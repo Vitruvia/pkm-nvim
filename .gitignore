@@ -1,0 +1,24 @@
+# .gitignore
+# Lua bytecode
+*.lua~
+*.luac
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test artifacts
+tests/temp/
+*.log
+
+# Plugin manager artifacts
+lazy-lock.json
+

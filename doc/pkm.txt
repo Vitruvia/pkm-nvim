@@ -1,0 +1,80 @@
+*pkm.txt*  Personal Knowledge Management for Neovim
+
+==============================================================================
+CONTENTS                                                      *pkm-contents*
+
+    1. Introduction ............................ |pkm-introduction|
+    2. Setup ................................... |pkm-setup|
+    3. Commands ................................ |pkm-commands|
+    4. Configuration ........................... |pkm-configuration|
+
+==============================================================================
+INTRODUCTION                                              *pkm-introduction*
+
+PKM (Personal Knowledge Management) is a note-taking system for Neovim.
+
+Features:
+  • Note creation and management
+  • Citations and bidirectional linking
+  • YAML frontmatter
+  • Cross-platform support (Windows, WSL, Linux, macOS)
+
+==============================================================================
+SETUP                                                            *pkm-setup*
+
+Minimal setup: >
+
+  require('pkm').setup({})
+
+Full setup: >
+
+  require('pkm').setup({
+    root_path = vim.fn.expand('~/Notes'),
+    user = {
+      name = "Your Name",
+    },
+    keymaps = {
+      new_note = "<leader>nn",
+      new_journal = "<leader>nj",
+      quick_capture = "<leader>nq",
+      insert_citation = "<leader>nc",
+      search = "<leader>nf",
+    }
+  })
+
+==============================================================================
+COMMANDS                                                      *pkm-commands*
+
+Note Creation~
+  :PKMNewNote                   Create a new note
+  :PKMNewJournal               Create journal entry
+  :PKMNewScratchpad            Create scratchpad
+  :PKMQuickCapture             Quick capture
+  :PKMConvertNote              Convert note type
+
+Citations~
+  :PKMInsertCitation           Insert citation
+  :PKMUpdateReferences         Update references
+  :PKMGotoCitation            Go to citation source
+
+Navigation~
+  :PKMLinkNote                Link to another note
+  :PKMFollowLink              Follow link under cursor
+  :PKMBacklinks               Show backlinks
+
+Search~
+  :PKMSearch [query]          Search all notes
+  :PKMBrowseTags              Browse by tags
+  :PKMRecentJournals          Recent journal entries
+
+Utilities~
+  :PKMStats                   Show statistics
+  :PKMSync                    Sync and validate references
+  :PKMCleanupFrontmatter      Clean corrupted frontmatter
+
+==============================================================================
+CONFIGURATION                                            *pkm-configuration*
+
+See README.md for full configuration options.
+
+ vim:tw=78:ts=8:ft=help:norl:
