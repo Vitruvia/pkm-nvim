@@ -8,6 +8,13 @@ local default_config = {
     journal = "02-Journal",
     scratchpad = "01-Scratchpad",
     templates = "templates",
+  },
+  keymaps = {
+    new_note = "<leader>nn",
+    new_journal = "<leader>nj",
+    search = "<leader>nf",
+    browse_tags = "<leader>nt",
+    insert_citation = "<leader>nc",
   }
 }
 
@@ -16,54 +23,43 @@ M.config = default_config
 function M.setup(user_config)
   M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
 
-  -- Ensure paths exist
-  if vim.fn.isdirectory(M.config.root_path) == 0 then
-    vim.notify("PKM Root not found: " .. M.config.root_path, vim.log.levels.WARN)
-  end
-
   -- Initialize Modules
   require('pkm.citations').setup(M.config)
-  
-  -- --- Commands ---
-  
-  -- 1. Citations
-  vim.api.nvim_create_user_command('PKMInsertCitation', function()
-    require('pkm.telescope').insert_citation_picker()
-  end, {})
+  require('pkm.templates').setup(M.config)
+  require('pkm.core').setup(M.config) -- Restore creation logic
 
-  vim.api.nvim_create_user_command('PKMUpdateReferences', function()
-    require('pkm.citations').update_references()
-  end, {})
+  -- --- Create Commands ---
   
-  -- 2. Templates (Requires templates.lua from previous turns)
-  vim.api.nvim_create_user_command('PKMApplyTemplate', function()
-    require('pkm.templates').apply_template()
-  end, {})
+  -- Creation
+  vim.api.nvim_create_user_command('PKMNewNote', function(opts) require('pkm.core').new_note(opts.args) end, { nargs = "?" })
+  vim.api.nvim_create_user_command('PKMNewJournal', function() require('pkm.core').new_journal() end, {})
+  
+  -- Search & Navigation
+  vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
+  vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
+  vim.api.nvim_create_user_command('PKMFind', function() require('pkm.telescope').find_notes() end, {})
+  
+  -- Citations & Utils
+  vim.api.nvim_create_user_command('PKMInsertCitation', function() require('pkm.telescope').insert_citation_picker() end, {})
+  vim.api.nvim_create_user_command('PKMUpdateReferences', function() require('pkm.citations').update_references() end, {})
+  vim.api.nvim_create_user_command('PKMApplyTemplate', function() require('pkm.templates').apply_template() end, {})
 
-  -- 3. Search & Browsing
-  vim.api.nvim_create_user_command('PKMFind', function()
-    require('pkm.telescope').find_notes()
-  end, {})
+  -- --- BIND KEYMAPS ---
+  -- This was missing previously, causing the errors.
+  local k = M.config.keymaps
+  local map = function(lhs, cmd, desc)
+    if lhs then vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) end
+  end
+
+  map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")
+  map(k.new_journal, "<cmd>PKMNewJournal<cr>", "New Journal")
+  map(k.search, "<cmd>PKMSearch<cr>", "Search Content")
+  map(k.browse_tags, "<cmd>PKMTags<cr>", "Browse Tags") -- Fixes <leader>nt
+  map(k.insert_citation, "<cmd>PKMInsertCitation<cr>", "Insert Citation")
+  map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture") -- Alias
   
-  vim.api.nvim_create_user_command('PKMSearch', function()
-    require('pkm.telescope').search_notes()
-  end, {})
-  
-  vim.api.nvim_create_user_command('PKMTags', function()
-    require('pkm.telescope').browse_tags()
-  end, {})
-  
-  -- --- Autocommands ---
-  local group = vim.api.nvim_create_augroup("PKMAuto", { clear = true })
-  vim.api.nvim_create_autocmd("BufWritePost", {
-    group = group,
-    pattern = "*.md",
-    callback = function()
-       vim.schedule(function() 
-         require('pkm.citations').update_references() 
-       end)
-    end
-  })
+  -- Mappings for commands I haven't fully implemented yet (Safety stubs)
+  -- map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Show Backlinks") 
 end
 
 return M

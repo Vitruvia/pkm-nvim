@@ -1,12 +1,9 @@
 -- lua/pkm/telescope.lua
 local M = {}
 local citations = require('pkm.citations')
-
--- Safe require for Telescope
 local has_telescope, telescope = pcall(require, 'telescope')
-if not has_telescope then
-  error("PKM requires telescope.nvim to be installed")
-end
+
+if not has_telescope then return M end
 
 local pickers = require('telescope.pickers')
 local finders = require('telescope.finders')
@@ -15,10 +12,9 @@ local actions = require('telescope.actions')
 local action_state = require('telescope.actions.state')
 local builtin = require('telescope.builtin')
 
--- 1. Insert Citation Picker
+-- ... Insert Citation Picker (Keep existing code) ...
 function M.insert_citation_picker()
   local items = citations.get_citable_items_list()
-  
   pickers.new({}, {
     prompt_title = "Insert Citation",
     finder = finders.new_table {
@@ -36,26 +32,22 @@ function M.insert_citation_picker()
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        -- Insert logic moved here to avoid circular require
-        local item = selection.value
-        local citation = string.format("%s[%s]", item.type, item.short_id)
-        local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-        local line = vim.api.nvim_get_current_line()
-        vim.api.nvim_set_current_line(line:sub(1, col) .. citation .. line:sub(col + 1))
-        vim.api.nvim_win_set_cursor(0, {row, col + #citation})
-        vim.schedule(function() citations.update_references() end)
+        if selection then
+            local item = selection.value
+            -- Use the citations module to insert
+            require('pkm.citations').complete_insertion(item)
+        end
       end)
       return true
     end,
   }):find()
 end
 
--- 2. Browse Tags Picker
 function M.browse_tags()
   local tags = citations.get_all_tags()
   
   pickers.new({}, {
-    prompt_title = "Browse Notes by Tag",
+    prompt_title = "Browse Tags",
     finder = finders.new_table {
       results = tags,
     },
@@ -64,35 +56,32 @@ function M.browse_tags()
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        local tag = selection[1]
-        
-        -- Open Live Grep pre-filled with the tag
-        -- We search for the specific YAML list syntax to be accurate
-        -- Pattern: "  - "tagname"" or "  - tagname"
-        builtin.grep_string({
-          prompt_title = "Notes with tag: " .. tag,
-          search = tag, 
-          cwd = require('pkm.init').config.root_path
-        })
+        if selection then
+            local tag = selection[1]
+            -- Fix: Use explicit string search to avoid regex errors
+            builtin.grep_string({
+              prompt_title = "Tag: " .. tag,
+              search = tag,
+              use_regex = false, 
+              cwd = require('pkm.init').config.root_path
+            })
+        end
       end)
       return true
     end,
   }):find()
 end
 
--- 3. Search All Notes (File Names)
-function M.find_notes()
-  builtin.find_files({
-    prompt_title = "Find Notes",
+function M.search_notes()
+  builtin.live_grep({
+    prompt_title = "Search Notes",
     cwd = require('pkm.init').config.root_path,
-    hidden = false
   })
 end
 
--- 4. Search Note Content (Grep)
-function M.search_notes()
-  builtin.live_grep({
-    prompt_title = "Search Note Content",
+function M.find_notes()
+  builtin.find_files({
+    prompt_title = "Find Files",
     cwd = require('pkm.init').config.root_path,
   })
 end
