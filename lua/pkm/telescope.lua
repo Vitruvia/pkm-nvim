@@ -12,9 +12,10 @@ local actions = require('telescope.actions')
 local action_state = require('telescope.actions.state')
 local builtin = require('telescope.builtin')
 
--- ... Insert Citation Picker (Keep existing code) ...
+-- 1. Insert Citation Picker
 function M.insert_citation_picker()
   local items = citations.get_citable_items_list()
+  
   pickers.new({}, {
     prompt_title = "Insert Citation",
     finder = finders.new_table {
@@ -32,22 +33,26 @@ function M.insert_citation_picker()
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        if selection then
-            local item = selection.value
-            -- Use the citations module to insert
-            require('pkm.citations').complete_insertion(item)
-        end
+        -- Insert logic moved here to avoid circular require
+        local item = selection.value
+        local citation = string.format("%s[%s]", item.type, item.short_id)
+        local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+        local line = vim.api.nvim_get_current_line()
+        vim.api.nvim_set_current_line(line:sub(1, col) .. citation .. line:sub(col + 1))
+        vim.api.nvim_win_set_cursor(0, {row, col + #citation})
+        vim.schedule(function() citations.update_references() end)
       end)
       return true
     end,
   }):find()
 end
 
+-- 2. Browse Tags Picker
 function M.browse_tags()
   local tags = citations.get_all_tags()
   
   pickers.new({}, {
-    prompt_title = "Browse Tags",
+    prompt_title = "Browse Notes by Tag",
     finder = finders.new_table {
       results = tags,
     },
@@ -56,34 +61,75 @@ function M.browse_tags()
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        if selection then
-            local tag = selection[1]
-            -- Fix: Use explicit string search to avoid regex errors
-            builtin.grep_string({
-              prompt_title = "Tag: " .. tag,
-              search = tag,
-              use_regex = false, 
-              cwd = require('pkm.init').config.root_path
-            })
-        end
+        local tag = selection[1]
+        
+        -- Open Live Grep pre-filled with the tag
+        -- We search for the specific YAML list syntax to be accurate
+        -- Pattern: "  - "tagname"" or "  - tagname"
+        builtin.grep_string({
+          prompt_title = "Notes with tag: " .. tag,
+          search = tag, 
+          cwd = require('pkm.init').config.root_path
+        })
       end)
       return true
     end,
   }):find()
 end
 
+-- 3. Search All Notes (File Names)
+function M.find_notes()
+  builtin.find_files({
+    prompt_title = "Find Notes",
+    cwd = require('pkm.init').config.root_path,
+    hidden = false
+  })
+end
+
+-- 4. Search Note Content (Grep)
 function M.search_notes()
   builtin.live_grep({
-    prompt_title = "Search Notes",
+    prompt_title = "Search Note Content",
     cwd = require('pkm.init').config.root_path,
   })
 end
 
-function M.find_notes()
-  builtin.find_files({
-    prompt_title = "Find Files",
-    cwd = require('pkm.init').config.root_path,
-  })
+
+-- 5. Select Templates
+function M.template_picker(templates, on_select)
+  pickers.new({}, {
+    prompt_title = "Apply Template",
+    finder = finders.new_table {
+      results = templates,
+      entry_maker = function(entry)
+        return {
+          value = entry,
+          display = entry.name,
+          ordinal = entry.name,
+          path = entry.path
+        }
+      end
+    },
+    sorter = conf.generic_sorter({}),
+    previewer = require('telescope.previewers').new_buffer_previewer({
+      define_preview = function(self, entry, status)
+        require('telescope.config').values.buffer_previewer_maker(entry.path, self.state.bufnr, {
+          bufname = self.state.bufname,
+          winid = self.state.winid,
+        })
+      end
+    }),
+    attach_mappings = function(prompt_bufnr, map)
+      actions.select_default:replace(function()
+        actions.close(prompt_bufnr)
+        local selection = action_state.get_selected_entry()
+        if selection then
+          on_select(selection.value)
+        end
+      end)
+      return true
+    end,
+  }):find()
 end
 
 return M

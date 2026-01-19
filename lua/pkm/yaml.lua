@@ -1,576 +1,190 @@
 -- lua/pkm/yaml.lua
--- YAML frontmatter handling with automatic timestamp management
--- FIXED VERSION: Resolves empty nested structure corruption
-
 local M = {}
-local config = {}
-local timestamp_module = nil
 
-function M.setup(user_config)
-  config = user_config
-  timestamp_module = require('pkm.timestamp')
+--- Helper: Safe String Quoting for YAML
+local function quote_string(str)
+  if not str then return "" end
+  -- Escape double quotes and wrap in double quotes
+  return string.format('"%s"', str:gsub('"', '\\"'))
 end
 
---- Parse YAML frontmatter from file content
---- @param lines table Array of file lines
---- @return table|nil Parsed frontmatter, or nil if none found
---- @return number Start line of content (after frontmatter)
-function M.parse_frontmatter(lines)
-  if not lines or #lines == 0 then
-    return nil, 1
-  end
+--- Helper: Parse Inline Table - { key: val, key2: "val" }
+local function parse_inline_table(text)
+  local clean = text:match("^%s*-%s*{(.+)}%s*$")
+  if not clean then return nil end
   
-  if lines[1] ~= "---" then
-    return nil, 1
-  end
-  
-  local end_line = nil
-  for i = 2, #lines do
-    if lines[i] == "---" or lines[i] == "..." then
-      end_line = i
-      break
-    end
-  end
-  
-  if not end_line then
-    return nil, 1
-  end
-  
-  local yaml_lines = {}
-  for i = 2, end_line - 1 do
-    table.insert(yaml_lines, lines[i])
-  end
-  
-  local frontmatter = M.parse_yaml(yaml_lines)
-  
-  return frontmatter, end_line + 1
-end
-
---- Simple YAML parser for frontmatter - FIXED VERSION
---- Handles nested empty arrays AND multi-line array items
---- @param lines table Array of YAML lines
---- @return table Parsed YAML as Lua table
-function M.parse_yaml(lines)
   local result = {}
-  local current_key = nil
-  local current_array = nil
-  local indent_stack = {{key = nil, indent = -1, table = result}}
-  
-  for _, line in ipairs(lines) do
-    -- Skip empty lines and comments
-    if line:match("^%s*$") or line:match("^%s*#") then
-      goto continue
-    end
-    
-    local indent = #line:match("^%s*")
-    local content = line:gsub("^%s+", "")
-    
-    -- Handle array items
-    if content:match("^%-") then
-      local value = content:match("^%-%s*(.*)")
-      
-      if not current_array then
-        vim.notify("Array item without array context", vim.log.levels.WARN)
-        goto continue
-      end
-      
-      -- FIXED: Handle multi-line array items (object items)
-      if value == "" or value:match("^%s*$") then
-        -- Empty dash means the object properties follow on next lines
-        -- Create a table for this array item
-        local item_table = {}
-        table.insert(current_array, item_table)
-        
-        -- Push this item onto the stack so subsequent properties go into it
-        table.insert(indent_stack, {
-          key = nil,  -- No key, this is an array item
-          indent = indent,
-          table = item_table,
-          is_array_item = true  -- Mark as array item
-        })
-      else
-        -- Simple value on same line as dash
-        local parsed_value = M.parse_value(value)
-        table.insert(current_array, parsed_value)
-      end
-      
-      goto continue
-    end
-    
-    -- Handle key-value pairs
-    local key, value = content:match("^([%w_%-]+):%s*(.*)")
-    
-    if key then
-      -- Find correct target table based on indentation
-      local target_table = result
-      
-      -- Pop stack items that are at same or shallower level
-      while #indent_stack > 1 and indent <= indent_stack[#indent_stack].indent do
-        table.remove(indent_stack)
-      end
-      
-      -- Use the current top of stack as target
-      target_table = indent_stack[#indent_stack].table
-      
-      -- Handle explicit empty array notation []
-      if value == "[]" then
-        target_table[key] = {}
-        current_key = nil
-        current_array = nil
-        
-      elseif value == "" or value:match("^%s*$") then
-        -- Create nested table for child elements
-        local nested_table = {}
-        target_table[key] = nested_table
-        current_array = nested_table
-        
-        -- Push to stack
-        table.insert(indent_stack, {
-          key = key,
-          indent = indent,
-          table = nested_table
-        })
-        
-      else
-        target_table[key] = M.parse_value(value)
-        current_key = nil
-        current_array = nil
-      end
-    end
-    
-    ::continue::
-  end
+  -- Naive CSV split doesn't work for quoted strings with commas. 
+  -- We use a pattern matching approach for specific expected keys.
+  -- This is stricter but safer for your specific schema.
+  local identifier = clean:match("identifier:%s*([^,}]+)")
+  local title = clean:match('title:%s*"(.-[^\\])"') or clean:match("title:%s*([^,}]+)")
+  local link = clean:match("link:%s*([^,}]+)")
+
+  if identifier then result.identifier = vim.trim(identifier) end
+  if title then result.title = title:gsub('\\"', '"') end -- Unescape
+  if link then result.link = vim.trim(link) end
   
   return result
 end
 
---- Parse a YAML value
---- @param value string Raw value string
---- @return any Parsed value
-function M.parse_value(value)
-  -- Handle nil or empty values first
-  if not value or value == "" then
-    return nil
-  end
+function M.parse_frontmatter(lines)
+  local frontmatter = {}
+  local content_start_index = 1
   
-  -- Ensure value is a string before string operations
-  if type(value) ~= "string" then
-    return value
-  end
-  
-  value = value:match("^%s*(.-)%s*$")
-  
-  if value == "null" or value == "~" or value == "" then
-    return nil
-  end
-  
-  if value == "true" or value == "yes" or value == "on" then
-    return true
-  end
-  if value == "false" or value == "no" or value == "off" then
-    return false
-  end
-  
-  local num = tonumber(value)
-  if num then
-    return num
-  end
-  
-  if value:match('^".-"$') then
-    return value:sub(2, -2)
-  end
-  if value:match("^'.-'$") then
-    return value:sub(2, -2)
-  end
-  
-  return value
-end
-
--- ============================================================================
--- FIXED: YAML GENERATION WITH PROPER EMPTY ARRAY HANDLING
--- ============================================================================
-
---- Check if table is completely empty
---- @param t table Table to check
---- @return boolean True if table has no entries
-local function is_empty_table(t)
-  return next(t) == nil
-end
-
---- Check if table is an array (sequential numeric keys)
---- @param t table Table to check
---- @return boolean True if table is an array
-local function is_array_table(t)
-  -- Empty tables are treated as arrays
-  if is_empty_table(t) then
-    return true
-  end
-  
-  -- Check if all keys are sequential numbers starting from 1
-  local count = 0
-  for k, _ in pairs(t) do
-    if type(k) ~= "number" then
-      return false
-    end
-    count = count + 1
-  end
-  
-  -- Verify sequential from 1 to count
-  for i = 1, count do
-    if t[i] == nil then
-      return false
-    end
-  end
-  
-  return count > 0
-end
-
---- Generate YAML frontmatter from table with a predefined key order.
---- @param data table Data to convert to YAML
---- @param indent number Current indentation level
---- @return table Array of YAML lines
-function M.generate_yaml(data, indent)
-  indent = indent or 0
-  local lines = {}
-  local indent_str = string.rep("  ", indent)
-
-  -- 1. Define the desired logical order for keys.
-  local key_order = {
-    "title", "author", "source_author", "note_author", "status", "tags",
-    "created_on", "last_updated_on", "cites", "cited_by", "citation",
-    "source_type", "source_location"
-  }
-  local seen = {}
-
-  -- Helper function to process a key-value pair
-  local function process_key(key, value)
-    local value_type = type(value)
-
-    if value_type == "table" then
-      -- Case 1: The table is empty.
-      if next(value) == nil then
-        table.insert(lines, indent_str .. key .. ": []")
-        return
-      end
-
-      -- Case 2: The table is an array.
-      local is_array = #value > 0 and next(value, #value) == nil
-      if is_array then
-        table.insert(lines, indent_str .. key .. ":")
-        for _, item in ipairs(value) do
-          if type(item) == "table" then
-            -- Handle nested objects within an array
-            local nested_lines = M.generate_yaml(item, indent + 2)
-            table.insert(lines, indent_str .. "  -")
-            for _, nested_line in ipairs(nested_lines) do
-                table.insert(lines, "  " .. nested_line)
-            end
-          else
-            table.insert(lines, indent_str .. "  - " .. M.format_value(item))
-          end
-        end
-      else
-        -- Case 3: The table is a dictionary/map.
-        table.insert(lines, indent_str .. key .. ":")
-        local nested_lines = M.generate_yaml(value, indent + 1)
-        for _, nested_line in ipairs(nested_lines) do
-          table.insert(lines, nested_line)
-        end
-      end
-    else
-      -- Case 4: The value is a primitive (string, number, etc.).
-      table.insert(lines, indent_str .. key .. ": " .. M.format_value(value))
-    end
+  if type(lines) == "string" then lines = vim.split(lines, "\n") end
+  -- Check if file actually starts with YAML
+  if not lines or #lines == 0 or lines[1] ~= "---" then 
+      return nil, 1 
   end
 
-  -- 2. First pass: Iterate through our predefined order.
-  for _, key in ipairs(key_order) do
-    if data[key] ~= nil then
-      process_key(key, data[key])
-      seen[key] = true
-    end
-  end
+  local current_key = nil      
+  local current_section = nil  
+  local current_sub = nil      
+  local current_list_item = nil 
 
-  -- 3. Second pass: Iterate through any remaining keys not in our list.
-  for key, value in pairs(data) do
-    if not seen[key] then
-      process_key(key, value)
-    end
-  end
-  
-  return lines
-end
-
---- Format a value for YAML output
---- @param value any Value to format
---- @return string Formatted value
-function M.format_value(value)
-  local value_type = type(value)
-  
-  if value_type == "nil" then
-    return "null"
-  elseif value_type == "boolean" then
-    return value and "true" or "false"
-  elseif value_type == "number" then
-    return tostring(value)
-  elseif value_type == "string" then
-    if value:match("^[%w_%-]+$") then
-      return value
-    else
-      return '"' .. value:gsub('"', '\\"') .. '"'
-    end
-  else
-    return tostring(value)
-  end
-end
-
---- Create frontmatter for a new note
---- @param note_type string Type of note
---- @param custom_data table|nil Custom frontmatter fields
---- @return table Array of frontmatter lines (including delimiters)
-function M.create_frontmatter(note_type, custom_data)
-  local template = vim.deepcopy(config.frontmatter_templates[note_type] or {})
-  
-  if custom_data then
-    template = vim.tbl_deep_extend("force", template, custom_data)
-  end
-  
-  -- Process special markers and date formats
-  for key, value in pairs(template) do
-    if type(value) == "string" then
-      if value == "ISO8601" then
-        -- Replace with current ISO 8601 timestamp
-        template[key] = timestamp_module.to_iso8601()
-      elseif value:match("^%%") then
-        -- Old-style date format string
-        template[key] = os.date(value)
-      end
-    end
-  end
-  
-  local yaml_lines = M.generate_yaml(template)
-  
-  local lines = {"---"}
-  for _, line in ipairs(yaml_lines) do
-    table.insert(lines, line)
-  end
-  table.insert(lines, "---")
-  table.insert(lines, "")
-  
-  return lines
-end
-
---- Update last_updated_on field in current buffer
-function M.update_last_modified()
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, content_start = M.parse_frontmatter(lines)
-  
-  if not frontmatter then
-    return -- No frontmatter, do nothing
-  end
-  
-  local new_timestamp = timestamp_module.to_iso8601()
-  
-  -- Only update if the timestamp is actually different
-  if frontmatter.last_updated_on ~= new_timestamp then
-    frontmatter.last_updated_on = new_timestamp
-    M.save_frontmatter(frontmatter, content_start)
-  end
-end
-
---- Setup autocmd to update last_updated_on on save
-function M.setup_auto_update()
-  vim.api.nvim_create_autocmd("BufWritePre", {
-    pattern = "*.md",
-    callback = function()
-      -- Only update if file is in PKM directories
-      local filepath = vim.fn.expand("%:p")
-      local root = config.root_path
-      
-      if filepath:find(root, 1, true) then
-        local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-        local frontmatter, content_start = M.parse_frontmatter(lines)
-        
-        if frontmatter and frontmatter.last_updated_on then
-          frontmatter.last_updated_on = timestamp_module.to_iso8601()
-          M.save_frontmatter(frontmatter, content_start)
-        end
-      end
-    end,
-    desc = "Auto-update last_updated_on timestamp"
-  })
-end
-
---- Update frontmatter in current buffer (interactive)
-function M.update_frontmatter()
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, content_start = M.parse_frontmatter(lines)
-  
-  if not frontmatter then
-    vim.notify("No frontmatter found", vim.log.levels.WARN)
-    return
-  end
-  
-  vim.ui.input({
-    prompt = "Edit frontmatter (key=value, or 'done' to finish): "
-  }, function(input)
-    if not input or input == "done" then
-      M.save_frontmatter(frontmatter, content_start)
-      return
-    end
-    
-    local key, value = input:match("^([^=]+)=(.+)$")
-    if key and value then
-      key = key:gsub("^%s+", ""):gsub("%s+$", "")
-      value = M.parse_value(value)
-      frontmatter[key] = value
-      vim.notify("Updated: " .. key .. " = " .. tostring(value), vim.log.levels.INFO)
-    else
-      vim.notify("Invalid format. Use: key=value", vim.log.levels.WARN)
-    end
-    
-    vim.schedule(function()
-      M.update_frontmatter()
-    end)
-  end)
-end
-
---- Save updated frontmatter to the buffer or a specified file.
---- @param frontmatter table Frontmatter data
---- @param content_start number Line where content starts
---- @param filepath string|nil Optional path to a file to write to. If nil, writes to the current buffer.
-function M.save_frontmatter(frontmatter, content_start, filepath)
-  -- 1. Generate the new YAML text from the table
-  local new_fm_lines = {"---"}
-  local yaml_lines = M.generate_yaml(frontmatter)
-  for _, line in ipairs(yaml_lines) do
-    table.insert(new_fm_lines, line)
-  end
-  table.insert(new_fm_lines, "---")
-
-  -- 2. Decide whether to write to the current buffer or a different file
-  if not filepath then
-    -- CASE A: No filepath provided, modify the CURRENT buffer
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    
-    -- FIXED: Check if there's already a blank line after frontmatter
-    -- content_start is 1-indexed, so lines[content_start] is the first content line
-    local has_blank_after = (#lines >= content_start and lines[content_start] == "")
-    
-    -- Only add blank line if one doesn't already exist
-    if not has_blank_after then
-      table.insert(new_fm_lines, "")
-    end
-    
-    vim.api.nvim_buf_set_lines(0, 0, content_start - 1, false, new_fm_lines)
-    
-  else
-    -- CASE B: Filepath provided, read that file and replace its frontmatter
-    local original_content = vim.fn.readfile(filepath)
-    local final_content = {}
-    
-    -- Add the new frontmatter
-    for _, line in ipairs(new_fm_lines) do
-      table.insert(final_content, line)
-    end
-
-    -- Find where the original content started (could be different from current buffer)
-    local _, original_content_start = M.parse_frontmatter(original_content)
-
-    -- FIXED: Check if content starts with blank line
-    local has_blank_after = (#original_content >= original_content_start and 
-                            original_content[original_content_start] == "")
-    
-    -- Add a blank line if the content doesn't start with one
-    if not has_blank_after then
-      table.insert(final_content, "")
-    end
-    
-    -- Append the rest of the original file's content
-    for i = original_content_start, #original_content do
-      table.insert(final_content, original_content[i])
-    end
-    
-    -- Write the entire reconstructed content back to the file
-    vim.fn.writefile(final_content, filepath)
-  end
-end
-
---- Validate frontmatter structure
-function M.validate_frontmatter()
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, _ = M.parse_frontmatter(lines)
-  
-  if not frontmatter then
-    vim.notify("No frontmatter found", vim.log.levels.ERROR)
-    return false
-  end
-  
-  local filepath = vim.fn.expand("%:p")
-  local note_type = nil
-  
-  for type_name, folder in pairs(config.folders) do
-    if filepath:match(folder) then
-      note_type = type_name == "consolidated" and "consolidated" or type_name
+  for i = 2, #lines do
+    local line = lines[i]
+    if line == "---" or line == "..." then
+      content_start_index = i + 1
       break
     end
+    
+    -- 1. Top Level Keys
+    local key, val = line:match("^(%w+):%s*(.*)")
+    if key then
+      current_key = key
+      if val == "" then
+         -- Section Start (cites:, cited_by:, tags:)
+         if key == "tags" then
+             frontmatter.tags = {}
+         else
+             frontmatter[key] = {} 
+         end
+         current_section = key
+         current_sub = nil
+      else
+         -- Scalar Value
+         -- Remove surrounding quotes only
+         val = val:gsub('^"(.*)"$', '%1'):gsub("^'(.*)'$", '%1')
+         frontmatter[key] = val
+         current_section = nil
+      end
+
+    -- 2. Subsections (notes:, journal:)
+    elseif current_section and line:match("^%s+%w+:$") then
+      local sub = line:match("^%s+(%w+):")
+      current_sub = sub
+      if not frontmatter[current_section] then frontmatter[current_section] = {} end
+      frontmatter[current_section][sub] = {}
+
+    -- 3. Tag List Items
+    elseif current_key == "tags" and line:match("^%s+-%s+") then
+      local tag_val = line:match("^%s+-%s+(.*)")
+      if tag_val then
+         tag_val = tag_val:gsub('^"(.*)"$', '%1'):gsub("^'(.*)'$", '%1')
+         table.insert(frontmatter.tags, tag_val)
+      end
+
+    -- 4. Inline Citation Items ( - { ... })
+    elseif current_section and current_sub and line:match("^%s+-%s+{") then
+      local item = parse_inline_table(line)
+      if item then
+        table.insert(frontmatter[current_section][current_sub], item)
+      end
+      
+    -- 5. Block Citation Start ( - )
+    elseif current_section and current_sub and line:match("^%s+-$") then
+       current_list_item = {}
+       table.insert(frontmatter[current_section][current_sub], current_list_item)
+       
+    -- 6. Block Citation Properties ( title: ... )
+    elseif current_section and current_sub and current_list_item and line:match("^%s+%w+:") then
+       local k, v = line:match("^%s+(%w+):%s*(.*)")
+       if k and v then
+          v = v:gsub('^"(.*)"$', '%1'):gsub("^'(.*)'$", '%1')
+          current_list_item[k] = v
+       end
+    end
   end
+
+  return frontmatter, content_start_index
+end
+
+function M.generate_yaml(fm)
+  local lines = {}
   
-  if not note_type then
-    vim.notify("Unknown note type, cannot validate", vim.log.levels.WARN)
-    return false
+  -- 1. Priority Metadata
+  local priority_keys = {"title", "author", "status", "created_on", "last_updated_on", "type"}
+  for _, k in ipairs(priority_keys) do
+    if fm[k] then 
+        table.insert(lines, string.format("%s: %s", k, quote_string(fm[k]))) 
+    end
   end
-  
-  local template = config.frontmatter_templates[note_type]
-  if not template then
-    vim.notify("No template for this note type", vim.log.levels.INFO)
-    return true
+
+  -- 2. Tags
+  if fm.tags and #fm.tags > 0 then
+    table.insert(lines, "tags:")
+    for _, tag in ipairs(fm.tags) do
+      table.insert(lines, string.format("  - %s", quote_string(tag)))
+    end
   end
-  
-  local missing = {}
-  for key, _ in pairs(template) do
-    if frontmatter[key] == nil then
-      table.insert(missing, key)
+
+  -- 3. Citations (Separated Blocks)
+  for _, section in ipairs({"cites", "cited_by"}) do
+    if fm[section] then
+      local has_content = false
+      -- Check content existence
+      for _, list in pairs(fm[section]) do
+        if #list > 0 then has_content = true break end
+      end
+      
+      if has_content then
+        table.insert(lines, section .. ":")
+        -- Explicit ordering: bib, notes, journal
+        for _, sub in ipairs({"bib", "notes", "journal"}) do
+          if fm[section][sub] and #fm[section][sub] > 0 then
+            table.insert(lines, "  " .. sub .. ":")
+            for _, item in ipairs(fm[section][sub]) do
+              -- Output as Valid Flow-Style YAML
+              local parts = {}
+              if item.identifier then table.insert(parts, "identifier: " .. item.identifier) end
+              if item.title then table.insert(parts, "title: " .. quote_string(item.title)) end
+              if item.link then table.insert(parts, "link: " .. quote_string(item.link)) end
+              
+              table.insert(lines, string.format("    - { %s }", table.concat(parts, ", ")))
+            end
+          else
+            -- Explicit empty array for clarity
+            table.insert(lines, string.format("  %s: []", sub))
+          end
+        end
+      end
     end
   end
   
-  if #missing > 0 then
-    vim.notify("Missing fields: " .. table.concat(missing, ", "), vim.log.levels.WARN)
-    return false
-  else
-    vim.notify("Frontmatter valid", vim.log.levels.INFO)
-    return true
-  end
+  return lines
 end
 
---- Add or update a field in frontmatter
---- @param key string Field key
---- @param value any Field value
-function M.set_field(key, value)
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, content_start = M.parse_frontmatter(lines)
+function M.save_frontmatter(fm, content_start, filepath)
+  local all_lines = vim.fn.readfile(filepath)
+  local content = {}
   
-  if not frontmatter then
-    vim.notify("No frontmatter to update", vim.log.levels.ERROR)
-    return
+  if content_start <= #all_lines then
+    for i = content_start, #all_lines do
+      table.insert(content, all_lines[i])
+    end
   end
-  
-  frontmatter[key] = value
-  M.save_frontmatter(frontmatter, content_start)
-end
 
---- Get a field from frontmatter
---- @param key string Field key
---- @return any|nil Field value
-function M.get_field(key)
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, _ = M.parse_frontmatter(lines)
+  local new_lines = {"---"}
+  local yaml_lines = M.generate_yaml(fm)
+  for _, l in ipairs(yaml_lines) do table.insert(new_lines, l) end
+  table.insert(new_lines, "---")
   
-  if not frontmatter then
-    return nil
-  end
-  
-  return frontmatter[key]
+  if #content > 0 and content[1] ~= "" then table.insert(new_lines, "") end
+  for _, l in ipairs(content) do table.insert(new_lines, l) end
+
+  vim.fn.writefile(new_lines, filepath)
 end
 
 return M
