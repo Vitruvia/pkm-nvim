@@ -61,6 +61,7 @@ function M.read_note_metadata(filepath)
   if fm then
     if fm.title and fm.title ~= "" then title = fm.title end
     
+    -- FIXED: Handle cases where tags is a string or nil
     if fm.tags then 
         if type(fm.tags) == "table" then
             tags = fm.tags
@@ -91,27 +92,28 @@ function M.get_data()
   }
   
   for _, folder in ipairs(search_paths) do
-    if folder then -- Ensure folder config exists
+    if folder then -- Safety check if folder config is missing
         local search_path = join_path(config.root_path, folder)
-        -- FIXED: Force result to be a table even if glob returns string or nil
+        -- FIXED: Ensure files is a table. vim.fn.glob can return string if nothing found or error
         local files = vim.fn.glob(search_path .. "/*.md", false, true)
         if type(files) ~= "table" then files = {} end
         
         for _, file in ipairs(files) do
-          local type, id = M.get_note_type_and_id(file)
+          -- FIXED: Renamed 'type' to 'item_type' to avoid shadowing global type() function
+          local item_type, id = M.get_note_type_and_id(file)
           if id then
             local title, note_tags = M.read_note_metadata(file)
             
             items[id] = {
               path = file,
               basename = vim.fn.fnamemodify(file, ":t:r"),
-              type = type,
+              type = item_type, -- use valid variable
               title = title,
               tags = note_tags
             }
             
             -- Aggregate unique tags
-            -- FIXED: Added strict type check to prevent crash
+            -- FIXED: Now 'type()' function works because variable 'type' is gone
             if type(note_tags) == "table" then
                 for _, t in ipairs(note_tags) do
                   if t and t ~= "" then all_tags[t] = true end
@@ -186,9 +188,9 @@ function M.update_references()
   
   for i = content_start, #lines do
     for match in lines[i]:gmatch("%w+%[[%w%-_]+%]") do
-       local type, id_part = M.parse_citation_tag(match)
+       local item_type, id_part = M.parse_citation_tag(match)
        for full_id, item in pairs(all_items) do
-          if (item.type == type) and (full_id:find(id_part, 1, true)) then
+          if (item.type == item_type) and (full_id:find(id_part, 1, true)) then
              new_citations[full_id] = item
              break
           end

@@ -25,8 +25,8 @@ function M.setup(user_config)
 
   -- Initialize Modules (Order matters for dependencies)
   -- 1. Utils
-  require('pkm.timestamp').setup(M.config) -- FIXED: Was missing
-  require('pkm.yaml').setup(M.config)      -- Implicitly needed often
+  require('pkm.timestamp').setup(M.config) -- FIXED: Was missing, required for journal format
+  require('pkm.yaml').setup(M.config)
   
   -- 2. Core Logic
   require('pkm.citations').setup(M.config)

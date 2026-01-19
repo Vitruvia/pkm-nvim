@@ -134,7 +134,6 @@ function M.now(format_override)
     ts.hour = date.hour
     ts.min = date.min
   end
-  -- date_only needs no extra fields
   
   return ts
 end
