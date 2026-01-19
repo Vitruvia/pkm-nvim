@@ -23,24 +23,31 @@ M.config = default_config
 function M.setup(user_config)
   M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
 
-  -- Initialize Modules (Order matters for dependencies)
-  -- 1. Utils
-  require('pkm.timestamp').setup(M.config) -- FIXED: Was missing, required for journal format
+  -- Initialize Modules (Order matters)
+  -- Utils first
+  require('pkm.timestamp').setup(M.config)
   require('pkm.yaml').setup(M.config)
   
-  -- 2. Core Logic
+  -- Core modules next
   require('pkm.citations').setup(M.config)
   require('pkm.templates').setup(M.config)
-  require('pkm.journal').setup(M.config)   -- FIXED: Was missing
-  require('pkm.notes').setup(M.config)     -- FIXED: Was missing
-  require('pkm.ui').setup(M.config)        -- FIXED: Was missing
+  require('pkm.journal').setup(M.config)
+  require('pkm.notes').setup(M.config)
+  require('pkm.ui').setup(M.config)
+  
+  -- Legacy core (optional, but keeping for safety if other things depend on it)
   require('pkm.core').setup(M.config)
 
-  -- --- Create Commands ---
+  -- --- COMMANDS ---
   
-  -- Creation
-  vim.api.nvim_create_user_command('PKMNewNote', function(opts) require('pkm.core').new_note(opts.args) end, { nargs = "?" })
-  vim.api.nvim_create_user_command('PKMNewJournal', function() require('pkm.core').new_journal() end, {})
+  -- Creation (FIXED: Pointing to specific modules instead of core.lua)
+  vim.api.nvim_create_user_command('PKMNewNote', function(opts) 
+    require('pkm.notes').create_new_note(opts.args ~= "" and opts.args or nil) 
+  end, { nargs = "?" })
+  
+  vim.api.nvim_create_user_command('PKMNewJournal', function() 
+    require('pkm.journal').create_entry(true) -- Use journal.lua for correct format
+  end, {})
   
   -- Search & Navigation
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
@@ -52,10 +59,12 @@ function M.setup(user_config)
   vim.api.nvim_create_user_command('PKMUpdateReferences', function() require('pkm.citations').update_references() end, {})
   vim.api.nvim_create_user_command('PKMApplyTemplate', function() require('pkm.templates').apply_template() end, {})
 
-  -- --- BIND KEYMAPS ---
+  -- --- KEYMAPS ---
   local k = M.config.keymaps
-  local map = function(lhs, cmd, desc)
-    if lhs then vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) end
+  local function map(lhs, cmd, desc)
+    if lhs then 
+      vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) 
+    end
   end
 
   map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")

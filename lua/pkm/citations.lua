@@ -61,7 +61,7 @@ function M.read_note_metadata(filepath)
   if fm then
     if fm.title and fm.title ~= "" then title = fm.title end
     
-    -- FIXED: Handle cases where tags is a string or nil
+    -- Handle cases where tags is a string or nil
     if fm.tags then 
         if type(fm.tags) == "table" then
             tags = fm.tags
@@ -92,9 +92,9 @@ function M.get_data()
   }
   
   for _, folder in ipairs(search_paths) do
-    if folder then -- Safety check if folder config is missing
+    if folder then 
         local search_path = join_path(config.root_path, folder)
-        -- FIXED: Ensure files is a table. vim.fn.glob can return string if nothing found or error
+        -- Ensure files is a table. vim.fn.glob can return string/nil on error
         local files = vim.fn.glob(search_path .. "/*.md", false, true)
         if type(files) ~= "table" then files = {} end
         
@@ -107,13 +107,13 @@ function M.get_data()
             items[id] = {
               path = file,
               basename = vim.fn.fnamemodify(file, ":t:r"),
-              type = item_type, -- use valid variable
+              type = item_type, -- use the renamed variable
               title = title,
               tags = note_tags
             }
             
             -- Aggregate unique tags
-            -- FIXED: Now 'type()' function works because variable 'type' is gone
+            -- FIXED: type() now works because the local variable shadowing it is gone
             if type(note_tags) == "table" then
                 for _, t in ipairs(note_tags) do
                   if t and t ~= "" then all_tags[t] = true end
