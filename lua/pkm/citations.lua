@@ -4,9 +4,9 @@ local config = {}
 local yaml = nil
 local path_sep = package.config:sub(1, 1)
 
--- Cache
+-- Cache storage
 local items_cache = nil
-local tag_cache = nil -- New: Cache for tags
+local tag_cache = nil
 local cache_dirty = true
 
 function M.setup(user_config)
@@ -45,10 +45,12 @@ function M.get_note_type_and_id(filepath)
   end
   local prefix = filename:match("^([a-z]+)_")
   if prefix == "journal" then return "journal", filename end
+  
+  -- Fallback for non-standard names
   return "note", filename 
 end
 
--- Read File to get Title and Tags
+-- Read File to get Title and Tags (Robust Version)
 function M.read_note_metadata(filepath)
   local content = vim.fn.readfile(filepath)
   local fm, _ = yaml.parse_frontmatter(content)
@@ -58,7 +60,17 @@ function M.read_note_metadata(filepath)
 
   if fm then
     if fm.title and fm.title ~= "" then title = fm.title end
-    if fm.tags then tags = fm.tags end
+    
+    -- FIXED: Handle cases where tags is a string or nil
+    if fm.tags then 
+        if type(fm.tags) == "table" then
+            tags = fm.tags
+        elseif type(fm.tags) == "string" then
+            -- Clean quotes if present and wrap in table
+            local clean_tag = fm.tags:gsub('^"(.*)"$', '%1'):gsub("^'(.*)'$", '%1')
+            tags = { clean_tag }
+        end
+    end
   end
   
   return title, tags
@@ -97,8 +109,11 @@ function M.get_data()
         }
         
         -- Aggregate unique tags
-        for _, t in ipairs(note_tags) do
-          all_tags[t] = true
+        -- FIXED: Ensure note_tags is iterable
+        if type(note_tags) == "table" then
+            for _, t in ipairs(note_tags) do
+              if t and t ~= "" then all_tags[t] = true end
+            end
         end
       end
     end
@@ -136,7 +151,20 @@ function M.get_citable_items_list()
   return list
 end
 
--- Standard update logic (Kept same as before)
+-- Citation Insertion Helper
+function M.complete_insertion(selected)
+    local citation = string.format("%s[%s]", selected.type, selected.short_id)
+    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+    local line = vim.api.nvim_get_current_line()
+    vim.api.nvim_set_current_line(
+      line:sub(1, col) .. citation .. line:sub(col + 1)
+    )
+    vim.api.nvim_win_set_cursor(0, {row, col + #citation})
+    
+    vim.schedule(function() M.update_references() end)
+end
+
+-- Update Logic
 local function ensure_grouped_structure(fm, key)
     if not fm[key] then fm[key] = {} end
     if not fm[key].notes then fm[key].notes = {} end
@@ -151,7 +179,7 @@ function M.update_references()
   if not fm then return end
 
   local new_citations = {}
-  local all_items, _ = M.get_data()
+  local all_items, _ = M.get_data() -- Uses cache
   
   for i = content_start, #lines do
     for match in lines[i]:gmatch("%w+%[[%w%-_]+%]") do
@@ -184,7 +212,6 @@ function M.update_references()
   
   yaml.save_frontmatter(fm, content_start, current_path)
   
-  -- Backlinks (Separated Buckets)
   local current_type, current_id = M.get_note_type_and_id(current_path)
   if current_id then
       for id, item in pairs(new_citations) do
