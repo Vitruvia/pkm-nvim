@@ -23,10 +23,18 @@ M.config = default_config
 function M.setup(user_config)
   M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
 
-  -- Initialize Modules
+  -- Initialize Modules (Order matters for dependencies)
+  -- 1. Utils
+  require('pkm.timestamp').setup(M.config) -- FIXED: Was missing
+  require('pkm.yaml').setup(M.config)      -- Implicitly needed often
+  
+  -- 2. Core Logic
   require('pkm.citations').setup(M.config)
   require('pkm.templates').setup(M.config)
-  require('pkm.core').setup(M.config) -- Restore creation logic
+  require('pkm.journal').setup(M.config)   -- FIXED: Was missing
+  require('pkm.notes').setup(M.config)     -- FIXED: Was missing
+  require('pkm.ui').setup(M.config)        -- FIXED: Was missing
+  require('pkm.core').setup(M.config)
 
   -- --- Create Commands ---
   
@@ -45,7 +53,6 @@ function M.setup(user_config)
   vim.api.nvim_create_user_command('PKMApplyTemplate', function() require('pkm.templates').apply_template() end, {})
 
   -- --- BIND KEYMAPS ---
-  -- This was missing previously, causing the errors.
   local k = M.config.keymaps
   local map = function(lhs, cmd, desc)
     if lhs then vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) end
@@ -54,12 +61,9 @@ function M.setup(user_config)
   map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")
   map(k.new_journal, "<cmd>PKMNewJournal<cr>", "New Journal")
   map(k.search, "<cmd>PKMSearch<cr>", "Search Content")
-  map(k.browse_tags, "<cmd>PKMTags<cr>", "Browse Tags") -- Fixes <leader>nt
+  map(k.browse_tags, "<cmd>PKMTags<cr>", "Browse Tags") 
   map(k.insert_citation, "<cmd>PKMInsertCitation<cr>", "Insert Citation")
-  map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture") -- Alias
-  
-  -- Mappings for commands I haven't fully implemented yet (Safety stubs)
-  -- map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Show Backlinks") 
+  map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture")
 end
 
 return M

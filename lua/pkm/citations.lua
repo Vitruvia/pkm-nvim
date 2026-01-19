@@ -61,7 +61,6 @@ function M.read_note_metadata(filepath)
   if fm then
     if fm.title and fm.title ~= "" then title = fm.title end
     
-    -- FIXED: Handle cases where tags is a string or nil
     if fm.tags then 
         if type(fm.tags) == "table" then
             tags = fm.tags
@@ -92,30 +91,34 @@ function M.get_data()
   }
   
   for _, folder in ipairs(search_paths) do
-    local search_path = join_path(config.root_path, folder)
-    local files = vim.fn.glob(search_path .. "/*.md", false, true)
-    
-    for _, file in ipairs(files) do
-      local type, id = M.get_note_type_and_id(file)
-      if id then
-        local title, note_tags = M.read_note_metadata(file)
+    if folder then -- Ensure folder config exists
+        local search_path = join_path(config.root_path, folder)
+        -- FIXED: Force result to be a table even if glob returns string or nil
+        local files = vim.fn.glob(search_path .. "/*.md", false, true)
+        if type(files) ~= "table" then files = {} end
         
-        items[id] = {
-          path = file,
-          basename = vim.fn.fnamemodify(file, ":t:r"),
-          type = type,
-          title = title,
-          tags = note_tags
-        }
-        
-        -- Aggregate unique tags
-        -- FIXED: Ensure note_tags is iterable
-        if type(note_tags) == "table" then
-            for _, t in ipairs(note_tags) do
-              if t and t ~= "" then all_tags[t] = true end
+        for _, file in ipairs(files) do
+          local type, id = M.get_note_type_and_id(file)
+          if id then
+            local title, note_tags = M.read_note_metadata(file)
+            
+            items[id] = {
+              path = file,
+              basename = vim.fn.fnamemodify(file, ":t:r"),
+              type = type,
+              title = title,
+              tags = note_tags
+            }
+            
+            -- Aggregate unique tags
+            -- FIXED: Added strict type check to prevent crash
+            if type(note_tags) == "table" then
+                for _, t in ipairs(note_tags) do
+                  if t and t ~= "" then all_tags[t] = true end
+                end
             end
+          end
         end
-      end
     end
   end
   

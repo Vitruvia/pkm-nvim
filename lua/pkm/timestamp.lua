@@ -5,7 +5,8 @@ local M = {}
 local config = {}
 
 function M.setup(user_config)
-  config = user_config
+  config = user_config or {}
+  config.timestamp = config.timestamp or {}
   
   -- Set default behavior if not specified
   config.timestamp.default_format = config.timestamp.default_format or "full"
@@ -14,8 +15,6 @@ function M.setup(user_config)
 end
 
 --- Parse timestamp from various formats
---- @param timestamp_str string Timestamp string
---- @return table|nil Parsed timestamp {year, month, day, hour, min, sec}
 function M.parse_timestamp(timestamp_str)
   if not timestamp_str then return nil end
   
@@ -86,11 +85,10 @@ function M.parse_timestamp(timestamp_str)
 end
 
 --- Format timestamp to string
---- @param ts table Timestamp table
---- @param format_type string|nil Format type (default from config or ts.format)
---- @return string Formatted timestamp
 function M.format_timestamp(ts, format_type)
-  format_type = format_type or ts.format or config.timestamp.default_format
+  -- FIXED: Safety check for config
+  local default = (config.timestamp and config.timestamp.default_format) or "full"
+  format_type = format_type or ts.format or default
   
   if format_type == "full" then
     return string.format("%04d-%02d-%02d_%02d-%02d-%02d",
@@ -105,21 +103,21 @@ function M.format_timestamp(ts, format_type)
       ts.year, ts.month, ts.day)
   
   elseif format_type == "date_unknown" then
+    local unknown_marker = (config.timestamp and config.timestamp.unknown_time_marker) or "99-99-99"
     return string.format("%04d-%02d-%02d_%s",
-      ts.year, ts.month, ts.day, config.timestamp.unknown_time_marker)
+      ts.year, ts.month, ts.day, unknown_marker)
   
   else
-    -- Default: use config default or full
-    return M.format_timestamp(ts, config.timestamp.default_format or "full")
+    return M.format_timestamp(ts, default)
   end
 end
 
 --- Get current timestamp with default format
---- @param format_override string|nil Override default format
---- @return table Timestamp
 function M.now(format_override)
   local date = os.date("*t")
-  local format = format_override or config.timestamp.default_format or "full"
+  -- FIXED: Safety check for config
+  local default = (config.timestamp and config.timestamp.default_format) or "full"
+  local format = format_override or default
   
   local ts = {
     year = date.year,
@@ -135,35 +133,32 @@ function M.now(format_override)
   elseif format == "date_time" then
     ts.hour = date.hour
     ts.min = date.min
-  elseif format == "date_unknown" then
-    -- Date only with unknown marker
-  elseif format == "date_only" then
-    -- Date only
   end
+  -- date_only needs no extra fields
   
   return ts
 end
 
 --- Create timestamp - uses default or prompts based on config
---- @param force_interactive boolean Force interactive mode
---- @return table|nil Timestamp or nil if cancelled
 function M.create_timestamp(force_interactive)
-  -- If auto timestamp enabled and not forcing interactive, return now
-  if config.timestamp.auto_timestamp and not force_interactive then
+  local auto = true
+  if config.timestamp and config.timestamp.auto_timestamp == false then auto = false end
+  
+  if auto and not force_interactive then
     return M.now()
   end
   
-  -- If prompt on create or force interactive, show interactive dialog
-  if config.timestamp.prompt_on_create or force_interactive then
+  local prompt = false
+  if config.timestamp and config.timestamp.prompt_on_create then prompt = true end
+
+  if prompt or force_interactive then
     return M.create_interactive()
   end
   
-  -- Default: return current timestamp with default format
   return M.now()
 end
 
---- Interactive timestamp creation (when explicitly requested)
---- @return table|nil Timestamp or nil if cancelled
+--- Interactive timestamp creation
 function M.create_interactive()
   -- Date prompt
   vim.fn.inputsave()
@@ -243,8 +238,6 @@ function M.create_interactive()
 end
 
 --- Get ISO 8601 formatted timestamp for YAML frontmatter
---- @param ts table|nil Timestamp (uses now if nil)
---- @return string ISO 8601 formatted string
 function M.to_iso8601(ts)
   ts = ts or M.now()
   
@@ -257,8 +250,6 @@ function M.to_iso8601(ts)
 end
 
 --- Convert old Google Docs timestamp format to new format
---- @param filename string Filename with timestamp
---- @return table|nil Parsed timestamp
 function M.parse_legacy_filename(filename)
   local year, month, day = filename:match("(%d%d%d%d)%-(%d+)%-(%d+)")
   
@@ -275,10 +266,6 @@ function M.parse_legacy_filename(filename)
 end
 
 --- Create filename with timestamp
---- @param base_name string Base name for file
---- @param ts table|nil Timestamp (uses now if nil)
---- @param extension string File extension (default ".md")
---- @return string Filename
 function M.create_filename(base_name, ts, extension)
   ts = ts or M.now()
   extension = extension or ".md"
@@ -288,10 +275,6 @@ function M.create_filename(base_name, ts, extension)
 end
 
 --- Parse filename with timestamp
---- @param filename string Filename
---- @return string|nil Base name
---- @return table|nil Timestamp
---- @return string|nil Extension
 function M.parse_filename(filename)
   local name, ext = filename:match("^(.+)(%.%w+)$")
   if not name then
@@ -311,9 +294,6 @@ function M.parse_filename(filename)
 end
 
 --- Compare two timestamps
---- @param ts1 table First timestamp
---- @param ts2 table Second timestamp
---- @return number -1 if ts1 < ts2, 0 if equal, 1 if ts1 > ts2
 function M.compare(ts1, ts2)
   if ts1.year ~= ts2.year then
     return ts1.year < ts2.year and -1 or 1
@@ -353,9 +333,6 @@ function M.compare(ts1, ts2)
 end
 
 --- Check if timestamp is valid
---- @param ts table Timestamp
---- @return boolean True if valid
---- @return string|nil Error message if invalid
 function M.validate(ts)
   if not ts.year or not ts.month or not ts.day then
     return false, "Missing date components"
@@ -395,8 +372,6 @@ function M.validate(ts)
 end
 
 --- Get human-readable timestamp
---- @param ts table Timestamp
---- @return string Human-readable string
 function M.to_human(ts)
   local date_str = string.format("%04d-%02d-%02d", ts.year, ts.month, ts.day)
   
