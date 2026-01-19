@@ -1,4 +1,6 @@
 -- lua/pkm/citations.lua
+-- FIXED VERSION: Restores missing update_references_on_rename function
+
 local M = {}
 local config = {}
 local yaml = nil
@@ -52,12 +54,10 @@ function M.get_citable_items_map()
   for _, folder in ipairs(search_paths) do
     if folder then
         local search_path = join_path(config.root_path, folder)
-        -- FIXED: Safety check for glob return type
         local files = vim.fn.glob(search_path .. "/*.md", false, true)
         if type(files) ~= "table" then files = {} end
 
         for _, file in ipairs(files) do
-          -- FIXED: Renamed 'type' to 'item_type' to avoid shadowing global type()
           local item_type, id = M.get_note_type_and_id(file)
           if item_type and id then
             items_map[id] = {
@@ -98,27 +98,27 @@ function M.get_citable_items_for_picker()
   return items
 end
 
--- FIXED: Compatibility alias for Telescope (which expects this name)
+-- Compatibility alias for Telescope
 M.get_citable_items_list = M.get_citable_items_for_picker
 
---- FIXED: Initialize or migrate cited_by to new grouped structure
+--- Initialize or migrate cited_by to new grouped structure
 local function ensure_grouped_cited_by(frontmatter)
   if not frontmatter.cited_by then
-    frontmatter.cited_by = {notes = {}, bib = {}}
+    frontmatter.cited_by = {notes = {}, bib = {}, journal = {}}
     return false
   end
   
   -- Check if already in new format
   if frontmatter.cited_by.notes or frontmatter.cited_by.bib then
-    -- Ensure both keys exist
     frontmatter.cited_by.notes = frontmatter.cited_by.notes or {}
     frontmatter.cited_by.bib = frontmatter.cited_by.bib or {}
+    frontmatter.cited_by.journal = frontmatter.cited_by.journal or {}
     return false
   end
   
   -- Migrate from old flat format
   local old_array = frontmatter.cited_by
-  local new_structure = {notes = {}, bib = {}}
+  local new_structure = {notes = {}, bib = {}, journal = {}}
   
   if type(old_array) == "table" then
       for _, entry in ipairs(old_array) do
@@ -131,6 +131,8 @@ local function ensure_grouped_cited_by(frontmatter)
           
           if entry.type == "bib" then
             table.insert(new_structure.bib, clean_entry)
+          elseif entry.type == "journal" then
+            table.insert(new_structure.journal, clean_entry)
           else
             table.insert(new_structure.notes, clean_entry)
           end
@@ -142,17 +144,16 @@ local function ensure_grouped_cited_by(frontmatter)
   return true
 end
 
---- FIXED: Adds or removes a backlink from a target file
+--- Adds or removes a backlink from a target file
 local function manage_backlink(citing_path, target_path, action)
   local citing_type, citing_id = M.get_note_type_and_id(citing_path)
   if not citing_type or not citing_id then return end
   
-  -- VALIDATION: Check if target is aggregate note
+  -- Check if target is aggregate note (skip updates to avoid spam)
   local target_content = vim.fn.readfile(target_path)
   local target_fm, _ = yaml.parse_frontmatter(target_content)
   
   if target_fm and target_fm.type == "agg" then
-    -- Silently fail for aggregates to avoid spamming errors during bulk updates
     return
   end
   
@@ -161,11 +162,12 @@ local function manage_backlink(citing_path, target_path, action)
   local fm, content_start = yaml.parse_frontmatter(content)
   if not fm then return end
   
-  -- CRITICAL FIX: Ensure grouped structure
   local migrated = ensure_grouped_cited_by(fm)
   
   -- Determine which group to modify
-  local group = (citing_type == "bib") and "bib" or "notes"
+  local group = "notes"
+  if citing_type == "bib" then group = "bib" end
+  if citing_type == "journal" then group = "journal" end
   
   -- Check if entry exists
   local found_index = nil
@@ -181,7 +183,6 @@ local function manage_backlink(citing_path, target_path, action)
   local modified = migrated
   
   if action == "add" and not found_index then
-    -- Add new backlink
     if not fm.cited_by[group] then fm.cited_by[group] = {} end
     table.insert(fm.cited_by[group], {
       identifier = citing_id,
@@ -191,29 +192,22 @@ local function manage_backlink(citing_path, target_path, action)
     modified = true
     
   elseif action == "remove" and found_index then
-    -- Remove backlink
     table.remove(fm.cited_by[group], found_index)
     modified = true
   end
   
   if modified then
-    -- Sort both groups
     if fm.cited_by.notes then
-        table.sort(fm.cited_by.notes, function(a, b) 
-          return (a.identifier or "") < (b.identifier or "") 
-        end)
+        table.sort(fm.cited_by.notes, function(a, b) return (a.identifier or "") < (b.identifier or "") end)
     end
     if fm.cited_by.bib then
-        table.sort(fm.cited_by.bib, function(a, b) 
-          return (a.identifier or "") < (b.identifier or "") 
-        end)
+        table.sort(fm.cited_by.bib, function(a, b) return (a.identifier or "") < (b.identifier or "") end)
     end
-    
     yaml.save_frontmatter(fm, content_start, target_path)
   end
 end
 
---- FIXED: Migrate legacy inline links to YAML
+--- Migrate legacy inline links to YAML
 local function migrate_legacy_links(filepath)
   local content = vim.fn.readfile(filepath)
   local fm, content_start = yaml.parse_frontmatter(content)
@@ -226,7 +220,6 @@ local function migrate_legacy_links(filepath)
   local clean_content = {}
   local pattern = "%*Linked from: %[%[([^%]]+)%]%]%*"
   
-  -- Scan document body for legacy links
   for i = content_start, #content do
     local line = content[i]
     local basename = line:match(pattern)
@@ -238,23 +231,20 @@ local function migrate_legacy_links(filepath)
     end
   end
   
-  -- Process found legacy links
   if #legacy_links > 0 then
     local items_map = M.get_citable_items_map()
     
     for _, basename in ipairs(legacy_links) do
-      local found = false
       for id, data in pairs(items_map) do
         if data.basename == basename then
-          local group = (data.type == "bib") and "bib" or "notes"
+          local group = "notes"
+          if data.type == "bib" then group = "bib" end
+          if data.type == "journal" then group = "journal" end
           
           local exists = false
           if fm.cited_by[group] then
               for _, entry in ipairs(fm.cited_by[group]) do
-                if entry.identifier == id then
-                  exists = true
-                  break
-                end
+                if entry.identifier == id then exists = true break end
               end
           end
           
@@ -265,19 +255,14 @@ local function migrate_legacy_links(filepath)
               link = "[[" .. basename .. "]]"
             })
           end
-          
-          found = true
           break
         end
       end
     end
     
-    -- Write updated file
     local fm_lines = yaml.generate_yaml(fm)
     local final_content = {"---"}
-    for _, line in ipairs(fm_lines) do 
-      table.insert(final_content, line) 
-    end
+    for _, line in ipairs(fm_lines) do table.insert(final_content, line) end
     table.insert(final_content, "---")
     
     if #clean_content > 0 and clean_content[1] ~= "" then
@@ -292,7 +277,7 @@ local function migrate_legacy_links(filepath)
   end
 end
 
---- ENHANCED: Update references with file existence validation
+--- Update references in current file and cross-update backlinks
 function M.update_references()
   local current_path = vim.fn.expand("%:p")
   if not current_path or current_path == "" then return end
@@ -303,16 +288,18 @@ function M.update_references()
   local frontmatter, content_start = yaml.parse_frontmatter(lines)
   if not frontmatter then return end
   
-  -- Ensure cites uses grouped structure
+  -- Ensure grouped structure for cites
   if not frontmatter.cites then
-    frontmatter.cites = {notes = {}, bib = {}}
+    frontmatter.cites = {notes = {}, bib = {}, journal = {}}
   elseif type(frontmatter.cites) == "table" then
     if not frontmatter.cites.notes and not frontmatter.cites.bib then
         local old_array = frontmatter.cites
-        frontmatter.cites = {notes = {}, bib = {}}
+        frontmatter.cites = {notes = {}, bib = {}, journal = {}}
         for _, entry in ipairs(old_array) do
           if type(entry) == "table" and entry.identifier then
-            local group = (entry.type == "bib") and "bib" or "notes"
+            local group = "notes"
+            if entry.type == "bib" then group = "bib" end
+            if entry.type == "journal" then group = "journal" end
             table.insert(frontmatter.cites[group], {
               identifier = entry.identifier,
               title = entry.title,
@@ -323,16 +310,18 @@ function M.update_references()
     end
   end
   
-  -- Build maps of old references
+  -- Map old citations to check diffs later
   local old_cites_map = {}
-  for _, entry in ipairs(frontmatter.cites.notes or {}) do
-    if entry.identifier then old_cites_map[entry.identifier] = true end
-  end
-  for _, entry in ipairs(frontmatter.cites.bib or {}) do
-    if entry.identifier then old_cites_map[entry.identifier] = true end
+  local groups = {"notes", "bib", "journal"}
+  for _, g in ipairs(groups) do
+    if frontmatter.cites[g] then
+        for _, entry in ipairs(frontmatter.cites[g]) do
+            if entry.identifier then old_cites_map[entry.identifier] = true end
+        end
+    end
   end
   
-  -- Find all citations in document body
+  -- Find new citations in text
   local all_items_map = M.get_citable_items_map()
   local all_items_by_short = {}
   
@@ -341,7 +330,7 @@ function M.update_references()
     all_items_by_short[short] = {id = id, data = data}
   end
   
-  local new_cites = {notes = {}, bib = {}}
+  local new_cites = {notes = {}, bib = {}, journal = {}}
   local new_cites_map = {}
   
   for i = content_start, #lines do
@@ -354,7 +343,10 @@ function M.update_references()
         if item then
           if vim.fn.filereadable(item.data.path) == 1 then
             if not new_cites_map[item.id] then
-              local group = (item.data.type == "bib") and "bib" or "notes"
+              local group = "notes"
+              if item.data.type == "bib" then group = "bib" end
+              if item.data.type == "journal" then group = "journal" end
+              
               table.insert(new_cites[group], {
                 identifier = item.id,
                 title = item.data.title,
@@ -369,14 +361,15 @@ function M.update_references()
   end
   
   -- Sort
-  table.sort(new_cites.notes, function(a, b) return a.identifier < b.identifier end)
-  table.sort(new_cites.bib, function(a, b) return a.identifier < b.identifier end)
+  for _, g in ipairs(groups) do
+      table.sort(new_cites[g], function(a, b) return a.identifier < b.identifier end)
+  end
   
   frontmatter.cites = new_cites
   yaml.save_frontmatter(frontmatter, content_start)
   
-  -- Update backlinks (Cross-updating)
-  -- Remove backlinks for citations that were deleted
+  -- Bidirectional updates (Backlinks)
+  -- Remove me from notes I stopped citing
   for id, _ in pairs(old_cites_map) do
     if not new_cites_map[id] then
       local target_item = all_items_map[id]
@@ -386,7 +379,7 @@ function M.update_references()
     end
   end
   
-  -- Add backlinks for new citations
+  -- Add me to notes I started citing
   for id, _ in pairs(new_cites_map) do
     if not old_cites_map[id] then
       local target_item = all_items_map[id]
@@ -397,7 +390,7 @@ function M.update_references()
   end
 end
 
---- Insert citation with aggregate validation
+--- Insert citation helper
 function M.insert_citation()
   local items = M.get_citable_items_for_picker()
   if #items == 0 then return end
@@ -454,6 +447,117 @@ function M.goto_citation()
   vim.notify("Citation not found: " .. citation_match, vim.log.levels.ERROR)
 end
 
+-- ============================================================================
+-- FIXED: Missing function restored for rename/delete logic
+-- ============================================================================
+function M.update_references_on_rename(old_basename, new_basename, new_title)
+  local old_type, old_id = M.get_note_type_and_id(old_basename .. ".md")
+  -- For deletion, new_basename is "__DELETED__", skip generating ID
+  local new_type, new_id = nil, nil
+  if new_basename ~= "__DELETED__" then
+      new_type, new_id = M.get_note_type_and_id(new_basename .. ".md")
+  end
+  
+  if not old_id then return end
+  
+  local search_paths = {
+    config.folders.consolidated,
+    config.folders.journal, 
+    config.folders.scratchpad
+  }
+  
+  for _, folder in ipairs(search_paths) do
+    if folder then
+        local search_path = join_path(config.root_path, folder)
+        local files = vim.fn.glob(search_path .. "/*.md", false, true)
+        if type(files) ~= "table" then files = {} end
+        
+        for _, file in ipairs(files) do
+          local content = vim.fn.readfile(file)
+          local modified = false
+          local new_content_lines = {}
+          
+          -- 1. Body replacement (Inline links)
+          for _, line in ipairs(content) do
+            local new_line = line
+            if new_basename == "__DELETED__" then
+                local link_pattern = "%[%[" .. vim.pesc(old_basename) .. "%]%]"
+                if line:match(link_pattern) then
+                    new_line = line:gsub(link_pattern, "~~" .. old_basename .. "~~ (deleted)")
+                    modified = true
+                end
+            else
+                new_line = line:gsub(
+                  "%[%[" .. vim.pesc(old_basename) .. "%]%]",
+                  "[[" .. new_basename .. "]]"
+                )
+                if new_line ~= line then modified = true end
+            end
+            table.insert(new_content_lines, new_line)
+          end
+          
+          -- 2. YAML replacement
+          local fm, content_start = yaml.parse_frontmatter(new_content_lines)
+          if fm then
+             local lists_to_check = {}
+             if fm.cites then table.insert(lists_to_check, fm.cites) end
+             if fm.cited_by then table.insert(lists_to_check, fm.cited_by) end
+             
+             for _, list in ipairs(lists_to_check) do
+                for _, group_key in ipairs({"notes", "bib", "journal"}) do
+                    if list[group_key] then
+                        local new_group_list = {}
+                        local list_modified = false
+                        
+                        for _, item in ipairs(list[group_key]) do
+                            if type(item) == "table" and item.identifier == old_id then
+                                if new_basename == "__DELETED__" then
+                                    -- Skip adding this item -> effectively deletes it
+                                    list_modified = true
+                                    modified = true
+                                else
+                                    -- Rename
+                                    item.link = "[[" .. new_basename .. "]]"
+                                    if new_id then item.identifier = new_id end
+                                    if new_title and item.title then item.title = new_title end
+                                    table.insert(new_group_list, item)
+                                    modified = true
+                                end
+                            else
+                                table.insert(new_group_list, item)
+                            end
+                        end
+                        
+                        if list_modified then
+                            list[group_key] = new_group_list
+                        end
+                    end
+                end
+             end
+          end
+          
+          if modified then
+               if fm then
+                  local fm_lines = yaml.generate_yaml(fm)
+                  local final_content = {"---"}
+                  for _, line in ipairs(fm_lines) do table.insert(final_content, line) end
+                  table.insert(final_content, "---")
+                  if #new_content_lines >= content_start and new_content_lines[content_start] ~= "" then
+                    table.insert(final_content, "")
+                  end
+                  for i = content_start, #new_content_lines do
+                    table.insert(final_content, new_content_lines[i])
+                  end
+                  vim.fn.writefile(final_content, file)
+              else
+                  vim.fn.writefile(new_content_lines, file)
+              end
+          end
+        end
+    end
+  end
+end
+
 --- Cleanup deleted note references
 function M.cleanup_deleted_note(deleted_path)
     -- Simply remove backlinks to this file from everything else
@@ -462,8 +566,6 @@ function M.cleanup_deleted_note(deleted_path)
         "__DELETED__", 
         nil
     )
-    -- This is a simplified version; real cleanup requires reading the deleted file's cites.
-    -- Assuming deleted file is already gone or we just want to break links.
 end
 
 return M

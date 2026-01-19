@@ -1,7 +1,6 @@
 -- lua/pkm/init.lua
 local M = {}
 
--- Define defaults including the templates needed by yaml.lua
 local default_config = {
   root_path = vim.fn.expand('~/Notes'),
   
@@ -12,22 +11,28 @@ local default_config = {
     templates = "templates",
   },
   
+  -- Restore Sync settings
+  sync = {
+    enabled = true,
+    auto_sync_on_save = true,
+  },
+
   frontmatter_templates = {
     consolidated = {
       title = "", author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
-      tags = {}, status = "draft", cites = {notes = {}, bib = {}}, cited_by = {notes = {}, bib = {}},
+      tags = {}, status = "draft", cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
     },
     journal = {
       created_on = "ISO8601", last_updated_on = "ISO8601", author = "",
-      tags = {}, cites = {notes = {}, bib = {}}, cited_by = {notes = {}, bib = {}},
+      tags = {}, cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
     },
     bibliography = {
       title = "", source_author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
-      cites = {notes = {}, bib = {}}, cited_by = {notes = {}, bib = {}},
+      cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
     },
     scratchpad = {
       created_on = "ISO8601", last_updated_on = "ISO8601",
-      cites = {notes = {}, bib = {}}, cited_by = {notes = {}, bib = {}},
+      cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
     },
   },
   
@@ -116,6 +121,83 @@ function M.setup(user_config)
   map(k.follow_link, "<cmd>PKMFollowLink<cr>", "Follow Link")
   map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Backlinks")
   map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture")
+
+  -- --- SYNC LOGIC ---
+  if M.config.sync.enabled then
+    M.setup_sync_autocmds()
+  end
+end
+
+--- Setup autocmds for bidirectional filename-YAML sync and timestamps
+function M.setup_sync_autocmds()
+  local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
+  
+  -- Sync on save (includes reference updates and timestamp)
+  vim.api.nvim_create_autocmd("BufWritePost", {
+    group = augroup,
+    pattern = "*.md",
+    callback = function()
+      local filepath = vim.fn.expand("%:p")
+      
+      -- Only process PKM files
+      if not filepath:find(M.config.root_path, 1, true) then
+        return
+      end
+      
+      -- Use schedule to decouple from the save event and avoid race conditions
+      vim.schedule(function()
+        local yaml = require('pkm.yaml')
+        local timestamp = require('pkm.timestamp')
+        local notes = require('pkm.notes')
+        local journal = require('pkm.journal')
+        local citations = require('pkm.citations')
+
+        -- STEP 1: Update the last_updated_on timestamp on disk
+        local lines = vim.fn.readfile(filepath)
+        local frontmatter, content_start = yaml.parse_frontmatter(lines)
+        
+        if frontmatter then
+          frontmatter.last_updated_on = timestamp.to_iso8601()
+          yaml.save_frontmatter(frontmatter, content_start, filepath)
+        end
+        
+        -- STEP 2: Sync filename if title changed
+        if filepath:find(M.config.folders.consolidated, 1, true) then
+          notes.sync_filename_on_save()
+        end
+        if filepath:find(M.config.folders.journal, 1, true) then
+          journal.sync_filename_on_save()
+        end
+
+        -- STEP 3: Sync references (the cross-update you wanted)
+        if M.config.sync.auto_sync_on_save then
+          citations.update_references()
+        end
+
+        -- STEP 4: Force reload check to sync buffer with disk changes
+        vim.cmd("checktime")
+      end)
+    end,
+    desc = "PKM: Auto-sync on save"
+  })
+  
+  -- Sync YAML when file is renamed externally
+  vim.api.nvim_create_autocmd("BufReadPost", {
+    group = augroup,
+    pattern = "*.md",
+    callback = function()
+      local filepath = vim.fn.expand("%:p")
+      if not filepath:find(M.config.root_path, 1, true) then return end
+      
+      if filepath:find(M.config.folders.consolidated, 1, true) then
+        require('pkm.notes').sync_yaml_on_rename()
+      end
+      if filepath:find(M.config.folders.journal, 1, true) then
+        require('pkm.journal').sync_yaml_on_rename()
+      end
+    end,
+    desc = "PKM: Sync YAML when file is renamed"
+  })
 end
 
 --- Delete note safely
