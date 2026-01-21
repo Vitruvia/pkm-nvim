@@ -55,7 +55,7 @@ function M.browse_tags()
   if not check_ripgrep() then return end
   
   local tags = citations.get_all_tags()
-  local root = require('pkm.init').config.root_path
+  local root = require('pkm').config.root_path
   
   pickers.new({}, {
     prompt_title = "Browse Notes by Tag",
@@ -89,7 +89,7 @@ end
 function M.find_notes()
   builtin.find_files({
     prompt_title = "Find Notes (Filename)",
-    cwd = require('pkm.init').config.root_path,
+    cwd = require('pkm').config.root_path,
     hidden = true,
     no_ignore = true,
   })
@@ -99,7 +99,7 @@ end
 function M.search_notes()
   if not check_ripgrep() then return end
 
-  local root = require('pkm.init').config.root_path
+  local root = require('pkm').config.root_path
   
   if vim.fn.isdirectory(root) == 0 then
      vim.notify("PKM Error: Invalid root path for search: " .. tostring(root), vim.log.levels.ERROR)
