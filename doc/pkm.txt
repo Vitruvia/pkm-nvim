@@ -4,77 +4,146 @@
 CONTENTS                                                      *pkm-contents*
 
     1. Introduction ............................ |pkm-introduction|
-    2. Setup ................................... |pkm-setup|
-    3. Commands ................................ |pkm-commands|
-    4. Configuration ........................... |pkm-configuration|
+    2. Requirements ............................ |pkm-requirements|
+    3. Setup ................................... |pkm-setup|
+    4. Commands ................................ |pkm-commands|
+    5. Configuration ........................... |pkm-configuration|
+    6. Keymaps ................................. |pkm-keymaps|
 
 ==============================================================================
-INTRODUCTION                                              *pkm-introduction*
+1. INTRODUCTION                                             *pkm-introduction*
 
-PKM (Personal Knowledge Management) is a note-taking system for Neovim.
+PKM is a comprehensive note-taking system for Neovim designed for Zettelkasten,
+Journaling, and Reference management.
 
 Features:
-  • Note creation and management
-  • Citations and bidirectional linking
-  • YAML frontmatter
-  • Cross-platform support (Windows, WSL, Linux, macOS)
+  • Bidirectional Linking: Updating a link in one file updates back-references.
+  • Metadata Sync: Renaming a file automatically updates its YAML title.
+  • Citations: Insert citations that link notes and bibliography entries.
+  • Cross-Platform: Works on Windows, Linux, and WSL.
 
 ==============================================================================
-SETUP                                                            *pkm-setup*
+2. REQUIREMENTS                                             *pkm-requirements*
+
+The following plugins and tools are required:
+
+  • nvim-telescope/telescope.nvim (For search and picking)
+  • ripgrep (rg) installed on your system (Required for grep search)
+
+==============================================================================
+3. SETUP                                                           *pkm-setup*
+
+Install via your plugin manager (e.g., lazy.nvim).
 
 Minimal setup: >
-
   require('pkm').setup({})
+<
 
-Full setup: >
-
+Full setup example: >
   require('pkm').setup({
     root_path = vim.fn.expand('~/Notes'),
     user = {
       name = "Your Name",
+      email = "you@example.com",
     },
-    keymaps = {
-      new_note = "<leader>nn",
-      new_journal = "<leader>nj",
-      quick_capture = "<leader>nq",
-      insert_citation = "<leader>nc",
-      search = "<leader>nf",
+    folders = {
+      consolidated = "03-Consolidated",
+      journal = "02-Journal",
+      scratchpad = "01-Scratchpad",
+    },
+    timestamp = {
+      default_format = "full", -- 'full', 'date_time', or 'date_only'
     }
   })
+<
 
 ==============================================================================
-COMMANDS                                                      *pkm-commands*
+4. COMMANDS                                                     *pkm-commands*
 
-Note Creation~
-  :PKMNewNote                   Create a new note
-  :PKMNewJournal               Create journal entry
-  :PKMNewScratchpad            Create scratchpad
-  :PKMQuickCapture             Quick capture
-  :PKMConvertNote              Convert note type
+CREATION~
+:PKMNewNote [type]      Create a new note. Optional type: 'note', 'bib', 'agg'.
+                        If no type is provided, prompts the user.
+:PKMNewJournal          Create a journal entry for today (auto-timestamped).
+:PKMNewScratchpad       Create a quick scratchpad note.
+:PKMQuickCapture        Open today's scratchpad (or create if missing) and
+                        append a timestamp header.
 
-Citations~
-  :PKMInsertCitation           Insert citation
-  :PKMUpdateReferences         Update references
-  :PKMGotoCitation            Go to citation source
+NAVIGATION & SEARCH~
+:PKMSearch              Search content across all notes (uses Telescope/Ripgrep).
+:PKMFind                Find notes by filename.
+:PKMTags                Browse notes by tag.
+:PKMBacklinks           Show notes that link to the current note.
+:PKMLinkNote            Insert a Wiki-link `[[...]]` to another note.
+:PKMFollowLink          Open the note referenced by the link under cursor.
 
-Navigation~
-  :PKMLinkNote                Link to another note
-  :PKMFollowLink              Follow link under cursor
-  :PKMBacklinks               Show backlinks
+CITATIONS~
+:PKMInsertCitation      Insert a structured citation (e.g., `note[note-001]`).
+                        Automatically adds a backlink to the target note.
+:PKMGotoCitation        Jump to the file referenced by the citation under cursor.
+:PKMUpdateReferences    Scan current file and update YAML `cites` list.
 
-Search~
-  :PKMSearch [query]          Search all notes
-  :PKMBrowseTags              Browse by tags
-  :PKMRecentJournals          Recent journal entries
-
-Utilities~
-  :PKMStats                   Show statistics
-  :PKMSync                    Sync and validate references
-  :PKMCleanupFrontmatter      Clean corrupted frontmatter
+MANAGEMENT~
+:PKMDeleteNote          Safely delete the current note.
+                        *Crucial:* This removes references to this note from
+                        other files to prevent broken links.
+:PKMSync                Force a synchronization of references.
+:PKMUpdateFrontmatter   Interactive prompt to edit YAML keys.
+:PKMValidateFrontmatter Check if YAML structure matches the template.
 
 ==============================================================================
-CONFIGURATION                                            *pkm-configuration*
+5. CONFIGURATION                                           *pkm-configuration*
 
-See README.md for full configuration options.
+The default configuration is:
 
- vim:tw=78:ts=8:ft=help:norl:
+>
+  config = {
+    -- Auto-detects home dir, normalization for Windows handled automatically
+    root_path = nil, 
+
+    folders = {
+      consolidated = "03-Consolidated",
+      journal = "02-Journal",
+      scratchpad = "01-Scratchpad",
+      templates = "templates",
+    },
+
+    sync = {
+      enabled = true,
+      auto_sync_on_save = true, -- Update 'last_updated_on' and refs on save
+    },
+
+    timestamp = {
+      default_format = "full",
+      auto_timestamp = true,
+    },
+    
+    user = {
+      name = "", -- Used for 'author' field in YAML
+    }
+  }
+<
+
+==============================================================================
+6. KEYMAPS                                                       *pkm-keymaps*
+
+You can define custom keymaps in the setup table. Defaults:
+
+  <leader>nn  :PKMNewNote
+  <leader>nj  :PKMNewJournal
+  <leader>ns  :PKMNewScratchpad
+  <leader>nq  :PKMQuickCapture
+  
+  <leader>nd  :PKMDeleteNote
+  
+  <leader>nf  :PKMSearch (Find content)
+  <leader>nt  :PKMTags
+  
+  <leader>nc  :PKMInsertCitation
+  <leader>ng  :PKMGotoCitation
+  
+  <leader>nl  :PKMLinkNote
+  <leader>nb  :PKMBacklinks
+  gf          :PKMFollowLink (Override standard goto-file)
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:

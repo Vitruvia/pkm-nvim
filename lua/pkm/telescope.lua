@@ -111,7 +111,7 @@ function M.search_notes()
     cwd = root,
     glob_pattern = "*.md",
     additional_args = function() 
-        return { "--hidden", "--no-ignore", "--fixed-strings" } 
+        return { "--hidden", "--no-ignore" } 
     end
   })
 end
