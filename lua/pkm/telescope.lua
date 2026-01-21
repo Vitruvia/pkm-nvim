@@ -12,10 +12,9 @@ local actions = require('telescope.actions')
 local action_state = require('telescope.actions.state')
 local builtin = require('telescope.builtin')
 
--- Helper: Check for Ripgrep
 local function check_ripgrep()
   if vim.fn.executable("rg") == 0 then
-    vim.notify("PKM Error: 'rg' (Ripgrep) is not installed or not in PATH.\nInstall it via 'winget install BurntSushi.ripgrep.MSVC'", vim.log.levels.ERROR)
+    vim.notify("PKM Error: 'rg' (Ripgrep) not found. Please install it.", vim.log.levels.ERROR)
     return false
   end
   return true
@@ -56,6 +55,7 @@ function M.browse_tags()
   if not check_ripgrep() then return end
   
   local tags = citations.get_all_tags()
+  local root = require('pkm.init').config.root_path
   
   pickers.new({}, {
     prompt_title = "Browse Notes by Tag",
@@ -75,7 +75,7 @@ function M.browse_tags()
             builtin.grep_string({
               prompt_title = "Notes with tag: " .. tag,
               search = tag, 
-              cwd = require('pkm.init').config.root_path,
+              cwd = root,
               additional_args = function() return { "--hidden" } end
             })
         end
@@ -101,16 +101,15 @@ function M.search_notes()
 
   local root = require('pkm.init').config.root_path
   
-  -- Ensure the root is valid before searching
   if vim.fn.isdirectory(root) == 0 then
-     vim.notify("PKM Error: Cannot search. Invalid root: " .. tostring(root), vim.log.levels.ERROR)
+     vim.notify("PKM Error: Invalid root path for search: " .. tostring(root), vim.log.levels.ERROR)
      return
   end
 
   builtin.live_grep({
     prompt_title = "Search Note Content",
     cwd = root,
-    glob_pattern = "*.md", -- Search all MD files
+    glob_pattern = "*.md",
     additional_args = function() 
         return { "--hidden", "--no-ignore", "--fixed-strings" } 
     end
