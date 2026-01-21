@@ -33,7 +33,9 @@ function M.insert_citation_picker()
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        citations.complete_insertion(selection.value)
+        if selection then
+            citations.complete_insertion(selection.value)
+        end
       end)
       return true
     end,
@@ -57,14 +59,18 @@ function M.browse_tags()
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        local tag = selection.value
-        
-        -- Search for the tag in the files
-        builtin.grep_string({
-          prompt_title = "Notes with tag: " .. tag,
-          search = tag, 
-          cwd = require('pkm.init').config.root_path,
-        })
+        if selection then
+            local tag = selection.value
+            -- Search for the tag content in files
+            builtin.grep_string({
+              prompt_title = "Notes with tag: " .. tag,
+              search = tag, 
+              cwd = require('pkm.init').config.root_path,
+              additional_args = function(args)
+                return vim.list_extend(args, { "--hidden", "--no-ignore" })
+              end
+            })
+        end
       end)
       return true
     end,
@@ -74,20 +80,23 @@ end
 -- 3. Find Note Files (by filename)
 function M.find_notes()
   builtin.find_files({
-    prompt_title = "Find Notes",
+    prompt_title = "Find Notes (Filename)",
     cwd = require('pkm.init').config.root_path,
-    hidden = false,
-    find_command = { "find", ".", "-type", "f", "-name", "*.md" } -- Optimization for Linux/WSL
+    hidden = true,
+    no_ignore = true,
   })
 end
 
--- 4. Search Note Content (Live Grep) - Fixed for <leader>nf
+-- 4. Search Note Content (Live Grep) - Fixed
 function M.search_notes()
-  -- Requires 'ripgrep' to be installed on the system
   builtin.live_grep({
     prompt_title = "Search Note Content",
     cwd = require('pkm.init').config.root_path,
-    glob_pattern = "*.md", -- Only search markdown files
+    -- Force search in markdown files, include hidden/ignored files
+    type_filter = "markdown",
+    additional_args = function(args)
+        return vim.list_extend(args, { "--hidden", "--no-ignore" })
+    end
   })
 end
 
