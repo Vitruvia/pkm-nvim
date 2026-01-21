@@ -12,6 +12,15 @@ local actions = require('telescope.actions')
 local action_state = require('telescope.actions.state')
 local builtin = require('telescope.builtin')
 
+-- Helper: Check for Ripgrep
+local function check_ripgrep()
+  if vim.fn.executable("rg") == 0 then
+    vim.notify("PKM Error: 'rg' (Ripgrep) is not installed or not in PATH.\nInstall it via 'winget install BurntSushi.ripgrep.MSVC'", vim.log.levels.ERROR)
+    return false
+  end
+  return true
+end
+
 -- 1. Insert Citation Picker
 function M.insert_citation_picker()
   local items = citations.get_citable_items_list()
@@ -44,6 +53,8 @@ end
 
 -- 2. Browse Tags Picker
 function M.browse_tags()
+  if not check_ripgrep() then return end
+  
   local tags = citations.get_all_tags()
   
   pickers.new({}, {
@@ -61,12 +72,10 @@ function M.browse_tags()
         local selection = action_state.get_selected_entry()
         if selection then
             local tag = selection.value
-            -- Search for the tag content in files
             builtin.grep_string({
               prompt_title = "Notes with tag: " .. tag,
               search = tag, 
               cwd = require('pkm.init').config.root_path,
-              glob_pattern = "*.md",
               additional_args = function() return { "--hidden" } end
             })
         end
@@ -86,18 +95,22 @@ function M.find_notes()
   })
 end
 
--- 4. Search Note Content (Live Grep) - SIMPLIFIED
+-- 4. Search Note Content (Live Grep)
 function M.search_notes()
+  if not check_ripgrep() then return end
+
   local root = require('pkm.init').config.root_path
   
-  -- Debug info: remove after confirming it works
-  -- vim.notify("Searching in: " .. root, vim.log.levels.INFO)
+  -- Ensure the root is valid before searching
+  if vim.fn.isdirectory(root) == 0 then
+     vim.notify("PKM Error: Cannot search. Invalid root: " .. tostring(root), vim.log.levels.ERROR)
+     return
+  end
 
   builtin.live_grep({
     prompt_title = "Search Note Content",
     cwd = root,
-    glob_pattern = "*.md",
-    -- Removed strict type_filter to avoid issues with custom file extensions or rg detection
+    glob_pattern = "*.md", -- Search all MD files
     additional_args = function() 
         return { "--hidden", "--no-ignore", "--fixed-strings" } 
     end

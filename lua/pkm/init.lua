@@ -2,8 +2,7 @@
 local M = {}
 
 local default_config = {
-  -- Default to home, but this should be overwritten by your setup() call
-  root_path = vim.fn.expand('~/Notes'),
+  root_path = vim.fn.expand('~/Notes'), -- Fallback if user provides nothing
   
   folders = {
     consolidated = "03-Consolidated",
@@ -57,19 +56,16 @@ M.config = default_config
 function M.setup(user_config)
   M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
 
-  -- Validate Root Path
+  -- Validate Root Path (Strict)
   local root = M.config.root_path
-  if vim.fn.isdirectory(root) == 0 then
-    -- Try to expand if it contains ~
+  -- Expand tilde if present
+  if root:match("^~") then
     root = vim.fn.expand(root)
     M.config.root_path = root
   end
-  
+
   if vim.fn.isdirectory(root) == 0 then
-    vim.notify("PKM Error: Root path does not exist: " .. root, vim.log.levels.ERROR)
-  else
-    -- Optional: confirm loaded path (comment out once working)
-    -- vim.notify("PKM Root: " .. root, vim.log.levels.INFO)
+    vim.notify("PKM Warning: Root path does not exist: " .. root, vim.log.levels.WARN)
   end
 
   -- Inject user name
