@@ -66,9 +66,8 @@ function M.browse_tags()
               prompt_title = "Notes with tag: " .. tag,
               search = tag, 
               cwd = require('pkm.init').config.root_path,
-              additional_args = function()
-                return { "--hidden", "--no-ignore" }
-              end
+              glob_pattern = "*.md",
+              additional_args = function() return { "--hidden" } end
             })
         end
       end)
@@ -87,22 +86,20 @@ function M.find_notes()
   })
 end
 
--- 4. Search Note Content (Live Grep) - FIXED
+-- 4. Search Note Content (Live Grep) - SIMPLIFIED
 function M.search_notes()
-  -- Check if root path is configured
   local root = require('pkm.init').config.root_path
-  if not root or vim.fn.isdirectory(root) == 0 then
-    vim.notify("PKM: Root path invalid: " .. tostring(root), vim.log.levels.ERROR)
-    return
-  end
+  
+  -- Debug info: remove after confirming it works
+  -- vim.notify("Searching in: " .. root, vim.log.levels.INFO)
 
   builtin.live_grep({
     prompt_title = "Search Note Content",
     cwd = root,
-    type_filter = "markdown", -- Restrict to markdown files
-    additional_args = function()
-        -- FIXED: Simply return a new table instead of trying to extend 'args'
-        return { "--hidden", "--no-ignore" }
+    glob_pattern = "*.md",
+    -- Removed strict type_filter to avoid issues with custom file extensions or rg detection
+    additional_args = function() 
+        return { "--hidden", "--no-ignore", "--fixed-strings" } 
     end
   })
 end

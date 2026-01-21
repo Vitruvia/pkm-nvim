@@ -2,6 +2,7 @@
 local M = {}
 
 local default_config = {
+  -- Default to home, but this should be overwritten by your setup() call
   root_path = vim.fn.expand('~/Notes'),
   
   folders = {
@@ -38,7 +39,7 @@ local default_config = {
   keymaps = {
     new_note = "<leader>nn",
     new_journal = "<leader>nj",
-    new_scratchpad = "<leader>ns", -- Added
+    new_scratchpad = "<leader>ns",
     search = "<leader>nf",
     browse_tags = "<leader>nt",
     insert_citation = "<leader>nc",
@@ -56,10 +57,24 @@ M.config = default_config
 function M.setup(user_config)
   M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
 
-  -- Inject user name into templates
+  -- Validate Root Path
+  local root = M.config.root_path
+  if vim.fn.isdirectory(root) == 0 then
+    -- Try to expand if it contains ~
+    root = vim.fn.expand(root)
+    M.config.root_path = root
+  end
+  
+  if vim.fn.isdirectory(root) == 0 then
+    vim.notify("PKM Error: Root path does not exist: " .. root, vim.log.levels.ERROR)
+  else
+    -- Optional: confirm loaded path (comment out once working)
+    -- vim.notify("PKM Root: " .. root, vim.log.levels.INFO)
+  end
+
+  -- Inject user name
   if M.config.user and M.config.user.name ~= "" then
     M.config.frontmatter_templates.consolidated.author = M.config.user.name
-    -- FIXED: Also inject into journal
     M.config.frontmatter_templates.journal.author = M.config.user.name
   end
 
@@ -75,15 +90,13 @@ function M.setup(user_config)
   -- --- COMMANDS ---
   vim.api.nvim_create_user_command('PKMNewNote', function(opts) require('pkm.notes').create_new_note(opts.args ~= "" and opts.args or nil) end, { nargs = "?" })
   vim.api.nvim_create_user_command('PKMNewJournal', function() require('pkm.journal').create_entry(true) end, {})
-  vim.api.nvim_create_user_command('PKMNewScratchpad', function() require('pkm.notes').create_scratchpad() end, {}) -- Added
+  vim.api.nvim_create_user_command('PKMNewScratchpad', function() require('pkm.notes').create_scratchpad() end, {})
   vim.api.nvim_create_user_command('PKMDeleteNote', function() M.delete_note_safely() end, {})
-
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
   vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
   vim.api.nvim_create_user_command('PKMInsertCitation', function() require('pkm.telescope').insert_citation_picker() end, {})
   vim.api.nvim_create_user_command('PKMGotoCitation', function() require('pkm.citations').goto_citation() end, {})
   vim.api.nvim_create_user_command('PKMUpdateReferences', function() require('pkm.citations').update_references() end, {})
-  
   vim.api.nvim_create_user_command('PKMLinkNote', function() require('pkm.notes').link_to_note() end, {})
   vim.api.nvim_create_user_command('PKMFollowLink', function() require('pkm.notes').follow_link() end, {})
   vim.api.nvim_create_user_command('PKMBacklinks', function() require('pkm.notes').show_backlinks() end, {})
@@ -96,7 +109,7 @@ function M.setup(user_config)
 
   map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")
   map(k.new_journal, "<cmd>PKMNewJournal<cr>", "New Journal")
-  map(k.new_scratchpad, "<cmd>PKMNewScratchpad<cr>", "New Scratchpad") -- Added
+  map(k.new_scratchpad, "<cmd>PKMNewScratchpad<cr>", "New Scratchpad")
   map(k.delete_note, "<cmd>PKMDeleteNote<cr>", "Delete Note")
   map(k.search, "<cmd>PKMSearch<cr>", "Search Content")
   map(k.browse_tags, "<cmd>PKMTags<cr>", "Browse Tags") 
@@ -109,11 +122,6 @@ function M.setup(user_config)
 
   if M.config.sync.enabled then M.setup_sync_autocmds() end
 end
-
--- (Keep the setup_sync_autocmds and delete_note_safely functions exactly as they were in the previous correct version)
--- [Re-paste the rest of init.lua functions here if you are copy-pasting the whole file, essentially just ensure new_scratchpad is mapped]
--- For brevity, I am omitting the repeating function bodies from the previous step unless requested, 
--- but ensure you keep `setup_sync_autocmds` and `delete_note_safely` in the file.
 
 function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
