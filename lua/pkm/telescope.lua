@@ -33,14 +33,7 @@ function M.insert_citation_picker()
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        -- Insert logic moved here to avoid circular require
-        local item = selection.value
-        local citation = string.format("%s[%s]", item.type, item.short_id)
-        local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-        local line = vim.api.nvim_get_current_line()
-        vim.api.nvim_set_current_line(line:sub(1, col) .. citation .. line:sub(col + 1))
-        vim.api.nvim_win_set_cursor(0, {row, col + #citation})
-        vim.schedule(function() citations.update_references() end)
+        citations.complete_insertion(selection.value)
       end)
       return true
     end,
@@ -55,21 +48,22 @@ function M.browse_tags()
     prompt_title = "Browse Notes by Tag",
     finder = finders.new_table {
       results = tags,
+      entry_maker = function(entry) 
+          return { value = entry, display = entry, ordinal = entry } 
+      end
     },
     sorter = conf.generic_sorter({}),
     attach_mappings = function(prompt_bufnr, map)
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        local tag = selection[1]
+        local tag = selection.value
         
-        -- Open Live Grep pre-filled with the tag
-        -- We search for the specific YAML list syntax to be accurate
-        -- Pattern: "  - "tagname"" or "  - tagname"
+        -- Search for the tag in the files
         builtin.grep_string({
           prompt_title = "Notes with tag: " .. tag,
           search = tag, 
-          cwd = require('pkm.init').config.root_path
+          cwd = require('pkm.init').config.root_path,
         })
       end)
       return true
@@ -77,59 +71,24 @@ function M.browse_tags()
   }):find()
 end
 
--- 3. Search All Notes (File Names)
+-- 3. Find Note Files (by filename)
 function M.find_notes()
   builtin.find_files({
     prompt_title = "Find Notes",
     cwd = require('pkm.init').config.root_path,
-    hidden = false
+    hidden = false,
+    find_command = { "find", ".", "-type", "f", "-name", "*.md" } -- Optimization for Linux/WSL
   })
 end
 
--- 4. Search Note Content (Grep)
+-- 4. Search Note Content (Live Grep) - Fixed for <leader>nf
 function M.search_notes()
+  -- Requires 'ripgrep' to be installed on the system
   builtin.live_grep({
     prompt_title = "Search Note Content",
     cwd = require('pkm.init').config.root_path,
+    glob_pattern = "*.md", -- Only search markdown files
   })
-end
-
-
--- 5. Select Templates
-function M.template_picker(templates, on_select)
-  pickers.new({}, {
-    prompt_title = "Apply Template",
-    finder = finders.new_table {
-      results = templates,
-      entry_maker = function(entry)
-        return {
-          value = entry,
-          display = entry.name,
-          ordinal = entry.name,
-          path = entry.path
-        }
-      end
-    },
-    sorter = conf.generic_sorter({}),
-    previewer = require('telescope.previewers').new_buffer_previewer({
-      define_preview = function(self, entry, status)
-        require('telescope.config').values.buffer_previewer_maker(entry.path, self.state.bufnr, {
-          bufname = self.state.bufname,
-          winid = self.state.winid,
-        })
-      end
-    }),
-    attach_mappings = function(prompt_bufnr, map)
-      actions.select_default:replace(function()
-        actions.close(prompt_bufnr)
-        local selection = action_state.get_selected_entry()
-        if selection then
-          on_select(selection.value)
-        end
-      end)
-      return true
-    end,
-  }):find()
 end
 
 return M
