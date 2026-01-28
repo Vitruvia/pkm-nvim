@@ -161,7 +161,6 @@ function M.create_new_note(note_type) -- REMOVED the 'allow_unnamed' parameter
   vim.cmd("edit " .. vim.fn.fnameescape(filepath))
   
   vim.cmd("normal! G")
-  vim.cmd("startinsert")
   
   vim.notify("Created: " .. filename, vim.log.levels.INFO)
   return filepath
@@ -296,7 +295,6 @@ function M.create_scratchpad()
   
   -- Move cursor to end
   vim.cmd("normal! G")
-  vim.cmd("startinsert")
   
   vim.notify("Created scratchpad: " .. filename, vim.log.levels.INFO)
   return filepath
