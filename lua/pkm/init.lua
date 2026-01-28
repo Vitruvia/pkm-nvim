@@ -59,6 +59,7 @@ local default_config = {
     follow_link = "gf",
     backlinks = "<leader>nb",
     quick_capture = "<leader>nq",
+    import_note = "<leader>ni"
   }
 }
 
@@ -116,6 +117,10 @@ function M.setup(user_config)
     M.delete_note_safely() 
   end, {})
 
+  vim.api.nvim_create_user_command('PKMImport', function() 
+      require('pkm.notes').import_note() 
+  end, { desc = "Import current file into PKM system" })
+
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
   vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
   vim.api.nvim_create_user_command('PKMInsertCitation', function() require('pkm.telescope').insert_citation_picker() end, {})
@@ -144,6 +149,7 @@ function M.setup(user_config)
   map(k.follow_link, "<cmd>PKMFollowLink<cr>", "Follow Link")
   map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Backlinks")
   map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture")
+  map(k.import_note, "<cmd>PKMImport<cr>", "Import Note")
 
   if M.config.sync.enabled then M.setup_sync_autocmds() end
 end

@@ -635,4 +635,101 @@ function M.show_backlinks()
   end)
 end
 
+function M.import_note()
+  local current_path = vim.fn.expand("%:p")
+  local current_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  
+  -- Check if already in system
+  if current_path ~= "" and current_path:find(config.root_path, 1, true) then
+    vim.notify("This file is already in your PKM system.", vim.log.levels.WARN)
+    return
+  end
+
+  -- Parse any existing frontmatter
+  local existing_fm, content_start = yaml.parse_frontmatter(current_lines)
+  local title_guess = "Imported Note"
+  
+  if existing_fm and existing_fm.title then
+    title_guess = existing_fm.title
+  elseif current_path ~= "" then
+    title_guess = vim.fn.fnamemodify(current_path, ":t:r")
+  elseif content_start and current_lines[content_start] then
+    -- Try to guess title from first line if it looks like a header
+    local first_line = current_lines[content_start]
+    if first_line:match("^#+ ") then
+        title_guess = first_line:gsub("^#+ ", "")
+    end
+  end
+
+  -- Prompt for Type
+  vim.ui.select({"note", "bib", "agg"}, { prompt = "Select Import Type:" }, function(selected_type)
+    if not selected_type then return end
+    
+    -- Prompt for Title
+    vim.ui.input({ prompt = "Title: ", default = title_guess }, function(input_title) 
+      if input_title == nil then return end -- Cancelled
+      local title = input_title
+      if title == "" then title = "Unnamed" end
+
+      -- Prepare Metadata
+      local fm_data = existing_fm or {}
+      fm_data.title = title
+      if not fm_data.created_on then fm_data.created_on = timestamp.to_iso8601() end
+      
+      -- If bib, ensure source fields exist (prompt optional, or just blank)
+      if selected_type == "bib" then
+         if not fm_data.source_author then fm_data.source_author = "" end
+         if not fm_data.source_type then fm_data.source_type = "book" end
+      end
+
+      -- Generate Target Path
+      local note_number = get_next_note_number()
+      local safe_title = sanitize_title(title)
+      local filename = string.format("%04d_%s_%s.md", note_number, selected_type, safe_title)
+      local target_path = join_path(config.root_path, config.folders.consolidated, filename)
+      ensure_dir(vim.fn.fnamemodify(target_path, ":h"))
+
+      -- Prevent overwrite
+      if vim.fn.filereadable(target_path) == 1 then
+         vim.notify("Cannot import: ID collision or file exists (" .. filename .. ")", vim.log.levels.ERROR)
+         return
+      end
+
+      -- Generate New Frontmatter
+      local template_type = (selected_type == "bib") and "bibliography" or "consolidated"
+      local new_fm_lines = yaml.create_frontmatter(template_type, fm_data)
+      
+      -- Construct Final Content
+      local final_content = {}
+      for _, l in ipairs(new_fm_lines) do table.insert(final_content, l) end
+      
+      -- Append original body (skip original FM if it existed)
+      local start_line = existing_fm and content_start or 1
+      for i = start_line, #current_lines do
+        table.insert(final_content, current_lines[i])
+      end
+
+      -- Write File
+      vim.fn.writefile(final_content, target_path)
+      
+      -- Handle Old Buffer/File
+      local delete_old = false
+      if current_path ~= "" and vim.fn.filereadable(current_path) == 1 then
+        vim.ui.select({"Delete original", "Keep original"}, { prompt = "Import successful. Original file:" }, function(choice)
+            if choice == "Delete original" then
+                vim.fn.delete(current_path)
+            end
+            -- Switch buffer to new file
+            vim.cmd("edit " .. vim.fn.fnameescape(target_path))
+        end)
+      else
+        -- Unnamed buffer, just switch
+        vim.cmd("edit " .. vim.fn.fnameescape(target_path))
+      end
+      
+      vim.notify("Imported: " .. filename, vim.log.levels.INFO)
+    end)
+  end)
+end
+
 return M
