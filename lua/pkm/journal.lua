@@ -115,7 +115,6 @@ function M.create_entry(use_current)
   
   -- Move cursor to content area
   vim.cmd("normal! G")
-  vim.cmd("startinsert")
   
   vim.notify("Created journal entry: " .. filename, vim.log.levels.INFO)
   return filepath
