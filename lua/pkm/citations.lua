@@ -415,6 +415,141 @@ function M.update_references()
   end
 end
 
+function M.update_references(target_file)
+  -- 1. Determine Context (Buffer vs Disk)
+  local current_path = target_file or vim.fn.expand("%:p")
+  if not current_path or current_path == "" then return end
+  
+  -- Only migrate legacy links if we are working on disk (Sync mode)
+  if target_file then
+    migrate_legacy_links(current_path)
+  end
+  
+  -- 2. Read Content
+  local lines
+  if target_file then
+    lines = vim.fn.readfile(target_file) -- Read from disk
+  else
+    lines = vim.api.nvim_buf_get_lines(0, 0, -1, false) -- Read from buffer
+  end
+
+  local frontmatter, content_start = yaml.parse_frontmatter(lines)
+  if not frontmatter then return end
+  
+  -- 3. Ensure structure
+  if not frontmatter.cites then
+    frontmatter.cites = {notes = {}, bib = {}, journal = {}}
+  elseif type(frontmatter.cites) == "table" then
+    if not frontmatter.cites.notes and not frontmatter.cites.bib then
+        local old_array = frontmatter.cites
+        frontmatter.cites = {notes = {}, bib = {}, journal = {}}
+        for _, entry in ipairs(old_array) do
+          if type(entry) == "table" and entry.identifier then
+            local group = "notes"
+            if entry.type == "bib" then group = "bib" end
+            if entry.type == "journal" then group = "journal" end
+            table.insert(frontmatter.cites[group], {
+              identifier = entry.identifier,
+              title = entry.title,
+              link = entry.link
+            })
+          end
+        end
+    end
+  end
+  
+  -- 4. Map Old Citations
+  local old_cites_map = {}
+  local groups = {"notes", "bib", "journal"}
+  for _, g in ipairs(groups) do
+    if frontmatter.cites[g] then
+        for _, entry in ipairs(frontmatter.cites[g]) do
+            if entry.identifier then old_cites_map[entry.identifier] = true end
+        end
+    end
+  end
+  
+  -- 5. Scan Text for Citations
+  local all_items_map = M.get_citable_items_map()
+  local all_items_by_short = {}
+  for id, data in pairs(all_items_map) do
+    local short = data.type .. "|" .. (id:match("note%-(%d+)") or id:match("bib%-(%d+)") or id)
+    all_items_by_short[short] = {id = id, data = data}
+  end
+  
+  local new_cites = {notes = {}, bib = {}, journal = {}}
+  local new_cites_map = {}
+  
+  for i = content_start, #lines do
+    for match in lines[i]:gmatch("%w+%[[%w%-_]+%]") do
+      local cite_type, short_id = M.parse_citation(match)
+      if cite_type and short_id then
+        local key = cite_type .. "|" .. short_id
+        local item = all_items_by_short[key]
+        if item then
+          if vim.fn.filereadable(item.data.path) == 1 then
+            if not new_cites_map[item.id] then
+              local group = "notes"
+              if item.data.type == "bib" then group = "bib" end
+              if item.data.type == "journal" then group = "journal" end
+              table.insert(new_cites[group], {
+                identifier = item.id,
+                title = item.data.title,
+                link = "[[" .. item.data.basename .. "]]"
+              })
+              new_cites_map[item.id] = true
+            end
+          end
+        end
+      end
+    end
+  end
+  
+  for _, g in ipairs(groups) do
+      table.sort(new_cites[g], function(a, b) return a.identifier < b.identifier end)
+  end
+  
+  frontmatter.cites = new_cites
+  
+  -- 6. Save (Buffer or Disk)
+  yaml.save_frontmatter(frontmatter, content_start, target_file)
+  
+  -- 7. Cross-Update Backlinks
+  for id, _ in pairs(old_cites_map) do
+    if not new_cites_map[id] then
+      local target_item = all_items_map[id]
+      if target_item and vim.fn.filereadable(target_item.path) == 1 then
+        manage_backlink(current_path, target_item.path, "remove")
+      end
+    end
+  end
+  
+  for id, _ in pairs(new_cites_map) do
+    if not old_cites_map[id] then
+      local target_item = all_items_map[id]
+      if target_item and vim.fn.filereadable(target_item.path) == 1 then
+        manage_backlink(current_path, target_item.path, "add")
+      end
+    end
+  end
+end
+
+--- Helper to insert citation text and update refs (Used by Telescope)
+function M.complete_insertion(selected)
+    if not selected then return end
+    
+    local citation = string.format("%s[%s]", selected.type, selected.short_id)
+    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+    local line = vim.api.nvim_get_current_line()
+    
+    vim.api.nvim_set_current_line(
+      line:sub(1, col) .. citation .. line:sub(col + 1)
+    )
+    
+    vim.api.nvim_win_set_cursor(0, {row, col + #citation})
+    vim.schedule(M.update_references)
+end
+
 function M.insert_citation()
   local items = M.get_citable_items_for_picker()
   if #items == 0 then return end
@@ -435,21 +570,6 @@ function M.insert_citation()
   end)
 end
 
---- Helper to insert citation text and update refs (Used by Telescope)
-function M.complete_insertion(selected)
-    if not selected then return end
-    
-    local citation = string.format("%s[%s]", selected.type, selected.short_id)
-    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-    local line = vim.api.nvim_get_current_line()
-    
-    vim.api.nvim_set_current_line(
-      line:sub(1, col) .. citation .. line:sub(col + 1)
-    )
-    
-    vim.api.nvim_win_set_cursor(0, {row, col + #citation})
-    vim.schedule(M.update_references)
-end
 
 function M.goto_citation()
   local line = vim.api.nvim_get_current_line()

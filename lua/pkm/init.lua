@@ -158,20 +158,15 @@ function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
   
   vim.api.nvim_create_autocmd("BufWritePost", {
-    group = augroup, 
-    pattern = "*.md",
+    group = augroup, pattern = "*.md",
     callback = function()
       local filepath = vim.fn.expand("%:p")
-      -- Loose check here to avoid path separator issues during save
       if not filepath:lower():find(".md") then return end
       
       vim.schedule(function()
-        -- Re-check directory match strictly inside schedule
         local root = M.config.root_path
-        -- Normalize slashes for comparison
         local norm_path = filepath:gsub("\\", "/")
         local norm_root = root:gsub("\\", "/")
-        
         if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
 
         local yaml = require('pkm.yaml')
@@ -180,50 +175,40 @@ function M.setup_sync_autocmds()
         local journal = require('pkm.journal')
         local citations = require('pkm.citations')
 
-        -- Update timestamp on disk
         local lines = vim.fn.readfile(filepath)
-        local frontmatter, content_start = yaml.parse_frontmatter(lines)
-        if frontmatter then
-          frontmatter.last_updated_on = timestamp.to_iso8601()
-          yaml.save_frontmatter(frontmatter, content_start, filepath)
+        if lines[1] == "---" then
+            local frontmatter, content_start = yaml.parse_frontmatter(lines)
+            if not frontmatter or (frontmatter.cites and type(frontmatter.cites) ~= "table") then
+                vim.notify("PKM Error: Frontmatter corrupted. Sync aborted.", vim.log.levels.ERROR)
+                return 
+            end
+            frontmatter.last_updated_on = timestamp.to_iso8601()
+            yaml.save_frontmatter(frontmatter, content_start, filepath)
         end
+
+        if filepath:find(M.config.folders.consolidated, 1, true) then notes.sync_filename_on_save() end
+        if filepath:find(M.config.folders.journal, 1, true) then journal.sync_filename_on_save() end
         
-        -- Sync filename if title changed
-        if filepath:find(M.config.folders.consolidated, 1, true) then 
-            notes.sync_filename_on_save() 
-        end
-        if filepath:find(M.config.folders.journal, 1, true) then 
-            journal.sync_filename_on_save() 
-        end
-        
-        -- Cross-update references
+        -- FIXED: Pass filepath to update references on DISK, so reloading gets everything
         if M.config.sync.auto_sync_on_save then 
-            citations.update_references() 
+            citations.update_references(filepath) 
         end
         
-        -- Trigger reload to prevent "file changed on disk" errors
         vim.cmd("checktime")
       end)
     end,
   })
   
   vim.api.nvim_create_autocmd("BufReadPost", {
-    group = augroup, 
-    pattern = "*.md",
+    group = augroup, pattern = "*.md",
     callback = function()
       local filepath = vim.fn.expand("%:p")
       local root = M.config.root_path
       local norm_path = filepath:gsub("\\", "/")
       local norm_root = root:gsub("\\", "/")
-      
       if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
-      
-      if filepath:find(M.config.folders.consolidated, 1, true) then 
-        require('pkm.notes').sync_yaml_on_rename() 
-      end
-      if filepath:find(M.config.folders.journal, 1, true) then 
-        require('pkm.journal').sync_yaml_on_rename() 
-      end
+      if filepath:find(M.config.folders.consolidated, 1, true) then require('pkm.notes').sync_yaml_on_rename() end
+      if filepath:find(M.config.folders.journal, 1, true) then require('pkm.journal').sync_yaml_on_rename() end
     end,
   })
 end
