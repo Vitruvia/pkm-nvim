@@ -435,9 +435,22 @@ function M.insert_citation()
   end)
 end
 
--- ============================================================================
--- FIXED: Go to citation - Improved detection
--- ============================================================================
+--- Helper to insert citation text and update refs (Used by Telescope)
+function M.complete_insertion(selected)
+    if not selected then return end
+    
+    local citation = string.format("%s[%s]", selected.type, selected.short_id)
+    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+    local line = vim.api.nvim_get_current_line()
+    
+    vim.api.nvim_set_current_line(
+      line:sub(1, col) .. citation .. line:sub(col + 1)
+    )
+    
+    vim.api.nvim_win_set_cursor(0, {row, col + #citation})
+    vim.schedule(M.update_references)
+end
+
 function M.goto_citation()
   local line = vim.api.nvim_get_current_line()
   local col = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1-based column
