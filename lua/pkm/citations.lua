@@ -497,7 +497,6 @@ end
       end
     end
   end
-end
 
 function M.update_references(target_file)
   -- 1. Determine Context (Buffer vs Disk)
