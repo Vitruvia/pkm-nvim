@@ -21,6 +21,7 @@ function M.parse_frontmatter(lines)
   end
 
   local first_line = lines[1]:gsub("\r$", "")
+  local first_line = lines[1]:gsub("\n$", "")
   
   if first_line[1] ~= "---" then
     vim.notify("PKM Warning: malformed frontmatter delimiter in "
