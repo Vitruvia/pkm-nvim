@@ -388,7 +388,7 @@ function M.update_references(target_file)
   
 -- 5. Scan Text for Citations
   for i = content_start, #lines do
-    for match in lines[i]:gmatch("%w+%[[%w%-_]+%]") do
+    for match in lines[i]:gmatch("[%a][%w_%-]*%[[%w%-_]+%]") do
       local cite_type, short_id = M.parse_citation(match)
       if cite_type and short_id then
         local key = cite_type .. "|" .. short_id

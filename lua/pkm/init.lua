@@ -120,6 +120,14 @@ function M.setup(user_config)
   vim.api.nvim_create_user_command('PKMImport', function() 
       require('pkm.notes').import_note() 
   end, { desc = "Import current file into PKM system" })
+   
+  vim.api.nvim_create_user_command('PKMToggleAutoSync', function()
+     M.config.sync.auto_sync_on_save = not M.config.sync.auto_sync_on_save
+     local status = M.config.sync.auto_sync_on_save and "enabled" or "disabled"
+     vim.notify("Auto-sync on save: " .. status, vim.log.levels.INFO)
+     vim.api.nvim_clear_autocmds({ group = "PKMSync" })
+     if M.config.sync.enabled then M.setup_sync_autocmds() end
+   end, { desc = "Toggle automatic reference synchronization" })
 
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
   vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
