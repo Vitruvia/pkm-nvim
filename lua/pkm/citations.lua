@@ -309,10 +309,15 @@ local function migrate_legacy_links(filepath)
   end
 end
 
---- Update references in current file and cross-update backlinks
-function M.update_references()
-  local current_path = vim.fn.expand("%:p")
+function M.update_references(target_file)
+  -- Prevent vim.schedule from passing timer objects as paths
+  if type(target_file) ~= "string" then target_file = nil end
+
+  local current_path = target_file or vim.fn.expand("%:p")
   if not current_path or current_path == "" then return end
+  
+  migrate_legacy_links(current_path)
+-- ... (leave the rest of the function exactly as it is)
   
   migrate_legacy_links(current_path)
   
@@ -536,18 +541,15 @@ end
 
 --- Helper to insert citation text and update refs (Used by Telescope)
 function M.complete_insertion(selected)
-    if not selected then return end
-    
-    local citation = string.format("%s[%s]", selected.type, selected.short_id)
-    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-    local line = vim.api.nvim_get_current_line()
-    
-    vim.api.nvim_set_current_line(
-      line:sub(1, col) .. citation .. line:sub(col + 1)
-    )
-    
-    vim.api.nvim_win_set_cursor(0, {row, col + #citation})
-    vim.schedule(M.update_references)
+  if not selected then return end
+  local citation = string.format("%s[%s]", selected.type, selected.short_id)
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = vim.api.nvim_get_current_line()
+  vim.api.nvim_set_current_line(line:sub(1, col) .. citation .. line:sub(col + 1))
+  vim.api.nvim_win_set_cursor(0, {row, col + #citation})
+  
+  -- Wrapped in function() to guarantee no arguments are passed
+  vim.schedule(function() M.update_references() end)
 end
 
 function M.insert_citation()
@@ -566,7 +568,7 @@ function M.insert_citation()
       line:sub(1, col) .. citation .. line:sub(col + 1)
     )
     vim.api.nvim_win_set_cursor(0, {row, col + #citation})
-    vim.schedule(M.update_references)
+    vim.schedule(function() M.update_references() end)
   end)
 end
 

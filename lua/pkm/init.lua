@@ -20,7 +20,7 @@ local default_config = {
   frontmatter_templates = {
     consolidated = {
       title = "", author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
-      tags = {}, status = "draft", cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
+      tags = {}, cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
     },
     journal = {
       created_on = "ISO8601", last_updated_on = "ISO8601", author = "",
