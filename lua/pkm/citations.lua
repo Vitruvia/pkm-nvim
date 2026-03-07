@@ -374,14 +374,16 @@ function M.update_references(target_file)
   local new_cites = {notes = {}, bib = {}, journal = {}}
   local new_cites_map = {}
   
+-- 5. Scan Text for Citations
   for i = content_start, #lines do
     for match in lines[i]:gmatch("%w+%[[%w%-_]+%]") do
       local cite_type, short_id = M.parse_citation(match)
       if cite_type and short_id then
         local key = cite_type .. "|" .. short_id
         local item = all_items_by_short[key]
+        
+        -- Removed filereadable check to prevent encoding drops
         if item then
-          if vim.fn.filereadable(item.data.path) == 1 then
             if not new_cites_map[item.id] then
               local group = "notes"
               if item.data.type == "bib" then group = "bib" end
@@ -393,7 +395,6 @@ function M.update_references(target_file)
               })
               new_cites_map[item.id] = true
             end
-          end
         end
       end
     end
@@ -412,7 +413,8 @@ function M.update_references(target_file)
   for id, _ in pairs(old_cites_map) do
     if not new_cites_map[id] then
       local target_item = all_items_map[id]
-      if target_item and vim.fn.filereadable(target_item.path) == 1 then
+      -- Removed filereadable check here as well
+      if target_item then
         manage_backlink(current_path, target_item.path, "remove")
       end
     end
@@ -421,7 +423,8 @@ function M.update_references(target_file)
   for id, _ in pairs(new_cites_map) do
     if not old_cites_map[id] then
       local target_item = all_items_map[id]
-      if target_item and vim.fn.filereadable(target_item.path) == 1 then
+      -- Removed filereadable check here as well
+      if target_item then
         manage_backlink(current_path, target_item.path, "add")
       end
     end

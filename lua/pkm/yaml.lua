@@ -47,20 +47,14 @@ function M.parse_frontmatter(lines)
 end
 
 --- Simple YAML parser for frontmatter - FIXED VERSION
---- Handles nested empty arrays AND multi-line array items
---- @param lines table Array of YAML lines
---- @return table Parsed YAML as Lua table
+--- Uses strict indentation tracking to handle object arrays correctly.
 function M.parse_yaml(lines)
   local result = {}
-  local current_key = nil
-  local current_array = nil
   local indent_stack = {{key = nil, indent = -1, table = result}}
   
   for _, line in ipairs(lines) do
     -- Skip empty lines and comments
-    if line:match("^%s*$") or line:match("^%s*#") then
-      goto continue
-    end
+    if line:match("^%s*$") or line:match("^%s*#") then goto continue end
     
     local indent = #line:match("^%s*")
     local content = line:gsub("^%s+", "")
@@ -69,72 +63,57 @@ function M.parse_yaml(lines)
     if content:match("^%-") then
       local value = content:match("^%-%s*(.*)")
       
-      if not current_array then
-        vim.notify("Array item without array context", vim.log.levels.WARN)
+      -- Find the correct array parent based on indentation
+      while #indent_stack > 1 and indent <= indent_stack[#indent_stack].indent do
+        table.remove(indent_stack)
+      end
+      
+      local target_array = indent_stack[#indent_stack].table
+      
+      if type(target_array) ~= "table" then
+        vim.notify("Invalid array context", vim.log.levels.WARN)
         goto continue
       end
       
-      -- FIXED: Handle multi-line array items (object items)
+      -- Handle multi-line array items (object items)
       if value == "" or value:match("^%s*$") then
-        -- Empty dash means the object properties follow on next lines
-        -- Create a table for this array item
         local item_table = {}
-        table.insert(current_array, item_table)
-        
-        -- Push this item onto the stack so subsequent properties go into it
+        table.insert(target_array, item_table)
         table.insert(indent_stack, {
-          key = nil,  -- No key, this is an array item
+          key = nil,
           indent = indent,
           table = item_table,
-          is_array_item = true  -- Mark as array item
+          is_array_item = true
         })
       else
-        -- Simple value on same line as dash
-        local parsed_value = M.parse_value(value)
-        table.insert(current_array, parsed_value)
+        table.insert(target_array, M.parse_value(value))
       end
-      
       goto continue
     end
     
     -- Handle key-value pairs
     local key, value = content:match("^([%w_%-]+):%s*(.*)")
-    
     if key then
       -- Find correct target table based on indentation
-      local target_table = result
-      
-      -- Pop stack items that are at same or shallower level
       while #indent_stack > 1 and indent <= indent_stack[#indent_stack].indent do
         table.remove(indent_stack)
       end
       
-      -- Use the current top of stack as target
-      target_table = indent_stack[#indent_stack].table
+      local target_table = indent_stack[#indent_stack].table
       
       -- Handle explicit empty array notation []
       if value == "[]" then
         target_table[key] = {}
-        current_key = nil
-        current_array = nil
-        
       elseif value == "" or value:match("^%s*$") then
-        -- Create nested table for child elements
         local nested_table = {}
         target_table[key] = nested_table
-        current_array = nested_table
-        
-        -- Push to stack
         table.insert(indent_stack, {
           key = key,
           indent = indent,
           table = nested_table
         })
-        
       else
         target_table[key] = M.parse_value(value)
-        current_key = nil
-        current_array = nil
       end
     end
     
