@@ -23,8 +23,6 @@ function M.parse_frontmatter(lines)
   local first_line = lines[1]:gsub("\r$", "")
   
   if first_line ~= "---" then
-    vim.notify("PKM Warning: malformed frontmatter delimiter in "
-        .. vim.fn.expand("%:t"), vim.log.levels.WARN)
     return nil, 1
   end
   
