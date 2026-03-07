@@ -21,6 +21,8 @@ function M.parse_frontmatter(lines)
   end
   
   if lines[1] ~= "---" then
+    vim.notify("PKM Warning: malformed frontmatter delimiter in "
+        .. vim.fn.expand("%:t"), vim.log.levels.WARN)
     return nil, 1
   end
   
