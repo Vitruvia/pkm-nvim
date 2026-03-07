@@ -35,7 +35,11 @@ function M.get_note_type_and_id(filepath)
 end
 
 function M.get_note_title(filepath)
-  local content = vim.fn.readfile(filepath)
+  local ok, content = pcall(vim.fn.readfile, filepath)
+  if not ok or not content then
+    return vim.fn.fnamemodify(filepath, ":t:r"):gsub("_", " ")
+  end
+  
   local fm, _ = yaml.parse_frontmatter(content)
   return (fm and fm.title and fm.title ~= "") 
     and fm.title 
@@ -91,6 +95,7 @@ function M.get_all_tags()
 end
 
 --- Get a map of all citable items, keyed by their full unique identifier
+--- Get a map of all citable items, using LibUV for native UTF-8 support
 function M.get_citable_items_map()
   local items_map = {}
   local search_paths = {
@@ -98,22 +103,30 @@ function M.get_citable_items_map()
     config.folders.journal, 
     config.folders.scratchpad
   }
+  local uv = vim.uv or vim.loop
   
   for _, folder in ipairs(search_paths) do
     if folder then
         local search_path = join_path(config.root_path, folder)
-        local files = vim.fn.glob(search_path .. "/*.md", false, true)
-        if type(files) ~= "table" then files = {} end
-
-        for _, file in ipairs(files) do
-          local item_type, id = M.get_note_type_and_id(file)
-          if item_type and id then
-            items_map[id] = {
-              path = file,
-              basename = vim.fn.fnamemodify(file, ":t:r"),
-              type = item_type,
-              title = M.get_note_title(file)
-            }
+        local req = uv.fs_scandir(search_path)
+        
+        if req then
+          while true do
+            local name, ftype = uv.fs_scandir_next(req)
+            if not name then break end
+            
+            if name:match("%.md$") then
+              local file = join_path(search_path, name)
+              local item_type, id = M.get_note_type_and_id(file)
+              if item_type and id then
+                items_map[id] = {
+                  path = file,
+                  basename = vim.fn.fnamemodify(file, ":t:r"),
+                  type = item_type,
+                  title = M.get_note_title(file)
+                }
+              end
+            end
           end
         end
     end
@@ -194,13 +207,12 @@ local function manage_backlink(citing_path, target_path, action)
   local citing_type, citing_id = M.get_note_type_and_id(citing_path)
   if not citing_type or not citing_id then return end
   
-  local target_content = vim.fn.readfile(target_path)
-  local target_fm, _ = yaml.parse_frontmatter(target_content)
-  if target_fm and target_fm.type == "agg" then return end
+  -- Protected read and redundant file-read elimination
+  local ok, content = pcall(vim.fn.readfile, target_path)
+  if not ok or not content then return end
   
-  local content = vim.fn.readfile(target_path)
   local fm, content_start = yaml.parse_frontmatter(content)
-  if not fm then return end
+  if not fm or fm.type == "agg" then return end
   
   local migrated = ensure_grouped_cited_by(fm)
   
