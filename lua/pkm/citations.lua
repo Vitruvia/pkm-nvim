@@ -423,7 +423,6 @@ function M.update_references(target_file)
       end
     end
   end
-end
   
   local old_cites_map = {}
   local groups = {"notes", "bib", "journal"}
@@ -497,6 +496,7 @@ end
       end
     end
   end
+end
 
 function M.update_references(target_file)
   -- 1. Determine Context (Buffer vs Disk)
