@@ -33,7 +33,7 @@ local default_config = {
     scratchpad = {
       title = "", created_on = "ISO8601", last_updated_on = "ISO8601", 
       tags = {},
-      cites = cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
+      cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
     },
   },
   
