@@ -28,7 +28,7 @@ local default_config = {
     },
     bibliography = {
       title = "", source_author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
-      cites = cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
+      cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
     },
     scratchpad = {
       title = "", created_on = "ISO8601", last_updated_on = "ISO8601", 
