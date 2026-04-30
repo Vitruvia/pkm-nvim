@@ -32,6 +32,7 @@ local default_config = {
     },
     scratchpad = {
       created_on = "ISO8601", last_updated_on = "ISO8601",
+      tags = {},
       cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
     },
   },
@@ -59,7 +60,9 @@ local default_config = {
     follow_link = "gf",
     backlinks = "<leader>nb",
     quick_capture = "<leader>nq",
-    import_note = "<leader>ni"
+    import_note = "<leader>ni",
+    convert_note = "<leader>nx",
+    promote_note = "<leader>np",
   }
 }
 
@@ -129,6 +132,14 @@ function M.setup(user_config)
      if M.config.sync.enabled then M.setup_sync_autocmds() end
    end, { desc = "Toggle automatic reference synchronization" })
 
+  vim.api.nvim_create_user_command('PKMConvertNote', function()
+    require('pkm.notes').convert_note()
+  end, { desc = "Convert current note to a different type" })
+  
+  vim.api.nvim_create_user_command('PKMPromote', function()
+    require('pkm.notes').promote_note()
+  end, { desc = "Promote scratchpad to consolidated note or journal" })
+
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
   vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
   vim.api.nvim_create_user_command('PKMInsertCitation', function() require('pkm.telescope').insert_citation_picker() end, {})
@@ -143,6 +154,12 @@ function M.setup(user_config)
   local k = M.config.keymaps
   local function map(lhs, cmd, desc)
     if lhs then vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) end
+  end
+
+  if M.config.keymaps.promote_note then
+    vim.keymap.set('n', M.config.keymaps.promote_note,
+      function() require('pkm.notes').promote_note() end,
+      { noremap = true, silent = true, desc = "PKM: Promote note" })
   end
 
   map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")

@@ -166,6 +166,72 @@ function M.create_new_note(note_type) -- REMOVED the 'allow_unnamed' parameter
   return filepath
 end
 
+--- Promote current scratchpad to consolidated or journal
+--- Uses Telescope if available, vim.ui.select as fallback
+function M.promote_note()
+  local current_path = vim.fn.expand("%:p")
+
+  if current_path == "" then
+    vim.notify("No file open", vim.log.levels.ERROR)
+    return
+  end
+
+  if not current_path:find(config.folders.scratchpad, 1, true) then
+    vim.notify("PKMPromote: only works on scratchpad notes. Use :PKMConvertNote for other types.", vim.log.levels.WARN)
+    return
+  end
+
+  local targets = {
+    { label = "Consolidated Note",  value = "note" },
+    { label = "Journal Entry",      value = "journal" },
+    { label = "Cancel",             value = "cancel" },
+  }
+
+  -- Check Telescope at call time, not at load time
+  local has_telescope = package.loaded['telescope'] ~= nil
+  if has_telescope then
+    local ok, pickers      = pcall(require, "telescope.pickers")
+    local _,  finders      = pcall(require, "telescope.finders")
+    local _,  conf         = pcall(require, "telescope.config")
+    local _,  actions      = pcall(require, "telescope.actions")
+    local _,  action_state = pcall(require, "telescope.actions.state")
+
+    if ok then
+      pickers.new({}, {
+        prompt_title = "Promote scratchpad to:",
+        finder = finders.new_table {
+          results = targets,
+          entry_maker = function(entry)
+            return { value = entry, display = entry.label, ordinal = entry.label }
+          end,
+        },
+        sorter = conf.values.generic_sorter({}),
+        attach_mappings = function(prompt_bufnr)
+          actions.select_default:replace(function()
+            actions.close(prompt_bufnr)
+            local sel = action_state.get_selected_entry()
+            if sel and sel.value.value ~= "cancel" then
+              M.do_convert(current_path, "scratchpad", sel.value.value)
+            end
+          end)
+          return true
+        end,
+      }):find()
+      return
+    end
+  end
+
+  -- Fallback
+  vim.ui.select(targets, {
+    prompt = "Promote scratchpad to:",
+    format_item = function(item) return item.label end,
+  }, function(sel)
+    if sel and sel.value ~= "cancel" then
+      M.do_convert(current_path, "scratchpad", sel.value)
+    end
+  end)
+end
+
 --- Normalize path for comparison (cross-platform)
 --- @param path string Path to normalize
 --- @return string Normalized absolute path with forward slashes
@@ -300,60 +366,128 @@ function M.create_scratchpad()
   return filepath
 end
 
---- Convert current note to different type
+--- Convert note to the current folder's type: normalize current note to the
+--- format required by its PKM folder. Adds missing frontmatter fields,
+--- preserves existing ones. For consolidated notes without a valid PKM
+--- filename, prompts for type/title and renames the file.
 function M.convert_note()
   local current_path = vim.fn.expand("%:p")
-  
+
   if current_path == "" then
     vim.notify("No file open", vim.log.levels.ERROR)
     return
   end
-  
-  -- Determine current note type
-  local current_type = nil
-  
+
+  -- Detect which PKM folder the file lives in
+  local folder_type
   if current_path:find(config.folders.scratchpad, 1, true) then
-    current_type = "scratchpad"
+    folder_type = "scratchpad"
   elseif current_path:find(config.folders.journal, 1, true) then
-    current_type = "journal"
+    folder_type = "journal"
   elseif current_path:find(config.folders.consolidated, 1, true) then
-    current_type = "consolidated"
+    folder_type = "consolidated"
   else
-    vim.notify("Unknown note type", vim.log.levels.ERROR)
+    vim.notify("PKMConvertNote: file is not inside a PKM folder", vim.log.levels.ERROR)
     return
   end
-  
-  -- Determine valid conversion targets
-  local targets = {}
-  if current_type == "scratchpad" then
-    targets = {"journal", "note", "cancel"}
-  elseif current_type == "journal" then
-    targets = {"note", "cancel"}
-  elseif current_type == "consolidated" then
-    targets = {"journal", "cancel"}
+
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local existing_fm, content_start = yaml.parse_frontmatter(lines)
+  existing_fm = existing_fm or {}
+
+  -- Collect body lines (everything after frontmatter)
+  local content = {}
+  for i = content_start, #lines do
+    table.insert(content, lines[i])
   end
-  
-  -- Prompt for target type
-  vim.ui.select(targets, {
-    prompt = string.format("Convert %s to:", current_type),
-    format_item = function(item)
-      if item == "journal" then
-        return "Journal Entry"
-      elseif item == "note" then
-        return "Consolidated Note"
-      elseif item == "cancel" then
-        return "Cancel"
+
+  -- Write merged frontmatter back to disk and reload the buffer.
+  -- create_frontmatter(key, existing_fm) keeps all existing values and
+  -- fills in any missing fields from the template.
+  local function apply_in_place(fm_key)
+    local new_fm_lines = yaml.create_frontmatter(fm_key, existing_fm)
+    local new_content = vim.list_extend(new_fm_lines, content)
+    vim.fn.writefile(new_content, current_path)
+    vim.cmd("edit!")
+    vim.notify("Converted to " .. folder_type .. " format", vim.log.levels.INFO)
+  end
+
+  if folder_type == "scratchpad" then
+    apply_in_place("scratchpad")
+
+  elseif folder_type == "journal" then
+    apply_in_place("journal")
+
+  elseif folder_type == "consolidated" then
+    local basename    = vim.fn.fnamemodify(current_path, ":t:r")
+    local number, note_type_part = basename:match("^(%d+)_([a-z]+)_")
+
+    if number and note_type_part then
+      -- File is already properly named: sync title from filename if absent
+      if not existing_fm.title or existing_fm.title == "" then
+        local name_part = basename:match("^%d+_[a-z]+_(.+)$")
+        existing_fm.title = name_part and name_part:gsub("_", " ") or "Unnamed Note"
       end
-      return item
+      local fm_key = (note_type_part == "bib") and "bibliography" or "consolidated"
+      apply_in_place(fm_key)
+
+    else
+      -- File does not follow PKM naming: prompt for type and title, then rename
+      local note_types = {
+        { label = "Regular Note",         value = "note" },
+        { label = "Aggregate/Collection", value = "agg"  },
+        { label = "Bibliography Entry",   value = "bib"  },
+      }
+
+      vim.ui.select(note_types, {
+        prompt = "Note type:",
+        format_item = function(item) return item.label end,
+      }, function(type_sel)
+        if not type_sel then
+          vim.notify("Conversion cancelled", vim.log.levels.INFO)
+          return
+        end
+
+        local default_title = (existing_fm.title and existing_fm.title ~= "")
+          and existing_fm.title
+          or basename:gsub("_", " ")
+
+        vim.fn.inputsave()
+        local title = vim.fn.input("Note title: ", default_title)
+        vim.fn.inputrestore()
+        if title == "" then title = "Unnamed Note" end
+        existing_fm.title = title
+
+        local note_number = get_next_note_number()
+        local safe_title  = sanitize_title(title)
+        local new_filename = string.format(
+          "%04d_%s_%s.md", note_number, type_sel.value, safe_title
+        )
+        local dir      = vim.fn.fnamemodify(current_path, ":h")
+        local new_path = join_path(dir, new_filename)
+
+        if vim.fn.filereadable(new_path) == 1 then
+          vim.notify("Cannot convert: target already exists: " .. new_filename, vim.log.levels.ERROR)
+          return
+        end
+
+        local fm_key = (type_sel.value == "bib") and "bibliography" or "consolidated"
+        local new_fm_lines = yaml.create_frontmatter(fm_key, existing_fm)
+        local new_content  = vim.list_extend(new_fm_lines, content)
+        vim.fn.writefile(new_content, new_path)
+
+        vim.fn.inputsave()
+        local del = vim.fn.input("Delete original file? (y/N): ")
+        vim.fn.inputrestore()
+        if del:lower() == "y" then
+          vim.fn.delete(current_path)
+        end
+
+        vim.cmd("edit " .. vim.fn.fnameescape(new_path))
+        vim.notify("Converted to: " .. new_filename, vim.log.levels.INFO)
+      end)
     end
-  }, function(target)
-    if not target or target == "cancel" then
-      vim.notify("Conversion cancelled", vim.log.levels.INFO)
-      return
-    end
-    
-    M.do_convert(current_path, current_type, target)
-  end)
+  end
 end
 
 
@@ -386,6 +520,23 @@ function M.quick_capture()
   vim.cmd("startinsert")
   
   return filepath
+end
+
+--- Shared finalisation: optionally delete original, open new file
+--- @param original_path string
+--- @param new_path string
+local function _finish_convert(original_path, new_path)
+  vim.fn.inputsave()
+  local delete_original = vim.fn.input("Delete original? (y/N): ")
+  vim.fn.inputrestore()
+
+  if delete_original:lower() == "y" then
+    vim.fn.delete(original_path)
+    vim.notify("Original deleted: " .. vim.fn.fnamemodify(original_path, ":t"), vim.log.levels.INFO)
+  end
+
+  vim.cmd("edit " .. vim.fn.fnameescape(new_path))
+  vim.notify("Promoted to: " .. vim.fn.fnamemodify(new_path, ":t"), vim.log.levels.INFO)
 end
 
 --- Perform the actual conversion
@@ -431,46 +582,58 @@ function M.do_convert(current_path, current_type, target)
     vim.fn.writefile(new_content, new_path)
     
   elseif target == "note" then
-    vim.fn.inputsave()
-    local title = vim.fn.input("Note title (leave empty for unnamed): ")
-    vim.fn.inputrestore()
-    
-    local note_number = get_next_note_number()
-    local safe_title = sanitize_title(title)
-    local note_filename = string.format("%04d_note_%s.md", note_number, safe_title)
-    
-    local consolidated_path = join_path(config.root_path, config.folders.consolidated)
-    ensure_dir(consolidated_path)
-    new_path = join_path(consolidated_path, note_filename)
-    
-    local fm_data = {
-      title = title ~= "" and title or "Unnamed Note",
+    -- Prompt for consolidated note subtype
+    local note_types = {
+      { label = "Regular Note",         value = "note" },
+      { label = "Aggregate/Collection", value = "agg"  },
+      { label = "Bibliography Entry",   value = "bib"  },
     }
-    
-    if existing_fm then
-      if existing_fm.tags then fm_data.tags = existing_fm.tags end
-      if existing_fm.author then fm_data.author = existing_fm.author end
-    end
-    
-    local new_frontmatter = yaml.create_frontmatter("consolidated", fm_data)
-    local new_content = vim.list_extend(new_frontmatter, content)
-    
-    vim.fn.writefile(new_content, new_path)
+  
+    vim.ui.select(note_types, {
+      prompt = "Consolidated note type:",
+      format_item = function(item) return item.label end,
+    }, function(type_sel)
+      if not type_sel then
+        vim.notify("Conversion cancelled", vim.log.levels.INFO)
+        return
+      end
+  
+      vim.fn.inputsave()
+      local title = vim.fn.input("Note title (leave empty for unnamed): ")
+      vim.fn.inputrestore()
+  
+      local note_number = get_next_note_number()
+      local safe_title  = sanitize_title(title)
+      local note_filename = string.format(
+        "%04d_%s_%s.md", note_number, type_sel.value,
+        safe_title ~= "" and safe_title or "unnamed"
+      )
+  
+      local consolidated_path = join_path(config.root_path, config.folders.consolidated)
+      ensure_dir(consolidated_path)
+      new_path = join_path(consolidated_path, note_filename)
+  
+      local fm_data = {
+        title  = title ~= "" and title or "Unnamed Note",
+      }
+  
+      if existing_fm then
+        if existing_fm.tags   then fm_data.tags   = existing_fm.tags   end
+        if existing_fm.author then fm_data.author = existing_fm.author end
+      end
+  
+      local new_frontmatter = yaml.create_frontmatter("consolidated", fm_data)
+      local new_content     = vim.list_extend(new_frontmatter, content)
+      vim.fn.writefile(new_content, new_path)
+  
+      -- Continue to the "ask to delete original / open new file" block below
+      _finish_convert(current_path, new_path)
+    end)
+    return  -- async from here; _finish_convert handles the rest
   end
   
   -- Ask whether to delete original
-  vim.fn.inputsave()
-  local delete_original = vim.fn.input("Delete original? (y/n): ", "n")
-  vim.fn.inputrestore()
-  
-  if delete_original:lower() == "y" then
-    vim.fn.delete(current_path)
-  end
-  
-  -- Open new file
-  vim.cmd("edit " .. vim.fn.fnameescape(new_path))
-  
-  vim.notify("Converted to " .. target, vim.log.levels.INFO)
+  _finish_convert(current_path, new_path)
 end
 
 --- Link to another note
