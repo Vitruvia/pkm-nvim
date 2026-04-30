@@ -336,32 +336,28 @@ function M.sync_yaml_on_rename()
   end
 end
 
---- Create a scratchpad note (FIXED VERSION)
---- @return string|nil Path to created scratchpad
 function M.create_scratchpad()
-  local ts = timestamp.now()  -- Uses default format
+  vim.fn.inputsave()
+  local title = vim.fn.input("Scratchpad title (optional, Enter to skip): ")
+  vim.fn.inputrestore()
+
+  local ts = timestamp.now()
   local filename = timestamp.create_filename("scratch", ts, ".md")
-  
+
   local scratchpad_path = join_path(config.root_path, config.folders.scratchpad)
   ensure_dir(scratchpad_path)
-  
+
   local filepath = join_path(scratchpad_path, filename)
-  
-  -- Create frontmatter for scratchpad with proper timestamps
-  local frontmatter_lines = yaml.create_frontmatter("scratchpad", {})
-  
-  -- Add blank content lines
+
+  -- Only pass title to frontmatter if the user provided one
+  local fm_data = title ~= "" and { title = title } or {}
+
+  local frontmatter_lines = yaml.create_frontmatter("scratchpad", fm_data)
   table.insert(frontmatter_lines, "")
-  
-  -- Write file
+
   vim.fn.writefile(frontmatter_lines, filepath)
-  
-  -- Open file
   vim.cmd("edit " .. vim.fn.fnameescape(filepath))
-  
-  -- Move cursor to end
   vim.cmd("normal! G")
-  
   vim.notify("Created scratchpad: " .. filename, vim.log.levels.INFO)
   return filepath
 end

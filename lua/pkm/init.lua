@@ -20,20 +20,20 @@ local default_config = {
   frontmatter_templates = {
     consolidated = {
       title = "", author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
-      tags = {}, cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
+      tags = {}, cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
     },
     journal = {
       created_on = "ISO8601", last_updated_on = "ISO8601", author = "",
-      tags = {}, cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
+      tags = {}, cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
     },
     bibliography = {
       title = "", source_author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
-      cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
+      cites = cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
     },
     scratchpad = {
-      created_on = "ISO8601", last_updated_on = "ISO8601",
+      title = "", created_on = "ISO8601", last_updated_on = "ISO8601", 
       tags = {},
-      cites = {notes = {}, bib = {}, journal = {}}, cited_by = {notes = {}, bib = {}, journal = {}},
+      cites = cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
     },
   },
   
@@ -175,6 +175,7 @@ function M.setup(user_config)
   map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Backlinks")
   map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture")
   map(k.import_note, "<cmd>PKMImport<cr>", "Import Note")
+  map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
 
   if M.config.sync.enabled then M.setup_sync_autocmds() end
 end

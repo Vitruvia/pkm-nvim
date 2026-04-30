@@ -165,39 +165,35 @@ M.get_citable_items_list = M.get_citable_items_for_picker
 --- Initialize or migrate cited_by to new grouped structure
 local function ensure_grouped_cited_by(frontmatter)
   if not frontmatter.cited_by then
-    frontmatter.cited_by = {notes = {}, bib = {}, journal = {}}
+    frontmatter.cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}}
     return false
   end
-  
   if frontmatter.cited_by.notes or frontmatter.cited_by.bib then
-    frontmatter.cited_by.notes = frontmatter.cited_by.notes or {}
-    frontmatter.cited_by.bib = frontmatter.cited_by.bib or {}
+    frontmatter.cited_by.notes   = frontmatter.cited_by.notes   or {}
+    frontmatter.cited_by.bib     = frontmatter.cited_by.bib     or {}
     frontmatter.cited_by.journal = frontmatter.cited_by.journal or {}
+    frontmatter.cited_by.scratch = frontmatter.cited_by.scratch or {}  -- ADD
     return false
   end
-  
+  -- migration from flat format (same as before, just add scratch bucket)
   local old_array = frontmatter.cited_by
-  local new_structure = {notes = {}, bib = {}, journal = {}}
-  
+  local new_structure = {notes = {}, bib = {}, journal = {}, scratch = {}}
   if type(old_array) == "table" then
-      for _, entry in ipairs(old_array) do
-        if type(entry) == "table" and entry.identifier then
-          local clean_entry = {
-            identifier = entry.identifier,
-            title = entry.title,
-            link = entry.link
-          }
-          if entry.type == "bib" then
-            table.insert(new_structure.bib, clean_entry)
-          elseif entry.type == "journal" then
-            table.insert(new_structure.journal, clean_entry)
-          else
-            table.insert(new_structure.notes, clean_entry)
-          end
+    for _, entry in ipairs(old_array) do
+      if type(entry) == "table" and entry.identifier then
+        local clean_entry = {identifier = entry.identifier, title = entry.title, link = entry.link}
+        if entry.type == "bib" then
+          table.insert(new_structure.bib, clean_entry)
+        elseif entry.type == "journal" then
+          table.insert(new_structure.journal, clean_entry)
+        elseif entry.type == "scratch" then
+          table.insert(new_structure.scratch, clean_entry)
+        else
+          table.insert(new_structure.notes, clean_entry)
         end
       end
+    end
   end
-  
   frontmatter.cited_by = new_structure
   return true
 end
@@ -216,9 +212,16 @@ local function manage_backlink(citing_path, target_path, action)
   
   local migrated = ensure_grouped_cited_by(fm)
   
-  local group = "notes"
-  if citing_type == "bib" then group = "bib" end
-  if citing_type == "journal" then group = "journal" end
+  local group
+  if citing_type == "bib" then
+    group = "bib"
+  elseif citing_type == "journal" then
+    group = "journal"
+  elseif citing_type == "scratch" then
+    group = "scratch"
+  else
+    group = "notes"  -- covers "note" and any other consolidated type
+  end
   
   local found_index = nil
   if fm.cited_by and fm.cited_by[group] then
@@ -247,11 +250,11 @@ local function manage_backlink(citing_path, target_path, action)
   end
   
   if modified then
-    if fm.cited_by.notes then
-        table.sort(fm.cited_by.notes, function(a, b) return (a.identifier or "") < (b.identifier or "") end)
-    end
-    if fm.cited_by.bib then
-        table.sort(fm.cited_by.bib, function(a, b) return (a.identifier or "") < (b.identifier or "") end)
+    local sort_fn = function(a, b) return (a.identifier or "") < (b.identifier or "") end
+    for _, g in ipairs({"notes", "bib", "journal", "scratch"}) do
+      if fm.cited_by[g] then
+        table.sort(fm.cited_by[g], sort_fn)
+      end
     end
     yaml.save_frontmatter(fm, content_start, target_path)
   end
@@ -287,6 +290,7 @@ local function migrate_legacy_links(filepath)
           local group = "notes"
           if data.type == "bib" then group = "bib" end
           if data.type == "journal" then group = "journal" end
+          if data.type == "scratch" then group = "scratch" end
           
           local exists = false
           if fm.cited_by[group] then
@@ -344,16 +348,17 @@ function M.update_references(target_file)
   
   -- 3. Ensure structure
   if not frontmatter.cites then
-    frontmatter.cites = {notes = {}, bib = {}, journal = {}}
+    frontmatter.cites = {notes = {}, bib = {}, journal = {}, scratch = {}}
   elseif type(frontmatter.cites) == "table" then
     if not frontmatter.cites.notes and not frontmatter.cites.bib then
         local old_array = frontmatter.cites
-        frontmatter.cites = {notes = {}, bib = {}, journal = {}}
+        frontmatter.cites = {notes = {}, bib = {}, journal = {}, scratch = {}}
         for _, entry in ipairs(old_array) do
           if type(entry) == "table" and entry.identifier then
             local group = "notes"
             if entry.type == "bib" then group = "bib" end
             if entry.type == "journal" then group = "journal" end
+            if entry.type == "scratch" then group = "scratch" end
             table.insert(frontmatter.cites[group], {
               identifier = entry.identifier,
               title = entry.title,
@@ -366,7 +371,7 @@ function M.update_references(target_file)
   
   -- 4. Map Old Citations
   local old_cites_map = {}
-  local groups = {"notes", "bib", "journal"}
+  local groups = {"notes", "bib", "journal", "scratch"}
   for _, g in ipairs(groups) do
     if frontmatter.cites[g] then
         for _, entry in ipairs(frontmatter.cites[g]) do
@@ -383,7 +388,7 @@ function M.update_references(target_file)
     all_items_by_short[short] = {id = id, data = data}
   end
   
-  local new_cites = {notes = {}, bib = {}, journal = {}}
+  local new_cites = {notes = {}, bib = {}, journal = {}, scratch = {}}
   local new_cites_map = {}
   
 -- 5. Scan Text for Citations
@@ -400,6 +405,7 @@ function M.update_references(target_file)
               local group = "notes"
               if item.data.type == "bib" then group = "bib" end
               if item.data.type == "journal" then group = "journal" end
+              if item.data.type == "scratch" then group = "scratch" end
               table.insert(new_cites[group], {
                 identifier = item.id,
                 title = item.data.title,
@@ -550,7 +556,7 @@ function M.update_references_on_rename(old_basename, new_basename, new_title)
              if fm.cited_by then table.insert(lists_to_check, fm.cited_by) end
              
              for _, list in ipairs(lists_to_check) do
-                for _, group_key in ipairs({"notes", "bib", "journal"}) do
+                for _, group_key in ipairs({"notes", "bib", "journal", "scratch"}) do
                     if list[group_key] then
                         local new_group_list = {}
                         local list_modified = false
@@ -613,7 +619,7 @@ function M.cleanup_deleted_note(deleted_path)
     
     if fm and fm.cites then
         local items_map = M.get_citable_items_map()
-        local groups = {"notes", "bib", "journal"}
+        local groups = {"notes", "bib", "journal", "scratch"}
         
         for _, group in ipairs(groups) do
             if fm.cites[group] then
