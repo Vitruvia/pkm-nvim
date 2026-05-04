@@ -8,16 +8,15 @@
 --   2. Matching runs with exact substring (never fuzzy) against frontmatter
 --      fields and optionally the note body.
 --   3. Results are shown in a Telescope picker (pre-filtered; typing in the
---      picker does exact substring refinement on filename only) or in a
---      scrollable fallback float if Telescope is unavailable.
+--      picker does exact substring refinement on the display string via
+--      finders.new_dynamic, never fzy) or in a scrollable fallback float.
 --   4. A destination prompt appears; files are copied.
 --
 -- Filter semantics:
 --   Tags ANY  (OR)  — note has at least one of the listed tags
 --   Tags ALL  (AND) — note has every one of the listed tags
---   Status    (OR)  — note status equals any of the listed values
 --   Title contains  — case-insensitive exact substring of frontmatter title
---   Text  contains  — case-insensitive exact substring anywhere in body
+--   Text  contains  — case-insensitive exact substring anywhere in note body
 --
 -- Dependencies (both loaded lazily):
 --   require('pkm.yaml')   — parse_frontmatter only
@@ -58,7 +57,7 @@ local function ensure_dir(dir)
   return vim.fn.isdirectory(dir) == 1
 end
 
---- Returns frontmatter table, content start line, and raw lines for a file.
+--- Returns frontmatter table, content_start line, and raw lines for a file.
 --- All three are nil if the file is unreadable or has no frontmatter.
 --- @param path string
 --- @return table|nil  fm
@@ -100,7 +99,9 @@ local function normalise_tags(raw)
 end
 
 --- Test whether a note satisfies all active filters.
---- All string matching is exact substring (string.find plain mode), never fuzzy.
+---
+--- All string matching uses string.find with plain=true:
+--- exact byte-for-byte substring, never a pattern, never fuzzy.
 ---
 --- @param path    string
 --- @param filters table   All fields optional; nil or empty = inactive.
@@ -136,29 +137,19 @@ function M.match_file(path, filters)
     end
   end
 
-  -- status: OR — exact match against fm.status
-  if filters.status and #filters.status > 0 then
-    local note_status = type(fm.status) == "string" and fm.status:lower() or ""
-    local found       = false
-    for _, s in ipairs(filters.status) do
-      if note_status == s:lower() then found = true; break end
-    end
-    if not found then return false end
-  end
-
-  -- title: exact case-insensitive substring
+  -- title: exact case-insensitive substring (plain=true disables patterns)
   if filters.title and filters.title ~= "" then
     local note_title = type(fm.title) == "string" and fm.title:lower() or ""
-    -- string.find with plain=true: no pattern interpretation, exact bytes
     if not note_title:find(filters.title:lower(), 1, true) then return false end
   end
 
-  -- text: exact substring anywhere in the body (after frontmatter)
+  -- text: exact substring anywhere in the body (lines after frontmatter)
   if filters.text and filters.text ~= "" then
     if not lines or not content_start then return false end
     local needle = filters.text:lower()
     local found  = false
     for i = content_start, #lines do
+      -- plain=true: third argument 1 is init position, true is plain flag
       if lines[i]:lower():find(needle, 1, true) then
         found = true; break
       end
@@ -272,33 +263,23 @@ end
 -- FILTER FORM
 -- ============================================================================
 
--- Field definitions. Order determines display order.
--- `multi` = true means value is comma-separated and parsed into a list.
+-- Field definitions. Order determines display order in the form.
+-- `multi` = true: value parsed as comma-separated list.
 local FIELDS = {
   { key = "tags_any", label = "Tags ANY  (OR)", multi = true  },
   { key = "tags_all", label = "Tags ALL (AND)", multi = true  },
-  { key = "status",   label = "Status        ", multi = true  },
   { key = "title",    label = "Title contains", multi = false },
   { key = "text",     label = "Text  contains", multi = false },
 }
 
--- The separator used between the label and the editable value in each line.
--- Chosen to be unambiguous: the user's value can contain anything except
--- leading/trailing whitespace being trimmed.
+-- The literal string separating the label from the editable value.
+-- The value may contain anything; we split only on the first occurrence.
 local FIELD_SEP = " : "
-
---- Build the display string for one form field line.
---- @param field table  Entry from FIELDS
---- @param value string Current value (may be empty)
---- @return string
-local function field_line(field, value)
-  return "  " .. field.label .. FIELD_SEP .. (value or "")
-end
 
 --- Extract the value portion from a form field line.
 --- Splits on the first occurrence of FIELD_SEP.
 --- @param line string
---- @return string  Trimmed value (may be "")
+--- @return string  Trimmed value, may be ""
 local function extract_value(line)
   local sep_pos = line:find(FIELD_SEP, 1, true)
   if not sep_pos then return "" end
@@ -307,28 +288,27 @@ local function extract_value(line)
 end
 
 --- Open the filter form and call on_submit(filters) when the user confirms.
---- on_submit is NOT called if the user cancels.
+--- on_submit is not called if the user cancels.
 --- @param on_submit function(filters: table)
 local function show_filter_form(on_submit)
   local header = {
-    "  Fill in any fields below. Leave blank to skip.",
-    "  Comma-separated values mean OR (or AND for the second tags field).",
-    "  <Tab> / <S-Tab>: move between fields   <CR>: search   <Esc>: cancel",
+    "  Fill in any fields. Leave blank to skip.",
+    "  Comma-separated values: OR logic (or AND for the second tags field).",
+    "  <Tab>/<S-Tab> move fields   <CR> search   <Esc> cancel",
     "  " .. string.rep("─", 62),
   }
 
-  local field_start = #header + 1  -- 1-indexed line where fields begin
+  local field_start = #header + 1
 
   local initial_lines = vim.deepcopy(header)
   for _, f in ipairs(FIELDS) do
-    table.insert(initial_lines, field_line(f, ""))
+    table.insert(initial_lines, "  " .. f.label .. FIELD_SEP)
   end
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, initial_lines)
   vim.api.nvim_set_option_value('modifiable', true,   { buf = buf })
   vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
-  vim.api.nvim_set_option_value('filetype',   'pkm_export_form', { buf = buf })
 
   local width  = 68
   local height = #initial_lines + 2
@@ -344,10 +324,10 @@ local function show_filter_form(on_submit)
     title_pos = 'center',
   })
 
-  -- Position cursor at end of first field's value.
+  --- Move cursor to end of the value area on the given field line.
   local function go_to_field(idx)
     local lnum = field_start + idx - 1
-    local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1] or ""
+    local line  = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1] or ""
     vim.api.nvim_win_set_cursor(win, { lnum, #line })
     vim.cmd("startinsert!")
   end
@@ -378,37 +358,30 @@ local function show_filter_form(on_submit)
     end
 
     close()
-    -- Schedule so the window fully closes before the next UI element opens.
-    vim.schedule(function()
-      on_submit(filters)
-    end)
+    vim.schedule(function() on_submit(filters) end)
   end
 
   local ko = { noremap = true, silent = true, buffer = buf }
 
-  -- <CR> in normal or insert mode: submit.
   vim.keymap.set({ 'n', 'i' }, '<CR>', function()
     vim.cmd("stopinsert")
     read_and_submit()
   end, ko)
 
-  -- <Esc> in normal mode: cancel.
   vim.keymap.set('n', '<Esc>', function() close() end, ko)
 
-  -- <Tab>: move to next field.
   vim.keymap.set({ 'n', 'i' }, '<Tab>', function()
     vim.cmd("stopinsert")
-    local cur  = vim.api.nvim_win_get_cursor(win)
-    local cur_field = cur[1] - field_start + 1
+    local cur        = vim.api.nvim_win_get_cursor(win)
+    local cur_field  = cur[1] - field_start + 1
     local next_field = (cur_field % #FIELDS) + 1
     go_to_field(next_field)
   end, ko)
 
-  -- <S-Tab>: move to previous field.
   vim.keymap.set({ 'n', 'i' }, '<S-Tab>', function()
     vim.cmd("stopinsert")
-    local cur  = vim.api.nvim_win_get_cursor(win)
-    local cur_field = cur[1] - field_start + 1
+    local cur        = vim.api.nvim_win_get_cursor(win)
+    local cur_field  = cur[1] - field_start + 1
     local prev_field = ((cur_field - 2) % #FIELDS) + 1
     go_to_field(prev_field)
   end, ko)
@@ -418,22 +391,9 @@ end
 -- TELESCOPE RESULTS PICKER
 -- ============================================================================
 
---- Custom sorter for the results picker: exact case-insensitive substring
---- match on the display string (filename + tags + status).
---- Returns 0 (keep) or -1 (discard). Never uses fzy/subsequence matching.
---- An empty prompt keeps all entries.
-local function make_exact_sorter()
-  return require('telescope.sorters').Sorter:new({
-    scoring_function = function(_, prompt, line, _)
-      if not prompt or prompt == "" then return 0 end
-      if line:lower():find(prompt:lower(), 1, true) then return 0 end
-      return -1
-    end,
-  })
-end
-
---- Build the display string for one picker row.
---- Format: "<filename>  [tag1, tag2]  status"
+--- Build the display / ordinal string for a picker row.
+--- Format: "<filename>  [tag1, tag2]"
+--- Status is intentionally excluded (being removed from metadata).
 local function build_display(path, fm)
   local name = vim.fn.fnamemodify(path, ":t")
   local tags  = {}
@@ -442,14 +402,17 @@ local function build_display(path, fm)
       if type(t) == "string" then table.insert(tags, t) end
     end
   end
-  local tag_str    = #tags > 0 and ("  [" .. table.concat(tags, ", ") .. "]") or ""
-  local status_str = type(fm.status) == "string" and ("  " .. fm.status) or ""
-  return name .. tag_str .. status_str
+  local tag_str = #tags > 0 and ("  [" .. table.concat(tags, ", ") .. "]") or ""
+  return name .. tag_str
 end
 
 --- Open a Telescope picker over a pre-filtered list of files.
---- The picker allows further narrowing by exact substring on the display
---- string, plus Tab multi-select and file preview.
+---
+--- The list shown is exactly what `collect_files` returned; no fzy applied.
+--- Typing in the prompt runs exact substring filtering (via new_dynamic) on
+--- the display string. The sorter is a pass-through (score 0 always) so it
+--- cannot reintroduce fzy behaviour regardless of Telescope version.
+---
 --- @param paths        table   Pre-filtered list of absolute paths
 --- @param default_dest string
 local function telescope_results_picker(paths, default_dest)
@@ -458,32 +421,54 @@ local function telescope_results_picker(paths, default_dest)
   local actions      = require('telescope.actions')
   local action_state = require('telescope.actions.state')
   local previewers   = require('telescope.previewers')
+  local sorters      = require('telescope.sorters')
 
-  -- Build entries.
+  -- Build entry table once; new_dynamic will filter it on each keystroke.
   local entries = {}
   for _, path in ipairs(paths) do
     local fm, _, _ = get_file_data(path)
     fm = fm or {}
+    local display = build_display(path, fm)
     table.insert(entries, {
-      value   = path,                    -- recovered in get_multi_selection()
-      display = build_display(path, fm),
-      ordinal = build_display(path, fm), -- sorter matches against this
-      path    = path,                    -- required by vim_buffer_cat previewer
+      value   = path,
+      display = display,
+      ordinal = display,
+      path    = path,   -- required by vim_buffer_cat previewer
     })
   end
 
   local count = #entries
+
   pickers.new({}, {
     prompt_title = string.format(
-      "PKMExport: %d match%s  ·  type to filter  ·  <Tab> select  ·  <CR> confirm",
+      "PKMExport: %d match%s  ·  type for exact filter  ·  <Tab> select  ·  <CR> confirm",
       count, count == 1 and "" or "es"),
 
-    finder = finders.new_table {
-      results = entries,
+    -- new_dynamic re-runs fn on every prompt change.
+    -- Exact substring matching (plain=true) guarantees no fzy behaviour.
+    finder = finders.new_dynamic({
+      fn = function(prompt)
+        if not prompt or prompt == "" then
+          return entries
+        end
+        local needle   = prompt:lower()
+        local filtered = {}
+        for _, e in ipairs(entries) do
+          if e.ordinal:lower():find(needle, 1, true) then
+            table.insert(filtered, e)
+          end
+        end
+        return filtered
+      end,
       entry_maker = function(e) return e end,
-    },
+    }),
 
-    sorter    = make_exact_sorter(),
+    -- Pass-through sorter: always returns score 0 (keep, no reordering).
+    -- This prevents Telescope from applying any secondary fzy pass.
+    sorter = sorters.Sorter:new({
+      scoring_function = function() return 0 end,
+    }),
+
     previewer = previewers.vim_buffer_cat.new({}),
 
     attach_mappings = function(prompt_bufnr, map)
@@ -530,10 +515,10 @@ end
 -- ============================================================================
 
 --- Scrollable floating buffer listing matched files.
---- <CR> exports all matched files; q/<Esc> cancels.
---- @param paths        table
---- @param on_confirm   function(paths)
---- @param on_cancel    function()
+--- <CR> exports all; q/<Esc> cancels.
+--- @param paths      table
+--- @param on_confirm function(paths)
+--- @param on_cancel  function()
 local function show_result_float(paths, on_confirm, on_cancel)
   local header    = string.format(
     "  %d note%s matched  ·  <CR> export all  ·  q/<Esc> cancel",
@@ -580,10 +565,9 @@ end
 -- ENTRY POINT
 -- ============================================================================
 
---- Launch the export UI:
----   1. Filter form (always shown)
----   2a. Telescope results picker, if Telescope is available
----   2b. Scrollable results float, otherwise
+--- Launch the export UI.
+--- Step 1: filter form (always shown).
+--- Step 2: Telescope results picker if available, else scrollable float.
 function M.interactive_export()
   local config       = require('pkm').config
   local default_dest = join_path(config.root_path, "exports", os.date("%Y%m%d_%H%M%S"))

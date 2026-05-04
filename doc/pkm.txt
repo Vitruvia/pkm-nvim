@@ -1,149 +1,495 @@
 *pkm.txt*  Personal Knowledge Management for Neovim
 
 ==============================================================================
-CONTENTS                                                      *pkm-contents*
+CONTENTS                                                       *pkm-contents*
 
     1. Introduction ............................ |pkm-introduction|
     2. Requirements ............................ |pkm-requirements|
-    3. Setup ................................... |pkm-setup|
-    4. Commands ................................ |pkm-commands|
-    5. Configuration ........................... |pkm-configuration|
-    6. Keymaps ................................. |pkm-keymaps|
+    3. Installation ............................ |pkm-installation|
+    4. Setup ................................... |pkm-setup|
+    5. Workflow ................................ |pkm-workflow|
+    6. Commands ................................ |pkm-commands|
+    7. Citations ............................... |pkm-citations|
+    8. Export .................................. |pkm-export|
+    9. Configuration ........................... |pkm-configuration|
+   10. Keymaps ................................. |pkm-keymaps|
+   11. Frontmatter ............................. |pkm-frontmatter|
+   12. File Naming ............................. |pkm-naming|
 
 ==============================================================================
 1. INTRODUCTION                                             *pkm-introduction*
 
-PKM is a comprehensive note-taking system for Neovim designed for Zettelkasten,
-Journaling, and Reference management.
+PKM.nvim is a personal knowledge management plugin for Neovim. It manages
+a collection of markdown notes with YAML frontmatter, automatic bidirectional
+citation tracking, and Telescope integration for search and navigation.
 
-Features:
-  • Bidirectional Linking: Updating a link in one file updates back-references.
-  • Metadata Sync: Renaming a file automatically updates its YAML title.
-  • Citations: Insert citations that link notes and bibliography entries.
-  • Cross-Platform: Works on Windows, Linux, and WSL.
+The system is built around a three-stage workflow:
+
+  Scratchpad  →  quick capture, no friction
+      ↓
+  Journal     →  timestamped entries, personal log
+      ↓
+  Consolidated →  permanent numbered knowledge base
+
+Notes are plain markdown files. No proprietary formats, no cloud dependency.
+Everything works from the filesystem.
 
 ==============================================================================
 2. REQUIREMENTS                                             *pkm-requirements*
 
-The following plugins and tools are required:
-
-  • nvim-telescope/telescope.nvim (For search and picking)
-  • ripgrep (rg) installed on your system (Required for grep search)
+  • Neovim ≥ 0.10
+  • nvim-telescope/telescope.nvim   (optional but strongly recommended)
+  • ripgrep (rg)                    (required for :PKMSearch)
 
 ==============================================================================
-3. SETUP                                                           *pkm-setup*
+3. INSTALLATION                                             *pkm-installation*
 
-Install via your plugin manager (e.g., lazy.nvim).
-
-Minimal setup: >
-  require('pkm').setup({})
+lazy.nvim: >
+  {
+    'yourusername/pkm.nvim',
+    dependencies = { 'nvim-telescope/telescope.nvim' },
+    config = function()
+      require('pkm').setup({
+        root_path = vim.fn.expand('~/Notes'),
+      })
+    end,
+  }
 <
 
-Full setup example: >
-  require('pkm').setup({
-    root_path = vim.fn.expand('~/Notes'),
-    user = {
-      name = "Your Name",
-      email = "you@example.com",
-    },
-    folders = {
-      consolidated = "03-Consolidated",
-      journal = "02-Journal",
-      scratchpad = "01-Scratchpad",
-    },
-    timestamp = {
-      default_format = "full", -- 'full', 'date_time', or 'date_only'
-    }
-  })
-<
-
-==============================================================================
-4. COMMANDS                                                     *pkm-commands*
-
-CREATION~
-:PKMNewNote [type]      Create a new note. Optional type: 'note', 'bib', 'agg'.
-                        If no type is provided, prompts the user.
-:PKMNewJournal          Create a journal entry for today (auto-timestamped).
-:PKMNewScratchpad       Create a quick scratchpad note.
-:PKMQuickCapture        Open today's scratchpad (or create if missing) and
-                        append a timestamp header.
-
-NAVIGATION & SEARCH~
-:PKMSearch              Search content across all notes (uses Telescope/Ripgrep).
-:PKMFind                Find notes by filename.
-:PKMTags                Browse notes by tag.
-:PKMBacklinks           Show notes that link to the current note.
-:PKMLinkNote            Insert a Wiki-link `[[...]]` to another note.
-:PKMFollowLink          Open the note referenced by the link under cursor.
-
-CITATIONS~
-:PKMInsertCitation      Insert a structured citation (e.g., `note[note-001]`).
-                        Automatically adds a backlink to the target note.
-:PKMGotoCitation        Jump to the file referenced by the citation under cursor.
-:PKMUpdateReferences    Scan current file and update YAML `cites` list.
-
-MANAGEMENT~
-:PKMDeleteNote          Safely delete the current note.
-                        *Crucial:* This removes references to this note from
-                        other files to prevent broken links.
-:PKMSync                Force a synchronization of references.
-:PKMUpdateFrontmatter   Interactive prompt to edit YAML keys.
-:PKMValidateFrontmatter Check if YAML structure matches the template.
-
-==============================================================================
-5. CONFIGURATION                                           *pkm-configuration*
-
-The default configuration is:
-
->
-  config = {
-    -- Auto-detects home dir, normalization for Windows handled automatically
-    root_path = nil, 
-
-    folders = {
-      consolidated = "03-Consolidated",
-      journal = "02-Journal",
-      scratchpad = "01-Scratchpad",
-      templates = "templates",
-    },
-
-    sync = {
-      enabled = true,
-      auto_sync_on_save = true, -- Update 'last_updated_on' and refs on save
-    },
-
-    timestamp = {
-      default_format = "full",
-      auto_timestamp = true,
-    },
-    
-    user = {
-      name = "", -- Used for 'author' field in YAML
-    }
+packer: >
+  use {
+    'yourusername/pkm.nvim',
+    requires = { 'nvim-telescope/telescope.nvim' },
+    config = function()
+      require('pkm').setup({ root_path = vim.fn.expand('~/Notes') })
+    end,
   }
 <
 
 ==============================================================================
-6. KEYMAPS                                                       *pkm-keymaps*
+4. SETUP                                                           *pkm-setup*
 
-You can define custom keymaps in the setup table. Defaults:
+Minimal: >
+  require('pkm').setup({
+    root_path = vim.fn.expand('~/Notes'),
+  })
+<
 
-  <leader>nn  :PKMNewNote
-  <leader>nj  :PKMNewJournal
-  <leader>ns  :PKMNewScratchpad
-  <leader>nq  :PKMQuickCapture
-  
-  <leader>nd  :PKMDeleteNote
-  
-  <leader>nf  :PKMSearch (Find content)
-  <leader>nt  :PKMTags
-  
-  <leader>nc  :PKMInsertCitation
-  <leader>ng  :PKMGotoCitation
-  
-  <leader>nl  :PKMLinkNote
-  <leader>nb  :PKMBacklinks
-  gf          :PKMFollowLink (Override standard goto-file)
+With user info and keymaps: >
+  require('pkm').setup({
+    root_path = vim.fn.expand('~/Notes'),
+    user = {
+      name = "Your Name",
+    },
+    keymaps = {
+      new_note       = "<leader>nn",
+      new_journal    = "<leader>nj",
+      quick_capture  = "<leader>nq",
+      search         = "<leader>nf",
+      insert_citation = "<leader>nc",
+    },
+  })
+<
+
+PKM creates the folder structure under root_path on first use.
+
+==============================================================================
+5. WORKFLOW                                                     *pkm-workflow*
+
+CAPTURE~
+Use |:PKMQuickCapture| or |:PKMNewScratchpad| to write down ideas immediately.
+Scratchpads are timestamped files in 01-Scratchpad/. They carry minimal
+frontmatter and require no decisions at creation time.
+
+JOURNAL~
+Use |:PKMNewJournal| for dated entries. The timestamp is recorded in the
+filename and frontmatter automatically.
+
+CONSOLIDATE~
+When a scratchpad contains something worth keeping permanently, use
+|:PKMPromote| to move it to a consolidated note or journal entry. You can
+also create consolidated notes directly with |:PKMNewNote|.
+
+CONSOLIDATED NOTE TYPES~
+  note   Regular knowledge note
+  bib    Bibliography or reference entry (prompts for author and source type)
+  agg    Aggregate or collection note (gathers related content)
+
+CITE~
+In any note, use |:PKMInsertCitation| to pick another note and insert a
+structured citation. The cited note automatically receives a backlink in its
+`cited_by` frontmatter field. This is maintained bidirectionally.
+
+SEARCH~
+Use |:PKMSearch| to search content, |:PKMTags| to browse by tag, or
+|:PKMFind| to find by filename.
+
+==============================================================================
+6. COMMANDS                                                     *pkm-commands*
+
+CREATION~
+
+:PKMNewNote [type]      Create a consolidated note.
+                        Type: 'note', 'bib', or 'agg'.
+                        If omitted, a picker prompts for the type.
+
+:PKMNewJournal          Create a journal entry timestamped to the current
+                        time. Opens immediately for editing.
+
+:PKMNewScratchpad       Create a new scratchpad with an optional title.
+
+:PKMQuickCapture        Open today's scratchpad (creates it if missing) and
+                        append a timestamp header at the end. Useful for
+                        rapid notes during the day.
+
+:PKMImport              Import the currently open file into the PKM structure.
+                        Adds the appropriate frontmatter template for its
+                        folder without overwriting existing fields.
+
+LIFECYCLE~
+
+:PKMConvertNote         Normalize the current note to match its folder format.
+                        Adds any missing frontmatter fields while preserving
+                        existing values. For consolidated notes without a
+                        valid PKM filename, prompts for type and title and
+                        renames the file.
+
+:PKMPromote             Promote a scratchpad to a consolidated note or journal
+                        entry. Only available from the scratchpad folder.
+
+:PKMDeleteNote          Safely delete the current note. Scans all other notes
+                        for references to this file and removes them before
+                        deletion. Always use this instead of deleting files
+                        manually.
+
+NAVIGATION~
+
+:PKMFollowLink          Open the note referenced by the [[wiki-link]] under
+                        the cursor. Searches all PKM folders.
+
+:PKMLinkNote            Pick a note and insert a [[wiki-link]] at the cursor.
+
+:PKMBacklinks           Show all notes that contain a link to the current note.
+
+:PKMGotoCitation        Jump to the note referenced by the citation string
+                        under the cursor (e.g. note[0042]).
+
+SEARCH & BROWSE~
+
+:PKMSearch              Search note contents using Telescope and ripgrep.
+
+:PKMFind                Find notes by filename using Telescope.
+
+:PKMTags                Browse notes by tag using Telescope. Select a tag,
+                        then select a file to open.
+
+:PKMStats               Open a statistics window showing note counts, top
+                        tags, and citation counts.
+
+CITATIONS~
+
+:PKMInsertCitation      Open a picker of all citable notes and bibliography
+                        entries. Inserting a selection writes the citation
+                        string and updates both notes' frontmatter.
+
+:PKMGotoCitation        Jump to the note under the cursor.
+
+:PKMUpdateReferences    Scan the current buffer for citation strings and
+                        rebuild the `cites` frontmatter list to match.
+
+:PKMSync                Force a full reference synchronization across all
+                        notes. Also cleans up frontmatter inconsistencies.
+                        Equivalent to running :PKMUpdateReferences on every
+                        file plus cleanup.
+
+EXPORT~
+
+:PKMExport              Open the export filter form. See |pkm-export|.
+
+UTILITIES~
+
+:PKMToggleAutoSync      Toggle automatic reference sync on save.
+
+:PKMValidate            Validate the current file's citation references and
+                        report stale entries.
+
+:PKMCleanupFrontmatter  Remove corrupted or unexpected frontmatter keys from
+                        all notes.
+
+==============================================================================
+7. CITATIONS                                                   *pkm-citations*
+
+CITATION FORMAT~
+
+Citations are written inline as: >
+  note[0042]
+  bib[0003]
+<
+The number is the four-digit note number. The prefix identifies the note type.
+
+INSERTING A CITATION~
+
+Use |:PKMInsertCitation| (or the keymap). A Telescope picker shows all notes
+with their identifiers and titles. Selecting one inserts the citation string
+at the cursor and immediately:
+
+  1. Adds the cited note to the current file's `cites.notes` or `cites.bib`
+  2. Adds the current file to the cited note's `cited_by.notes` or `cited_by.bib`
+
+BIDIRECTIONAL SYNC~
+
+The frontmatter fields `cites` and `cited_by` are always kept in sync:
+
+  • When you insert a citation: both files are updated immediately
+  • On save (if auto_sync_on_save = true): :PKMUpdateReferences rescans
+    the buffer and repairs any inconsistencies
+  • When you delete a note: :PKMDeleteNote removes all references to it
+
+FRONTMATTER STRUCTURE~
+>
+  cites:
+    notes:
+      - identifier: note-0042
+        title: "Note Title"
+        link: "[[0042_note_Note_Title]]"
+    bib:
+      - identifier: bib-0003
+        title: "Source Title"
+        link: "[[0003_bib_Source_Title]]"
+  cited_by:
+    notes: []
+    bib: []
+<
+Empty groups serialize as `[]` (not omitted). Do not change this structure
+manually; use the PKM commands instead.
+
+==============================================================================
+8. EXPORT                                                         *pkm-export*
+
+:PKMExport opens a filter form to select notes and copy them to a folder.
+Useful for preparing a set of notes to review, share with an LLM, or archive.
+
+THE FILTER FORM~
+>
+  ╭─ PKMExport: Advanced Filter ──────────────────────────────────────╮
+  │  Fill in any fields. Leave blank to skip.                         │
+  │  Comma-separated values: OR logic (AND for the second tags field).│
+  │  <Tab>/<S-Tab> move fields   <CR> search   <Esc> cancel           │
+  │  ──────────────────────────────────────────────────────────────── │
+  │  Tags ANY  (OR) :                                                 │
+  │  Tags ALL (AND) :                                                 │
+  │  Title contains :                                                 │
+  │  Text  contains :                                                 │
+  ╰───────────────────────────────────────────────────────────────────╯
+<
+  Tags ANY (OR)   Note has at least one of these tags.
+                  Comma-separated. Example: mathematics, physics
+  Tags ALL (AND)  Note has every one of these tags.
+                  Comma-separated. Example: proof, analysis
+  Title contains  Exact case-insensitive substring of the note title.
+  Text  contains  Exact substring anywhere in the note body.
+
+All active fields are AND-ed together. Leave any field blank to skip it.
+Matching is exact substring — never fuzzy.
+
+RESULTS PICKER~
+
+After pressing <CR>, matched notes open in a Telescope picker. Type to
+narrow further by exact filename substring. Use <Tab> to select individual
+files for export. Press <CR> to confirm the selection, then enter a
+destination folder path (pre-filled with a timestamped default).
+
+PROGRAMMATIC API~
+>
+  -- Export all notes tagged both "mathematics" AND "proof"
+  require('pkm.export').export(
+    { tags_all = {"mathematics", "proof"} },
+    "/tmp/output"
+  )
+
+  -- Tags: any of math/physics, AND body contains "Fourier"
+  require('pkm.export').export(
+    { tags_any = {"mathematics", "physics"}, text = "Fourier" },
+    "/tmp/output"
+  )
+<
+
+==============================================================================
+9. CONFIGURATION                                           *pkm-configuration*
+>
+  require('pkm').setup({
+    -- Path to notes root directory. Required.
+    -- Auto-detects ~/Documents/Notes if omitted.
+    root_path = nil,
+
+    folders = {
+      scratchpad   = "01-Scratchpad",
+      journal      = "02-Journal",
+      consolidated = "03-Consolidated",
+      templates    = "templates",
+    },
+
+    sync = {
+      -- Master switch for all sync features
+      enabled = true,
+      -- Update last_updated_on and citation lists on every save
+      auto_sync_on_save = true,
+    },
+
+    timestamp = {
+      -- "full"      → YYYY-MM-DD_HH-MM-SS
+      -- "date_time" → YYYY-MM-DD_HH-MM
+      -- "date_only" → YYYY-MM-DD
+      default_format = "full",
+      auto_timestamp = true,
+    },
+
+    user = {
+      name        = "",   -- Inserted in 'author' frontmatter field
+      email       = "",
+      institution = "",
+    },
+
+    keymaps = {
+      -- Set any key to false or omit to disable
+      new_note        = "<leader>nn",
+      new_journal     = "<leader>nj",
+      new_scratchpad  = "<leader>ns",
+      quick_capture   = "<leader>nq",
+      convert_note    = "<leader>nx",
+      promote_note    = "<leader>np",
+      import_note     = "<leader>ni",
+      delete_note     = "<leader>nd",
+      insert_citation = "<leader>nc",
+      goto_citation   = "<leader>ng",
+      link_note       = "<leader>nl",
+      follow_link     = "gf",
+      backlinks       = "<leader>nb",
+      search          = "<leader>nf",
+      browse_tags     = "<leader>nt",
+    },
+  })
+<
+
+==============================================================================
+10. KEYMAPS                                                      *pkm-keymaps*
+
+Default keymaps (all overridable via the `keymaps` config table):
+
+  <leader>nn   :PKMNewNote
+  <leader>nj   :PKMNewJournal
+  <leader>ns   :PKMNewScratchpad
+  <leader>nq   :PKMQuickCapture
+  <leader>nx   :PKMConvertNote
+  <leader>np   :PKMPromote
+  <leader>ni   :PKMImport
+  <leader>nd   :PKMDeleteNote
+  <leader>nc   :PKMInsertCitation
+  <leader>ng   :PKMGotoCitation
+  <leader>nl   :PKMLinkNote
+  gf           :PKMFollowLink  (overrides standard goto-file in .md buffers)
+  <leader>nb   :PKMBacklinks
+  <leader>nf   :PKMSearch
+  <leader>nt   :PKMTags
+
+==============================================================================
+11. FRONTMATTER                                               *pkm-frontmatter*
+
+CONSOLIDATED NOTE~
+>
+  ---
+  title: ""
+  author: ""
+  created_on: "YYYY-MM-DD_HH-MM-SS"
+  last_updated_on: "YYYY-MM-DD_HH-MM-SS"
+  tags: []
+  cites:
+    notes: []
+    bib: []
+  cited_by:
+    notes: []
+    bib: []
+  ---
+<
+
+JOURNAL ENTRY~
+>
+  ---
+  created_on: "YYYY-MM-DD_HH-MM-SS"
+  last_updated_on: "YYYY-MM-DD_HH-MM-SS"
+  author: ""
+  tags: []
+  cites:
+    notes: []
+    bib: []
+  cited_by:
+    notes: []
+    bib: []
+  ---
+<
+
+BIBLIOGRAPHY ENTRY~
+>
+  ---
+  title: ""
+  source_author: ""
+  note_author: ""
+  created_on: "YYYY-MM-DD_HH-MM-SS"
+  last_updated_on: "YYYY-MM-DD_HH-MM-SS"
+  citation: ""
+  source_type: "book"
+  source_location: ""
+  tags: []
+  cites:
+    notes: []
+    bib: []
+  cited_by:
+    notes: []
+    bib: []
+  ---
+<
+
+SCRATCHPAD~
+>
+  ---
+  title: ""
+  created_on: "YYYY-MM-DD_HH-MM-SS"
+  last_updated_on: "YYYY-MM-DD_HH-MM-SS"
+  tags: []
+  cites:
+    notes: []
+    bib: []
+  cited_by:
+    notes: []
+    bib: []
+  ---
+<
+
+==============================================================================
+12. FILE NAMING                                                  *pkm-naming*
+
+CONSOLIDATED NOTES~
+
+  NNNN_type_Title_Words.md
+
+  NNNN   Four-digit zero-padded sequential number
+  type   One of: note, bib, agg
+  Title  Words from the title, joined by underscores, sanitized
+
+Examples: >
+  0042_note_Introduction_to_Fourier_Analysis.md
+  0003_bib_Fourier_Analysis_Stein_Shakarchi.md
+  0007_agg_Real_Analysis_Reading_List.md
+<
+
+JOURNAL ENTRIES~
+
+  journal_YYYY-MM-DD_HH-MM-SS.md
+  (or shorter formats depending on timestamp.default_format)
+
+SCRATCHPADS~
+
+  scratch_YYYY-MM-DD_HH-MM-SS.md
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:
