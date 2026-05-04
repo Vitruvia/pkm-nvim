@@ -140,6 +140,10 @@ function M.setup(user_config)
     require('pkm.notes').promote_note()
   end, { desc = "Promote scratchpad to consolidated note or journal" })
 
+  vim.api.nvim_create_user_command('PKMExport', function()
+    require('pkm.export').interactive_export()
+  end, { desc = "Filter notes and copy to a folder" })
+
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
   vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
   vim.api.nvim_create_user_command('PKMInsertCitation', function() require('pkm.telescope').insert_citation_picker() end, {})
