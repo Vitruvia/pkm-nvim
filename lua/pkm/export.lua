@@ -1,21 +1,28 @@
 -- lua/pkm/export.lua
 --
--- Export utility: select notes and copy them to a folder for external use.
+-- Export utility: select notes by explicit field filters, then copy to a folder.
 -- READ-ONLY — never modifies any note file.
 --
--- Primary UI  : Telescope picker (fuzzy search · Tab multi-select · preview)
--- Fallback UI : Sequential prompts + floating result buffer
+-- UX flow:
+--   1. A floating form lets the user fill in named filter fields.
+--   2. Matching runs with exact substring (never fuzzy) against frontmatter
+--      fields and optionally the note body.
+--   3. Results are shown in a Telescope picker (pre-filtered; typing in the
+--      picker does exact substring refinement on filename only) or in a
+--      scrollable fallback float if Telescope is unavailable.
+--   4. A destination prompt appears; files are copied.
 --
--- Filter semantics (fallback path only; Telescope filtering is interactive):
---   tags_any  OR  — note has at least one of the given tags
---   tags_all  AND — note has every one of the given tags
---   status    OR  — note status equals any of the given values
---   title         case-insensitive substring match on frontmatter title
+-- Filter semantics:
+--   Tags ANY  (OR)  — note has at least one of the listed tags
+--   Tags ALL  (AND) — note has every one of the listed tags
+--   Status    (OR)  — note status equals any of the listed values
+--   Title contains  — case-insensitive exact substring of frontmatter title
+--   Text  contains  — case-insensitive exact substring anywhere in body
 --
--- Dependencies:
---   require('pkm.yaml')   — parse_frontmatter only, loaded lazily
---   require('pkm').config — root_path and folders, loaded lazily
---   require('telescope')  — optional; fallback activated when absent
+-- Dependencies (both loaded lazily):
+--   require('pkm.yaml')   — parse_frontmatter only
+--   require('pkm').config — root_path and folders
+--   require('telescope')  — optional
 
 local M = {}
 
@@ -29,7 +36,7 @@ local function join_path(...)
   return table.concat({ ... }, path_sep)
 end
 
---- Pure-Lua binary-safe file copy. No system calls; works on Windows and WSL.
+--- Pure-Lua binary-safe copy. No system calls; works on Windows/WSL.
 --- @param src string
 --- @param dst string
 --- @return boolean ok
@@ -39,7 +46,6 @@ local function copy_file(src, dst)
   if not rf then return false, "Cannot read: " .. (err_r or src) end
   local data = rf:read("*a")
   rf:close()
-
   local wf, err_w = io.open(dst, "wb")
   if not wf then return false, "Cannot write: " .. (err_w or dst) end
   wf:write(data)
@@ -52,14 +58,18 @@ local function ensure_dir(dir)
   return vim.fn.isdirectory(dir) == 1
 end
 
---- Parse frontmatter from a file path. Returns nil if unreadable or absent.
+--- Returns frontmatter table, content start line, and raw lines for a file.
+--- All three are nil if the file is unreadable or has no frontmatter.
 --- @param path string
---- @return table|nil frontmatter
-local function get_frontmatter(path)
+--- @return table|nil  fm
+--- @return number|nil content_start
+--- @return table|nil  lines
+local function get_file_data(path)
   local ok, lines = pcall(vim.fn.readfile, path)
-  if not ok or not lines then return nil end
-  local fm, _ = require('pkm.yaml').parse_frontmatter(lines)
-  return fm
+  if not ok or not lines then return nil, nil, nil end
+  local fm, cs = require('pkm.yaml').parse_frontmatter(lines)
+  if not fm then return nil, nil, nil end
+  return fm, cs, lines
 end
 
 --- Split a comma-separated string into trimmed, non-empty tokens.
@@ -68,22 +78,20 @@ end
 local function split_csv(str)
   local result = {}
   for item in str:gmatch("[^,]+") do
-    local trimmed = item:match("^%s*(.-)%s*$")
-    if trimmed ~= "" then table.insert(result, trimmed) end
+    local t = item:match("^%s*(.-)%s*$")
+    if t ~= "" then table.insert(result, t) end
   end
   return result
 end
 
 -- ============================================================================
--- FILTER ENGINE   (used by fallback; Telescope does live interactive filtering)
+-- FILTER ENGINE
 -- ============================================================================
 
 --- Normalise frontmatter tags to a flat list of lowercase strings.
---- @param raw any
---- @return table
 local function normalise_tags(raw)
   if type(raw) == "string" then raw = { raw } end
-  if type(raw) ~= "table" then return {} end
+  if type(raw) ~= "table"  then return {}      end
   local out = {}
   for _, t in ipairs(raw) do
     if type(t) == "string" then table.insert(out, t:lower()) end
@@ -91,18 +99,19 @@ local function normalise_tags(raw)
   return out
 end
 
---- Test whether a note file satisfies all active filters.
+--- Test whether a note satisfies all active filters.
+--- All string matching is exact substring (string.find plain mode), never fuzzy.
 ---
---- @param path    string  Absolute path to a .md file
---- @param filters table   Filter spec; all fields optional / nil = inactive
+--- @param path    string
+--- @param filters table   All fields optional; nil or empty = inactive.
 --- @return boolean
 function M.match_file(path, filters)
-  local fm = get_frontmatter(path)
+  local fm, content_start, lines = get_file_data(path)
   if not fm then return false end
 
   local note_tags = normalise_tags(fm.tags)
 
-  -- tags_any: OR — at least one filter tag present in note
+  -- tags_any: OR — note must have at least one listed tag
   if filters.tags_any and #filters.tags_any > 0 then
     local found = false
     for _, wanted in ipairs(filters.tags_any) do
@@ -115,7 +124,7 @@ function M.match_file(path, filters)
     if not found then return false end
   end
 
-  -- tags_all: AND — every filter tag must be present
+  -- tags_all: AND — note must have every listed tag
   if filters.tags_all and #filters.tags_all > 0 then
     for _, wanted in ipairs(filters.tags_all) do
       local wl    = wanted:lower()
@@ -127,7 +136,7 @@ function M.match_file(path, filters)
     end
   end
 
-  -- status: OR
+  -- status: OR — exact match against fm.status
   if filters.status and #filters.status > 0 then
     local note_status = type(fm.status) == "string" and fm.status:lower() or ""
     local found       = false
@@ -137,10 +146,24 @@ function M.match_file(path, filters)
     if not found then return false end
   end
 
-  -- title: case-insensitive substring
+  -- title: exact case-insensitive substring
   if filters.title and filters.title ~= "" then
     local note_title = type(fm.title) == "string" and fm.title:lower() or ""
+    -- string.find with plain=true: no pattern interpretation, exact bytes
     if not note_title:find(filters.title:lower(), 1, true) then return false end
+  end
+
+  -- text: exact substring anywhere in the body (after frontmatter)
+  if filters.text and filters.text ~= "" then
+    if not lines or not content_start then return false end
+    local needle = filters.text:lower()
+    local found  = false
+    for i = content_start, #lines do
+      if lines[i]:lower():find(needle, 1, true) then
+        found = true; break
+      end
+    end
+    if not found then return false end
   end
 
   return true
@@ -172,12 +195,12 @@ function M.collect_files(filters)
 end
 
 -- ============================================================================
--- COPY ENGINE   (shared by both UI paths)
+-- COPY ENGINE
 -- ============================================================================
 
---- Copy a list of absolute paths into dest. Reports results via vim.notify.
---- @param paths table   List of source paths
---- @param dest  string  Destination directory (created if absent)
+--- Copy a list of paths into dest. Reports results via vim.notify.
+--- @param paths table
+--- @param dest  string
 --- @return number copied
 --- @return number errors
 function M.copy_files(paths, dest)
@@ -207,10 +230,9 @@ function M.copy_files(paths, dest)
   return copied, errors
 end
 
---- Programmatic entry point: collect via filter spec then copy.
---- Example:
+--- Programmatic entry point (no UI). Example:
 ---   require('pkm.export').export(
----     { tags_any = {"math"}, tags_all = {"proof", "analysis"} },
+---     { tags_all = {"mathematics", "proof"}, text = "Fourier" },
 ---     "/tmp/llm-context"
 ---   )
 --- @param filters table
@@ -225,59 +247,10 @@ function M.export(filters, dest)
 end
 
 -- ============================================================================
--- TELESCOPE UI PATH
+-- DESTINATION PROMPT  (shared between both UI paths)
 -- ============================================================================
 
---- Build the ordinal string for fuzzy matching.
----
---- Format: "<basename> <title> <tag1> <tag2> ... <status>"  (all lowercase)
----
---- Telescope's fzy sorter matches the query as a subsequence against this
---- string. Typing multiple space-separated words (e.g. "math proof") narrows
---- results because each character of the full query must appear in order —
---- effectively an AND of all typed characters across all metadata fields.
----
---- @param path string
---- @param fm   table
---- @return string
-local function build_ordinal(path, fm)
-  local parts = { vim.fn.fnamemodify(path, ":t:r"):lower() }
-  if type(fm.title) == "string" then
-    table.insert(parts, fm.title:lower())
-  end
-  if type(fm.tags) == "table" then
-    for _, t in ipairs(fm.tags) do
-      if type(t) == "string" then table.insert(parts, t:lower()) end
-    end
-  end
-  if type(fm.status) == "string" then
-    table.insert(parts, fm.status:lower())
-  end
-  return table.concat(parts, " ")
-end
-
---- Build the display string shown in the Telescope picker row.
---- Format: "<filename>  [tag1, tag2]  status"
---- @param path string
---- @param fm   table
---- @return string
-local function build_display(path, fm)
-  local name = vim.fn.fnamemodify(path, ":t")
-
-  local tags = {}
-  if type(fm.tags) == "table" then
-    for _, t in ipairs(fm.tags) do
-      if type(t) == "string" then table.insert(tags, t) end
-    end
-  end
-
-  local tag_str    = #tags > 0 and ("  [" .. table.concat(tags, ", ") .. "]") or ""
-  local status_str = type(fm.status) == "string" and ("  " .. fm.status) or ""
-  return name .. tag_str .. status_str
-end
-
---- Prompt for destination and copy. Called after Telescope closes so the
---- input prompt appears cleanly without a lingering picker window.
+--- Prompt for a destination path and copy on confirmation.
 --- @param paths        table
 --- @param default_dest string
 local function prompt_dest_and_copy(paths, default_dest)
@@ -295,78 +268,225 @@ local function prompt_dest_and_copy(paths, default_dest)
   )
 end
 
---- Open a Telescope picker over all PKM notes.
----
---- Navigation:
----   Type to fuzzy-filter  (filename · title · tags · status all searched)
----   <Tab>   toggle selection on current entry and move to next
----   <S-Tab> toggle selection on current entry and move to previous
----   <CR>    confirm the selection (or current entry if nothing was Tab-selected)
----   <Esc>   / <C-c>  cancel
-local function telescope_export()
-  -- Checked at call time to avoid Lazy.nvim deferred-load issues.
-  local ok_tel = pcall(require, 'telescope')
-  if not ok_tel then
-    vim.notify("PKMExport: Telescope not available.", vim.log.levels.ERROR)
-    return
+-- ============================================================================
+-- FILTER FORM
+-- ============================================================================
+
+-- Field definitions. Order determines display order.
+-- `multi` = true means value is comma-separated and parsed into a list.
+local FIELDS = {
+  { key = "tags_any", label = "Tags ANY  (OR)", multi = true  },
+  { key = "tags_all", label = "Tags ALL (AND)", multi = true  },
+  { key = "status",   label = "Status        ", multi = true  },
+  { key = "title",    label = "Title contains", multi = false },
+  { key = "text",     label = "Text  contains", multi = false },
+}
+
+-- The separator used between the label and the editable value in each line.
+-- Chosen to be unambiguous: the user's value can contain anything except
+-- leading/trailing whitespace being trimmed.
+local FIELD_SEP = " : "
+
+--- Build the display string for one form field line.
+--- @param field table  Entry from FIELDS
+--- @param value string Current value (may be empty)
+--- @return string
+local function field_line(field, value)
+  return "  " .. field.label .. FIELD_SEP .. (value or "")
+end
+
+--- Extract the value portion from a form field line.
+--- Splits on the first occurrence of FIELD_SEP.
+--- @param line string
+--- @return string  Trimmed value (may be "")
+local function extract_value(line)
+  local sep_pos = line:find(FIELD_SEP, 1, true)
+  if not sep_pos then return "" end
+  local raw = line:sub(sep_pos + #FIELD_SEP)
+  return raw:match("^%s*(.-)%s*$") or ""
+end
+
+--- Open the filter form and call on_submit(filters) when the user confirms.
+--- on_submit is NOT called if the user cancels.
+--- @param on_submit function(filters: table)
+local function show_filter_form(on_submit)
+  local header = {
+    "  Fill in any fields below. Leave blank to skip.",
+    "  Comma-separated values mean OR (or AND for the second tags field).",
+    "  <Tab> / <S-Tab>: move between fields   <CR>: search   <Esc>: cancel",
+    "  " .. string.rep("─", 62),
+  }
+
+  local field_start = #header + 1  -- 1-indexed line where fields begin
+
+  local initial_lines = vim.deepcopy(header)
+  for _, f in ipairs(FIELDS) do
+    table.insert(initial_lines, field_line(f, ""))
   end
 
-  local pickers      = require('telescope.pickers')
-  local finders      = require('telescope.finders')
-  local conf         = require('telescope.config').values
-  local actions      = require('telescope.actions')
-  local action_state = require('telescope.actions.state')
-  local previewers   = require('telescope.previewers')
-  local config       = require('pkm').config
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, initial_lines)
+  vim.api.nvim_set_option_value('modifiable', true,   { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
+  vim.api.nvim_set_option_value('filetype',   'pkm_export_form', { buf = buf })
 
-  -- Collect every .md file from all PKM folders.
-  local entries = {}
-  for _, folder in pairs(config.folders) do
-    local dir = join_path(config.root_path, folder)
-    if vim.fn.isdirectory(dir) == 1 then
-      local files = vim.fn.glob(dir .. path_sep .. "*.md", false, true)
-      for _, path in ipairs(files) do
-        local fm = get_frontmatter(path) or {}
-        table.insert(entries, {
-          path    = path,
-          display = build_display(path, fm),
-          ordinal = build_ordinal(path, fm),
-        })
-      end
+  local width  = 68
+  local height = #initial_lines + 2
+  local win    = vim.api.nvim_open_win(buf, true, {
+    relative  = 'editor',
+    width     = width,
+    height    = height,
+    col       = math.floor((vim.o.columns - width)  / 2),
+    row       = math.floor((vim.o.lines   - height) / 2),
+    style     = 'minimal',
+    border    = 'rounded',
+    title     = ' PKMExport: Advanced Filter ',
+    title_pos = 'center',
+  })
+
+  -- Position cursor at end of first field's value.
+  local function go_to_field(idx)
+    local lnum = field_start + idx - 1
+    local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1] or ""
+    vim.api.nvim_win_set_cursor(win, { lnum, #line })
+    vim.cmd("startinsert!")
+  end
+
+  go_to_field(1)
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
     end
   end
 
-  if #entries == 0 then
-    vim.notify("PKMExport: No notes found.", vim.log.levels.INFO)
-    return
+  local function read_and_submit()
+    local buf_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local filters   = {}
+
+    for i, field in ipairs(FIELDS) do
+      local line  = buf_lines[field_start + i - 1] or ""
+      local value = extract_value(line)
+      if value ~= "" then
+        if field.multi then
+          local items = split_csv(value)
+          if #items > 0 then filters[field.key] = items end
+        else
+          filters[field.key] = value
+        end
+      end
+    end
+
+    close()
+    -- Schedule so the window fully closes before the next UI element opens.
+    vim.schedule(function()
+      on_submit(filters)
+    end)
   end
 
-  table.sort(entries, function(a, b) return a.display < b.display end)
+  local ko = { noremap = true, silent = true, buffer = buf }
 
-  local default_dest = join_path(config.root_path, "exports", os.date("%Y%m%d_%H%M%S"))
+  -- <CR> in normal or insert mode: submit.
+  vim.keymap.set({ 'n', 'i' }, '<CR>', function()
+    vim.cmd("stopinsert")
+    read_and_submit()
+  end, ko)
 
+  -- <Esc> in normal mode: cancel.
+  vim.keymap.set('n', '<Esc>', function() close() end, ko)
+
+  -- <Tab>: move to next field.
+  vim.keymap.set({ 'n', 'i' }, '<Tab>', function()
+    vim.cmd("stopinsert")
+    local cur  = vim.api.nvim_win_get_cursor(win)
+    local cur_field = cur[1] - field_start + 1
+    local next_field = (cur_field % #FIELDS) + 1
+    go_to_field(next_field)
+  end, ko)
+
+  -- <S-Tab>: move to previous field.
+  vim.keymap.set({ 'n', 'i' }, '<S-Tab>', function()
+    vim.cmd("stopinsert")
+    local cur  = vim.api.nvim_win_get_cursor(win)
+    local cur_field = cur[1] - field_start + 1
+    local prev_field = ((cur_field - 2) % #FIELDS) + 1
+    go_to_field(prev_field)
+  end, ko)
+end
+
+-- ============================================================================
+-- TELESCOPE RESULTS PICKER
+-- ============================================================================
+
+--- Custom sorter for the results picker: exact case-insensitive substring
+--- match on the display string (filename + tags + status).
+--- Returns 0 (keep) or -1 (discard). Never uses fzy/subsequence matching.
+--- An empty prompt keeps all entries.
+local function make_exact_sorter()
+  return require('telescope.sorters').Sorter:new({
+    scoring_function = function(_, prompt, line, _)
+      if not prompt or prompt == "" then return 0 end
+      if line:lower():find(prompt:lower(), 1, true) then return 0 end
+      return -1
+    end,
+  })
+end
+
+--- Build the display string for one picker row.
+--- Format: "<filename>  [tag1, tag2]  status"
+local function build_display(path, fm)
+  local name = vim.fn.fnamemodify(path, ":t")
+  local tags  = {}
+  if type(fm.tags) == "table" then
+    for _, t in ipairs(fm.tags) do
+      if type(t) == "string" then table.insert(tags, t) end
+    end
+  end
+  local tag_str    = #tags > 0 and ("  [" .. table.concat(tags, ", ") .. "]") or ""
+  local status_str = type(fm.status) == "string" and ("  " .. fm.status) or ""
+  return name .. tag_str .. status_str
+end
+
+--- Open a Telescope picker over a pre-filtered list of files.
+--- The picker allows further narrowing by exact substring on the display
+--- string, plus Tab multi-select and file preview.
+--- @param paths        table   Pre-filtered list of absolute paths
+--- @param default_dest string
+local function telescope_results_picker(paths, default_dest)
+  local pickers      = require('telescope.pickers')
+  local finders      = require('telescope.finders')
+  local actions      = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+  local previewers   = require('telescope.previewers')
+
+  -- Build entries.
+  local entries = {}
+  for _, path in ipairs(paths) do
+    local fm, _, _ = get_file_data(path)
+    fm = fm or {}
+    table.insert(entries, {
+      value   = path,                    -- recovered in get_multi_selection()
+      display = build_display(path, fm),
+      ordinal = build_display(path, fm), -- sorter matches against this
+      path    = path,                    -- required by vim_buffer_cat previewer
+    })
+  end
+
+  local count = #entries
   pickers.new({}, {
-    prompt_title = "PKMExport  ·  fuzzy search  ·  <Tab> select  ·  <CR> confirm",
+    prompt_title = string.format(
+      "PKMExport: %d match%s  ·  type to filter  ·  <Tab> select  ·  <CR> confirm",
+      count, count == 1 and "" or "es"),
 
     finder = finders.new_table {
       results = entries,
-      entry_maker = function(entry)
-        return {
-          -- `value` is what get_multi_selection() returns per entry.
-          value   = entry.path,
-          display = entry.display,
-          ordinal = entry.ordinal,
-          -- `path` is required by vim_buffer_cat previewer.
-          path    = entry.path,
-        }
-      end,
+      entry_maker = function(e) return e end,
     },
 
-    sorter    = conf.generic_sorter({}),
+    sorter    = make_exact_sorter(),
     previewer = previewers.vim_buffer_cat.new({}),
 
     attach_mappings = function(prompt_bufnr, map)
-      -- Toggle selection and move cursor.
       local sel_next = actions.toggle_selection + actions.move_selection_next
       local sel_prev = actions.toggle_selection + actions.move_selection_previous
       map("i", "<Tab>",   sel_next)
@@ -374,13 +494,10 @@ local function telescope_export()
       map("i", "<S-Tab>", sel_prev)
       map("n", "<S-Tab>", sel_prev)
 
-      -- <CR>: finalise selection, close picker, prompt for destination.
       actions.select_default:replace(function()
         local picker     = action_state.get_current_picker(prompt_bufnr)
         local selections = picker:get_multi_selection()
 
-        -- If the user pressed <CR> without Tab-selecting, treat the currently
-        -- highlighted entry as the sole selection.
         if #selections == 0 then
           local entry = action_state.get_selected_entry()
           if entry then selections = { entry } end
@@ -393,16 +510,13 @@ local function telescope_export()
           return
         end
 
-        local paths = {}
+        local selected_paths = {}
         for _, sel in ipairs(selections) do
-          -- sel.value was set to the file path in entry_maker.
-          table.insert(paths, sel.value)
+          table.insert(selected_paths, sel.value)
         end
 
-        -- Defer one tick so Telescope's window fully closes before
-        -- vim.ui.input opens; prevents rendering conflicts.
         vim.schedule(function()
-          prompt_dest_and_copy(paths, default_dest)
+          prompt_dest_and_copy(selected_paths, default_dest)
         end)
       end)
 
@@ -412,19 +526,19 @@ local function telescope_export()
 end
 
 -- ============================================================================
--- FALLBACK UI PATH   (no Telescope)
+-- FALLBACK RESULTS FLOAT  (no Telescope)
 -- ============================================================================
 
---- Open a floating, scrollable, read-only buffer listing matched files.
---- <CR> confirms and proceeds; q / <Esc> cancels.
---- @param paths      table
---- @param on_confirm function(paths)
---- @param on_cancel  function()
-local function show_result_buffer(paths, on_confirm, on_cancel)
+--- Scrollable floating buffer listing matched files.
+--- <CR> exports all matched files; q/<Esc> cancels.
+--- @param paths        table
+--- @param on_confirm   function(paths)
+--- @param on_cancel    function()
+local function show_result_float(paths, on_confirm, on_cancel)
   local header    = string.format(
-    "  %d note%s matched  ·  <CR> confirm  ·  q/<Esc> cancel",
+    "  %d note%s matched  ·  <CR> export all  ·  q/<Esc> cancel",
     #paths, #paths == 1 and "" or "s")
-  local separator = "  " .. string.rep("─", #header - 2)
+  local separator = "  " .. string.rep("─", math.max(#header - 2, 10))
 
   local lines = { header, separator }
   for _, p in ipairs(paths) do
@@ -462,103 +576,43 @@ local function show_result_buffer(paths, on_confirm, on_cancel)
   vim.keymap.set('n', '<Esc>', function() close(); on_cancel()       end, ko)
 end
 
---- Sequential prompt chain for the fallback (no-Telescope) path.
-local function fallback_export()
-  local config       = require('pkm').config
-  local default_dest = join_path(config.root_path, "exports", os.date("%Y%m%d_%H%M%S"))
-
-  local function trim(s) return s and s:match("^%s*(.-)%s*$") or "" end
-
-  vim.ui.input(
-    { prompt = "Tags ANY (OR, comma-separated, empty = skip): " },
-    function(v1)
-      if v1 == nil then return end
-      local tags_any = split_csv(trim(v1))
-
-      vim.ui.input(
-        { prompt = "Tags ALL (AND, comma-separated, empty = skip): " },
-        function(v2)
-          if v2 == nil then return end
-          local tags_all = split_csv(trim(v2))
-
-          vim.ui.input(
-            { prompt = "Status (OR, comma-separated, empty = skip): " },
-            function(v3)
-              if v3 == nil then return end
-              local status = split_csv(trim(v3))
-
-              vim.ui.input(
-                { prompt = "Title contains (substring, empty = skip): " },
-                function(v4)
-                  if v4 == nil then return end
-                  local title = trim(v4)
-
-                  local filters = {
-                    tags_any = #tags_any > 0 and tags_any or nil,
-                    tags_all = #tags_all > 0 and tags_all or nil,
-                    status   = #status   > 0 and status   or nil,
-                    title    = title ~= ""   and title    or nil,
-                  }
-
-                  local has_filter = filters.tags_any or filters.tags_all
-                                  or filters.status   or filters.title
-                  if not has_filter then
-                    vim.notify(
-                      "PKMExport: No filters specified — will match all notes.",
-                      vim.log.levels.WARN
-                    )
-                  end
-
-                  local paths = M.collect_files(filters)
-                  if #paths == 0 then
-                    vim.notify("PKMExport: No notes matched.", vim.log.levels.INFO)
-                    return
-                  end
-
-                  show_result_buffer(
-                    paths,
-                    function(confirmed_paths)
-                      vim.ui.input(
-                        { prompt  = string.format(
-                            "Export %d note%s to: ",
-                            #confirmed_paths, #confirmed_paths == 1 and "" or "s"),
-                          default = default_dest },
-                        function(dest)
-                          if not dest or dest:match("^%s*$") then
-                            vim.notify("PKMExport: Cancelled.", vim.log.levels.INFO)
-                            return
-                          end
-                          M.copy_files(confirmed_paths, dest)
-                        end
-                      )
-                    end,
-                    function()
-                      vim.notify("PKMExport: Cancelled.", vim.log.levels.INFO)
-                    end
-                  )
-                end
-              )
-            end
-          )
-        end
-      )
-    end
-  )
-end
-
 -- ============================================================================
 -- ENTRY POINT
 -- ============================================================================
 
---- Launch the export UI.
---- Uses Telescope if available at call time; falls back to prompt chain.
+--- Launch the export UI:
+---   1. Filter form (always shown)
+---   2a. Telescope results picker, if Telescope is available
+---   2b. Scrollable results float, otherwise
 function M.interactive_export()
-  local has_telescope = pcall(require, 'telescope')
-  if has_telescope then
-    telescope_export()
-  else
-    fallback_export()
-  end
+  local config       = require('pkm').config
+  local default_dest = join_path(config.root_path, "exports", os.date("%Y%m%d_%H%M%S"))
+
+  show_filter_form(function(filters)
+    local paths = M.collect_files(filters)
+
+    if #paths == 0 then
+      vim.notify("PKMExport: No notes matched the given filters.", vim.log.levels.INFO)
+      return
+    end
+
+    local has_telescope = pcall(require, 'telescope')
+    if has_telescope then
+      telescope_results_picker(paths, default_dest)
+    else
+      show_result_float(
+        paths,
+        function(confirmed)
+          vim.schedule(function()
+            prompt_dest_and_copy(confirmed, default_dest)
+          end)
+        end,
+        function()
+          vim.notify("PKMExport: Cancelled.", vim.log.levels.INFO)
+        end
+      )
+    end
+  end)
 end
 
 return M
