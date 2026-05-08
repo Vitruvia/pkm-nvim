@@ -309,4 +309,84 @@ function M.show_analytics()
   vim.notify("Analytics dashboard not yet implemented", vim.log.levels.INFO)
 end
 
+--- Fallback tag-merge UI for when Telescope is unavailable.
+--- Asks for a target tag, then loops asking for source tags until the user
+--- selects "Done", then confirms and executes.
+function M.merge_tags_ui()
+  local citations_mod = require('pkm.citations')
+  local all_tags = citations_mod.get_all_tags()
+
+  if #all_tags == 0 then
+    vim.notify("PKM: No tags found.", vim.log.levels.INFO)
+    return
+  end
+
+  -- Step 1: pick target
+  vim.ui.select(all_tags, {
+    prompt = "Merge Tags — Step 1: Pick TARGET tag",
+  }, function(target)
+    if not target then return end
+
+    local sources    = {}
+    local source_set = {}  -- dedup guard for the sources list itself
+
+    local function execute_merge()
+      if #sources == 0 then
+        vim.notify("PKM: No source tags selected. Merge cancelled.", vim.log.levels.INFO)
+        return
+      end
+      local src_str = table.concat(sources, ", ")
+      vim.fn.inputsave()
+      local answer = vim.fn.input(
+        string.format("Merge [%s] → '%s'? (y/N): ", src_str, target), "n"
+      )
+      vim.fn.inputrestore()
+      if answer:lower() ~= "y" then
+        vim.notify("PKM: Tag merge cancelled.", vim.log.levels.INFO)
+        return
+      end
+      local count = citations_mod.merge_tags(sources, target)
+      vim.notify(
+        string.format("PKM: Merged [%s] → '%s' in %d file(s).", src_str, target, count),
+        vim.log.levels.INFO
+      )
+    end
+
+    local function pick_source()
+      -- Build the remaining candidates
+      local candidates = { "── Done (execute merge) ──" }
+      for _, t in ipairs(all_tags) do
+        if t ~= target and not source_set[t] then
+          table.insert(candidates, t)
+        end
+      end
+
+      if #candidates == 1 then
+        -- Only "Done" left — nothing more to pick
+        execute_merge()
+        return
+      end
+
+      local header = #sources == 0
+        and string.format("Merge Tags — Step 2: Pick SOURCE tags → '%s'", target)
+        or  string.format(
+              "Merge Tags — Sources so far: [%s] → '%s'  (pick more or Done)",
+              table.concat(sources, ", "), target
+            )
+
+      vim.ui.select(candidates, { prompt = header }, function(choice)
+        if not choice or choice:match("^── Done") then
+          execute_merge()
+        else
+          source_set[choice] = true
+          table.insert(sources, choice)
+          pick_source()
+        end
+      end)
+    end
+
+    pick_source()
+  end)
+end
+
 return M

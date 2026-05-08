@@ -116,4 +116,120 @@ function M.search_notes()
   })
 end
 
+-- 5. Merge Tags Picker
+-- Step 1: pick TARGET (single select).
+-- Step 2: pick SOURCE tags (multi-select with <Tab>).
+-- Step 3: confirm and execute.
+function M.merge_tags_picker()
+  local citations_mod = require('pkm.citations')
+  local all_tags = citations_mod.get_all_tags()
+
+  if #all_tags == 0 then
+    vim.notify("PKM: No tags found.", vim.log.levels.INFO)
+    return
+  end
+
+  -- ── Step 1: pick TARGET ────────────────────────────────────────────────
+  pickers.new({}, {
+    prompt_title = "Merge Tags — Step 1: Pick TARGET tag",
+    finder = finders.new_table {
+      results = all_tags,
+      entry_maker = function(t)
+        return { value = t, display = t, ordinal = t }
+      end,
+    },
+    sorter = conf.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr)
+      actions.select_default:replace(function()
+        actions.close(prompt_bufnr)
+        local sel = action_state.get_selected_entry()
+        if not sel then return end
+        local target = sel.value
+
+        local source_candidates = vim.tbl_filter(
+          function(t) return t ~= target end, all_tags
+        )
+
+        if #source_candidates == 0 then
+          vim.notify("PKM: No other tags available to merge.", vim.log.levels.INFO)
+          return
+        end
+
+        -- ── Step 2: pick SOURCES (multi-select) ──────────────────────────
+        vim.schedule(function()
+          pickers.new({}, {
+            prompt_title = "Merge Tags — Step 2: Sources → '"
+              .. target .. "'  (<Tab> multi-select, <CR> confirm)",
+            finder = finders.new_table {
+              results = source_candidates,
+              entry_maker = function(t)
+                return { value = t, display = t, ordinal = t }
+              end,
+            },
+            sorter = conf.generic_sorter({}),
+            attach_mappings = function(prompt_bufnr2, map2)
+              -- Standard multi-select binding
+              map2('i', '<Tab>', function()
+                actions.toggle_selection(prompt_bufnr2)
+                actions.move_selection_next(prompt_bufnr2)
+              end)
+              map2('n', '<Tab>', function()
+                actions.toggle_selection(prompt_bufnr2)
+                actions.move_selection_next(prompt_bufnr2)
+              end)
+
+              actions.select_default:replace(function()
+                local picker2  = action_state.get_current_picker(prompt_bufnr2)
+                local multi    = picker2:get_multi_selection()
+                actions.close(prompt_bufnr2)
+
+                -- Fall back to the highlighted entry if nothing was toggled
+                if #multi == 0 then
+                  local cur = action_state.get_selected_entry()
+                  if cur then multi = { cur } end
+                end
+
+                if #multi == 0 then
+                  vim.notify("PKM: No source tags selected.", vim.log.levels.INFO)
+                  return
+                end
+
+                local sources  = vim.tbl_map(function(e) return e.value end, multi)
+
+                -- ── Step 3: confirm ──────────────────────────────────────
+                vim.schedule(function()
+                  local src_str = table.concat(sources, ", ")
+                  local choice  = vim.fn.confirm(
+                    string.format(
+                      "Merge [%s]\n→ '%s'\n\nThis will rewrite all affected notes. Proceed?",
+                      src_str, target
+                    ),
+                    "&Yes\n&No", 2
+                  )
+                  if choice ~= 1 then
+                    vim.notify("PKM: Tag merge cancelled.", vim.log.levels.INFO)
+                    return
+                  end
+
+                  local count = citations_mod.merge_tags(sources, target)
+                  vim.notify(
+                    string.format(
+                      "PKM: Merged [%s] → '%s' in %d file(s).",
+                      src_str, target, count
+                    ),
+                    vim.log.levels.INFO
+                  )
+                end)
+              end)
+
+              return true
+            end,
+          }):find()
+        end)
+      end)
+      return true
+    end,
+  }):find()
+end
+
 return M
