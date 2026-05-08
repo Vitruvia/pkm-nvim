@@ -309,9 +309,6 @@ function M.show_analytics()
   vim.notify("Analytics dashboard not yet implemented", vim.log.levels.INFO)
 end
 
---- Fallback tag-merge UI for when Telescope is unavailable.
---- Asks for a target tag, then loops asking for source tags until the user
---- selects "Done", then confirms and executes.
 function M.merge_tags_ui()
   local citations_mod = require('pkm.citations')
   local all_tags = citations_mod.get_all_tags()
@@ -321,71 +318,80 @@ function M.merge_tags_ui()
     return
   end
 
-  -- Step 1: pick target
+  -- Step 1: pick target from a list
   vim.ui.select(all_tags, {
-    prompt = "Merge Tags — Step 1: Pick TARGET tag",
+    prompt = "Merge Tags — Pick TARGET tag (sources will be typed next)",
   }, function(target)
     if not target then return end
 
-    local sources    = {}
-    local source_set = {}  -- dedup guard for the sources list itself
+    -- Step 2: show available tags and let the user type sources
+    local available = vim.tbl_filter(function(t) return t ~= target end, all_tags)
+    local available_str = table.concat(available, "  |  ")
 
-    local function execute_merge()
-      if #sources == 0 then
-        vim.notify("PKM: No source tags selected. Merge cancelled.", vim.log.levels.INFO)
-        return
-      end
-      local src_str = table.concat(sources, ", ")
-      vim.fn.inputsave()
-      local answer = vim.fn.input(
-        string.format("Merge [%s] → '%s'? (y/N): ", src_str, target), "n"
-      )
-      vim.fn.inputrestore()
-      if answer:lower() ~= "y" then
-        vim.notify("PKM: Tag merge cancelled.", vim.log.levels.INFO)
-        return
-      end
-      local count = citations_mod.merge_tags(sources, target)
-      vim.notify(
-        string.format("PKM: Merged [%s] → '%s' in %d file(s).", src_str, target, count),
-        vim.log.levels.INFO
-      )
+    vim.notify("Available tags:\n" .. available_str, vim.log.levels.INFO)
+
+    vim.fn.inputsave()
+    local raw = vim.fn.input(
+      string.format("Sources to merge into '%s' (comma-separated): ", target)
+    )
+    vim.fn.inputrestore()
+
+    if not raw or raw:match("^%s*$") then
+      vim.notify("PKM: No sources entered. Merge cancelled.", vim.log.levels.INFO)
+      return
     end
 
-    local function pick_source()
-      -- Build the remaining candidates
-      local candidates = { "── Done (execute merge) ──" }
-      for _, t in ipairs(all_tags) do
-        if t ~= target and not source_set[t] then
-          table.insert(candidates, t)
-        end
-      end
+    -- Parse and validate
+    local sources = {}
+    local source_set = {}
+    local invalid = {}
+    local valid_set = {}
+    for _, t in ipairs(available) do valid_set[t] = true end
 
-      if #candidates == 1 then
-        -- Only "Done" left — nothing more to pick
-        execute_merge()
-        return
-      end
-
-      local header = #sources == 0
-        and string.format("Merge Tags — Step 2: Pick SOURCE tags → '%s'", target)
-        or  string.format(
-              "Merge Tags — Sources so far: [%s] → '%s'  (pick more or Done)",
-              table.concat(sources, ", "), target
-            )
-
-      vim.ui.select(candidates, { prompt = header }, function(choice)
-        if not choice or choice:match("^── Done") then
-          execute_merge()
+    for entry in raw:gmatch("[^,]+") do
+      local t = entry:match("^%s*(.-)%s*$")
+      if t ~= "" then
+        if valid_set[t] then
+          if not source_set[t] then
+            source_set[t] = true
+            table.insert(sources, t)
+          end
         else
-          source_set[choice] = true
-          table.insert(sources, choice)
-          pick_source()
+          table.insert(invalid, t)
         end
-      end)
+      end
     end
 
-    pick_source()
+    if #invalid > 0 then
+      vim.notify(
+        "PKM: Unknown tags (ignored): " .. table.concat(invalid, ", "),
+        vim.log.levels.WARN
+      )
+    end
+
+    if #sources == 0 then
+      vim.notify("PKM: No valid source tags. Merge cancelled.", vim.log.levels.INFO)
+      return
+    end
+
+    -- Confirm
+    local src_str = table.concat(sources, ", ")
+    vim.fn.inputsave()
+    local answer = vim.fn.input(
+      string.format("Merge [%s] → '%s'? (y/N): ", src_str, target), "n"
+    )
+    vim.fn.inputrestore()
+
+    if answer:lower() ~= "y" then
+      vim.notify("PKM: Tag merge cancelled.", vim.log.levels.INFO)
+      return
+    end
+
+    local count = citations_mod.merge_tags(sources, target)
+    vim.notify(
+      string.format("PKM: Merged [%s] → '%s' in %d file(s).", src_str, target, count),
+      vim.log.levels.INFO
+    )
   end)
 end
 
