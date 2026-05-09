@@ -2,19 +2,13 @@
 -- UI components and search for PKM system
 
 local M = {}
+local utils = require('pkm.utils')
 local config = {}
 local yaml = nil
-local path_sep = package.config:sub(1, 1)
 
 function M.setup(user_config)
   config = user_config
   yaml = require('pkm.yaml')
-end
-
---- Cross-platform path joining
-local function join_path(...)
-  local parts = {...}
-  return table.concat(parts, path_sep)
 end
 
 --- Search all notes (Feature 5 placeholder)
@@ -22,9 +16,9 @@ end
 function M.search_notes(query)
   -- Collect all markdown files
   local search_paths = {
-    join_path(config.root_path, config.folders.consolidated),
-    join_path(config.root_path, config.folders.journal),
-    join_path(config.root_path, config.folders.scratchpad),
+    utils.join(config.root_path, config.folders.consolidated),
+    utils.join(config.root_path, config.folders.journal),
+    utils.join(config.root_path, config.folders.scratchpad),
   }
   
   local results = {}
@@ -44,7 +38,7 @@ function M.search_notes(query)
   local query_lower = query:lower()
   
   for _, search_path in ipairs(search_paths) do
-    local files = vim.fn.glob(search_path .. path_sep .. "*.md", false, true)
+    local files = vim.fn.glob(search_path .. utils.sep .. "*.md", false, true)
     
     for _, file in ipairs(files) do
       local content = vim.fn.readfile(file)
@@ -169,14 +163,14 @@ end
 function M.browse_tags()
   -- Collect tags from all notes
   local all_paths = {
-    join_path(config.root_path, config.folders.consolidated),
-    join_path(config.root_path, config.folders.journal),
+    utils.join(config.root_path, config.folders.consolidated),
+    utils.join(config.root_path, config.folders.journal),
   }
   
   local tag_files = {}
   
   for _, search_path in ipairs(all_paths) do
-    local files = vim.fn.glob(search_path .. path_sep .. "*.md", false, true)
+    local files = vim.fn.glob(search_path .. utils.sep .. "*.md", false, true)
     
     for _, file in ipairs(files) do
       local content = vim.fn.readfile(file)

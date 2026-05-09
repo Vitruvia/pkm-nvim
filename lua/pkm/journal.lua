@@ -3,29 +3,15 @@
 -- FIXED: Remove duplicate date header, auto-use current time by default
 
 local M = {}
+local utils = require('pkm.utils')
 local config = {}
 local yaml = nil
 local timestamp = nil
-local path_sep = package.config:sub(1, 1)
 
 function M.setup(user_config)
   config = user_config
   yaml = require('pkm.yaml')
   timestamp = require('pkm.timestamp')
-end
-
---- Cross-platform path joining
-local function join_path(...)
-  local parts = {...}
-  return table.concat(parts, path_sep)
-end
-
---- Ensure directory exists
-local function ensure_dir(path)
-  if vim.fn.isdirectory(path) == 0 then
-    return vim.fn.mkdir(path, "p") == 1
-  end
-  return true
 end
 
 --- Create a new journal entry
@@ -52,10 +38,10 @@ function M.create_entry(use_current)
   -- Generate filename
   local filename = timestamp.create_filename("journal", ts, ".md")
   
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  ensure_dir(journal_path)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  utils.ensure_dir(journal_path)
   
-  local filepath = join_path(journal_path, filename)
+  local filepath = utils.join(journal_path, filename)
   
   -- Check if file exists
   if vim.fn.filereadable(filepath) == 1 then
@@ -136,7 +122,7 @@ function M.rename_from_yaml(filepath, iso_timestamp)
   local new_timestamp_part = iso_timestamp:gsub("T", "_"):gsub(":", "-")
   
   local new_filename = "journal_" .. new_timestamp_part .. ".md"
-  local new_filepath = join_path(dir, new_filename)
+  local new_filepath = utils.join(dir, new_filename)
   
   -- ============================ START OF FIX ============================
   -- Normalize path separators to prevent comparison errors
@@ -252,8 +238,8 @@ end
 --- @param end_date table End timestamp
 --- @return table Array of journal entries
 function M.find_by_date_range(start_date, end_date)
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  local files = vim.fn.glob(journal_path .. path_sep .. "journal_*.md", false, true)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  local files = vim.fn.glob(journal_path .. utils.sep .. "journal_*.md", false, true)
   
   local entries = {}
   
@@ -303,8 +289,8 @@ end
 function M.list_recent(count)
   count = count or 10
   
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  local files = vim.fn.glob(journal_path .. path_sep .. "journal_*.md", false, true)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  local files = vim.fn.glob(journal_path .. utils.sep .. "journal_*.md", false, true)
   
   local entries = {}
   
@@ -356,8 +342,8 @@ end
 --- @param tag string Tag to search for
 --- @return table Array of entries
 function M.find_by_tag(tag)
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  local files = vim.fn.glob(journal_path .. path_sep .. "journal_*.md", false, true)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  local files = vim.fn.glob(journal_path .. utils.sep .. "journal_*.md", false, true)
   
   local entries = {}
   
@@ -396,8 +382,8 @@ end
 --- Get all tags from journal entries
 --- @return table Map of tag -> count
 function M.get_all_tags()
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  local files = vim.fn.glob(journal_path .. path_sep .. "journal_*.md", false, true)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  local files = vim.fn.glob(journal_path .. utils.sep .. "journal_*.md", false, true)
   
   local tag_counts = {}
   

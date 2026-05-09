@@ -1,19 +1,16 @@
 -- lua/pkm/templates.lua
 local M = {}
+local utils = require('pkm.utils')
 local config = {}
-local path_sep = package.config:sub(1, 1)
 
 function M.setup(user_config)
   config = user_config
 end
 
-local function join_path(...)
-  return table.concat({...}, path_sep)
-end
 
 function M.get_templates()
   local template_dir = config.folders.templates or "templates"
-  local template_path = join_path(config.root_path, template_dir)
+  local template_path = utils.join(config.root_path, template_dir)
   
   -- Ensure directory exists
   if vim.fn.isdirectory(template_path) == 0 then
@@ -49,7 +46,7 @@ function M.apply_template()
   local templates = M.get_templates()
   
   if #templates == 0 then
-    vim.notify("No templates found in " .. join_path(config.root_path, config.folders.templates or "templates"), vim.log.levels.WARN)
+    vim.notify("No templates found in " .. utils.join(config.root_path, config.folders.templates or "templates"), vim.log.levels.WARN)
     return
   end
 

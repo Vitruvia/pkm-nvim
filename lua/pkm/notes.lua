@@ -2,10 +2,10 @@
 -- Enhanced note management with unnamed notes and bidirectional filename-YAML sync
 
 local M = {}
+local utils = require('pkm.utils')
 local config = {}
 local yaml = nil
 local timestamp = nil
-local path_sep = package.config:sub(1, 1)
 
 function M.setup(user_config)
   config = user_config
@@ -13,24 +13,10 @@ function M.setup(user_config)
   timestamp = require('pkm.timestamp')
 end
 
---- Cross-platform path joining
-local function join_path(...)
-  local parts = {...}
-  return table.concat(parts, path_sep)
-end
-
---- Ensure directory exists
-local function ensure_dir(path)
-  if vim.fn.isdirectory(path) == 0 then
-    return vim.fn.mkdir(path, "p") == 1
-  end
-  return true
-end
-
 --- Get next available note number
 local function get_next_note_number()
-  local consolidated_path = join_path(config.root_path, config.folders.consolidated)
-  local files = vim.fn.glob(consolidated_path .. path_sep .. "*.md", false, true)
+  local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
+  local files = vim.fn.glob(consolidated_path .. utils.sep .. "*.md", false, true)
   
   local max_num = 0
   for _, file in ipairs(files) do
@@ -122,10 +108,10 @@ function M.create_new_note(note_type) -- REMOVED the 'allow_unnamed' parameter
   local safe_title = sanitize_title(title)
   local filename = string.format("%04d_%s_%s.md", note_number, note_type, safe_title)
   
-  local consolidated_path = join_path(config.root_path, config.folders.consolidated)
-  ensure_dir(consolidated_path)
+  local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
+  utils.ensure_dir(consolidated_path)
   
-  local filepath = join_path(consolidated_path, filename)
+  local filepath = utils.join(consolidated_path, filename)
   
   if vim.fn.filereadable(filepath) == 1 then
     vim.notify("File already exists: " .. filename, vim.log.levels.ERROR)
@@ -255,7 +241,7 @@ function M.rename_from_yaml(filepath, new_title)
   
   local safe_title = sanitize_title(new_title)
   local new_filename = string.format("%04d_%s_%s.md", tonumber(number), note_type, safe_title)
-  local new_filepath = join_path(dir, new_filename)
+  local new_filepath = utils.join(dir, new_filename)
   
   -- ============================ START OF FIX ============================
   -- Normalize path separators to prevent comparison errors
@@ -344,10 +330,10 @@ function M.create_scratchpad()
   local ts = timestamp.now()
   local filename = timestamp.create_filename("scratch", ts, ".md")
 
-  local scratchpad_path = join_path(config.root_path, config.folders.scratchpad)
-  ensure_dir(scratchpad_path)
+  local scratchpad_path = utils.join(config.root_path, config.folders.scratchpad)
+  utils.ensure_dir(scratchpad_path)
 
-  local filepath = join_path(scratchpad_path, filename)
+  local filepath = utils.join(scratchpad_path, filename)
 
   -- Only pass title to frontmatter if the user provided one
   local fm_data = title ~= "" and { title = title } or {}
@@ -460,7 +446,7 @@ function M.convert_note()
           "%04d_%s_%s.md", note_number, type_sel.value, safe_title
         )
         local dir      = vim.fn.fnamemodify(current_path, ":h")
-        local new_path = join_path(dir, new_filename)
+        local new_path = utils.join(dir, new_filename)
 
         if vim.fn.filereadable(new_path) == 1 then
           vim.notify("Cannot convert: target already exists: " .. new_filename, vim.log.levels.ERROR)
@@ -492,8 +478,8 @@ function M.quick_capture()
   local today = timestamp.now()
   local date_str = timestamp.format_timestamp(today, "date_only")
   
-  local scratchpad_path = join_path(config.root_path, config.folders.scratchpad)
-  local pattern = join_path(scratchpad_path, "scratch_" .. date_str .. "*.md")
+  local scratchpad_path = utils.join(config.root_path, config.folders.scratchpad)
+  local pattern = utils.join(scratchpad_path, "scratch_" .. date_str .. "*.md")
   local files = vim.fn.glob(pattern, false, true)
   
   local filepath
@@ -559,9 +545,9 @@ function M.do_convert(current_path, current_type, target)
     local ts = timestamp.now()
     
     local journal_filename = timestamp.create_filename("journal", ts, ".md")
-    local journal_path = join_path(config.root_path, config.folders.journal)
-    ensure_dir(journal_path)
-    new_path = join_path(journal_path, journal_filename)
+    local journal_path = utils.join(config.root_path, config.folders.journal)
+    utils.ensure_dir(journal_path)
+    new_path = utils.join(journal_path, journal_filename)
     
     local fm_data = {
       date = timestamp.format_timestamp(ts, "date_only"),
@@ -605,9 +591,9 @@ function M.do_convert(current_path, current_type, target)
         safe_title ~= "" and safe_title or "unnamed"
       )
   
-      local consolidated_path = join_path(config.root_path, config.folders.consolidated)
-      ensure_dir(consolidated_path)
-      new_path = join_path(consolidated_path, note_filename)
+      local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
+      utils.ensure_dir(consolidated_path)
+      new_path = utils.join(consolidated_path, note_filename)
   
       local fm_data = {
         title  = title ~= "" and title or "Unnamed Note",
@@ -641,8 +627,8 @@ function M.link_to_note()
   end
   
   -- Get all notes
-  local consolidated_path = join_path(config.root_path, config.folders.consolidated)
-  local files = vim.fn.glob(consolidated_path .. path_sep .. "*.md", false, true)
+  local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
+  local files = vim.fn.glob(consolidated_path .. utils.sep .. "*.md", false, true)
   
   local notes = {}
   for _, file in ipairs(files) do
@@ -720,9 +706,9 @@ function M.follow_link()
   
   -- Search all known folders for a file with this basename
   local potential_paths = {
-    join_path(config.root_path, config.folders.consolidated, link_target .. ".md"),
-    join_path(config.root_path, config.folders.journal, link_target .. ".md"),
-    join_path(config.root_path, config.folders.scratchpad, link_target .. ".md"),
+    utils.join(config.root_path, config.folders.consolidated, link_target .. ".md"),
+    utils.join(config.root_path, config.folders.journal, link_target .. ".md"),
+    utils.join(config.root_path, config.folders.scratchpad, link_target .. ".md"),
   }
   
   for _, target_path in ipairs(potential_paths) do
@@ -747,15 +733,15 @@ function M.show_backlinks()
   local current_basename = vim.fn.fnamemodify(current_path, ":t:r")
   
   local search_paths = {
-    join_path(config.root_path, config.folders.consolidated),
-    join_path(config.root_path, config.folders.journal),
-    join_path(config.root_path, config.folders.scratchpad),
+    utils.join(config.root_path, config.folders.consolidated),
+    utils.join(config.root_path, config.folders.journal),
+    utils.join(config.root_path, config.folders.scratchpad),
   }
   
   local backlinks = {}
   
   for _, search_path in ipairs(search_paths) do
-    local files = vim.fn.glob(search_path .. path_sep .. "*.md", false, true)
+    local files = vim.fn.glob(search_path .. utils.sep .. "*.md", false, true)
     
     for _, file in ipairs(files) do
       if file ~= current_path then
@@ -845,8 +831,8 @@ function M.import_note()
       local note_number = get_next_note_number()
       local safe_title = sanitize_title(title)
       local filename = string.format("%04d_%s_%s.md", note_number, selected_type, safe_title)
-      local target_path = join_path(config.root_path, config.folders.consolidated, filename)
-      ensure_dir(vim.fn.fnamemodify(target_path, ":h"))
+      local target_path = utils.join(config.root_path, config.folders.consolidated, filename)
+      utils.ensure_dir(vim.fn.fnamemodify(target_path, ":h"))
 
       -- Prevent overwrite
       if vim.fn.filereadable(target_path) == 1 then

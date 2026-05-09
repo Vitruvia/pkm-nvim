@@ -2,17 +2,13 @@
 -- FIXED VERSION: Restores get_all_tags, fixes detection, and adds cross-update delete
 
 local M = {}
+local utils = require('pkm.utils')
 local config = {}
 local yaml = nil
-local path_sep = package.config:sub(1, 1)
 
 function M.setup(user_config)
   config = user_config
   yaml = require('pkm.yaml')
-end
-
-local function join_path(...) 
-  return table.concat({...}, path_sep) 
 end
 
 function M.parse_citation(text) 
@@ -63,9 +59,6 @@ local function get_file_tags(filepath)
   return tags
 end
 
--- ============================================================================
--- FIXED: Missing function restored for Telescope
--- ============================================================================
 function M.get_all_tags()
   local all_tags = {}
   local search_paths = {
@@ -76,7 +69,7 @@ function M.get_all_tags()
 
   for _, folder in ipairs(search_paths) do
     if folder then
-        local search_path = join_path(config.root_path, folder)
+        local search_path = utils.join(config.root_path, folder)
         local files = vim.fn.glob(search_path .. "/*.md", false, true)
         if type(files) ~= "table" then files = {} end
         
@@ -107,7 +100,7 @@ function M.get_citable_items_map()
   
   for _, folder in ipairs(search_paths) do
     if folder then
-        local search_path = join_path(config.root_path, folder)
+        local search_path = utils.join(config.root_path, folder)
         local req = uv.fs_scandir(search_path)
         
         if req then
@@ -116,7 +109,7 @@ function M.get_citable_items_map()
             if not name then break end
             
             if name:match("%.md$") then
-              local file = join_path(search_path, name)
+              local file = utils.join(search_path, name)
               local item_type, id = M.get_note_type_and_id(file)
               if item_type and id then
                 items_map[id] = {
@@ -520,7 +513,7 @@ function M.update_references_on_rename(old_basename, new_basename, new_title)
   
   for _, folder in ipairs(search_paths) do
     if folder then
-        local search_path = join_path(config.root_path, folder)
+        local search_path = utils.join(config.root_path, folder)
         local files = vim.fn.glob(search_path .. "/*.md", false, true)
         if type(files) ~= "table" then files = {} end
         
@@ -665,8 +658,8 @@ function M.merge_tags(source_tags, target_tag)
 
   for _, folder in ipairs(search_paths) do
     if folder then
-      local search_path = join_path(config.root_path, folder)
-      local files = vim.fn.glob(search_path .. path_sep .. "*.md", false, true)
+      local search_path = utils.join(config.root_path, folder)
+      local files = vim.fn.glob(search_path .. utils.sep .. "*.md", false, true)
       if type(files) ~= "table" then files = {} end
 
       for _, file in ipairs(files) do

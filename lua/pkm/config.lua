@@ -1,0 +1,106 @@
+-- lua/pkm/config.lua
+-- Default configuration and resolution logic.
+-- Called once by init.lua; returns the final merged config table.
+
+local M = {}
+
+local utils = require('pkm.utils')
+
+local defaults = {
+  root_path = nil,
+
+  folders = {
+    consolidated = "03-Consolidated",
+    journal      = "02-Journal",
+    scratchpad   = "01-Scratchpad",
+    templates    = "templates",
+  },
+
+  sync = {
+    enabled           = true,
+    auto_sync_on_save = true,
+  },
+
+  frontmatter_templates = {
+    consolidated = {
+      title = "", author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
+      tags = {},
+      cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
+      cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
+    },
+    journal = {
+      created_on = "ISO8601", last_updated_on = "ISO8601", author = "",
+      tags = {},
+      cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
+      cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
+    },
+    bibliography = {
+      title = "", source_author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
+      cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
+      cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
+    },
+    scratchpad = {
+      title = "", created_on = "ISO8601", last_updated_on = "ISO8601",
+      tags = {},
+      cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
+      cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
+    },
+  },
+
+  timestamp = {
+    default_format = "full",
+    auto_timestamp = true,
+  },
+
+  user = {
+    name  = "",
+    email = "",
+  },
+
+  keymaps = {
+    new_note        = "<leader>nn",
+    new_journal     = "<leader>nj",
+    new_scratchpad  = "<leader>ns",
+    search          = "<leader>nf",
+    browse_tags     = "<leader>nt",
+    insert_citation = "<leader>nc",
+    goto_citation   = "<leader>ng",
+    delete_note     = "<leader>nd",
+    link_note       = "<leader>nl",
+    follow_link     = "gf",
+    backlinks       = "<leader>nb",
+    quick_capture   = "<leader>nq",
+    import_note     = "<leader>ni",
+    convert_note    = "<leader>nx",
+    promote_note    = "<leader>np",
+  },
+}
+
+--- Merge user config with defaults, resolve paths, validate, inject author.
+---@param user_config table|nil
+---@return table Resolved configuration
+function M.resolve(user_config)
+  local cfg = vim.tbl_deep_extend("force", defaults, user_config or {})
+
+  -- Path resolution
+  if not cfg.root_path then
+    cfg.root_path = vim.fn.expand('~/Notes')
+  end
+
+  cfg.root_path = utils.normalize(vim.fn.expand(cfg.root_path))
+
+  -- Validation
+  if vim.fn.isdirectory(cfg.root_path) == 0 then
+    vim.notify("PKM Critical: Root path does not exist: " .. cfg.root_path, vim.log.levels.ERROR)
+  end
+
+  -- Inject author into templates that carry an author field
+  if cfg.user and cfg.user.name ~= "" then
+    cfg.frontmatter_templates.consolidated.author = cfg.user.name
+    cfg.frontmatter_templates.journal.author      = cfg.user.name
+  end
+
+  return cfg
+end
+
+return M
