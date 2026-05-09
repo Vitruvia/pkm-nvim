@@ -146,6 +146,16 @@ function M.setup(user_config)
 
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
   vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
+
+  vim.api.nvim_create_user_command('PKMMergeTags', function()
+    local has_tele = pcall(require, 'telescope')
+    if has_tele then
+      require('pkm.telescope').merge_tags_picker()
+    else
+      require('pkm.ui').merge_tags_ui()
+    end
+  end, { desc = "Merge tags across all notes" })
+
   vim.api.nvim_create_user_command('PKMInsertCitation', function() require('pkm.telescope').insert_citation_picker() end, {})
   vim.api.nvim_create_user_command('PKMGotoCitation', function() require('pkm.citations').goto_citation() end, {})
   vim.api.nvim_create_user_command('PKMUpdateReferences', function() require('pkm.citations').update_references() end, {})
