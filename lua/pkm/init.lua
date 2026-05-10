@@ -15,96 +15,12 @@ function M.setup(user_config)
   require('pkm.notes').setup(M.config)
   require('pkm.ui').setup(M.config)
 
-  -- --- COMMANDS ---
-  vim.api.nvim_create_user_command('PKMNewNote', function(opts) 
-    require('pkm.notes').create_new_note(opts.args ~= "" and opts.args or nil) 
-  end, { nargs = "?" })
-  
-  vim.api.nvim_create_user_command('PKMNewJournal', function() 
-    require('pkm.journal').create_entry(true) 
-  end, {})
-  
-  vim.api.nvim_create_user_command('PKMNewScratchpad', function() 
-    require('pkm.notes').create_scratchpad() 
-  end, {})
-  
-  vim.api.nvim_create_user_command('PKMDeleteNote', function() 
-    M.delete_note_safely() 
-  end, {})
-
-  vim.api.nvim_create_user_command('PKMImport', function() 
-      require('pkm.notes').import_note() 
-  end, { desc = "Import current file into PKM system" })
-   
-  vim.api.nvim_create_user_command('PKMToggleAutoSync', function()
-     M.config.sync.auto_sync_on_save = not M.config.sync.auto_sync_on_save
-     local status = M.config.sync.auto_sync_on_save and "enabled" or "disabled"
-     vim.notify("Auto-sync on save: " .. status, vim.log.levels.INFO)
-     vim.api.nvim_clear_autocmds({ group = "PKMSync" })
-     if M.config.sync.enabled then M.setup_sync_autocmds() end
-   end, { desc = "Toggle automatic reference synchronization" })
-
-  vim.api.nvim_create_user_command('PKMConvertNote', function()
-    require('pkm.notes').convert_note()
-  end, { desc = "Convert current note to a different type" })
-  
-  vim.api.nvim_create_user_command('PKMPromote', function()
-    require('pkm.notes').promote_note()
-  end, { desc = "Promote scratchpad to consolidated note or journal" })
-
-  vim.api.nvim_create_user_command('PKMExport', function()
-    require('pkm.export').interactive_export()
-  end, { desc = "Filter notes and copy to a folder" })
-
-  vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
-  vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
-
-  vim.api.nvim_create_user_command('PKMMergeTags', function()
-    local has_tele = pcall(require, 'telescope')
-    if has_tele then
-      require('pkm.telescope').merge_tags_picker()
-    else
-      require('pkm.ui').merge_tags_ui()
-    end
-  end, { desc = "Merge tags across all notes" })
-
-  vim.api.nvim_create_user_command('PKMInsertCitation', function() require('pkm.telescope').insert_citation_picker() end, {})
-  vim.api.nvim_create_user_command('PKMGotoCitation', function() require('pkm.citations').goto_citation() end, {})
-  vim.api.nvim_create_user_command('PKMUpdateReferences', function() require('pkm.citations').update_references() end, {})
-  
-  vim.api.nvim_create_user_command('PKMLinkNote', function() require('pkm.notes').link_to_note() end, {})
-  vim.api.nvim_create_user_command('PKMFollowLink', function() require('pkm.notes').follow_link() end, {})
-  vim.api.nvim_create_user_command('PKMBacklinks', function() require('pkm.notes').show_backlinks() end, {})
-
-  -- --- KEYMAPS ---
-  local k = M.config.keymaps
-  local function map(lhs, cmd, desc)
-    if lhs then vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) end
-  end
-
-  if M.config.keymaps.promote_note then
-    vim.keymap.set('n', M.config.keymaps.promote_note,
-      function() require('pkm.notes').promote_note() end,
-      { noremap = true, silent = true, desc = "PKM: Promote note" })
-  end
-
-  map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")
-  map(k.new_journal, "<cmd>PKMNewJournal<cr>", "New Journal")
-  map(k.new_scratchpad, "<cmd>PKMNewScratchpad<cr>", "New Scratchpad")
-  map(k.delete_note, "<cmd>PKMDeleteNote<cr>", "Delete Note")
-  map(k.search, "<cmd>PKMSearch<cr>", "Search Content")
-  map(k.browse_tags, "<cmd>PKMTags<cr>", "Browse Tags") 
-  map(k.insert_citation, "<cmd>PKMInsertCitation<cr>", "Insert Citation")
-  map(k.goto_citation, "<cmd>PKMGotoCitation<cr>", "Goto Citation")
-  map(k.link_note, "<cmd>PKMLinkNote<cr>", "Link Note")
-  map(k.follow_link, "<cmd>PKMFollowLink<cr>", "Follow Link")
-  map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Backlinks")
-  map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture")
-  map(k.import_note, "<cmd>PKMImport<cr>", "Import Note")
-  map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
-
+  -- Wire commands and keymaps
+  require('pkm.commands').register()
+  require('pkm.keymaps').register(M.config)
   if M.config.sync.enabled then M.setup_sync_autocmds() end
-end
+end 
+
 
 function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })

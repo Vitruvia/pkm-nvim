@@ -389,4 +389,30 @@ function M.merge_tags_ui()
   end)
 end
 
+--- Show a statistics window with note counts per folder type.
+function M.show_stats()
+  local folders = {
+    { label = "Consolidated", path = utils.join(config.root_path, config.folders.consolidated) },
+    { label = "Journal",      path = utils.join(config.root_path, config.folders.journal) },
+    { label = "Scratchpad",   path = utils.join(config.root_path, config.folders.scratchpad) },
+  }
+
+  local lines = { "PKM Statistics", string.rep("─", 30), "" }
+  local total = 0
+
+  for _, folder in ipairs(folders) do
+    local files = vim.fn.glob(folder.path .. utils.sep .. "*.md", false, true)
+    local count = type(files) == "table" and #files or 0
+    total = total + count
+    table.insert(lines, string.format("  %-16s %d notes", folder.label .. ":", count))
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, string.format("  %-16s %d notes", "Total:", total))
+  table.insert(lines, "")
+  table.insert(lines, "Root: " .. config.root_path)
+
+  vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+end
+
 return M
