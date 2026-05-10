@@ -10,7 +10,7 @@ function M.register(config)
   end
 
   if config.keymaps.promote_note then
-    vim.keymap.set('n', M.config.keymaps.promote_note,
+    vim.keymap.set('n', config.keymaps.promote_note,
       function() require('pkm.notes').promote_note() end,
       { noremap = true, silent = true, desc = "PKM: Promote note" })
   end
