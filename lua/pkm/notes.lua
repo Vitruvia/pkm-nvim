@@ -118,7 +118,9 @@ function M.create_new_note(note_type) -- REMOVED the 'allow_unnamed' parameter
     return nil
   end
   
-  local fm_type = (note_type == "bib") and "bibliography" or "consolidated"
+  local fm_type = (note_type == "bib") and "bibliography"
+             or (note_type == "agg") and "agg"
+             or "note"
   local frontmatter_data = {
     title = title ~= "" and title or "Unnamed Note",
   }
@@ -410,7 +412,9 @@ function M.convert_note()
         local name_part = basename:match("^%d+_[a-z]+_(.+)$")
         existing_fm.title = name_part and name_part:gsub("_", " ") or "Unnamed Note"
       end
-      local fm_key = (note_type_part == "bib") and "bibliography" or "consolidated"
+    local fm_key = (note_type_part == "bib") and "bibliography"
+            or (note_type_part == "agg") and "agg"
+            or "note"
       apply_in_place(fm_key)
 
     else

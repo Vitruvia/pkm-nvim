@@ -1,20 +1,56 @@
--- lua/pkm/yaml.lua
--- YAML frontmatter handling with automatic timestamp management
--- FIXED VERSION: Resolves empty nested structure corruption
+-- =============================================================================
+-- pkm.yaml — YAML frontmatter parsing and generation
+-- =============================================================================
+-- Dependencies : pkm.timestamp
+-- Consumed by  : virtually all modules (citations, notes, journal, export...)
+--
+-- WARNING: This module contains carefully fixed parser logic. Do not modify
+-- parse_yaml or generate_yaml without strong justification and thorough testing.
+-- Silent regressions here corrupt note files.
+--
+-- Public API:
+--   setup(user_config)                    → Initialize with resolved PKM config
+--   parse_frontmatter(lines)              → (frontmatter, content_start) from line array
+--   parse_yaml(lines)                     → table from raw YAML lines
+--   parse_value(value)                    → typed Lua value from YAML string
+--   generate_yaml(data, indent?)          → string[] YAML lines from table
+--   format_value(value)                   → YAML-safe string from Lua value
+--   create_frontmatter(note_type, data?)  → string[] full frontmatter block with delimiters
+--   save_frontmatter(fm, content_start, filepath?) → write fm to buffer or file
+--   update_last_modified()                → update last_updated_on in current
+--                                           buffer
+--   setup_auto_update()                   → register BufWritePre autocmd for
+--                                           timestamps
+--   update_frontmatter()                  → interactive field editor
+--   validate_frontmatter()                → check required fields against template
+--   set_field(key, value)                 → set one frontmatter field in current buffer
+--   get_field(key)                        → read one frontmatter field from current buffer
+-- =============================================================================
 
 local M = {}
 local config = {}
 local timestamp_module = nil
 
+-- =============================================================================
+-- SECTION: Setup
+-- =============================================================================
+---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config
   timestamp_module = require('pkm.timestamp')
 end
 
---- Parse YAML frontmatter from file content
---- @param lines table Array of file lines
---- @return table|nil Parsed frontmatter, or nil if none found
---- @return number Start line of content (after frontmatter)
+-- =============================================================================
+-- SECTION: Parsing
+-- =============================================================================
+--- Parse YAML frontmatter block from an array of file lines. Returns nil
+--- frontmatter if no valid --- delimiters are found. NOTE: The first line must
+--- be exactly "---" with no trailing whitespace.
+---@param lines string[]
+---@return table|nil frontmatter Parsed frontmatter table, or nil if
+---        absent/malformed 
+---@return integer content_start 1-based index of first line after the closing 
+---        "---"
 function M.parse_frontmatter(lines)
   if not lines or #lines == 0 then
     return nil, 1
@@ -48,8 +84,11 @@ function M.parse_frontmatter(lines)
   return frontmatter, end_line + 1
 end
 
---- Simple YAML parser for frontmatter - FIXED VERSION
---- Uses strict indentation tracking to handle object arrays correctly.
+--- Parse raw YAML lines into a Lua table. Handles nested maps, arrays, object
+--- arrays, and explicit empty arrays ([]). Uses an indent stack to resolve
+--- nesting without regex.
+---@param lines string[]
+---@return table
 function M.parse_yaml(lines)
   local result = {}
   local indent_stack = {{key = nil, indent = -1, table = result}}
@@ -125,9 +164,10 @@ function M.parse_yaml(lines)
   return result
 end
 
---- Parse a YAML value
---- @param value string Raw value string
---- @return any Parsed value
+--- Convert a raw YAML value string to a typed Lua value.
+--- Handles: null/~, true/false, numbers, quoted strings, bare strings.
+---@param value string
+---@return any
 function M.parse_value(value)
   -- Handle nil or empty values first
   if not value or value == "" then
@@ -167,10 +207,9 @@ function M.parse_value(value)
   return value
 end
 
--- ============================================================================
--- FIXED: YAML GENERATION WITH PROPER EMPTY ARRAY HANDLING
--- ============================================================================
-
+-- =============================================================================
+-- SECTION: Generation helpers
+-- =============================================================================
 --- Check if table is completely empty
 --- @param t table Table to check
 --- @return boolean True if table has no entries
@@ -206,10 +245,16 @@ local function is_array_table(t)
   return count > 0
 end
 
---- Generate YAML frontmatter from table with a predefined key order.
---- @param data table Data to convert to YAML
---- @param indent number Current indentation level
---- @return table Array of YAML lines
+-- =============================================================================
+-- SECTION: Generation
+-- =============================================================================
+--- Serialize a Lua table to YAML lines with a fixed key ordering.
+--- Empty tables emit "key: []". Nested maps and object arrays are indented.
+--- Key order: title, author, source_author, tags, created_on, last_updated_on,
+---            cites, cited_by, citation, source_type, source_location, then rest.
+---@param data table
+---@param indent integer? Indentation level (default 0, each level = 2 spaces)
+---@return string[]
 function M.generate_yaml(data, indent)
   indent = indent or 0
   local lines = {}
@@ -282,9 +327,10 @@ function M.generate_yaml(data, indent)
   return lines
 end
 
---- Format a value for YAML output
---- @param value any Value to format
---- @return string Formatted value
+--- Format a single Lua value as a YAML-safe string.
+--- Strings containing non-word characters are double-quoted.
+---@param value any
+---@return string
 function M.format_value(value)
   local value_type = type(value)
   
@@ -305,10 +351,19 @@ function M.format_value(value)
   end
 end
 
---- Create frontmatter for a new note
---- @param note_type string Type of note
---- @param custom_data table|nil Custom frontmatter fields
---- @return table Array of frontmatter lines (including delimiters)
+-- =============================================================================
+-- SECTION: Frontmatter construction
+-- =============================================================================
+--- Build a complete frontmatter block for a new note.
+--- Deep-copies the template for note_type, merges custom_data over it,
+--- replaces "ISO8601" sentinel values with current timestamps,
+--- then wraps the result in "---" delimiters.
+---@param note_type string Key into config.frontmatter_templates (e.g. "note",
+---       "bib", "journal")
+---@param custom_data table|nil Fields to merge over the template (title,
+---       author, etc.)
+---@return string[] Lines including opening "---", YAML, closing "---", and
+---        blank line
 function M.create_frontmatter(note_type, custom_data)
   local template = vim.deepcopy(config.frontmatter_templates[note_type] or {})
   
@@ -341,7 +396,7 @@ function M.create_frontmatter(note_type, custom_data)
   return lines
 end
 
---- Update last_updated_on field in current buffer
+--- Update last_updated_on in the current buffer if it differs from now.
 function M.update_last_modified()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local frontmatter, content_start = M.parse_frontmatter(lines)
@@ -359,7 +414,8 @@ function M.update_last_modified()
   end
 end
 
---- Setup autocmd to update last_updated_on on save
+--- Register a BufWritePre autocmd that updates last_updated_on on every save
+--- within the PKM root. Call once during setup if auto-timestamp is desired.
 function M.setup_auto_update()
   vim.api.nvim_create_autocmd("BufWritePre", {
     pattern = "*.md",
@@ -382,7 +438,8 @@ function M.setup_auto_update()
   })
 end
 
---- Update frontmatter in current buffer (interactive)
+--- Interactive frontmatter field editor. Prompts for key=value pairs until
+--- "done".
 function M.update_frontmatter()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local frontmatter, content_start = M.parse_frontmatter(lines)
@@ -416,10 +473,20 @@ function M.update_frontmatter()
   end)
 end
 
---- Save updated frontmatter to the buffer or a specified file.
---- @param frontmatter table Frontmatter data
---- @param content_start number Line where content starts
---- @param filepath string|nil Optional path to a file to write to. If nil, writes to the current buffer.
+-- =============================================================================
+-- SECTION: Saving
+-- =============================================================================
+--- Write updated frontmatter back to the current buffer (Case A) or a file
+--- (Case B).
+--- Case A (filepath nil): replaces lines 0..content_start-1 in the current buffer.
+--- Case B (filepath set): reads the file, rebuilds content with new
+---                        frontmatter, writes to disk.
+--- Preserves or adds a blank line between frontmatter and body.
+---@param frontmatter table Updated frontmatter table
+---@param content_start integer|nil 1-based line index of first body line (Case
+---       A only)
+---@param filepath string|nil Absolute path for disk write; nil to write to
+---       current buffer
 function M.save_frontmatter(frontmatter, content_start, filepath)
   -- 1. Generate the new YAML text from the table
   local new_fm_lines = {"---"}
@@ -477,7 +544,12 @@ function M.save_frontmatter(frontmatter, content_start, filepath)
   end
 end
 
---- Validate frontmatter structure
+-- =============================================================================
+-- SECTION: Validation and field access
+-- =============================================================================
+--- Validate that the current buffer's frontmatter contains all fields
+--- required by its note type template. Reports missing fields.
+---@return boolean valid
 function M.validate_frontmatter()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local frontmatter, _ = M.parse_frontmatter(lines)
@@ -488,21 +560,23 @@ function M.validate_frontmatter()
   end
   
   local filepath = vim.fn.expand("%:p")
-  local note_type = nil
-  
-  for type_name, folder in pairs(config.folders) do
-    if filepath:match(folder) then
-      note_type = type_name == "consolidated" and "consolidated" or type_name
-      break
-    end
-  end
-  
-  if not note_type then
+  local template_key
+
+  if filepath:find(config.folders.journal, 1, true) then
+    template_key = "journal"
+  elseif filepath:find(config.folders.scratchpad, 1, true) then
+    template_key = "scratchpad"
+  elseif filepath:find(config.folders.consolidated, 1, true) then
+    local note_type_part = vim.fn.fnamemodify(filepath, ":t:r"):match("^%d+_([a-z]+)_")
+    if note_type_part == "bib" then template_key = "bibliography"
+    elseif note_type_part == "agg" then template_key = "agg"
+    else template_key = "note" end
+  else
     vim.notify("Unknown note type, cannot validate", vim.log.levels.WARN)
     return false
   end
   
-  local template = config.frontmatter_templates[note_type]
+  local template = config.frontmatter_templates[template_key]
   if not template then
     vim.notify("No template for this note type", vim.log.levels.INFO)
     return true
@@ -524,9 +598,9 @@ function M.validate_frontmatter()
   end
 end
 
---- Add or update a field in frontmatter
---- @param key string Field key
---- @param value any Field value
+--- Set a single frontmatter field in the current buffer and save.
+---@param key string
+---@param value any
 function M.set_field(key, value)
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local frontmatter, content_start = M.parse_frontmatter(lines)
@@ -540,9 +614,9 @@ function M.set_field(key, value)
   M.save_frontmatter(frontmatter, content_start)
 end
 
---- Get a field from frontmatter
---- @param key string Field key
---- @return any|nil Field value
+--- Read a single frontmatter field from the current buffer.
+---@param key string
+---@return any|nil
 function M.get_field(key)
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local frontmatter, _ = M.parse_frontmatter(lines)

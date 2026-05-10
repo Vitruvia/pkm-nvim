@@ -22,20 +22,26 @@ local defaults = {
   },
 
   frontmatter_templates = {
-    consolidated = {
+    note = {
       title = "", author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
       tags = {},
       cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
       cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
     },
-    journal = {
-      created_on = "ISO8601", last_updated_on = "ISO8601", author = "",
+    agg = {
+      title = "", author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
       tags = {},
       cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
       cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
     },
     bibliography = {
       title = "", source_author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
+      tags = {},
+      cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
+      cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
+    },
+    journal = {
+      created_on = "ISO8601", last_updated_on = "ISO8601", author = "",
       tags = {},
       cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
       cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
