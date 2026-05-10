@@ -63,9 +63,10 @@ function M.get_note_type_and_id(filepath)
     local item_type = (note_type == "bib") and "bib" or "note"
     return item_type, item_type .. "-" .. number
   end
-  local prefix, timestamp = filename:match("^(.+)_(.+)$")
-  if prefix == "journal" or prefix == "scratch" then 
-    return prefix, timestamp 
+  if filename:match("^journal_") then
+    return "journal", filename:match("^journal_(.+)$")
+  elseif filename:match("^scratch_") then
+    return "scratch", filename:match("^scratch_(.+)$")
   end
   return nil, nil
 end
