@@ -103,8 +103,9 @@ function M.resolve(user_config)
 
   -- Inject author into templates that carry an author field
   if cfg.user and cfg.user.name ~= "" then
-    cfg.frontmatter_templates.consolidated.author = cfg.user.name
-    cfg.frontmatter_templates.journal.author      = cfg.user.name
+    cfg.frontmatter_templates.note.author = cfg.user.name
+    cfg.frontmatter_templates.agg.author = cfg.user.name
+    cfg.frontmatter_templates.journal.author = cfg.user.name
   end
 
   return cfg
