@@ -20,7 +20,7 @@ function M.register()
   end, {})
   
   vim.api.nvim_create_user_command('PKMDeleteNote', function() 
-    M.delete_note_safely() 
+    require('pkm').delete_note_safely() 
   end, {})
 
   vim.api.nvim_create_user_command('PKMImport', function() 
@@ -28,12 +28,14 @@ function M.register()
   end, { desc = "Import current file into PKM system" })
    
   vim.api.nvim_create_user_command('PKMToggleAutoSync', function()
-     M.config.sync.auto_sync_on_save = not M.config.sync.auto_sync_on_save
-     local status = M.config.sync.auto_sync_on_save and "enabled" or "disabled"
-     vim.notify("Auto-sync on save: " .. status, vim.log.levels.INFO)
-     vim.api.nvim_clear_autocmds({ group = "PKMSync" })
-     if M.config.sync.enabled then M.setup_sync_autocmds() end
-   end, { desc = "Toggle automatic reference synchronization" })
+    local pkm = require('pkm')
+
+    pkm.config.sync.auto_sync_on_save = not pkm.config.sync.auto_sync_on_save
+    local status = pkm.config.sync.auto_sync_on_save and "enabled" or "disabled"
+    vim.notify("Auto-sync on save: " .. status, vim.log.levels.INFO)
+    vim.api.nvim_clear_autocmds({ group = "PKMSync" })
+    if pkm.config.sync.enabled then pkm.setup_sync_autocmds() end
+  end, { desc = "Toggle automatic reference synchronization" })
 
   vim.api.nvim_create_user_command('PKMConvertNote', function()
     require('pkm.notes').convert_note()
