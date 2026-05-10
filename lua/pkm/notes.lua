@@ -141,7 +141,7 @@ function M.create_new_note(note_type) -- REMOVED the 'allow_unnamed' parameter
   
   local frontmatter_lines = yaml.create_frontmatter(fm_type, frontmatter_data)
   
-  table.insert(frontmatter_lines, "")
+  -- Add a blank line for content
   table.insert(frontmatter_lines, "")
   
   vim.fn.writefile(frontmatter_lines, filepath)
