@@ -1,6 +1,23 @@
--- lua/pkm/utils.lua
--- Shared cross-platform utilities.
+-- =============================================================================
+-- pkm.utils — Shared cross-platform utilities
+-- =============================================================================
+-- Dependencies : none
+-- Consumed by  : all pkm modules
+--
 -- No setup() needed — require and use directly.
+-- All path operations use M.sep so they work on Windows, WSL, and Linux.
+--
+-- Public values:
+--   is_windows (boolean)  true on win32/win64
+--   is_wsl     (boolean)  true in WSL environment
+--   sep        (string)   platform path separator ("\" or "/")
+--
+-- Public API:
+--   join(...)             → platform-joined path string
+--   normalize(path)       → path with correct separators for current OS
+--   ensure_dir(path)      → create directory recursively if absent
+--   notify(msg, level?)   → vim.notify with "[PKM] " prefix
+-- =============================================================================
 
 local M = {}
 

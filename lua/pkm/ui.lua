@@ -1,18 +1,45 @@
--- lua/pkm/ui.lua
--- UI components and search for PKM system
-
+-- =============================================================================
+-- pkm.ui — Fallback UI components (no Telescope dependency)
+-- =============================================================================
+-- Dependencies : pkm.yaml, pkm.utils, pkm.citations (lazy)
+-- Consumed by  : pkm.commands, pkm.telescope (fallback)
+--
+-- NOTE: show_stats_window and select_note_enhanced are unused in the current
+-- command set. show_graph and show_analytics are stubs. See dead code list.
+--
+-- Public API:
+--   setup(user_config)          → Initialize with resolved PKM config
+--   search_notes(query?)        → Full-text search with vim.ui.select results
+--   browse_tags()               → Two-level tag → file picker
+--   merge_tags_ui()             → Interactive tag merge (fallback for PKMMergeTags)
+--   show_stats()                → Show note counts via vim.notify
+--   show_stats_window(stats)    → Floating window stats display (currently unused)
+--   select_note_enhanced(...)   → Telescope-or-fallback note picker (currently unused)
+--   show_graph()                → Stub placeholder
+--   show_analytics()            → Stub placeholder
+-- =============================================================================
 local M = {}
+
 local utils = require('pkm.utils')
 local config = {}
 local yaml = nil
 
+-- =============================================================================
+-- SECTION: Setup
+-- =============================================================================
+---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config
   yaml = require('pkm.yaml')
 end
 
---- Search all notes (Feature 5 placeholder)
---- @param query string Search query
+-- =============================================================================
+-- SECTION: Search
+-- =============================================================================
+--- Full-text search across all three PKM folders.
+--- Prompts for query if not provided. Opens result in editor and jumps to
+--- first matching line. Uses vim.ui.select for result display.
+---@param query string|nil Search string; prompts if nil or empty
 function M.search_notes(query)
   -- Collect all markdown files
   local search_paths = {
@@ -94,8 +121,14 @@ function M.search_notes(query)
   end)
 end
 
---- Show statistics window
---- @param stats table Statistics data
+-- =============================================================================
+-- SECTION: Statistics
+-- =============================================================================
+--- Display a floating window with PKM statistics.
+--- NOTE: Currently unused — show_stats() is used instead. The stats
+--- parameter structure (total_notes, notes_by_status, notes_by_tag) is
+--- not populated anywhere in the codebase.
+---@param stats table {total_notes, total_journals, total_scratchpads, total_citations, notes_by_status, notes_by_tag}
 function M.show_stats_window(stats)
   -- Create buffer for stats
   local buf = vim.api.nvim_create_buf(false, true)
@@ -158,8 +191,11 @@ function M.show_stats_window(stats)
   vim.api.nvim_buf_set_keymap(buf, 'n', '<Esc>', '<cmd>close<CR>', {noremap = true, silent = true})
 end
 
---- Tag browser (Feature 1 - for future enhancement)
---- Shows all tags and allows navigation
+-- =============================================================================
+-- SECTION: Tag browsing
+-- =============================================================================
+--- Two-level tag browser: first pick a tag, then pick a file with that tag.
+--- Scans consolidated and journal folders. Uses vim.ui.select.
 function M.browse_tags()
   -- Collect tags from all notes
   local all_paths = {
@@ -233,11 +269,15 @@ function M.browse_tags()
   end)
 end
 
---- Enhanced note selector with filtering
---- This is for integration with Telescope in the future
---- @param notes table Array of note items
---- @param prompt string Prompt text
---- @param callback function Selection callback
+-- =============================================================================
+-- SECTION: Enhanced selectors (unused / future)
+-- =============================================================================
+--- Telescope-or-fallback note picker. Uses Telescope if available at call
+--- time, otherwise falls back to vim.ui.select.
+--- NOTE: Currently unused in the command set.
+---@param notes {display:string}[] Array of note items with display field
+---@param prompt string Picker prompt text
+---@param callback function Called with selected item or nil
 function M.select_note_enhanced(notes, prompt, callback)
   -- Check if Telescope is available
   local has_telescope, telescope = pcall(require, "telescope")
@@ -285,14 +325,14 @@ function M.select_note_enhanced(notes, prompt, callback)
   end
 end
 
---- Graph view placeholder (Feature 2 - for future implementation)
+--- Stub placeholder for future graph visualization.
 function M.show_graph()
   vim.notify("Graph view not yet implemented", vim.log.levels.INFO)
   -- This would show a visual graph of note connections
   -- Could use graphviz or similar for visualization
 end
 
---- Analytics dashboard placeholder (Feature 8 - for future implementation)
+--- Stub placeholder for future analytics dashboard.
 function M.show_analytics()
   -- This would show:
   -- - Reading time estimates
@@ -303,6 +343,13 @@ function M.show_analytics()
   vim.notify("Analytics dashboard not yet implemented", vim.log.levels.INFO)
 end
 
+-- =============================================================================
+-- SECTION: Tag merging
+-- =============================================================================
+--- Interactive tag merge UI. Prompts for a target tag via vim.ui.select,
+--- then accepts comma-separated source tags via input. Validates, confirms,
+--- then delegates to citations.merge_tags(). Used as fallback when Telescope
+--- is unavailable for PKMMergeTags.
 function M.merge_tags_ui()
   local citations_mod = require('pkm.citations')
   local all_tags = citations_mod.get_all_tags()
@@ -390,6 +437,8 @@ function M.merge_tags_ui()
 end
 
 --- Show a statistics window with note counts per folder type.
+--- Show note counts per folder via vim.notify.
+--- Called by :PKMStats command.
 function M.show_stats()
   local folders = {
     { label = "Consolidated", path = utils.join(config.root_path, config.folders.consolidated) },

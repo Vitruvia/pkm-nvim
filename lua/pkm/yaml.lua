@@ -26,8 +26,8 @@
 --   set_field(key, value)                 → set one frontmatter field in current buffer
 --   get_field(key)                        → read one frontmatter field from current buffer
 -- =============================================================================
-
 local M = {}
+
 local config = {}
 local timestamp_module = nil
 
@@ -501,7 +501,6 @@ function M.save_frontmatter(frontmatter, content_start, filepath)
     -- CASE A: No filepath provided, modify the CURRENT buffer
     local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
     
-    -- FIXED: Check if there's already a blank line after frontmatter
     -- content_start is 1-indexed, so lines[content_start] is the first content line
     local has_blank_after = (#lines >= content_start and lines[content_start] == "")
     
@@ -525,7 +524,6 @@ function M.save_frontmatter(frontmatter, content_start, filepath)
     -- Find where the original content started (could be different from current buffer)
     local _, original_content_start = M.parse_frontmatter(original_content)
 
-    -- FIXED: Check if content starts with blank line
     local has_blank_after = (#original_content >= original_content_start and 
                             original_content[original_content_start] == "")
     

@@ -1,39 +1,35 @@
--- lua/pkm/export.lua
+-- =============================================================================
+-- pkm.export — Note filtering and copy utility
+-- =============================================================================
+-- Dependencies : pkm.yaml (lazy), pkm.init (for config), telescope (optional)
+-- Consumed by  : pkm.commands (:PKMExport)
 --
--- Export utility: select notes by explicit field filters, then copy to a folder.
 -- READ-ONLY — never modifies any note file.
 --
--- UX flow:
---   1. A floating form lets the user fill in named filter fields.
---   2. Matching runs with exact substring (never fuzzy) against frontmatter
---      fields and optionally the note body.
---   3. Results are shown in a Telescope picker (pre-filtered; typing in the
---      picker does exact substring refinement on the display string via
---      finders.new_dynamic, never fzy) or in a scrollable fallback float.
---   4. A destination prompt appears; files are copied.
---
 -- Filter semantics:
---   Tags ANY  (OR)  — note has at least one of the listed tags
---   Tags ALL  (AND) — note has every one of the listed tags
---   Title contains  — case-insensitive exact substring of frontmatter title
---   Text  contains  — case-insensitive exact substring anywhere in note body
+--   tags_any  (OR)  — note has at least one of the listed tags
+--   tags_all  (AND) — note has every one of the listed tags
+--   title           — case-insensitive exact substring of frontmatter title
+--   text            — case-insensitive exact substring anywhere in body
 --
--- Dependencies (both loaded lazily):
---   require('pkm.yaml')   — parse_frontmatter only
---   require('pkm').config — root_path and folders
---   require('telescope')  — optional
+-- All string matching uses string.find with plain=true — exact byte substring,
+-- never a pattern, never fuzzy.
+--
+-- Public API:
+--   match_file(path, filters)  → boolean — test one file against filters
+--   collect_files(filters)     → string[] — all matching paths, sorted
+--   copy_files(paths, dest)    → (copied, errors) — copy to destination
+--   export(filters, dest)      → programmatic no-UI entry point
+--   interactive_export()       → full UI: filter form → picker → copy
+-- =============================================================================
 
 local M = {}
 
-local path_sep = package.config:sub(1, 1)
+local utils = require('pkm.utils')
 
 -- ============================================================================
 -- SHARED UTILITIES
 -- ============================================================================
-
-local function join_path(...)
-  return table.concat({ ... }, path_sep)
-end
 
 --- Pure-Lua binary-safe copy. No system calls; works on Windows/WSL.
 --- @param src string
@@ -98,14 +94,11 @@ local function normalise_tags(raw)
   return out
 end
 
---- Test whether a note satisfies all active filters.
----
---- All string matching uses string.find with plain=true:
---- exact byte-for-byte substring, never a pattern, never fuzzy.
----
---- @param path    string
---- @param filters table   All fields optional; nil or empty = inactive.
---- @return boolean
+--- Test whether a single note file satisfies all active filters.
+--- A nil or empty filter field is inactive (always passes).
+---@param path string Absolute path to note file
+---@param filters {tags_any?:string[], tags_all?:string[], title?:string, text?:string}
+---@return boolean
 function M.match_file(path, filters)
   local fm, content_start, lines = get_file_data(path)
   if not fm then return false end
@@ -161,16 +154,23 @@ function M.match_file(path, filters)
 end
 
 --- Collect all .md files from PKM folders that satisfy filters.
---- @param filters table
---- @return table  sorted list of absolute paths
+--- Scans consolidated, journal, and scratchpad folders only. The templates
+--- folder is intentionally excluded.
+---@param filters table Same structure as match_file filters
+---@return string[] Sorted list of absolute paths
 function M.collect_files(filters)
   local config  = require('pkm').config
   local matched = {}
 
-  for _, folder in pairs(config.folders) do
-    local dir = join_path(config.root_path, folder)
+  local note_folders = {
+    config.folders.consolidated,
+    config.folders.journal,
+    config.folders.scratchpad,
+  }
+  for _, folder in ipairs(note_folders) do
+    local dir = utils.join(config.root_path, folder)
     if vim.fn.isdirectory(dir) == 1 then
-      local files = vim.fn.glob(dir .. path_sep .. "*.md", false, true)
+      local files = vim.fn.glob(dir .. utils.sep .. "*.md", false, true)
       for _, filepath in ipairs(files) do
         if M.match_file(filepath, filters) then
           table.insert(matched, filepath)
@@ -189,11 +189,11 @@ end
 -- COPY ENGINE
 -- ============================================================================
 
---- Copy a list of paths into dest. Reports results via vim.notify.
---- @param paths table
---- @param dest  string
---- @return number copied
---- @return number errors
+--- Copy a list of files into dest directory. Reports results via vim.notify.
+---@param paths string[]
+---@param dest string Destination directory path
+---@return integer copied Number of files successfully copied
+---@return integer errors Number of files that failed
 function M.copy_files(paths, dest)
   if not ensure_dir(dest) then
     vim.notify("PKMExport: Cannot create destination: " .. dest, vim.log.levels.ERROR)
@@ -203,7 +203,7 @@ function M.copy_files(paths, dest)
   local copied, errors = 0, 0
   for _, src in ipairs(paths) do
     local filename = vim.fn.fnamemodify(src, ":t")
-    local ok, err  = copy_file(src, join_path(dest, filename))
+    local ok, err  = copy_file(src, utils.join(dest, filename))
     if ok then
       copied = copied + 1
     else
@@ -221,13 +221,10 @@ function M.copy_files(paths, dest)
   return copied, errors
 end
 
---- Programmatic entry point (no UI). Example:
----   require('pkm.export').export(
----     { tags_all = {"mathematics", "proof"}, text = "Fourier" },
----     "/tmp/llm-context"
----   )
---- @param filters table
---- @param dest    string
+--- Programmatic export without UI. Collects matching files and copies them.
+--- Example: require('pkm.export').export({tags_all={"math"}}, "/tmp/out")
+---@param filters table
+---@param dest string
 function M.export(filters, dest)
   local paths = M.collect_files(filters)
   if #paths == 0 then
@@ -565,12 +562,13 @@ end
 -- ENTRY POINT
 -- ============================================================================
 
---- Launch the export UI.
---- Step 1: filter form (always shown).
---- Step 2: Telescope results picker if available, else scrollable float.
+--- Launch the full interactive export UI.
+--- Step 1: floating filter form.
+--- Step 2: Telescope results picker (if available) or scrollable float.
+--- Step 3: destination prompt and copy.
 function M.interactive_export()
   local config       = require('pkm').config
-  local default_dest = join_path(config.root_path, "exports", os.date("%Y%m%d_%H%M%S"))
+  local default_dest = utils.join(config.root_path, "exports", os.date("%Y%m%d_%H%M%S"))
 
   show_filter_form(function(filters)
     local paths = M.collect_files(filters)

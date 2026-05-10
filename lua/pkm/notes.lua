@@ -20,8 +20,8 @@
 --   show_backlinks()                          → Show all notes linking to current note
 --   import_note()                             → Import external file into PKM structure
 -- =============================================================================
-
 local M = {}
+
 local utils = require('pkm.utils')
 local config = {}
 local yaml = nil
@@ -314,15 +314,12 @@ function M.rename_from_yaml(filepath, new_title)
   local new_filename = string.format("%04d_%s_%s.md", tonumber(number), note_type, safe_title)
   local new_filepath = utils.join(dir, new_filename)
   
-  -- ============================ START OF FIX ============================
-  -- Normalize path separators to prevent comparison errors
   local normalized_new = new_filepath:gsub("\\", "/")
   local normalized_current = filepath:gsub("\\", "/")
 
   if normalized_new == normalized_current then
-    return nil -- No change needed
+    return nil
   end
-  -- ============================= END OF FIX =============================
   
   if vim.fn.filereadable(new_filepath) == 1 then
     vim.notify("Cannot rename: file already exists: " .. new_filename, vim.log.levels.ERROR)

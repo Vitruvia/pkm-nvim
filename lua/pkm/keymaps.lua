@@ -1,6 +1,26 @@
--- lua/pkm/keymaps.lua
+-- =============================================================================
+-- pkm.keymaps — Keymap registration
+-- =============================================================================
+-- Dependencies : none (all modules required lazily via commands)
+-- Consumed by  : pkm.init (called once during setup)
+--
+-- NOTE: register(config) must receive the resolved config table because
+-- keymap lhs strings are needed immediately at registration time.
+--
+-- Known issue: quick_capture maps to PKMNewNote instead of a dedicated
+-- PKMQuickCapture command. See dead code / known bugs list.
+--
+-- Public API:
+--   register(config) → Register all <leader> keymaps from config.keymaps
+-- =============================================================================
 local M = {}
 
+-- =============================================================================
+-- SECTION: Registration
+-- =============================================================================
+--- Register all PKM keymaps using lhs strings from config.keymaps.
+--- Silently skips any keymap whose lhs is nil or false.
+---@param config table Resolved PKM config (needs config.keymaps)
 function M.register(config)
   local k = config.keymaps
 

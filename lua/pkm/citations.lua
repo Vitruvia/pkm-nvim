@@ -1,7 +1,3 @@
--- lua/pkm/citations.lua
-
-local M = {}
-
 -- =============================================================================
 -- pkm.citations — Bidirectional citation engine
 -- =============================================================================
@@ -24,6 +20,7 @@ local M = {}
 --   cleanup_deleted_note(filepath)   → remove all references to a deleted note
 --   merge_tags(source_tags, target_tag) → rewrite tags across all notes
 -- =============================================================================
+local M = {}
 
 local utils = require('pkm.utils')
 local config = {}

@@ -1,8 +1,32 @@
--- lua/pkm/init.lua
+-- =============================================================================
+-- pkm.init — Plugin entry point and orchestration
+-- =============================================================================
+-- Dependencies : pkm.config, pkm.utils, and all other pkm.* modules
+-- Consumed by  : Neovim (via plugin/pkm.lua autoload marker)
+--                pkm.commands (via require('pkm') for delete and sync)
+--
+-- This module's only responsibilities are:
+--   1. Resolve config and call setup() on every module
+--   2. Register commands and keymaps
+--   3. Register sync autocmds
+--   4. Hold delete_note_safely() and setup_sync_autocmds() which need
+--      direct access to M.config
+--
+-- Public API:
+--   setup(user_config)         → Initialize the entire plugin
+--   setup_sync_autocmds()      → Register BufWritePost and BufReadPost autocmds
+--   delete_note_safely()       → Confirm, cleanup citations, delete current note
+--   M.config                   → Resolved config table (set by setup())
+-- =============================================================================
 local M = {}
 
--- M.config = default_config
-
+-- =============================================================================
+-- SECTION: Setup
+-- =============================================================================
+--- Initialize the PKM plugin. Resolves config, calls setup() on all modules,
+--- registers commands and keymaps, and sets up sync autocmds if enabled.
+--- Must be called once from the user's lazy.nvim config function.
+---@param user_config table|nil User config table; merged over defaults by pkm.config.resolve()
 function M.setup(user_config)
   M.config = require('pkm.config').resolve(user_config)
 
@@ -21,7 +45,13 @@ function M.setup(user_config)
   if M.config.sync.enabled then M.setup_sync_autocmds() end
 end 
 
-
+-- =============================================================================
+-- SECTION: Sync autocmds
+-- =============================================================================
+--- Register BufWritePost and BufReadPost autocmds for the PKMSync augroup.
+--- BufWritePost: updates last_updated_on, syncs filename↔YAML, updates citations.
+--- BufReadPost: syncs YAML title/timestamp when file is opened after external rename.
+--- Only fires for .md files within M.config.root_path.
 function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
   
@@ -57,7 +87,6 @@ function M.setup_sync_autocmds()
         if filepath:find(M.config.folders.consolidated, 1, true) then notes.sync_filename_on_save() end
         if filepath:find(M.config.folders.journal, 1, true) then journal.sync_filename_on_save() end
         
-        -- FIXED: Pass filepath to update references on DISK, so reloading gets everything
         if M.config.sync.auto_sync_on_save then 
             citations.update_references(filepath) 
         end
@@ -81,6 +110,13 @@ function M.setup_sync_autocmds()
   })
 end
 
+-- =============================================================================
+-- SECTION: Note deletion
+-- =============================================================================
+--- Delete the current note safely: confirms with the user, removes all citation
+--- references across the wiki via cleanup_deleted_note(), deletes the buffer,
+--- then deletes the file from disk.
+--- Only works on files inside M.config.root_path.
 function M.delete_note_safely()
   local filepath = vim.fn.expand("%:p")
   local root = M.config.root_path

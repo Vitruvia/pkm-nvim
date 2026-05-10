@@ -1,12 +1,25 @@
--- lua/pkm/commands.lua
--- Registers all :PKM* user commands.
--- Called once by init.lua after config is resolved.
--- Modules are required lazily inside each handler.
+-- =============================================================================
+-- pkm.commands — User command registration
+-- =============================================================================
+-- Dependencies : none (all modules required lazily inside handlers)
+-- Consumed by  : pkm.init (called once during setup)
+--
+-- All handlers use lazy require so no module is loaded until its command
+-- is first invoked. Handlers that call init.lua functions must use
+-- require('pkm') rather than a local M reference.
+--
+-- Public API:
+--   register() → Register all :PKM* commands with Neovim
+-- =============================================================================
 
 local M = {}
 
+-- =============================================================================
+-- SECTION: Registration
+-- =============================================================================
+--- Register all :PKM* user commands. Called once by init.lua during setup.
+--- Safe to call again (nvim_create_user_command overwrites existing commands).
 function M.register()
-  --- COMMANDS ---
   vim.api.nvim_create_user_command('PKMNewNote', function(opts) 
     require('pkm.notes').create_new_note(opts.args ~= "" and opts.args or nil) 
   end, { nargs = "?" })

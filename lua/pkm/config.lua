@@ -1,11 +1,24 @@
--- lua/pkm/config.lua
--- Default configuration and resolution logic.
--- Called once by init.lua; returns the final merged config table.
+-- =============================================================================
+-- pkm.config — Default configuration and resolution
+-- =============================================================================
+-- Dependencies : pkm.utils
+-- Consumed by  : pkm.init (called once, result passed to all module setup())
+--
+-- This module is pure data — no side effects, no vim commands, no autocmds.
+-- The defaults table defines every supported config key. resolve() merges
+-- user config over defaults, normalizes paths, validates, and injects author.
+--
+-- Public API:
+--   resolve(user_config?) → table  Merged and validated config
+-- =============================================================================
 
 local M = {}
 
 local utils = require('pkm.utils')
 
+-- =============================================================================
+-- SECTION: Defaults
+-- =============================================================================
 local defaults = {
   root_path = nil,
 
@@ -83,6 +96,9 @@ local defaults = {
   },
 }
 
+-- =============================================================================
+-- SECTION: Resolution
+-- =============================================================================
 --- Merge user config with defaults, resolve paths, validate, inject author.
 ---@param user_config table|nil
 ---@return table Resolved configuration
