@@ -5,12 +5,8 @@
 ## [Unreleased]
 
 ### In Progress
-- Module API header blocks — citations.lua, yaml.lua, notes.lua, journal.lua,
-  ui.lua, commands.lua, keymaps.lua, telescope.lua, export.lua, templates.lua,
-  timestamp.lua, config.lua, utils.lua done
-- LuaDoc annotations — same files done
-- Section separators — same files done
-- Remaining: init.lua only
+- Module API header blocks, LuaDoc annotations, section separators — all
+  modules complete.
 
 ### Known Bugs (queued for after refactor)
 
@@ -46,18 +42,55 @@
   unavailable. All other modules check availability at call time; this module
   should be refactored to match.
 
-- **`export.lua` `collect_files` scans the templates folder** — iterates
-  `config.folders` with `pairs`, which includes `templates`. Template files
-  will appear in export results if they match filters. Fix: scan only
-  consolidated, journal, and scratchpad explicitly instead of all folders.
+- **`export.lua` `collect_files` scans the templates folder** — fixed in
+  1.1.2 below.
 
 - **`templates.lua` `apply_template` silently fails when Telescope is loaded**
   — calls `tele.template_picker(templates, on_select)` which is an empty stub.
   When Telescope is available, nothing happens. Fix: either implement the
-  picker in `telescope.lua` or fall through to `vim.ui.select` unconditionally
-  until it is implemented.
+  picker in `telescope.lua` or fall through to `vim.ui.select`
+  unconditionally until it is implemented.
 
-### Dead Code (queued for removal after refactor)
+### Suspended Functions (queued for decision)
+
+- **`journal.sync_yaml_on_rename`** — this function reads the journal filename,
+  parses the timestamp from it, and writes `date` and `time` fields back into
+  the YAML frontmatter. It is called from the `BufReadPost` autocmd in
+  `init.lua` whenever a journal file is opened.
+
+  The function was silently broken from the start by the greedy pattern bug
+  (see 1.1.1 fixes) — `filename:match("^(.+)_(.+)$")` extracted only the
+  last component of the timestamp, causing `parse_timestamp` to fail and the
+  function to exit without writing anything. When the pattern was fixed to
+  `filename:match("^journal_(.+)$")`, the function began working correctly
+  and started writing `date` and `time` fields to every journal note on open.
+
+  These fields are not in the journal frontmatter template and conflict with
+  the existing `created_on`/`last_updated_on` design, which already encodes
+  full date and time in a single ISO 8601 field. The `date` and `time` fields
+  are not read or used anywhere in the codebase.
+
+  **Current state:** the `BufReadPost` call in `init.lua` is commented out:
+  ```lua
+  -- if filepath:find(M.config.folders.journal, 1, true) then
+  --   require('pkm.journal').sync_yaml_on_rename()
+  -- end
+  ```
+  The function definition in `journal.lua` is left intact.
+
+  **Options going forward:**
+  - Delete the function and remove the commented call — if `date`/`time`
+    fields are never wanted.
+  - Add `date` and `time` to the journal template in `config.lua` and
+    reinstate the call — if split date/time fields are wanted alongside
+    `created_on`.
+  - Replace the function with one that syncs `created_on` from the filename
+    instead of writing separate `date`/`time` fields — for a cleaner design.
+
+  Note: `notes.sync_yaml_on_rename` (consolidated folder) is unrelated — it
+  only syncs the `title` field and is not affected by any of this.
+
+### Dead Code (queued for removal)
 
 - `normalize_path(path)` in `notes.lua` — defined but never called.
 - `is_empty_table(t)` in `yaml.lua` — defined but never called.
@@ -67,11 +100,15 @@
 - `select_note_enhanced` in `ui.lua` — defined but not called from any command.
 - `M.template_picker` in `templates.lua` — empty stub, never called externally.
 
-### Pending Cleanup
+---
 
-- `export.lua` used its own local `path_sep` and `join_path` instead of
-  `pkm.utils`. Fixed in this session (replaced with `utils.join` and
-  `utils.sep`).
+## [1.1.2] — 2026-05-10
+
+### Fixed
+- `export.lua`: `collect_files` now scans only consolidated, journal, and
+  scratchpad folders. Previously iterated all `config.folders` with `pairs`,
+  which included the templates folder.
+- `export.lua`: replaced local `path_sep`/`join_path` with `pkm.utils`.
 
 ---
 
