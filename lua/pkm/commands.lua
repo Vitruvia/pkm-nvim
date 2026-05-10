@@ -71,3 +71,5 @@ function M.register()
       require('pkm.ui').show_stats()
   end, { desc = "Show PKM statistics" })
 end
+
+return M
