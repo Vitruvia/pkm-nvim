@@ -36,6 +36,7 @@ local defaults = {
     },
     bibliography = {
       title = "", source_author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
+      tags = {},
       cites    = { notes = {}, bib = {}, journal = {}, scratch = {} },
       cited_by = { notes = {}, bib = {}, journal = {}, scratch = {} },
     },
