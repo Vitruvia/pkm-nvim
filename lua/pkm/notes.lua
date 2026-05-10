@@ -1,5 +1,25 @@
--- lua/pkm/notes.lua
--- Enhanced note management with unnamed notes and bidirectional filename-YAML sync
+-- =============================================================================
+-- pkm.notes — Note creation, conversion, promotion, and navigation
+-- =============================================================================
+-- Dependencies : pkm.yaml, pkm.utils, pkm.timestamp, pkm.citations (lazy)
+-- Consumed by  : pkm.commands, pkm.keymaps
+--
+-- Public API:
+--   setup(user_config)                        → Initialize with resolved PKM config
+--   create_new_note(note_type?)               → Create consolidated note (prompts if nil)
+--   create_scratchpad()                       → Create timestamped scratchpad note
+--   promote_note()                            → Promote scratchpad to consolidated or journal
+--   do_convert(current_path, current_type, target) → Perform note type conversion
+--   convert_note()                            → Normalize current note to its folder's format
+--   rename_from_yaml(filepath, new_title)     → Rename file to match YAML title
+--   sync_filename_on_save()                   → Sync filename to YAML title on BufWritePost
+--   sync_yaml_on_rename()                     → Sync YAML title to filename on BufReadPost
+--   quick_capture()                           → Open or create today's scratchpad
+--   link_to_note()                            → Insert [[wiki-link]] at cursor
+--   follow_link()                             → Open note linked under cursor
+--   show_backlinks()                          → Show all notes linking to current note
+--   import_note()                             → Import external file into PKM structure
+-- =============================================================================
 
 local M = {}
 local utils = require('pkm.utils')
@@ -7,12 +27,19 @@ local config = {}
 local yaml = nil
 local timestamp = nil
 
+-- =============================================================================
+-- SECTION: Setup
+-- =============================================================================
+---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config
   yaml = require('pkm.yaml')
   timestamp = require('pkm.timestamp')
 end
 
+-- =============================================================================
+-- SECTION: File naming helpers
+-- =============================================================================
 --- Get next available note number
 local function get_next_note_number()
   local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
@@ -53,10 +80,15 @@ local function sanitize_title(title)
   return safe
 end
 
---- Create a new consolidated note
---- @param note_type string|nil Type: "agg", "note", or "bib" (nil = prompt)
---- @return string|nil Path to created note
-function M.create_new_note(note_type) -- REMOVED the 'allow_unnamed' parameter
+-- =============================================================================
+-- SECTION: Note creation
+-- =============================================================================
+--- Create a new consolidated note in the configured consolidated folder.
+--- Prompts for type if not provided, then for title. Handles bib-specific
+--- fields (source_author, source_type) when type is "bib".
+---@param note_type string|nil "note", "agg", or "bib" — prompts if nil
+---@return string|nil filepath Absolute path of created note, or nil on cancel
+function M.create_new_note(note_type)
   if note_type == "" then
     note_type = nil
   end
@@ -154,8 +186,40 @@ function M.create_new_note(note_type) -- REMOVED the 'allow_unnamed' parameter
   return filepath
 end
 
---- Promote current scratchpad to consolidated or journal
---- Uses Telescope if available, vim.ui.select as fallback
+--- Create a timestamped scratchpad note. Prompts for an optional title.
+---@return string filepath Absolute path of created scratchpad
+function M.create_scratchpad()
+  vim.fn.inputsave()
+  local title = vim.fn.input("Scratchpad title (optional, Enter to skip): ")
+  vim.fn.inputrestore()
+
+  local ts = timestamp.now()
+  local filename = timestamp.create_filename("scratch", ts, ".md")
+
+  local scratchpad_path = utils.join(config.root_path, config.folders.scratchpad)
+  utils.ensure_dir(scratchpad_path)
+
+  local filepath = utils.join(scratchpad_path, filename)
+
+  -- Only pass title to frontmatter if the user provided one
+  local fm_data = title ~= "" and { title = title } or {}
+
+  local frontmatter_lines = yaml.create_frontmatter("scratchpad", fm_data)
+  table.insert(frontmatter_lines, "")
+
+  vim.fn.writefile(frontmatter_lines, filepath)
+  vim.cmd("edit " .. vim.fn.fnameescape(filepath))
+  vim.cmd("normal! G")
+  vim.notify("Created scratchpad: " .. filename, vim.log.levels.INFO)
+  return filepath
+end
+
+-- =============================================================================
+-- SECTION: Note promotion and conversion
+-- =============================================================================
+--- Promote the current scratchpad note to a consolidated note or journal entry.
+--- Only works when the current buffer is inside the scratchpad folder.
+--- Uses Telescope if available, falls back to vim.ui.select.
 function M.promote_note()
   local current_path = vim.fn.expand("%:p")
 
@@ -220,6 +284,9 @@ function M.promote_note()
   end)
 end
 
+-- =============================================================================
+-- SECTION: Filename-YAML synchronization
+-- =============================================================================
 --- Normalize path for comparison (cross-platform)
 --- @param path string Path to normalize
 --- @return string Normalized absolute path with forward slashes
@@ -228,10 +295,12 @@ local function normalize_path(path)
   return vim.fn.fnamemodify(path, ":p"):gsub("\\", "/")
 end
 
---- Rename file based on YAML metadata
---- @param filepath string Current file path
---- @param new_title string New title from YAML
---- @return string|nil New filepath if renamed, nil if not
+--- Rename a consolidated note file to match a new title.
+--- Derives the new filename from the existing number and type prefix.
+--- Propagates the rename through citations via update_references_on_rename.
+---@param filepath string Current absolute path of the note
+---@param new_title string New title from frontmatter
+---@return string|nil new_filepath New absolute path if renamed, nil if unchanged or failed
 function M.rename_from_yaml(filepath, new_title)
   local old_filename_no_ext = vim.fn.fnamemodify(filepath, ":t:r")
   local dir = vim.fn.fnamemodify(filepath, ":h")
@@ -273,7 +342,9 @@ function M.rename_from_yaml(filepath, new_title)
     return nil
   end
 end
---- Check and sync filename with YAML on save
+
+--- Called on BufWritePost. Reads title from current buffer's frontmatter
+--- and renames the file if the title has changed. Consolidated folder only.
 function M.sync_filename_on_save()
   local filepath = vim.fn.expand("%:p")
   
@@ -294,7 +365,9 @@ function M.sync_filename_on_save()
   M.rename_from_yaml(filepath, frontmatter.title)
 end
 
---- Update YAML when file is renamed externally
+--- Called on BufReadPost. Reads the filename and updates the YAML title
+--- field if it differs. Handles external renames (e.g. from the file system).
+--- Consolidated folder only.
 function M.sync_yaml_on_rename()
   local filepath = vim.fn.expand("%:p")
   
@@ -324,31 +397,6 @@ function M.sync_yaml_on_rename()
   end
 end
 
-function M.create_scratchpad()
-  vim.fn.inputsave()
-  local title = vim.fn.input("Scratchpad title (optional, Enter to skip): ")
-  vim.fn.inputrestore()
-
-  local ts = timestamp.now()
-  local filename = timestamp.create_filename("scratch", ts, ".md")
-
-  local scratchpad_path = utils.join(config.root_path, config.folders.scratchpad)
-  utils.ensure_dir(scratchpad_path)
-
-  local filepath = utils.join(scratchpad_path, filename)
-
-  -- Only pass title to frontmatter if the user provided one
-  local fm_data = title ~= "" and { title = title } or {}
-
-  local frontmatter_lines = yaml.create_frontmatter("scratchpad", fm_data)
-  table.insert(frontmatter_lines, "")
-
-  vim.fn.writefile(frontmatter_lines, filepath)
-  vim.cmd("edit " .. vim.fn.fnameescape(filepath))
-  vim.cmd("normal! G")
-  vim.notify("Created scratchpad: " .. filename, vim.log.levels.INFO)
-  return filepath
-end
 
 --- Convert note to the current folder's type: normalize current note to the
 --- format required by its PKM folder. Adds missing frontmatter fields,
@@ -457,7 +505,9 @@ function M.convert_note()
           return
         end
 
-        local fm_key = (type_sel.value == "bib") and "bibliography" or "consolidated"
+        local fm_key = (type_sel.value == "bib") and "bibliography"
+            or (type_sel.value == "agg") and "agg"
+            or "note"
         local new_fm_lines = yaml.create_frontmatter(fm_key, existing_fm)
         local new_content  = vim.list_extend(new_fm_lines, content)
         vim.fn.writefile(new_content, new_path)
@@ -476,8 +526,12 @@ function M.convert_note()
   end
 end
 
-
---- Quick capture - Open today's scratchpad or create new
+-- =============================================================================
+-- SECTION: Quick capture
+-- =============================================================================
+--- Open today's most recent scratchpad or create a new one.
+--- Appends a timestamp heading and enters insert mode at the bottom.
+---@return string filepath Absolute path of the scratchpad
 function M.quick_capture()
   local today = timestamp.now()
   local date_str = timestamp.format_timestamp(today, "date_only")
@@ -525,10 +579,12 @@ local function _finish_convert(original_path, new_path)
   vim.notify("Promoted to: " .. vim.fn.fnamemodify(new_path, ":t"), vim.log.levels.INFO)
 end
 
---- Perform the actual conversion
---- @param current_path string Current file path
---- @param current_type string Current note type
---- @param target string Target note type
+--- Perform the actual file conversion from one note type to another.
+--- Reads current buffer content, builds new frontmatter, writes to new path.
+--- For target "note", prompts for subtype and title asynchronously.
+---@param current_path string Absolute path of note being converted
+---@param current_type string Source type: "scratchpad", "journal", or "note"
+---@param target string Destination type: "note" or "journal"
 function M.do_convert(current_path, current_type, target)
   -- Read current content
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -608,7 +664,7 @@ function M.do_convert(current_path, current_type, target)
         if existing_fm.author then fm_data.author = existing_fm.author end
       end
   
-      local new_frontmatter = yaml.create_frontmatter("consolidated", fm_data)
+      local new_frontmatter = yaml.create_frontmatter("note", fm_data)
       local new_content     = vim.list_extend(new_frontmatter, content)
       vim.fn.writefile(new_content, new_path)
   
@@ -622,7 +678,11 @@ function M.do_convert(current_path, current_type, target)
   _finish_convert(current_path, new_path)
 end
 
---- Link to another note
+-- =============================================================================
+-- SECTION: Navigation
+-- =============================================================================
+--- Insert a [[wiki-link]] to another note at the current cursor position.
+--- Searches only the consolidated folder. Uses vim.ui.select for picking.
 function M.link_to_note()
   local source_path = vim.fn.expand("%:p")
   if source_path == "" then
@@ -675,7 +735,8 @@ function M.link_to_note()
   end)
 end
 
---- Follow link under cursor (FIXED VERSION)
+--- Open the note linked under the cursor via [[wiki-link]] syntax.
+--- Searches consolidated, journal, and scratchpad folders in that order.
 function M.follow_link()
   local line = vim.api.nvim_get_current_line()
   local _, col = unpack(vim.api.nvim_win_get_cursor(0)) -- col is 0-indexed
@@ -726,7 +787,8 @@ function M.follow_link()
   vim.notify("File not found: " .. link_target .. ".md", vim.log.levels.ERROR)
 end
 
---- Show backlinks to current note
+--- Show all notes that contain a [[wiki-link]] to the current note.
+--- Searches all three PKM folders. Opens selected backlink with vim.ui.select.
 function M.show_backlinks()
   local current_path = vim.fn.expand("%:p")
   if current_path == "" then
@@ -784,6 +846,12 @@ function M.show_backlinks()
   end)
 end
 
+-- =============================================================================
+-- SECTION: Import
+-- =============================================================================
+--- Import an external file into the PKM consolidated folder.
+--- Preserves existing frontmatter fields, prompts for type and title,
+--- generates a new numbered filename, and optionally deletes the original.
 function M.import_note()
   local current_path = vim.fn.expand("%:p")
   local current_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -845,7 +913,9 @@ function M.import_note()
       end
 
       -- Generate New Frontmatter
-      local template_type = (selected_type == "bib") and "bibliography" or "consolidated"
+      local template_type = (selected_type == "bib") and "bibliography" or
+      selected_type == "agg" and "agg" or "note"
+
       local new_fm_lines = yaml.create_frontmatter(template_type, fm_data)
       
       -- Construct Final Content

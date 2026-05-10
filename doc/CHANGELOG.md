@@ -5,9 +5,45 @@
 ## [Unreleased]
 
 ### In Progress
-- Module API header blocks (one per file)
-- LuaDoc annotations on exported functions
-- Section separators inside large files (citations.lua, notes.lua)
+- Module API header blocks (one per file) — citations.lua, yaml.lua, notes.lua done
+- LuaDoc annotations on exported functions — citations.lua, yaml.lua, notes.lua done
+- Section separators inside large files — citations.lua, yaml.lua, notes.lua done
+
+### Known Bugs (queued for after refactor)
+- **Rename from inside note requires manual `e!`** — when a note's title is
+  changed in frontmatter and saved, `sync_filename_on_save` renames the file
+  on disk but the buffer remains associated with the old path. The user must
+  run `:e!` to reload. Root cause: buffer is not redirected to the new path
+  after the filesystem rename. Fix requires: (1) write content to new path,
+  (2) delete old file, (3) redirect buffer via `keepalt file` + `edit`.
+  A secondary E484 error from `migrate_legacy_links` attempting to read the
+  old (now deleted) path is fixed by adding a `filereadable` guard at the top
+  of `update_references`. That guard can be applied independently at any time.
+
+### Dead Code (queued for removal after refactor)
+- `normalize_path(path)` in `notes.lua` — defined but never called. Safe to
+  delete; path normalization is handled inline where needed.
+- `is_empty_table(t)` in `yaml.lua` — defined in Generation helpers section
+  but never called; `generate_yaml` uses inline `next(value) == nil` instead.
+- `is_array_table(t)` in `yaml.lua` — same as above; defined but unused.
+
+---
+
+## [1.1.1] — 2026-05-10
+
+### Fixed
+- `do_convert` in `notes.lua` was passing `"consolidated"` as the template
+  key when promoting a scratchpad to a consolidated note. Now correctly
+  passes `"note"`, `"agg"`, or `"bib"` depending on user selection.
+- `import_note` in `notes.lua` had the same template key bug — used
+  `"consolidated"` as fallback instead of resolving from `selected_type`.
+  Now correctly passes `"note"` or `"agg"` alongside `"bibliography"`.
+- Template key `"consolidated"` renamed to `"note"` throughout `config.lua`,
+  `notes.lua`, and `convert_note()`. Author injection in `config.resolve()`
+  updated accordingly. `agg` template added to defaults.
+- `get_note_type_and_id` pattern fix from 1.1.0 confirmed working: journal
+  and scratch notes now correctly return their type and identifier, enabling
+  cross-folder backlink sync.
 
 ---
 
@@ -54,6 +90,12 @@
 - `setup_sync_autocmds()` was being called twice inside `setup()`.
 - Both `commands.lua` and `keymaps.lua` were missing `return M`, causing
   `require()` to return `true` instead of the module table.
+- `get_note_type_and_id` used a greedy pattern that split on the last
+  underscore, causing journal/scratch filenames with multiple underscores
+  to return nil. Fixed with explicit prefix matching.
+- `validate_frontmatter` used folder-name-to-template lookup which could not
+  distinguish note/bib/agg within the consolidated folder. Now reads type
+  from filename.
 
 ---
 
