@@ -606,10 +606,7 @@ function M.do_convert(current_path, current_type, target)
     utils.ensure_dir(journal_path)
     new_path = utils.join(journal_path, journal_filename)
     
-    local fm_data = {
-      date = timestamp.format_timestamp(ts, "date_only"),
-      time = string.format("%02d-%02d-%02d", ts.hour, ts.min, ts.sec or 0),
-    }
+    local fm_data = {}
     
     if existing_fm and existing_fm.tags then
       fm_data.tags = existing_fm.tags

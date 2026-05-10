@@ -105,7 +105,7 @@ function M.setup_sync_autocmds()
       local norm_root = root:gsub("\\", "/")
       if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
       if filepath:find(M.config.folders.consolidated, 1, true) then require('pkm.notes').sync_yaml_on_rename() end
-      if filepath:find(M.config.folders.journal, 1, true) then require('pkm.journal').sync_yaml_on_rename() end
+      -- if filepath:find(M.config.folders.journal, 1, true) then require('pkm.journal').sync_yaml_on_rename() end
     end,
   })
 end
