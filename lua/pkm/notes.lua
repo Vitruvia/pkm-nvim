@@ -11,6 +11,7 @@
 --   promote_note()                            → Promote scratchpad to consolidated or journal
 --   do_convert(current_path, current_type, target) → Perform note type conversion
 --   convert_note()                            → Normalize current note to its folder's format
+--   change_note_type()                        → Change type of consolidated note and rename file
 --   transpose_note()                          → Move note to different folder and convert
 --   rename_from_yaml(filepath, new_title)     → Rename file to match YAML title
 --   sync_filename_on_save()                   → Sync filename to YAML title on BufWritePost
@@ -614,6 +615,100 @@ function M.convert_note()
       end)
     end
   end
+end
+
+--- Change the type of an already-named consolidated note (note/agg/bib).
+--- Renames the file to reflect the new type and propagates the change
+--- through all citations via update_references_on_rename.
+--- Only works on consolidated notes with a valid PKM filename.
+function M.change_note_type()
+  local current_path = vim.fn.expand("%:p")
+
+  if current_path == "" then
+    vim.notify("No file open", vim.log.levels.ERROR)
+    return
+  end
+
+  if not current_path:find(config.folders.consolidated, 1, true) then
+    vim.notify("PKMChangeType: only works on consolidated notes.", vim.log.levels.ERROR)
+    return
+  end
+
+  local basename = vim.fn.fnamemodify(current_path, ":t:r")
+  local number, current_type = basename:match("^(%d+)_([a-z]+)_")
+
+  if not number or not current_type then
+    vim.notify("PKMChangeType: file does not have a valid PKM filename. Use :PKMConvertNote first.", vim.log.levels.WARN)
+    return
+  end
+
+  local note_types = {
+    { label = "Regular Note",         value = "note" },
+    { label = "Aggregate/Collection", value = "agg"  },
+    { label = "Bibliography Entry",   value = "bib"  },
+  }
+
+  -- Filter out current type
+  local targets = {}
+  for _, t in ipairs(note_types) do
+    if t.value ~= current_type then
+      table.insert(targets, t)
+    end
+  end
+
+  vim.ui.select(targets, {
+    prompt = string.format("Change type from '%s' to:", current_type),
+    format_item = function(item) return item.label end,
+  }, function(sel)
+    if not sel then
+      vim.notify("Type change cancelled.", vim.log.levels.INFO)
+      return
+    end
+
+    local dir          = vim.fn.fnamemodify(current_path, ":h")
+    local name_part    = basename:match("^%d+_[a-z]+_(.+)$")
+    local new_filename = string.format("%04d_%s_%s.md", tonumber(number), sel.value, name_part)
+    local new_path     = utils.join(dir, new_filename)
+
+    if vim.fn.filereadable(new_path) == 1 then
+      vim.notify("Cannot change type: target already exists: " .. new_filename, vim.log.levels.ERROR)
+      return
+    end
+
+    -- Update frontmatter template
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local existing_fm, content_start = yaml.parse_frontmatter(lines)
+    existing_fm = existing_fm or {}
+
+    local content = {}
+    for i = content_start, #lines do
+      table.insert(content, lines[i])
+    end
+
+    local fm_key = (sel.value == "bib") and "bibliography"
+               or (sel.value == "agg") and "agg"
+               or "note"
+    local new_fm_lines = yaml.create_frontmatter(fm_key, existing_fm)
+    local new_content  = vim.list_extend(new_fm_lines, content)
+
+    -- Rename file on disk
+    if vim.fn.rename(current_path, new_path) ~= 0 then
+      vim.notify("PKMChangeType: failed to rename file.", vim.log.levels.ERROR)
+      return
+    end
+
+    -- Write updated frontmatter to new path
+    vim.fn.writefile(new_content, new_path)
+
+    -- Propagate rename through citations
+    local old_basename = vim.fn.fnamemodify(current_path, ":t:r")
+    local new_basename = vim.fn.fnamemodify(new_path, ":t:r")
+    require('pkm.citations').update_references_on_rename(old_basename, new_basename, existing_fm.title)
+
+    -- Redirect buffer to new file
+    vim.cmd("file " .. vim.fn.fnameescape(new_path))
+    vim.notify(string.format("Changed type: %s → %s", current_type, sel.value), vim.log.levels.INFO)
+  end)
 end
 
 -- =============================================================================

@@ -66,7 +66,12 @@ function M.register()
     require('pkm.notes').transpose_note()
   end, { desc = "Move note to a different PKM folder and convert it" })
 
+  vim.api.nvim_create_user_command('PKMChangeType', function()
+    require('pkm.notes').change_note_type()
+  end, { desc = "Change the type of a consolidated note (note/agg/bib)" })
+
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
+
   vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
 
   vim.api.nvim_create_user_command('PKMMergeTags', function()

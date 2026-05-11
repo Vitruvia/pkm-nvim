@@ -4,11 +4,7 @@
 
 ## [Unreleased]
 
-### In Progress
-- Module API header blocks, LuaDoc annotations, section separators — all
-  modules complete.
-
-### Known Bugs (queued for after refactor)
+### Known Bugs (queued)
 
 - **Rename from inside note requires manual `e!`** — when a note's title is
   changed in frontmatter and saved, `sync_filename_on_save` renames the file
@@ -39,66 +35,89 @@
 - **`telescope.lua` checks Telescope at load time** — top-level
   `pcall(require, 'telescope')` returns an empty M if Telescope hasn't loaded
   yet. Under Lazy.nvim deferred loading this can silently make all pickers
-  unavailable. All other modules check availability at call time; this module
-  should be refactored to match.
-
-- **`export.lua` `collect_files` scans the templates folder** — fixed in
-  1.1.2 below.
+  unavailable. All other modules check availability at call time.
 
 - **`templates.lua` `apply_template` silently fails when Telescope is loaded**
   — calls `tele.template_picker(templates, on_select)` which is an empty stub.
-  When Telescope is available, nothing happens. Fix: either implement the
-  picker in `telescope.lua` or fall through to `vim.ui.select`
-  unconditionally until it is implemented.
+  Fix: either implement the picker in `telescope.lua` or fall through to
+  `vim.ui.select` unconditionally.
+
 
 ### Suspended Functions (queued for decision)
 
-- **`journal.sync_yaml_on_rename`** — this function reads the journal filename,
-  parses the timestamp from it, and writes `date` and `time` fields back into
-  the YAML frontmatter. It is called from the `BufReadPost` autocmd in
-  `init.lua` whenever a journal file is opened.
+- **`journal.sync_yaml_on_rename`** — reads the journal filename, parses the
+  timestamp from it, and writes `date` and `time` fields back into YAML.
+  Called from the `BufReadPost` autocmd in `init.lua`.
 
-  The function was silently broken from the start by the greedy pattern bug
-  (see 1.1.1 fixes) — `filename:match("^(.+)_(.+)$")` extracted only the
-  last component of the timestamp, causing `parse_timestamp` to fail and the
-  function to exit without writing anything. When the pattern was fixed to
-  `filename:match("^journal_(.+)$")`, the function began working correctly
-  and started writing `date` and `time` fields to every journal note on open.
+  Was silently broken by the greedy pattern bug — the function exited without
+  writing anything. When the pattern was fixed in 1.1.1, it began writing
+  `date` and `time` to every journal note on open. These fields are not in
+  the journal template and conflict with the `created_on`/`last_updated_on`
+  design.
 
-  These fields are not in the journal frontmatter template and conflict with
-  the existing `created_on`/`last_updated_on` design, which already encodes
-  full date and time in a single ISO 8601 field. The `date` and `time` fields
-  are not read or used anywhere in the codebase.
-
-  **Current state:** the `BufReadPost` call in `init.lua` is commented out:
-  ```lua
-  -- if filepath:find(M.config.folders.journal, 1, true) then
-  --   require('pkm.journal').sync_yaml_on_rename()
-  -- end
-  ```
+  **Current state:** the `BufReadPost` call in `init.lua` is commented out.
   The function definition in `journal.lua` is left intact.
 
-  **Options going forward:**
-  - Delete the function and remove the commented call — if `date`/`time`
-    fields are never wanted.
-  - Add `date` and `time` to the journal template in `config.lua` and
-    reinstate the call — if split date/time fields are wanted alongside
-    `created_on`.
-  - Replace the function with one that syncs `created_on` from the filename
-    instead of writing separate `date`/`time` fields — for a cleaner design.
+  **Options:**
+  - Delete — if `date`/`time` fields are never wanted.
+  - Add to template and reinstate — if split date/time fields are wanted.
+  - Replace with a function that syncs `created_on` from the filename instead.
 
   Note: `notes.sync_yaml_on_rename` (consolidated folder) is unrelated — it
-  only syncs the `title` field and is not affected by any of this.
+  syncs `title` only and is not affected.
 
 ### Dead Code (queued for removal)
 
 - `normalize_path(path)` in `notes.lua` — defined but never called.
 - `is_empty_table(t)` in `yaml.lua` — defined but never called.
 - `is_array_table(t)` in `yaml.lua` — defined but never called.
-- `show_stats_window(stats)` in `ui.lua` — the `stats` table it expects is
-  never constructed. `show_stats()` is the live implementation.
+- `show_stats_window(stats)` in `ui.lua` — stats table never constructed;
+  `show_stats()` is the live implementation.
 - `select_note_enhanced` in `ui.lua` — defined but not called from any command.
 - `M.template_picker` in `templates.lua` — empty stub, never called externally.
+
+---
+
+## [1.1.3] — 2026-05-11
+
+### Added
+- `transpose_note()` in `notes.lua` — moves the current note to a different
+  PKM folder and converts it to that folder's format. Works from any folder,
+  unlike `promote_note` which is scratchpad-only. Presents all folders except
+  the current one as targets, then delegates to `do_convert()`.
+- `:PKMTranspose` command in `commands.lua`.
+- `transpose_note = "<leader>nT"` keymap in `config.lua` defaults and
+  `keymaps.lua`.
+
+### Fixed
+- `do_convert` journal and scratchpad branches were missing
+  `update_references_on_rename` calls. Wiki-links and frontmatter citations
+  pointing to converted notes became stale. Now called after `writefile` in
+  all three branches (journal, note, scratchpad).
+- `do_convert` note branch was also missing `update_references_on_rename`.
+  Added after `writefile` with `fm_data.title` as the title argument.
+- `convert_note` unnamed-file branch had a duplicate and incorrect
+  `update_references_on_rename` call using `fm_data.title` (undefined in
+  scope) before `writefile`. Removed the duplicate; the correct single call
+  with `title` after `writefile` is retained.
+- `get_citable_items_for_picker` in `citations.lua` truncated scratch/journal
+  identifiers to date-only via `id:match("%d%d%d%d%-%d%d%-%d%d")`. This
+  caused citation metadata to never update for scratch/journal citations
+  because the token didn't match the full identifier in `update_references`.
+  Fixed by removing the date-only pattern; identifiers now fall through to
+  the full `id`.
+- **`short_id` truncation was breaking scratch citation metadata** — in
+  `get_citable_items_for_picker`, the pattern `id:match("%d%d%d%d%-%d%d%-%d%d")`
+  truncated scratch/journal identifiers to date-only (e.g. `"2026-05-09"`
+  instead of `"2026-05-09_22-17-17"`). The lookup key in `update_references`
+  used the full identifier, so the citation token never matches and metadata
+  is not updated. Fixed by removing the date-only pattern and fall through to the
+  full `id`.
+
+### Documentation
+- Module API headers, LuaDoc annotations, and section separators added to all
+  modules: citations, yaml, notes, journal, ui, commands, keymaps, telescope,
+  export, templates, timestamp, config, utils, init.
 
 ---
 
@@ -106,8 +125,8 @@
 
 ### Fixed
 - `export.lua`: `collect_files` now scans only consolidated, journal, and
-  scratchpad folders. Previously iterated all `config.folders` with `pairs`,
-  which included the templates folder.
+  scratchpad folders. Previously iterated all `config.folders` including
+  templates.
 - `export.lua`: replaced local `path_sep`/`join_path` with `pkm.utils`.
 
 ---
@@ -115,15 +134,15 @@
 ## [1.1.1] — 2026-05-10
 
 ### Fixed
-- `do_convert` in `notes.lua` used `"consolidated"` as template key.
-  Now correctly resolves to `"note"`, `"agg"`, or `"bib"`.
-- `import_note` in `notes.lua` had the same template key bug.
+- `do_convert` used `"consolidated"` as template key; now resolves to `"note"`,
+  `"agg"`, or `"bib"`.
+- `import_note` had the same template key bug.
 - Template key `"consolidated"` renamed to `"note"` throughout. `agg` template
   added to defaults.
-- `get_note_type_and_id` pattern fix confirmed working: cross-folder backlinks
-  now work correctly.
-- `sync_yaml_on_rename` in `journal.lua` had the greedy pattern bug. Fixed
-  with `filename:match("^journal_(.+)$")`.
+- Cross-folder backlinks now work correctly (`get_note_type_and_id` fix
+  confirmed working).
+- `sync_yaml_on_rename` in `journal.lua` had greedy pattern bug; fixed with
+  `filename:match("^journal_(.+)$")`.
 
 ---
 

@@ -50,6 +50,7 @@ function M.register(config)
   map(k.import_note, "<cmd>PKMImport<cr>", "Import Note")
   map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
   map(k.transpose_note, "<cmd>PKMTranspose<cr>", "Transpose Note")
+  map(k.change_note_type, "<cmd>PKMChangeType<cr>", "Change Note Type")
 end
 
 return M

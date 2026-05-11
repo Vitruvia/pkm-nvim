@@ -94,6 +94,7 @@ local defaults = {
     convert_note    = "<leader>nx",
     promote_note    = "<leader>np",
     transpose_note  = "<leader>nT",
+    change_note_type = "<leader>nC",
   },
 }
 
