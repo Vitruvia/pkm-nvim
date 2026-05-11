@@ -62,6 +62,10 @@ function M.register()
     require('pkm.export').interactive_export()
   end, { desc = "Filter notes and copy to a folder" })
 
+  vim.api.nvim_create_user_command('PKMTranspose', function()
+    require('pkm.notes').transpose_note()
+  end, { desc = "Move note to a different PKM folder and convert it" })
+
   vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
   vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
 

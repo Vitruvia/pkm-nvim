@@ -11,6 +11,7 @@
 --   promote_note()                            → Promote scratchpad to consolidated or journal
 --   do_convert(current_path, current_type, target) → Perform note type conversion
 --   convert_note()                            → Normalize current note to its folder's format
+--   transpose_note()                          → Move note to different folder and convert
 --   rename_from_yaml(filepath, new_title)     → Rename file to match YAML title
 --   sync_filename_on_save()                   → Sync filename to YAML title on BufWritePost
 --   sync_yaml_on_rename()                     → Sync YAML title to filename on BufReadPost
@@ -284,116 +285,203 @@ function M.promote_note()
   end)
 end
 
--- =============================================================================
--- SECTION: Filename-YAML synchronization
--- =============================================================================
---- Normalize path for comparison (cross-platform)
---- @param path string Path to normalize
---- @return string Normalized absolute path with forward slashes
-local function normalize_path(path)
-  -- Convert to absolute path and normalize separators
-  return vim.fn.fnamemodify(path, ":p"):gsub("\\", "/")
-end
+--- Move the current note to a different PKM folder and convert it to that
+--- folder's format. Works from any folder, unlike promote_note which is
+--- scratchpad-only. Presents all folders except the current one as targets,
+--- then delegates to do_convert().
+function M.transpose_note()
+  local current_path = vim.fn.expand("%:p")
 
---- Rename a consolidated note file to match a new title.
---- Derives the new filename from the existing number and type prefix.
---- Propagates the rename through citations via update_references_on_rename.
----@param filepath string Current absolute path of the note
----@param new_title string New title from frontmatter
----@return string|nil new_filepath New absolute path if renamed, nil if unchanged or failed
-function M.rename_from_yaml(filepath, new_title)
-  local old_filename_no_ext = vim.fn.fnamemodify(filepath, ":t:r")
-  local dir = vim.fn.fnamemodify(filepath, ":h")
-  
-  local number, note_type, old_title = old_filename_no_ext:match("^(%d+)_([a-z]+)_(.+)$")
-  if not number or not note_type then
-    return nil -- Not a valid consolidated note
+  if current_path == "" then
+    vim.notify("No file open", vim.log.levels.ERROR)
+    return
   end
-  
-  local safe_title = sanitize_title(new_title)
-  local new_filename = string.format("%04d_%s_%s.md", tonumber(number), note_type, safe_title)
-  local new_filepath = utils.join(dir, new_filename)
-  
-  local normalized_new = new_filepath:gsub("\\", "/")
-  local normalized_current = filepath:gsub("\\", "/")
 
-  if normalized_new == normalized_current then
-    return nil
-  end
-  
-  if vim.fn.filereadable(new_filepath) == 1 then
-    vim.notify("Cannot rename: file already exists: " .. new_filename, vim.log.levels.ERROR)
-    return nil
-  end
-  
-  if vim.fn.rename(filepath, new_filepath) == 0 then
-    vim.cmd("file " .. vim.fn.fnameescape(new_filepath))
-    vim.notify("Renamed to: " .. new_filename, vim.log.levels.INFO)
-    
-    local new_filename_no_ext = vim.fn.fnamemodify(new_filepath, ":t:r")
-    require('pkm.citations').update_references_on_rename(old_filename_no_ext, new_filename_no_ext, new_title)
-    
-    return new_filepath
+  local current_folder
+  if current_path:find(config.folders.scratchpad, 1, true) then
+    current_folder = "scratchpad"
+  elseif current_path:find(config.folders.journal, 1, true) then
+    current_folder = "journal"
+  elseif current_path:find(config.folders.consolidated, 1, true) then
+    current_folder = "consolidated"
   else
-    vim.notify("Failed to rename file", vim.log.levels.ERROR)
-    return nil
-  end
-end
-
---- Called on BufWritePost. Reads title from current buffer's frontmatter
---- and renames the file if the title has changed. Consolidated folder only.
-function M.sync_filename_on_save()
-  local filepath = vim.fn.expand("%:p")
-  
-  -- Only process files in consolidated folder
-  if not filepath:find(config.folders.consolidated, 1, true) then
+    vim.notify("PKMTranspose: file is not inside a PKM folder", vim.log.levels.ERROR)
     return
   end
-  
-  -- Read frontmatter
+
+  -- Offer all folders except the current one
+  local all_targets = {
+    { label = "Consolidated Note", value = "note"      },
+    { label = "Journal Entry",     value = "journal"   },
+    { label = "Scratchpad",        value = "scratchpad" },
+  }
+
+  local targets = {}
+  for _, t in ipairs(all_targets) do
+    local skip = (current_folder == "consolidated" and t.value == "note")
+              or (current_folder == "journal"      and t.value == "journal")
+              or (current_folder == "scratchpad"   and t.value == "scratchpad")
+    if not skip then
+      table.insert(targets, t)
+    end
+  end
+
+  vim.ui.select(targets, {
+    prompt = "Transpose note to:",
+    format_item = function(item) return item.label end,
+  }, function(sel)
+    if not sel then
+      vim.notify("Transpose cancelled", vim.log.levels.INFO)
+      return
+    end
+    M.do_convert(current_path, current_folder, sel.value)
+  end)
+end
+
+--- Ask whether to delete the original file, then open the new file.
+--- Shared finalisation step used by do_convert after file creation.
+---@param original_path string Absolute path of the source file
+---@param new_path string Absolute path of the newly created file
+local function _finish_convert(original_path, new_path)
+  vim.fn.inputsave()
+  local delete_original = vim.fn.input("Delete original? (y/N): ")
+  vim.fn.inputrestore()
+
+  if delete_original:lower() == "y" then
+    vim.fn.delete(original_path)
+    vim.notify("Original deleted: " .. vim.fn.fnamemodify(original_path, ":t"), vim.log.levels.INFO)
+  end
+
+  vim.cmd("edit " .. vim.fn.fnameescape(new_path))
+  vim.notify("Promoted to: " .. vim.fn.fnamemodify(new_path, ":t"), vim.log.levels.INFO)
+end
+
+--- Perform the actual file conversion from one note type to another.
+--- Reads current buffer content, builds new frontmatter, writes to new path.
+--- For target "note", prompts for subtype and title asynchronously.
+---@param current_path string Absolute path of note being converted
+---@param current_type string Source type: "scratchpad", "journal", or "note"
+---@param target string Destination type: "note", "journal", or "scratchpad"
+function M.do_convert(current_path, current_type, target)
+  -- Read current content
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, _ = yaml.parse_frontmatter(lines)
   
-  if not frontmatter or not frontmatter.title then
-    return
+  -- Parse existing frontmatter
+  local existing_fm, content_start = yaml.parse_frontmatter(lines)
+  
+  -- Get content without frontmatter
+  local content = {}
+  for i = content_start, #lines do
+    table.insert(content, lines[i])
   end
   
-  -- Rename if title changed
-  M.rename_from_yaml(filepath, frontmatter.title)
-end
+  -- Create new file based on target type
+  local new_path
+  
+  if target == "journal" then
+    local ts = timestamp.now()
+    
+    local journal_filename = timestamp.create_filename("journal", ts, ".md")
+    local journal_path = utils.join(config.root_path, config.folders.journal)
+    utils.ensure_dir(journal_path)
+    new_path = utils.join(journal_path, journal_filename)
+    
+    local fm_data = {}
 
---- Called on BufReadPost. Reads the filename and updates the YAML title
---- field if it differs. Handles external renames (e.g. from the file system).
---- Consolidated folder only.
-function M.sync_yaml_on_rename()
-  local filepath = vim.fn.expand("%:p")
-  
-  -- Only process consolidated notes
-  if not filepath:find(config.folders.consolidated, 1, true) then
-    return
-  end
-  
-  local filename = vim.fn.fnamemodify(filepath, ":t:r")
-  local _, _, name_part = filename:match("^(%d+)_([a-z]+)_(.+)$")
-  
-  if not name_part then
-    return
-  end
-  
-  -- Convert filename to readable title
-  local title = name_part:gsub("_", " ")
-  
-  -- Update YAML
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, content_start = yaml.parse_frontmatter(lines)
-  
-  if frontmatter and frontmatter.title ~= title then
-    frontmatter.title = title
-    yaml.save_frontmatter(frontmatter, content_start)
-    vim.notify("Updated title in YAML to match filename", vim.log.levels.INFO)
-  end
-end
+    if existing_fm and existing_fm.tags then
+      fm_data.tags = existing_fm.tags
+    end
+    
+    local new_frontmatter = yaml.create_frontmatter("journal", fm_data)
+    local new_content = vim.list_extend(new_frontmatter, content)
+    
+    vim.fn.writefile(new_content, new_path)
 
+    local old_basename = vim.fn.fnamemodify(current_path, ":t:r")
+    local new_basename = vim.fn.fnamemodify(new_path, ":t:r")
+
+    require('pkm.citations').update_references_on_rename(old_basename,
+    new_basename, nil)
+    
+  elseif target == "note" then
+    -- Prompt for consolidated note subtype
+    local note_types = {
+      { label = "Regular Note",         value = "note" },
+      { label = "Aggregate/Collection", value = "agg"  },
+      { label = "Bibliography Entry",   value = "bib"  },
+    }
+  
+    vim.ui.select(note_types, {
+      prompt = "Consolidated note type:",
+      format_item = function(item) return item.label end,
+    }, function(type_sel)
+      if not type_sel then
+        vim.notify("Conversion cancelled", vim.log.levels.INFO)
+        return
+      end
+  
+      vim.fn.inputsave()
+      local title = vim.fn.input("Note title (leave empty for unnamed): ")
+      vim.fn.inputrestore()
+  
+      local note_number = get_next_note_number()
+      local safe_title  = sanitize_title(title)
+      local note_filename = string.format(
+        "%04d_%s_%s.md", note_number, type_sel.value,
+        safe_title ~= "" and safe_title or "unnamed"
+      )
+  
+      local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
+      utils.ensure_dir(consolidated_path)
+      new_path = utils.join(consolidated_path, note_filename)
+  
+      local fm_data = {
+        title  = title ~= "" and title or "Unnamed Note",
+      }
+  
+      if existing_fm then
+        if existing_fm.tags   then fm_data.tags   = existing_fm.tags   end
+        if existing_fm.author then fm_data.author = existing_fm.author end
+      end
+  
+      local new_frontmatter = yaml.create_frontmatter("note", fm_data)
+      local new_content     = vim.list_extend(new_frontmatter, content)
+      vim.fn.writefile(new_content, new_path)
+
+      local old_basename = vim.fn.fnamemodify(current_path, ":t:r")
+      local new_basename = vim.fn.fnamemodify(new_path, ":t:r")
+      require('pkm.citations').update_references_on_rename(old_basename, new_basename, fm_data.title)
+  
+      -- Continue to the "ask to delete original / open new file" block below
+      _finish_convert(current_path, new_path)
+    end)
+    return  -- async from here; _finish_convert handles the rest
+  elseif target == "scratchpad" then
+    local ts = timestamp.now()
+    local scratch_filename = timestamp.create_filename("scratch", ts, ".md")
+    local scratch_path = utils.join(config.root_path, config.folders.scratchpad)
+    utils.ensure_dir(scratch_path)
+    new_path = utils.join(scratch_path, scratch_filename)
+  
+    local fm_data = {}
+    if existing_fm and existing_fm.tags then
+      fm_data.tags = existing_fm.tags
+    end
+  
+    local new_frontmatter = yaml.create_frontmatter("scratchpad", fm_data)
+    local new_content = vim.list_extend(new_frontmatter, content)
+    vim.fn.writefile(new_content, new_path)
+  
+    local old_basename = vim.fn.fnamemodify(current_path, ":t:r")
+    local new_basename = vim.fn.fnamemodify(new_path, ":t:r")
+    require('pkm.citations').update_references_on_rename(old_basename, new_basename, nil)
+  end
+
+
+  
+  -- Ask whether to delete original
+  _finish_convert(current_path, new_path)
+end
 
 --- Convert note to the current folder's type: normalize current note to the
 --- format required by its PKM folder. Adds missing frontmatter fields,
@@ -507,7 +595,12 @@ function M.convert_note()
             or "note"
         local new_fm_lines = yaml.create_frontmatter(fm_key, existing_fm)
         local new_content  = vim.list_extend(new_fm_lines, content)
+
         vim.fn.writefile(new_content, new_path)
+
+        local old_basename = vim.fn.fnamemodify(current_path, ":t:r")
+        local new_basename = vim.fn.fnamemodify(new_path, ":t:r")
+        require('pkm.citations').update_references_on_rename(old_basename, new_basename, title)
 
         vim.fn.inputsave()
         local del = vim.fn.input("Delete original file? (y/N): ")
@@ -522,6 +615,118 @@ function M.convert_note()
     end
   end
 end
+
+-- =============================================================================
+-- SECTION: Filename-YAML synchronization
+-- =============================================================================
+--- Normalize path for comparison (cross-platform)
+--- @param path string Path to normalize
+--- @return string Normalized absolute path with forward slashes
+local function normalize_path(path)
+  -- Convert to absolute path and normalize separators
+  return vim.fn.fnamemodify(path, ":p"):gsub("\\", "/")
+end
+
+--- Rename a consolidated note file to match a new title.
+--- Derives the new filename from the existing number and type prefix.
+--- Propagates the rename through citations via update_references_on_rename.
+---@param filepath string Current absolute path of the note
+---@param new_title string New title from frontmatter
+---@return string|nil new_filepath New absolute path if renamed, nil if unchanged or failed
+function M.rename_from_yaml(filepath, new_title)
+  local old_filename_no_ext = vim.fn.fnamemodify(filepath, ":t:r")
+  local dir = vim.fn.fnamemodify(filepath, ":h")
+  
+  local number, note_type, old_title = old_filename_no_ext:match("^(%d+)_([a-z]+)_(.+)$")
+  if not number or not note_type then
+    return nil -- Not a valid consolidated note
+  end
+  
+  local safe_title = sanitize_title(new_title)
+  local new_filename = string.format("%04d_%s_%s.md", tonumber(number), note_type, safe_title)
+  local new_filepath = utils.join(dir, new_filename)
+  
+  local normalized_new = new_filepath:gsub("\\", "/")
+  local normalized_current = filepath:gsub("\\", "/")
+
+  if normalized_new == normalized_current then
+    return nil
+  end
+  
+  if vim.fn.filereadable(new_filepath) == 1 then
+    vim.notify("Cannot rename: file already exists: " .. new_filename, vim.log.levels.ERROR)
+    return nil
+  end
+  
+  if vim.fn.rename(filepath, new_filepath) == 0 then
+    vim.cmd("file " .. vim.fn.fnameescape(new_filepath))
+    vim.notify("Renamed to: " .. new_filename, vim.log.levels.INFO)
+    
+    local new_filename_no_ext = vim.fn.fnamemodify(new_filepath, ":t:r")
+    require('pkm.citations').update_references_on_rename(old_filename_no_ext, new_filename_no_ext, new_title)
+    
+    return new_filepath
+  else
+    vim.notify("Failed to rename file", vim.log.levels.ERROR)
+    return nil
+  end
+end
+
+--- Called on BufWritePost. Reads title from current buffer's frontmatter
+--- and renames the file if the title has changed. Consolidated folder only.
+function M.sync_filename_on_save()
+  local filepath = vim.fn.expand("%:p")
+  
+  -- Only process files in consolidated folder
+  if not filepath:find(config.folders.consolidated, 1, true) then
+    return
+  end
+  
+  -- Read frontmatter
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local frontmatter, _ = yaml.parse_frontmatter(lines)
+  
+  if not frontmatter or not frontmatter.title then
+    return
+  end
+  
+  -- Rename if title changed
+  M.rename_from_yaml(filepath, frontmatter.title)
+end
+
+--- Called on BufReadPost. Reads the filename and updates the YAML title
+--- field if it differs. Handles external renames (e.g. from the file system).
+--- Consolidated folder only.
+function M.sync_yaml_on_rename()
+  local filepath = vim.fn.expand("%:p")
+  
+  -- Only process consolidated notes
+  if not filepath:find(config.folders.consolidated, 1, true) then
+    return
+  end
+  
+  local filename = vim.fn.fnamemodify(filepath, ":t:r")
+  local _, _, name_part = filename:match("^(%d+)_([a-z]+)_(.+)$")
+  
+  if not name_part then
+    return
+  end
+  
+  -- Convert filename to readable title
+  local title = name_part:gsub("_", " ")
+  
+  -- Update YAML
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local frontmatter, content_start = yaml.parse_frontmatter(lines)
+  
+  if frontmatter and frontmatter.title ~= title then
+    frontmatter.title = title
+    yaml.save_frontmatter(frontmatter, content_start)
+    vim.notify("Updated title in YAML to match filename", vim.log.levels.INFO)
+  end
+end
+
+
 
 -- =============================================================================
 -- SECTION: Quick capture
@@ -559,118 +764,6 @@ function M.quick_capture()
   return filepath
 end
 
---- Shared finalisation: optionally delete original, open new file
---- @param original_path string
---- @param new_path string
-local function _finish_convert(original_path, new_path)
-  vim.fn.inputsave()
-  local delete_original = vim.fn.input("Delete original? (y/N): ")
-  vim.fn.inputrestore()
-
-  if delete_original:lower() == "y" then
-    vim.fn.delete(original_path)
-    vim.notify("Original deleted: " .. vim.fn.fnamemodify(original_path, ":t"), vim.log.levels.INFO)
-  end
-
-  vim.cmd("edit " .. vim.fn.fnameescape(new_path))
-  vim.notify("Promoted to: " .. vim.fn.fnamemodify(new_path, ":t"), vim.log.levels.INFO)
-end
-
---- Perform the actual file conversion from one note type to another.
---- Reads current buffer content, builds new frontmatter, writes to new path.
---- For target "note", prompts for subtype and title asynchronously.
----@param current_path string Absolute path of note being converted
----@param current_type string Source type: "scratchpad", "journal", or "note"
----@param target string Destination type: "note" or "journal"
-function M.do_convert(current_path, current_type, target)
-  -- Read current content
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  
-  -- Parse existing frontmatter
-  local existing_fm, content_start = yaml.parse_frontmatter(lines)
-  
-  -- Get content without frontmatter
-  local content = {}
-  for i = content_start, #lines do
-    table.insert(content, lines[i])
-  end
-  
-  -- Create new file based on target type
-  local new_path
-  
-  if target == "journal" then
-    local ts = timestamp.now()
-    
-    local journal_filename = timestamp.create_filename("journal", ts, ".md")
-    local journal_path = utils.join(config.root_path, config.folders.journal)
-    utils.ensure_dir(journal_path)
-    new_path = utils.join(journal_path, journal_filename)
-    
-    local fm_data = {}
-    
-    if existing_fm and existing_fm.tags then
-      fm_data.tags = existing_fm.tags
-    end
-    
-    local new_frontmatter = yaml.create_frontmatter("journal", fm_data)
-    local new_content = vim.list_extend(new_frontmatter, content)
-    
-    vim.fn.writefile(new_content, new_path)
-    
-  elseif target == "note" then
-    -- Prompt for consolidated note subtype
-    local note_types = {
-      { label = "Regular Note",         value = "note" },
-      { label = "Aggregate/Collection", value = "agg"  },
-      { label = "Bibliography Entry",   value = "bib"  },
-    }
-  
-    vim.ui.select(note_types, {
-      prompt = "Consolidated note type:",
-      format_item = function(item) return item.label end,
-    }, function(type_sel)
-      if not type_sel then
-        vim.notify("Conversion cancelled", vim.log.levels.INFO)
-        return
-      end
-  
-      vim.fn.inputsave()
-      local title = vim.fn.input("Note title (leave empty for unnamed): ")
-      vim.fn.inputrestore()
-  
-      local note_number = get_next_note_number()
-      local safe_title  = sanitize_title(title)
-      local note_filename = string.format(
-        "%04d_%s_%s.md", note_number, type_sel.value,
-        safe_title ~= "" and safe_title or "unnamed"
-      )
-  
-      local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
-      utils.ensure_dir(consolidated_path)
-      new_path = utils.join(consolidated_path, note_filename)
-  
-      local fm_data = {
-        title  = title ~= "" and title or "Unnamed Note",
-      }
-  
-      if existing_fm then
-        if existing_fm.tags   then fm_data.tags   = existing_fm.tags   end
-        if existing_fm.author then fm_data.author = existing_fm.author end
-      end
-  
-      local new_frontmatter = yaml.create_frontmatter("note", fm_data)
-      local new_content     = vim.list_extend(new_frontmatter, content)
-      vim.fn.writefile(new_content, new_path)
-  
-      -- Continue to the "ask to delete original / open new file" block below
-      _finish_convert(current_path, new_path)
-    end)
-    return  -- async from here; _finish_convert handles the rest
-  end
-  
-  -- Ask whether to delete original
-  _finish_convert(current_path, new_path)
-end
 
 -- =============================================================================
 -- SECTION: Navigation

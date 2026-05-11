@@ -49,6 +49,7 @@ function M.register(config)
   map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture")
   map(k.import_note, "<cmd>PKMImport<cr>", "Import Note")
   map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
+  map(k.transpose_note, "<cmd>PKMTranspose<cr>", "Transpose Note")
 end
 
 return M

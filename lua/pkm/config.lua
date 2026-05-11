@@ -93,6 +93,7 @@ local defaults = {
     import_note     = "<leader>ni",
     convert_note    = "<leader>nx",
     promote_note    = "<leader>np",
+    transpose_note  = "<leader>nT",
   },
 }
 
