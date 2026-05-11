@@ -189,9 +189,8 @@ function M.get_citable_items_for_picker()
   
   for id, data in pairs(all_items_map) do
     local short_id = id:match("note%-(%d+)") 
-      or id:match("bib%-(%d+)") 
-      or id:match("%d%d%d%d%-%d%d%-%d%d") 
-      or id
+    or id:match("bib%-(%d+)") 
+    or id
     
     table.insert(items, {
       type = data.type,
