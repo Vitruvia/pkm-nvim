@@ -78,6 +78,13 @@
 
 ---
 
+## [1.1.4] — 2026-05-11
+
+### Added
+- `change_note_type()` in `notes.lua` - changes the type of a note that is
+already on the intended folder. Used especially for changing between "note",
+"agg", and "bib" within "Consolidated Notes".
+
 ## [1.1.3] — 2026-05-11
 
 ### Added
