@@ -1,19 +1,43 @@
--- lua/pkm/templates.lua
+-- =============================================================================
+-- pkm.templates — Template application for existing notes
+-- =============================================================================
+-- Dependencies : pkm.utils, pkm.telescope (optional, lazy)
+-- Consumed by  : pkm.commands (if a PKMApplyTemplate command is added)
+--
+-- Templates are .md files in config.folders.templates (default: "templates").
+-- Variables {{date}} and {{time}} are expanded on insertion.
+--
+-- KNOWN ISSUE: M.template_picker is defined but empty — the actual picker
+-- is expected to live in pkm.telescope. See dead code list in changelog.
+--
+-- Public API:
+--   setup(user_config)    → Initialize with resolved PKM config
+--   get_templates()       → {name, path}[] list of available templates
+--   apply_template()      → picker + insert template at cursor position
+--   template_picker()     → stub (dead code, see above)
+-- =============================================================================
 local M = {}
-local config = {}
-local path_sep = package.config:sub(1, 1)
 
+local utils = require('pkm.utils')
+local config = {}
+
+-- =============================================================================
+-- SECTION: Setup
+-- =============================================================================
+---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config
 end
 
-local function join_path(...)
-  return table.concat({...}, path_sep)
-end
-
+-- =============================================================================
+-- SECTION: Template discovery
+-- =============================================================================
+--- Scan the templates folder and return all .md files as template entries.
+--- Creates the templates directory if it does not exist.
+---@return {name:string, path:string}[]
 function M.get_templates()
   local template_dir = config.folders.templates or "templates"
-  local template_path = join_path(config.root_path, template_dir)
+  local template_path = utils.join(config.root_path, template_dir)
   
   -- Ensure directory exists
   if vim.fn.isdirectory(template_path) == 0 then
@@ -32,6 +56,9 @@ function M.get_templates()
   return templates
 end
 
+-- =============================================================================
+-- SECTION: Variable expansion
+-- =============================================================================
 local function expand_variables(lines)
   local new_lines = {}
   local date_str = os.date("%Y-%m-%d")
@@ -45,11 +72,17 @@ local function expand_variables(lines)
   return new_lines
 end
 
+-- =============================================================================
+-- SECTION: Application
+-- =============================================================================
+--- Insert a selected template at the current cursor line.
+--- Expands {{date}} and {{time}} variables before inserting.
+--- Uses Telescope picker if available, vim.ui.select otherwise.
 function M.apply_template()
   local templates = M.get_templates()
   
   if #templates == 0 then
-    vim.notify("No templates found in " .. join_path(config.root_path, config.folders.templates or "templates"), vim.log.levels.WARN)
+    vim.notify("No templates found in " .. utils.join(config.root_path, config.folders.templates or "templates"), vim.log.levels.WARN)
     return
   end
 
@@ -75,7 +108,10 @@ function M.apply_template()
   end
 end
 
--- Add missing export for telescope integration if needed
+--- Stub — intended as a Telescope picker entry point for templates.
+--- Currently empty. See dead code list.
+---@param templates {name:string, path:string}[]
+---@param on_select function
 function M.template_picker(templates, on_select)
     -- This logic is usually inside telescope.lua, but we can keep shared logic here if needed.
     -- For now, the implementation above delegates back to telescope.lua's picker or vim.ui

@@ -1,98 +1,34 @@
--- lua/pkm/init.lua
+-- =============================================================================
+-- pkm.init — Plugin entry point and orchestration
+-- =============================================================================
+-- Dependencies : pkm.config, pkm.utils, and all other pkm.* modules
+-- Consumed by  : Neovim (via plugin/pkm.lua autoload marker)
+--                pkm.commands (via require('pkm') for delete and sync)
+--
+-- This module's only responsibilities are:
+--   1. Resolve config and call setup() on every module
+--   2. Register commands and keymaps
+--   3. Register sync autocmds
+--   4. Hold delete_note_safely() and setup_sync_autocmds() which need
+--      direct access to M.config
+--
+-- Public API:
+--   setup(user_config)         → Initialize the entire plugin
+--   setup_sync_autocmds()      → Register BufWritePost and BufReadPost autocmds
+--   delete_note_safely()       → Confirm, cleanup citations, delete current note
+--   M.config                   → Resolved config table (set by setup())
+-- =============================================================================
 local M = {}
 
-local default_config = {
-  -- Default is nil so we can detect if user provided input
-  root_path = nil,
-  
-  folders = {
-    consolidated = "03-Consolidated",
-    journal = "02-Journal",
-    scratchpad = "01-Scratchpad",
-    templates = "templates",
-  },
-  
-  sync = {
-    enabled = true,
-    auto_sync_on_save = true,
-  },
-
-  frontmatter_templates = {
-    consolidated = {
-      title = "", author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
-      tags = {}, cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
-    },
-    journal = {
-      created_on = "ISO8601", last_updated_on = "ISO8601", author = "",
-      tags = {}, cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
-    },
-    bibliography = {
-      title = "", source_author = "", created_on = "ISO8601", last_updated_on = "ISO8601",
-      cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
-    },
-    scratchpad = {
-      title = "", created_on = "ISO8601", last_updated_on = "ISO8601", 
-      tags = {},
-      cites = {notes = {}, bib = {}, journal = {}, scratch = {}}, cited_by = {notes = {}, bib = {}, journal = {}, scratch = {}},
-    },
-  },
-  
-  timestamp = {
-    default_format = "full",
-    auto_timestamp = true,
-  },
-  
-  user = {
-    name = "",
-    email = "",
-  },
-
-  keymaps = {
-    new_note = "<leader>nn",
-    new_journal = "<leader>nj",
-    new_scratchpad = "<leader>ns",
-    search = "<leader>nf",
-    browse_tags = "<leader>nt",
-    insert_citation = "<leader>nc",
-    goto_citation = "<leader>ng",
-    delete_note = "<leader>nd",
-    link_note = "<leader>nl",
-    follow_link = "gf",
-    backlinks = "<leader>nb",
-    quick_capture = "<leader>nq",
-    import_note = "<leader>ni",
-    convert_note = "<leader>nx",
-    promote_note = "<leader>np",
-  }
-}
-
-M.config = default_config
-
+-- =============================================================================
+-- SECTION: Setup
+-- =============================================================================
+--- Initialize the PKM plugin. Resolves config, calls setup() on all modules,
+--- registers commands and keymaps, and sets up sync autocmds if enabled.
+--- Must be called once from the user's lazy.nvim config function.
+---@param user_config table|nil User config table; merged over defaults by pkm.config.resolve()
 function M.setup(user_config)
-  M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
-
-  -- 1. Path Resolution
-  if not M.config.root_path then
-    M.config.root_path = vim.fn.expand('~/Notes')
-  end
-
-  -- Windows Path Normalization (Convert / to \)
-  if vim.fn.has('win32') == 1 or vim.fn.has('win64') == 1 then
-    M.config.root_path = M.config.root_path:gsub("/", "\\")
-  end
-
-  -- Validation
-  if vim.fn.isdirectory(M.config.root_path) == 0 then
-    vim.notify("PKM Critical: Root path does not exist: " .. M.config.root_path, vim.log.levels.ERROR)
-  else
-    -- Optional debug: vim.notify("PKM Root: " .. M.config.root_path, vim.log.levels.INFO)
-  end
-
-  -- Inject user name
-  if M.config.user and M.config.user.name ~= "" then
-    M.config.frontmatter_templates.consolidated.author = M.config.user.name
-    M.config.frontmatter_templates.journal.author = M.config.user.name
-  end
+  M.config = require('pkm.config').resolve(user_config)
 
   -- Initialize Modules
   require('pkm.timestamp').setup(M.config)
@@ -103,97 +39,19 @@ function M.setup(user_config)
   require('pkm.notes').setup(M.config)
   require('pkm.ui').setup(M.config)
 
-  -- --- COMMANDS ---
-  vim.api.nvim_create_user_command('PKMNewNote', function(opts) 
-    require('pkm.notes').create_new_note(opts.args ~= "" and opts.args or nil) 
-  end, { nargs = "?" })
-  
-  vim.api.nvim_create_user_command('PKMNewJournal', function() 
-    require('pkm.journal').create_entry(true) 
-  end, {})
-  
-  vim.api.nvim_create_user_command('PKMNewScratchpad', function() 
-    require('pkm.notes').create_scratchpad() 
-  end, {})
-  
-  vim.api.nvim_create_user_command('PKMDeleteNote', function() 
-    M.delete_note_safely() 
-  end, {})
-
-  vim.api.nvim_create_user_command('PKMImport', function() 
-      require('pkm.notes').import_note() 
-  end, { desc = "Import current file into PKM system" })
-   
-  vim.api.nvim_create_user_command('PKMToggleAutoSync', function()
-     M.config.sync.auto_sync_on_save = not M.config.sync.auto_sync_on_save
-     local status = M.config.sync.auto_sync_on_save and "enabled" or "disabled"
-     vim.notify("Auto-sync on save: " .. status, vim.log.levels.INFO)
-     vim.api.nvim_clear_autocmds({ group = "PKMSync" })
-     if M.config.sync.enabled then M.setup_sync_autocmds() end
-   end, { desc = "Toggle automatic reference synchronization" })
-
-  vim.api.nvim_create_user_command('PKMConvertNote', function()
-    require('pkm.notes').convert_note()
-  end, { desc = "Convert current note to a different type" })
-  
-  vim.api.nvim_create_user_command('PKMPromote', function()
-    require('pkm.notes').promote_note()
-  end, { desc = "Promote scratchpad to consolidated note or journal" })
-
-  vim.api.nvim_create_user_command('PKMExport', function()
-    require('pkm.export').interactive_export()
-  end, { desc = "Filter notes and copy to a folder" })
-
-  vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
-  vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
-
-  vim.api.nvim_create_user_command('PKMMergeTags', function()
-    local has_tele = pcall(require, 'telescope')
-    if has_tele then
-      require('pkm.telescope').merge_tags_picker()
-    else
-      require('pkm.ui').merge_tags_ui()
-    end
-  end, { desc = "Merge tags across all notes" })
-
-  vim.api.nvim_create_user_command('PKMInsertCitation', function() require('pkm.telescope').insert_citation_picker() end, {})
-  vim.api.nvim_create_user_command('PKMGotoCitation', function() require('pkm.citations').goto_citation() end, {})
-  vim.api.nvim_create_user_command('PKMUpdateReferences', function() require('pkm.citations').update_references() end, {})
-  
-  vim.api.nvim_create_user_command('PKMLinkNote', function() require('pkm.notes').link_to_note() end, {})
-  vim.api.nvim_create_user_command('PKMFollowLink', function() require('pkm.notes').follow_link() end, {})
-  vim.api.nvim_create_user_command('PKMBacklinks', function() require('pkm.notes').show_backlinks() end, {})
-
-  -- --- KEYMAPS ---
-  local k = M.config.keymaps
-  local function map(lhs, cmd, desc)
-    if lhs then vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) end
-  end
-
-  if M.config.keymaps.promote_note then
-    vim.keymap.set('n', M.config.keymaps.promote_note,
-      function() require('pkm.notes').promote_note() end,
-      { noremap = true, silent = true, desc = "PKM: Promote note" })
-  end
-
-  map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")
-  map(k.new_journal, "<cmd>PKMNewJournal<cr>", "New Journal")
-  map(k.new_scratchpad, "<cmd>PKMNewScratchpad<cr>", "New Scratchpad")
-  map(k.delete_note, "<cmd>PKMDeleteNote<cr>", "Delete Note")
-  map(k.search, "<cmd>PKMSearch<cr>", "Search Content")
-  map(k.browse_tags, "<cmd>PKMTags<cr>", "Browse Tags") 
-  map(k.insert_citation, "<cmd>PKMInsertCitation<cr>", "Insert Citation")
-  map(k.goto_citation, "<cmd>PKMGotoCitation<cr>", "Goto Citation")
-  map(k.link_note, "<cmd>PKMLinkNote<cr>", "Link Note")
-  map(k.follow_link, "<cmd>PKMFollowLink<cr>", "Follow Link")
-  map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Backlinks")
-  map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture")
-  map(k.import_note, "<cmd>PKMImport<cr>", "Import Note")
-  map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
-
+  -- Wire commands and keymaps
+  require('pkm.commands').register()
+  require('pkm.keymaps').register(M.config)
   if M.config.sync.enabled then M.setup_sync_autocmds() end
-end
+end 
 
+-- =============================================================================
+-- SECTION: Sync autocmds
+-- =============================================================================
+--- Register BufWritePost and BufReadPost autocmds for the PKMSync augroup.
+--- BufWritePost: updates last_updated_on, syncs filename↔YAML, updates citations.
+--- BufReadPost: syncs YAML title/timestamp when file is opened after external rename.
+--- Only fires for .md files within M.config.root_path.
 function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
   
@@ -229,7 +87,6 @@ function M.setup_sync_autocmds()
         if filepath:find(M.config.folders.consolidated, 1, true) then notes.sync_filename_on_save() end
         if filepath:find(M.config.folders.journal, 1, true) then journal.sync_filename_on_save() end
         
-        -- FIXED: Pass filepath to update references on DISK, so reloading gets everything
         if M.config.sync.auto_sync_on_save then 
             citations.update_references(filepath) 
         end
@@ -248,11 +105,18 @@ function M.setup_sync_autocmds()
       local norm_root = root:gsub("\\", "/")
       if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
       if filepath:find(M.config.folders.consolidated, 1, true) then require('pkm.notes').sync_yaml_on_rename() end
-      if filepath:find(M.config.folders.journal, 1, true) then require('pkm.journal').sync_yaml_on_rename() end
+      -- if filepath:find(M.config.folders.journal, 1, true) then require('pkm.journal').sync_yaml_on_rename() end
     end,
   })
 end
 
+-- =============================================================================
+-- SECTION: Note deletion
+-- =============================================================================
+--- Delete the current note safely: confirms with the user, removes all citation
+--- references across the wiki via cleanup_deleted_note(), deletes the buffer,
+--- then deletes the file from disk.
+--- Only works on files inside M.config.root_path.
 function M.delete_note_safely()
   local filepath = vim.fn.expand("%:p")
   local root = M.config.root_path

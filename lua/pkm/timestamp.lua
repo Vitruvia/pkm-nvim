@@ -1,9 +1,36 @@
--- lua/pkm/timestamp.lua
--- Flexible timestamp handling for PKM system with configurable defaults
-
+-- =============================================================================
+-- pkm.timestamp — Timestamp parsing, formatting, and creation
+-- =============================================================================
+-- Dependencies : none (uses os.date only)
+-- Consumed by  : pkm.journal, pkm.notes, pkm.yaml (via create_frontmatter),
+--                pkm.init (via sync autocmd)
+--
+-- Timestamp table format: {year, month, day, hour?, min?, sec?, format}
+-- format values: "full" | "date_time" | "date_only" | "date_unknown"
+--
+-- Public API:
+--   setup(user_config)               → Initialize with resolved PKM config
+--   parse_timestamp(str)             → timestamp table from filename string
+--   format_timestamp(ts, format?)    → filename-safe string from timestamp table
+--   now(format_override?)            → current time as timestamp table
+--   create_timestamp(force?)         → auto or interactive based on config
+--   create_interactive()             → fully prompt-driven timestamp creation
+--   to_iso8601(ts?)                  → ISO 8601 string for YAML frontmatter
+--   parse_legacy_filename(filename)  → timestamp from old Google Docs format
+--   create_filename(base, ts?, ext?) → full filename string with timestamp
+--   parse_filename(filename)         → (base, ts, ext) from a filename
+--   compare(ts1, ts2)                → -1|0|1 ordering
+--   validate(ts)                     → (boolean, string?) validity check
+--   to_human(ts)                     → human-readable display string
+-- =============================================================================
 local M = {}
+
 local config = {}
 
+-- =============================================================================
+-- SECTION: Setup
+-- =============================================================================
+---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config or {}
   config.timestamp = config.timestamp or {}
@@ -14,7 +41,15 @@ function M.setup(user_config)
   config.timestamp.prompt_on_create = config.timestamp.prompt_on_create or false -- default false
 end
 
---- Parse timestamp from various formats
+-- =============================================================================
+-- SECTION: Parsing
+-- =============================================================================
+--- Parse a timestamp string from a PKM filename into a timestamp table.
+--- Supports four formats: full (YYYY-MM-DD_HH-MM-SS), date_time
+--- (YYYY-MM-DD_HH-MM), date_only (YYYY-MM-DD), date_unknown
+--- (YYYY-MM-DD_99-99-99).
+---@param timestamp_str string
+---@return {year:integer, month:integer, day:integer, hour:integer?, min:integer?, sec:integer?, format:string}|nil
 function M.parse_timestamp(timestamp_str)
   if not timestamp_str then return nil end
   
@@ -84,9 +119,11 @@ function M.parse_timestamp(timestamp_str)
   return nil
 end
 
+-- =============================================================================
+-- SECTION: Formatting
+-- =============================================================================
 --- Format timestamp to string
 function M.format_timestamp(ts, format_type)
-  -- FIXED: Safety check for config
   local default = (config.timestamp and config.timestamp.default_format) or "full"
   format_type = format_type or ts.format or default
   
@@ -112,10 +149,14 @@ function M.format_timestamp(ts, format_type)
   end
 end
 
---- Get current timestamp with default format
+-- =============================================================================
+-- SECTION: Timestamp creation
+-- =============================================================================
+--- Return the current time as a timestamp table.
+---@param format_override string|nil Override the config default format
+---@return table Timestamp table
 function M.now(format_override)
   local date = os.date("*t")
-  -- FIXED: Safety check for config
   local default = (config.timestamp and config.timestamp.default_format) or "full"
   local format = format_override or default
   
@@ -138,7 +179,11 @@ function M.now(format_override)
   return ts
 end
 
---- Create timestamp - uses default or prompts based on config
+--- Create a timestamp using the configured default behavior.
+--- If auto_timestamp is true (default), returns now(). If prompt_on_create
+--- is true or force_interactive is set, prompts interactively.
+---@param force_interactive boolean|nil Force interactive prompt regardless of config
+---@return table|nil Timestamp table, or nil if cancelled
 function M.create_timestamp(force_interactive)
   local auto = true
   if config.timestamp and config.timestamp.auto_timestamp == false then auto = false end
@@ -157,7 +202,9 @@ function M.create_timestamp(force_interactive)
   return M.now()
 end
 
---- Interactive timestamp creation
+--- Interactively prompt for date, then time format (now/custom/unknown/none).
+--- Returns nil if the user cancels or enters an invalid format.
+---@return table|nil Timestamp table
 function M.create_interactive()
   -- Date prompt
   vim.fn.inputsave()
@@ -236,7 +283,14 @@ function M.create_interactive()
   return ts
 end
 
---- Get ISO 8601 formatted timestamp for YAML frontmatter
+-- =============================================================================
+-- SECTION: ISO 8601 conversion
+-- =============================================================================
+--- Convert a timestamp table to an ISO 8601 string for YAML frontmatter.
+--- Includes time component if ts.hour is present; date-only otherwise.
+--- Defaults to current time if ts is nil.
+---@param ts table|nil Timestamp table (default: now())
+---@return string e.g. "2026-05-09T22:17:17" or "2026-05-09"
 function M.to_iso8601(ts)
   ts = ts or M.now()
   
@@ -248,7 +302,13 @@ function M.to_iso8601(ts)
   end
 end
 
---- Convert old Google Docs timestamp format to new format
+-- =============================================================================
+-- SECTION: Filename utilities
+-- =============================================================================
+--- Attempt to extract a date from an old Google Docs-style filename.
+--- Returns a date_only timestamp table or nil if no match.
+---@param filename string
+---@return table|nil
 function M.parse_legacy_filename(filename)
   local year, month, day = filename:match("(%d%d%d%d)%-(%d+)%-(%d+)")
   
@@ -264,7 +324,11 @@ function M.parse_legacy_filename(filename)
   return nil
 end
 
---- Create filename with timestamp
+--- Build a full filename string: base_name + "_" + formatted timestamp + extension.
+---@param base_name string Prefix e.g. "journal" or "scratch"
+---@param ts table|nil Timestamp table (default: now())
+---@param extension string|nil File extension (default: ".md")
+---@return string
 function M.create_filename(base_name, ts, extension)
   ts = ts or M.now()
   extension = extension or ".md"
@@ -273,7 +337,10 @@ function M.create_filename(base_name, ts, extension)
   return base_name .. "_" .. timestamp_str .. extension
 end
 
---- Parse filename with timestamp
+--- Split a filename into its base name, timestamp, and extension.
+--- Returns the original filename as base and nil timestamp if no match.
+---@param filename string
+---@return string base, table|nil ts, string ext
 function M.parse_filename(filename)
   local name, ext = filename:match("^(.+)(%.%w+)$")
   if not name then
@@ -292,7 +359,15 @@ function M.parse_filename(filename)
   return base, ts, ext
 end
 
---- Compare two timestamps
+-- =============================================================================
+-- SECTION: Comparison and validation
+-- =============================================================================
+--- Compare two timestamp tables.
+--- Compares year, month, day, then time components if present.
+--- A timestamp with time is considered later than one without (same date).
+---@param ts1 table
+---@param ts2 table
+---@return integer -1 if ts1 < ts2, 0 if equal, 1 if ts1 > ts2
 function M.compare(ts1, ts2)
   if ts1.year ~= ts2.year then
     return ts1.year < ts2.year and -1 or 1
@@ -331,7 +406,10 @@ function M.compare(ts1, ts2)
   return 0
 end
 
---- Check if timestamp is valid
+--- Validate that a timestamp table has valid date and time components.
+---@param ts table
+---@return boolean valid
+---@return string|nil error_message
 function M.validate(ts)
   if not ts.year or not ts.month or not ts.day then
     return false, "Missing date components"
@@ -370,7 +448,10 @@ function M.validate(ts)
   return true
 end
 
---- Get human-readable timestamp
+--- Format a timestamp as a human-readable display string.
+--- Examples: "2026-05-09 at 22:17:17", "2026-05-09", "2026-05-09 (time unknown)"
+---@param ts table
+---@return string
 function M.to_human(ts)
   local date_str = string.format("%04d-%02d-%02d", ts.year, ts.month, ts.day)
   

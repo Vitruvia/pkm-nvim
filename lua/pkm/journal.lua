@@ -1,36 +1,46 @@
--- lua/pkm/journal.lua
--- Enhanced journal management with timestamp-filename bidirectional sync
--- FIXED: Remove duplicate date header, auto-use current time by default
-
+-- =============================================================================
+-- pkm.journal — Journal entry creation, navigation, and sync
+-- =============================================================================
+-- Dependencies : pkm.yaml, pkm.utils, pkm.timestamp, pkm.citations (lazy)
+-- Consumed by  : pkm.commands, pkm.keymaps, pkm.init (autocmds)
+--
+-- Public API:
+--   setup(user_config)                    → Initialize with resolved PKM config
+--   create_entry(use_current?)            → Create journal entry (default: now)
+--   create_entry_custom()                 → Create entry with interactive timestamp
+--   rename_from_yaml(filepath, iso)       → Rename file to match created_on timestamp
+--   sync_filename_on_save()               → Sync filename to created_on on BufWritePost
+--   sync_yaml_on_rename()                 → Sync YAML timestamp to filename on BufReadPost
+--   find_by_date_range(start, end)        → Return entries within a date range
+--   list_recent(count?)                   → Show picker of N most recent entries
+--   find_by_tag(tag)                      → Return entries matching a tag
+--   get_all_tags()                        → table<tag, count> for journal folder only
+-- =============================================================================
 local M = {}
+
+local utils = require('pkm.utils')
 local config = {}
 local yaml = nil
 local timestamp = nil
-local path_sep = package.config:sub(1, 1)
 
+-- =============================================================================
+-- SECTION: Setup
+-- =============================================================================
+---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config
   yaml = require('pkm.yaml')
   timestamp = require('pkm.timestamp')
 end
 
---- Cross-platform path joining
-local function join_path(...)
-  local parts = {...}
-  return table.concat(parts, path_sep)
-end
-
---- Ensure directory exists
-local function ensure_dir(path)
-  if vim.fn.isdirectory(path) == 0 then
-    return vim.fn.mkdir(path, "p") == 1
-  end
-  return true
-end
-
---- Create a new journal entry
---- FIXED: Default to current time, removed duplicate markdown header
---- @param use_current boolean|nil Use current time (default: true)
+-- =============================================================================
+-- SECTION: Entry creation
+-- =============================================================================
+--- Create a new journal entry. Defaults to the current time.
+--- When use_current is false, prompts interactively for timestamp, tags,
+--- and location. If a file already exists for the timestamp, opens it instead.
+---@param use_current boolean|nil Use current time (default: true)
+---@return string|nil filepath Absolute path of created or opened entry
 function M.create_entry(use_current)
   if use_current == nil then
     use_current = true
@@ -52,10 +62,10 @@ function M.create_entry(use_current)
   -- Generate filename
   local filename = timestamp.create_filename("journal", ts, ".md")
   
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  ensure_dir(journal_path)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  utils.ensure_dir(journal_path)
   
-  local filepath = join_path(journal_path, filename)
+  local filepath = utils.join(journal_path, filename)
   
   -- Check if file exists
   if vim.fn.filereadable(filepath) == 1 then
@@ -120,15 +130,22 @@ function M.create_entry(use_current)
   return filepath
 end
 
---- Create journal with custom time (explicit command)
+--- Create a journal entry with an interactively chosen timestamp.
+--- Convenience wrapper around create_entry(false).
+---@return string|nil filepath
 function M.create_entry_custom()
   return M.create_entry(false)
 end
 
---- Rename journal file based on the YAML created_on timestamp
---- @param filepath string Current file path
---- @param iso_timestamp string The ISO8601 timestamp from the YAML
---- @return string|nil New filepath if renamed
+-- =============================================================================
+-- SECTION: Filename-YAML synchronization
+-- =============================================================================
+--- Rename a journal file to match its created_on YAML timestamp.
+--- Converts ISO8601 format to filename format (colons → dashes, T → underscore).
+--- Propagates the rename through citations via update_references_on_rename.
+---@param filepath string Current absolute path of the journal file
+---@param iso_timestamp string ISO8601 timestamp string from created_on field
+---@return string|nil new_filepath New absolute path if renamed, nil if unchanged or failed
 function M.rename_from_yaml(filepath, iso_timestamp)
   local dir = vim.fn.fnamemodify(filepath, ":h")
 
@@ -136,17 +153,14 @@ function M.rename_from_yaml(filepath, iso_timestamp)
   local new_timestamp_part = iso_timestamp:gsub("T", "_"):gsub(":", "-")
   
   local new_filename = "journal_" .. new_timestamp_part .. ".md"
-  local new_filepath = join_path(dir, new_filename)
+  local new_filepath = utils.join(dir, new_filename)
   
-  -- ============================ START OF FIX ============================
-  -- Normalize path separators to prevent comparison errors
   local normalized_new = new_filepath:gsub("\\", "/")
   local normalized_current = filepath:gsub("\\", "/")
 
   if normalized_new == normalized_current then
-    return nil -- No change needed
+    return nil
   end
-  -- ============================= END OF FIX =============================
   
   if vim.fn.filereadable(new_filepath) == 1 then
     vim.notify("Cannot rename: file already exists: " .. new_filename, vim.log.levels.ERROR)
@@ -169,7 +183,9 @@ function M.rename_from_yaml(filepath, iso_timestamp)
   end
 end
 
---- Sync filename when timestamp in YAML changes
+--- Called on BufWritePost. Reads created_on from the current buffer's
+--- frontmatter and renames the file if the timestamp has changed.
+--- Journal folder only.
 function M.sync_filename_on_save()
   local filepath = vim.fn.expand("%:p")
   
@@ -189,77 +205,83 @@ function M.sync_filename_on_save()
   M.rename_from_yaml(filepath, frontmatter.created_on)
 end
 
---- Update YAML timestamp when file is renamed externally
+--- Called on BufReadPost. Reads the filename timestamp and updates the
+--- YAML date and time fields if they differ. Journal folder only.
 function M.sync_yaml_on_rename()
-  local filepath = vim.fn.expand("%:p")
-  
-  -- Only process journal files
-  if not filepath:find(config.folders.journal, 1, true) then
     return
-  end
-  
-  local filename = vim.fn.fnamemodify(filepath, ":t:r")
-  local _, timestamp_str = filename:match("^(.+)_(.+)$")
-  
-  if not timestamp_str then
-    return
-  end
-  
-  -- Parse timestamp from filename
-  local ts = timestamp.parse_timestamp(timestamp_str)
-  if not ts then
-    return
-  end
-  
-  -- Update YAML
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, content_start = yaml.parse_frontmatter(lines)
-  
-  if not frontmatter then
-    return
-  end
-  
-  local file_date = timestamp.format_timestamp(ts, "date_only")
-  local file_time = nil
-  if ts.hour then
-    if ts.sec then
-      file_time = string.format("%02d-%02d-%02d", ts.hour, ts.min, ts.sec)
-    else
-      file_time = string.format("%02d-%02d", ts.hour, ts.min)
-    end
-  end
-  
-  -- Check if update needed
-  local yaml_changed = false
-  if frontmatter.date ~= file_date then
-    frontmatter.date = file_date
-    yaml_changed = true
-  end
-  
-  if file_time and frontmatter.time ~= file_time then
-    frontmatter.time = file_time
-    yaml_changed = true
-  end
-  
-  if yaml_changed then
-    yaml.save_frontmatter(frontmatter, content_start)
-    vim.notify("Updated timestamp in YAML to match filename", vim.log.levels.INFO)
-  end
+--  local filepath = vim.fn.expand("%:p")
+--  
+--  -- Only process journal files
+--  if not filepath:find(config.folders.journal, 1, true) then
+--    return
+--  end
+--  
+--  local filename = vim.fn.fnamemodify(filepath, ":t:r")
+--  local timestamp_str = filename:match("^journal_(.+)$")
+--  
+--  if not timestamp_str then
+--    return
+--  end
+--  
+--  -- Parse timestamp from filename
+--  local ts = timestamp.parse_timestamp(timestamp_str)
+--  if not ts then
+--    return
+--  end
+--  
+--  -- Update YAML
+--  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+--  local frontmatter, content_start = yaml.parse_frontmatter(lines)
+--  
+--  if not frontmatter then
+--    return
+--  end
+--  
+--  local file_date = timestamp.format_timestamp(ts, "date_only")
+--  local file_time = nil
+--  if ts.hour then
+--    if ts.sec then
+--      file_time = string.format("%02d-%02d-%02d", ts.hour, ts.min, ts.sec)
+--    else
+--      file_time = string.format("%02d-%02d", ts.hour, ts.min)
+--    end
+--  end
+--  
+--  -- Check if update needed
+--  local yaml_changed = false
+--  if frontmatter.date ~= file_date then
+--    frontmatter.date = file_date
+--    yaml_changed = true
+--  end
+--  
+--  if file_time and frontmatter.time ~= file_time then
+--    frontmatter.time = file_time
+--    yaml_changed = true
+--  end
+--  
+--  if yaml_changed then
+--    yaml.save_frontmatter(frontmatter, content_start)
+--    vim.notify("Updated timestamp in YAML to match filename", vim.log.levels.INFO)
+--  end
 end
 
---- Find journal entries by date range
---- @param start_date table Start timestamp
---- @param end_date table End timestamp
---- @return table Array of journal entries
+-- =============================================================================
+-- SECTION: Querying and navigation
+-- =============================================================================
+--- Return all journal entries whose timestamps fall within a date range.
+--- Entries are sorted newest first. Either bound may be nil (open range).
+---@param start_date table|nil Timestamp table (from pkm.timestamp)
+---@param end_date table|nil Timestamp table (from pkm.timestamp)
+---@return {path:string, timestamp:table, display:string}[]
 function M.find_by_date_range(start_date, end_date)
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  local files = vim.fn.glob(journal_path .. path_sep .. "journal_*.md", false, true)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  local files = vim.fn.glob(journal_path .. utils.sep .. "journal_*.md", false, true)
   
   local entries = {}
   
   for _, file in ipairs(files) do
     local filename = vim.fn.fnamemodify(file, ":t:r")
-    local _, ts_str = filename:match("^(.+)_(.+)$")
+    local ts_str = filename:match("^journal_(.+)$")
     
     if ts_str then
       local ts = timestamp.parse_timestamp(ts_str)
@@ -298,19 +320,19 @@ function M.find_by_date_range(start_date, end_date)
   return entries
 end
 
---- List recent journal entries
---- @param count number Number of entries to return
+--- Show a vim.ui.select picker of the N most recent journal entries.
+---@param count integer|nil Number of entries to show (default: 10)
 function M.list_recent(count)
   count = count or 10
   
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  local files = vim.fn.glob(journal_path .. path_sep .. "journal_*.md", false, true)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  local files = vim.fn.glob(journal_path .. utils.sep .. "journal_*.md", false, true)
   
   local entries = {}
   
   for _, file in ipairs(files) do
     local filename = vim.fn.fnamemodify(file, ":t:r")
-    local _, ts_str = filename:match("^(.+)_(.+)$")
+    local ts_str = filename:match("^journal_(.+)$")
     
     if ts_str then
       local ts = timestamp.parse_timestamp(ts_str)
@@ -352,12 +374,13 @@ function M.list_recent(count)
   end)
 end
 
---- Find journal entries by tag
---- @param tag string Tag to search for
---- @return table Array of entries
+--- Return all journal entries that carry a specific tag (case-insensitive).
+--- Sorted newest first when timestamps are available.
+---@param tag string Tag to search for
+---@return {path:string, timestamp:table|nil, display:string}[]
 function M.find_by_tag(tag)
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  local files = vim.fn.glob(journal_path .. path_sep .. "journal_*.md", false, true)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  local files = vim.fn.glob(journal_path .. utils.sep .. "journal_*.md", false, true)
   
   local entries = {}
   
@@ -369,7 +392,7 @@ function M.find_by_tag(tag)
       for _, entry_tag in ipairs(frontmatter.tags) do
         if entry_tag:lower() == tag:lower() then
           local filename = vim.fn.fnamemodify(file, ":t:r")
-          local _, ts_str = filename:match("^(.+)_(.+)$")
+          local ts_str = filename:match("^journal_(.+)$")
           local ts = ts_str and timestamp.parse_timestamp(ts_str)
           
           table.insert(entries, {
@@ -393,11 +416,13 @@ function M.find_by_tag(tag)
   return entries
 end
 
---- Get all tags from journal entries
---- @return table Map of tag -> count
+--- Collect tag usage counts across all journal entries.
+--- Note: this scans the journal folder only. For wiki-wide tags use
+--- citations.get_all_tags() instead.
+---@return table<string, integer> Map of tag string to occurrence count
 function M.get_all_tags()
-  local journal_path = join_path(config.root_path, config.folders.journal)
-  local files = vim.fn.glob(journal_path .. path_sep .. "journal_*.md", false, true)
+  local journal_path = utils.join(config.root_path, config.folders.journal)
+  local files = vim.fn.glob(journal_path .. utils.sep .. "journal_*.md", false, true)
   
   local tag_counts = {}
   

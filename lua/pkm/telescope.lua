@@ -1,5 +1,27 @@
--- lua/pkm/telescope.lua
+-- =============================================================================
+-- pkm.telescope — Telescope pickers for notes, tags, citations, and export
+-- =============================================================================
+-- Dependencies : pkm.citations, telescope.nvim (required at module load time)
+-- Consumed by  : pkm.commands
+--
+-- WARNING: This module checks Telescope availability at LOAD TIME (top-level
+-- pcall) and returns an empty M if unavailable. This differs from the
+-- call-time check pattern used elsewhere (notes.lua, keymaps.lua) and is
+-- fragile under Lazy.nvim deferred loading. See changelog known bugs.
+--
+-- If Telescope is not installed, the module returns {} silently. Commands
+-- in commands.lua that call this module directly (PKMSearch, PKMTags) will
+-- error in that case. See changelog for the missing fallback bug.
+--
+-- Public API (only available when Telescope is loaded):
+--   insert_citation_picker()  → fuzzy citation picker, inserts on select
+--   browse_tags()             → tag list → ripgrep by tag
+--   find_notes()              → telescope find_files over PKM root
+--   search_notes()            → telescope live_grep over PKM root (requires rg)
+--   merge_tags_picker()       → 3-step: pick target, multi-select sources, confirm
+-- =============================================================================
 local M = {}
+
 local citations = require('pkm.citations')
 local has_telescope, telescope = pcall(require, 'telescope')
 
@@ -12,6 +34,9 @@ local actions = require('telescope.actions')
 local action_state = require('telescope.actions.state')
 local builtin = require('telescope.builtin')
 
+-- =============================================================================
+-- SECTION: Helpers
+-- =============================================================================
 local function check_ripgrep()
   if vim.fn.executable("rg") == 0 then
     vim.notify("PKM Error: 'rg' (Ripgrep) not found. Please install it.", vim.log.levels.ERROR)
@@ -20,7 +45,11 @@ local function check_ripgrep()
   return true
 end
 
--- 1. Insert Citation Picker
+-- =============================================================================
+-- SECTION: Citation picker
+-- =============================================================================
+--- Fuzzy picker over all citable notes. Inserts citation token at cursor on select.
+--- Calls citations.complete_insertion() which also triggers update_references().
 function M.insert_citation_picker()
   local items = citations.get_citable_items_list()
   
@@ -50,7 +79,11 @@ function M.insert_citation_picker()
   }):find()
 end
 
--- 2. Browse Tags Picker
+-- =============================================================================
+-- SECTION: Tag and note browsing
+-- =============================================================================
+--- Show all tags in a picker. On select, runs ripgrep for that tag across the
+--- PKM root using telescope builtin.grep_string. Requires ripgrep.
 function M.browse_tags()
   if not check_ripgrep() then return end
   
@@ -85,7 +118,7 @@ function M.browse_tags()
   }):find()
 end
 
--- 3. Find Note Files (by filename)
+--- Open telescope find_files over the PKM root. Searches by filename only.
 function M.find_notes()
   builtin.find_files({
     prompt_title = "Find Notes (Filename)",
@@ -95,7 +128,8 @@ function M.find_notes()
   })
 end
 
--- 4. Search Note Content (Live Grep)
+--- Open telescope live_grep over the PKM root. Searches note body content.
+--- Requires ripgrep. Filters to *.md files only.
 function M.search_notes()
   if not check_ripgrep() then return end
 
@@ -116,10 +150,13 @@ function M.search_notes()
   })
 end
 
--- 5. Merge Tags Picker
--- Step 1: pick TARGET (single select).
--- Step 2: pick SOURCE tags (multi-select with <Tab>).
--- Step 3: confirm and execute.
+-- =============================================================================
+-- SECTION: Tag merging
+-- =============================================================================
+--- Three-step tag merge UI:
+---   Step 1 — pick TARGET tag (single select)
+---   Step 2 — pick SOURCE tags (multi-select with Tab)
+---   Step 3 — confirm via vim.fn.confirm, then call citations.merge_tags()
 function M.merge_tags_picker()
   local citations_mod = require('pkm.citations')
   local all_tags = citations_mod.get_all_tags()
