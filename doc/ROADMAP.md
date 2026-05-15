@@ -23,9 +23,6 @@ Notes are plain markdown files with YAML frontmatter. Consolidated notes carry s
 citations that create bidirectional links automatically. The system is local-first,
 cross-platform, and Vim-native.
 
-Alternative PKM modes and multi-wiki support are **distant future ideas** — not current
-goals. Do not design toward these unless explicitly asked.
-
 ---
 
 ## Current State
@@ -39,20 +36,23 @@ goals. Do not design toward these unless explicitly asked.
 - ✅ Flexible timestamp system (`full`, `date_time`, `date_only`)
 - ✅ Filename ↔ YAML title synchronization
 - ✅ Note promotion: scratchpad → consolidated or journal
-- ✅ Note conversion between types
+- ✅ Note conversion between types within folder (:PKMConvertNote)
+- ✅ Note transposition between folders (:PKMTranspose)
+- ✅ Note type change within consolidated folder (:PKMChangeType)
 - ✅ Import existing files into PKM structure
 - ✅ Citation cleanup (removes stale references when notes are deleted)
 - ✅ Tag merging across all notes
-- ✅ Telescope integration: note search, tag browser, citation picker
-- ✅ Export utility: filter notes by tag/title/body text, copy to folder (`:PKMExport`)
-- ✅ Statistics window (`:PKMStats`)
+- ✅ Telescope integration: note search, tag browser, citation picker, tag merge
+- ✅ Export utility: filter notes by tag/title/body text, copy to folder (:PKMExport)
+- ✅ Statistics window (:PKMStats)
 - ✅ Cross-platform: Windows, WSL, Linux, macOS
 
 **Known limitations:**
-- ⚠️ Single wiki only (multi-wiki is distant future)
+- ⚠️ Single wiki only
 - ⚠️ No preview system
 - ⚠️ No image embedding or visualization support
-- ⚠️ Export filter groups are AND-only across fields (no cross-field OR)
+- ⚠️ Export filter groups AND-only across fields (no cross-field OR yet)
+- ⚠️ quick_capture keymap unreachable (mapped to wrong command)
 
 ---
 
@@ -60,92 +60,122 @@ goals. Do not design toward these unless explicitly asked.
 
     pkm.nvim/
     ├── lua/pkm/
-    │   ├── init.lua        # Orchestration only: calls setup on all modules, wires commands/keymaps/autocmds
-    │   ├── config.lua      # Default config table and resolution logic (pure data, no side effects)
-    │   ├── utils.lua       # Shared cross-platform utilities: path joining, OS flags, notify
-    │   ├── commands.lua    # All :PKM* command registration (handlers require modules lazily)
-    │   ├── keymaps.lua     # All keymap wiring (receives resolved config as parameter)
-    │   ├── yaml.lua        # YAML frontmatter parsing and generation — complex, handle carefully
+    │   ├── init.lua        # Orchestration only: setup, commands, keymaps, autocmds
+    │   ├── config.lua      # Default config table and resolution logic (pure data)
+    │   ├── utils.lua       # Shared cross-platform utilities
+    │   ├── commands.lua    # All :PKM* command registration (lazy handlers)
+    │   ├── keymaps.lua     # All keymap wiring (receives resolved config)
+    │   ├── yaml.lua        # YAML frontmatter parsing and generation — handle carefully
     │   ├── timestamp.lua   # Timestamp creation, parsing, formatting
-    │   ├── citations.lua   # Bidirectional citation engine, tag indexing, citable item map
-    │   ├── notes.lua       # Note creation, conversion, promotion, linking, filename-YAML sync
-    │   ├── journal.lua     # Journal entry creation, journal-specific filename-YAML sync
-    │   ├── ui.lua          # Fallback UI: stats window, tag browser, search (no Telescope)
+    │   ├── citations.lua   # Bidirectional citation engine, tag indexing
+    │   ├── notes.lua       # Note creation, conversion, promotion, navigation
+    │   ├── journal.lua     # Journal entry creation, filename-YAML sync
+    │   ├── ui.lua          # Fallback UI: stats, tag browser, search (no Telescope)
     │   ├── telescope.lua   # Telescope pickers: search, tags, citations, tag merge
     │   ├── templates.lua   # Template application to notes
-    │   └── export.lua      # Note filtering and copy utility (read-only, no setup() needed)
+    │   └── export.lua      # Note filtering and copy utility (read-only)
     ├── plugin/pkm.lua      # Auto-load marker
     ├── doc/
     │   ├── pkm.txt         # Vim help documentation
     │   ├── PKM_ROADMAP.md  # This file
     │   ├── LLM_CONTEXT.md  # Fast-read session brief for LLMs
-    │   └── CHANGELOG.md    # Session history
-    ├── tests/              # Test files
+    │   └── CHANGELOG.md    # Version history and known bugs
+    ├── tests/
     └── README.md
 
 ---
 
 ## Module Responsibilities
 
-**init.lua** — pure orchestration. Calls `setup()` on every module, then calls
-`commands.register()`, `keymaps.register(config)`, and `setup_sync_autocmds()`.
-Also holds `delete_note_safely()` and `setup_sync_autocmds()` as these need
-direct access to `M.config`.
+**init.lua** — pure orchestration. Calls `setup()` on every module, registers commands
+and keymaps, sets up sync autocmds. Holds `delete_note_safely()` and
+`setup_sync_autocmds()` which need direct access to `M.config`.
 
-**config.lua** — pure data. Holds the default config table and `resolve(user_config)`,
-which merges defaults with user input, resolves paths, validates, and injects author
-into templates. No side effects.
+**config.lua** — pure data. Default config table and `resolve(user_config)`. No side
+effects.
 
-**utils.lua** — shared utilities. `utils.join(...)`, `utils.sep`, `utils.normalize(path)`,
-`utils.ensure_dir(path)`, `utils.is_windows`, `utils.is_wsl`. No setup() needed.
+**utils.lua** — shared utilities. `join()`, `sep`, `normalize()`, `ensure_dir()`,
+`is_windows`, `is_wsl`. No setup() needed.
 
-**commands.lua** — registers all `:PKM*` user commands. Handlers use lazy `require`
-inside each callback. References to `init.lua` functions go through `require('pkm')`.
+**commands.lua** — registers all `:PKM*` user commands. Handlers use lazy `require`.
+References to init.lua functions go through `require('pkm')`.
 
-**keymaps.lua** — registers all `<leader>` keymaps. Receives `config` as a parameter
+**keymaps.lua** — registers all `<leader>` keymaps. Receives `config` as parameter
 to `register(config)` because it needs keymap strings at registration time.
 
-**yaml.lua** — parse and generate YAML frontmatter. Contains a non-trivial parser
-handling nested empty structures. **Do not modify without strong justification.**
+**yaml.lua** — parse and generate YAML frontmatter. Contains a non-trivial parser.
+**Do not modify without strong justification.**
 
 **timestamp.lua** — timestamps in multiple formats; creates filenames; parses existing
 timestamps.
 
-**citations.lua** — bidirectional citation sync; `get_all_tags()`, `get_file_tags(path)`,
-`get_citable_items_map()`, `merge_tags(sources, target)`.
+**citations.lua** — bidirectional citation sync; tag indexing; `get_citable_items_map()`;
+`merge_tags()`.
 
-**notes.lua** — all note file operations: create, convert, promote, import, link,
-follow link, backlinks, filename-YAML sync.
+**notes.lua** — all note file operations: create, convert, transpose, change type,
+promote, import, link, follow link, backlinks, filename-YAML sync.
 
-**journal.lua** — journal creation (auto-timestamped by default); journal-specific
-filename-YAML sync.
+**journal.lua** — journal creation; journal-specific filename-YAML sync.
 
-**ui.lua** — fallback UI for stats, search, and tag browsing when Telescope is absent.
-`show_stats()` is the implementation behind `:PKMStats`.
+**ui.lua** — fallback UI for stats, search, tag browsing when Telescope is absent.
 
-**telescope.lua** — all Telescope pickers. Checks availability at call time (not load
-time — critical for Lazy.nvim).
+**telescope.lua** — all Telescope pickers. Checks availability at call time (critical
+for Lazy.nvim). Returns empty module if Telescope unavailable at load time (known issue).
 
-**export.lua** — filter notes by frontmatter fields and body text; copy matches to a
-destination folder. No `setup()`. Never modifies note files.
+**templates.lua** — template application to notes. Template picker is currently a stub.
+
+**export.lua** — filter notes by frontmatter fields and body text; copy to destination.
+No `setup()`. Never modifies note files.
 
 ---
 
 ## Development Roadmap
 
-### Next: Code Quality (In Progress)
+### Near Term (queued bugs and improvements)
 
-- [ ] Module API header blocks (one per file)
-- [ ] LuaDoc annotations on all exported functions
-- [ ] Section separators inside large files (citations.lua, notes.lua)
+Bugs and improvements queued for the next development cycle are tracked in
+`doc/CHANGELOG.md` under Known Bugs and Dead Code. Check there before starting
+any session.
 
-### Phase 1: Multi-Wiki System (Future)
+Current priority items:
+- Fix rename-from-inside-note requiring manual `e!`
+- Fix greedy timestamp pattern in journal.lua querying functions
+- Add Telescope fallback to PKMSearch and PKMTags
+- Fix quick_capture keymap calling wrong command
+- Fix telescope.lua load-time Telescope check
+- Fix templates.lua silent failure when Telescope is loaded
+- Remove identified dead code
 
-Support multiple independent wikis with citation permissions. Not a current goal.
+### Export improvements
+- Two filter groups connected by OR (cross-field OR queries)
+- Tag picker in the export form (select from existing tags via Telescope)
 
-### Phase 2: Preview System (Future)
+### Preview system (mid-term)
+Browser-based live preview with Markdown + LaTeX (MathJax) rendering. WebSocket
+live updates on save. Cross-platform browser opening. Terminal fallback (glow/mdcat).
+**Not a current goal — do not design toward it until explicitly asked.**
 
-Browser-based live preview with LaTeX and Markdown rendering. Not a current goal.
+### Image and visualization support (mid-term)
+Embed images in notes with normalized paths. Possibly inline rendering in terminal
+(kitty/iterm2 protocols). Mermaid diagram support in preview.
+**Not a current goal.**
+
+### Multi-wiki support (distant future)
+Multiple independent note collections with configurable citation permissions between
+them. Would be added as an opt-in configuration layer without breaking the
+single-wiki default. The current architecture (single `root_path`, module-level
+`config` tables) would need refactoring to support multiple configs simultaneously.
+**Not a current goal — do not design toward it until explicitly asked.**
+
+### Alternative PKM modes (distant future)
+Selectable workflow configurations: Obsidian-style (backlink graph focus),
+pure Zettelkasten (ID-based linking), etc. Would not change the default behavior.
+**Not a current goal.**
+
+### Non-flat citation structure (undecided)
+The current flat grouped structure (`cites: {notes, bib, journal, scratch}`) may be
+sufficient permanently. Hierarchical or categorized citations are a possible future
+direction. **Do not change the citation structure without explicit discussion.**
 
 ---
 
@@ -178,6 +208,10 @@ Branches: `feat/<name>`, `fix/<name>`
 
 ## Knowledge Base
 
+### Primary sources
 - Neovim docs: https://neovim.io/doc/
-- Lua docs: https://www.lua.org/docs.html
+- Lua manual: https://www.lua.org/manual/5.4/
+- Programming in Lua: https://www.lua.org/pil/
+
+### Others
 - LuaRocks style guide: https://github.com/luarocks/lua-style-guide
