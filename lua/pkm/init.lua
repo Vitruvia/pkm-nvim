@@ -44,6 +44,8 @@ function M.setup(user_config)
   require('pkm.keymaps').register(M.config)
   if M.config.sync.enabled then M.setup_sync_autocmds() end
 end 
+  -- Activate index
+  require('pkm.index').setup(M.config)
 
 -- =============================================================================
 -- SECTION: Sync autocmds

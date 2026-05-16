@@ -17,19 +17,43 @@
   - `filter.from_legacy(tbl)` → `tree | nil` — converts the old `export.lua`
     filter table `{tags_any, tags_all, title, text}` into a tree for backward
     compatibility.
-- `lua/pkm/bench.lua` — developer benchmarking and load-testing utilities.
-  Not user-facing; no commands registered.
-  - `bench.time(fn)` → elapsed ms (float) via `vim.uv.hrtime()` (nanosecond
-    resolution).
-  - `bench.gen_notes(n, dest)` — writes n synthetic consolidated `.md` notes
-    to dest with realistic frontmatter (title, tags, timestamps, citation
-    structure) and filler body text. Deterministic: fixed seed 42.
-  - `bench.baseline()` — times `scan_and_parse` (readfile + parse_frontmatter)
-    across the real corpus. Run before building `index.lua` to record the
-    pre-index baseline.
-  - `bench.run_suite(bench_dir, extended?)` — timed suite at 100 / 1k / 10k
-    synthetic notes (100k if `extended=true`). Each tier warm-cycled once
-    before timing. Projects 100k cost linearly from the largest measured tier.
+- `lua/pkm/bench.lua` — developer benchmarking utilities. Not user-facing,
+  no commands registered. Fully self-contained: synthetic files are written
+  to a temp directory and deleted after each run by default.
+  - `bench.time(fn)` → elapsed ms (float) via `vim.uv.hrtime()`.
+  - `bench.gen_notes(n, dest)` — write n synthetic consolidated notes with
+    realistic frontmatter and body. Deterministic (seed 42).
+  - `bench.cleanup(bench_dir)` → `vim.fn.delete(dir, 'rf')` — removes all
+    synthetic files. Called automatically by `run_suite` unless `keep=true`.
+  - `bench.baseline()` — Phase 1 raw scan on the real corpus. Read-only.
+  - `bench.run_suite(bench_dir?, opts?)` — four-phase suite over 100/1k/10k
+    synthetic notes (100k if `opts.extended=true`):
+    - Phase 1 (raw scan): readfile + parse_frontmatter — pre-index baseline.
+    - Phase 2 (index build): in-memory table construction — index.rebuild() cost.
+    - Phase 3 (index query): table iteration — post-index get_all() cost.
+    - Phase 4 (filter eval): filter.eval() on every entry — post-index query cost.
+    Each tier warm-cycled once before timing. Cleans up on completion.
+- `lua/pkm/index.lua` — in-memory note index with incremental invalidation.
+  Eliminates the per-query readfile + parse_frontmatter scan (baseline: ~0.25
+  ms/note; projected 27s at 100k notes). Index is built lazily on the first
+  call to get_all() and kept current by a BufWritePost autocmd that
+  re-reads only the saved file.
+  - `index.setup(config)` → store config, register BufWritePost autocmd
+  - `index.get_all()` → `entry[]` — builds on first call, O(n) table iter after
+  - `index.get(path)` → `entry | nil`
+  - `index.invalidate(path)` → re-read one file; remove entry if gone
+  - `index.rebuild()` → full rescan on demand
+  - `index.is_built()` → boolean
+  - Entry shape: `{path, title, tags, body, mtime}`
+- `pkm.init`: added `require('pkm.index').setup(M.config)` call in `setup()`.
+
+### Known Bugs
+- `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
+  malformed paths when bench_dir is a Unix-style path (e.g. `/tmp/pkm_bench`).
+  Files are still created correctly because vim.fn.mkdir/glob tolerate mixed
+  separators on WSL. Fix: accept bench_dir as-is and join subdirs with the
+  correct separator for the path type, or document that bench_dir must use
+  the native separator.   before timing. Projects 100k cost linearly from the largest measured tier.
 
 ### Known Bugs (queued)
 
