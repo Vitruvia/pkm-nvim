@@ -43,10 +43,10 @@ The note namespace is intentionally **flat and global** — all notes share a si
 - ✅ Export utility: filter notes by tag/title/body text, copy to folder (`:PKMExport`)
 - ✅ Statistics window (`:PKMStats`)
 - ✅ Cross-platform: Windows, WSL, Linux, macOS
+- ✅ Filter system with boolean search
+- ✅ Project view system (named saved filters)
 
 **Known limitations:**
-- ⚠️ Filter system is AND-only across fixed fields (no boolean logic, no OR/NOT)
-- ⚠️ No project view system (named saved filters)
 - ⚠️ No in-memory index — filter queries scan all files on every call
 - ⚠️ No preview system
 - ⚠️ No image embedding or visualization support
@@ -76,8 +76,6 @@ pkm.nvim/
 │   ├── telescope.lua   # Telescope pickers: search, tags, citations, tag merge
 │   ├── templates.lua   # Template application to notes
 │   ├── export.lua      # Note filtering and copy utility (read-only, no setup() needed)
-│   │
-│   │   -- PLANNED (Phase 1) --
 │   ├── filter.lua      # Filter expression parser and evaluator (pure logic, no I/O)
 │   ├── index.lua       # In-memory note index with incremental invalidation
 │   ├── views.lua       # Named project views: load from config, activate, list

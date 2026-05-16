@@ -203,6 +203,22 @@ EXPORT~
 
 :PKMExport              Open the export filter form. See |pkm-export|.
 
+VIEWS
+
+:PKMView [name]     Open a named project view. Without a name, presents a
+                    picker of all defined views. Tab-completes view names.
+
+:PKMViews           List all defined project views.
+
+:PKMViewNew         Prompt for a name and filter expression, then save the
+                    view to views.json.
+
+:PKMViewEdit        Open views.json for direct editing. Saving the file
+                    automatically reloads all views.
+
+:PKMViewDelete      Remove a named view from views.json. Tab-completes
+                    view names.
+
 ==============================================================================
 7. CITATIONS                                                   *pkm-citations*
 
@@ -335,6 +351,12 @@ PROGRAMMATIC API~
       email       = "",
       institution = "",
     },
+
+  -- Named project views (optional — prefer :PKMViewNew over editing config)
+  projects = {
+    rpg    = 'tag:rpg AND (title:ringforge OR text:ringforge)',
+    clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
+  },
 
     keymaps = {
       -- Set any value to false to disable that keymap
