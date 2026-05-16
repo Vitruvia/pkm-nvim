@@ -4,15 +4,21 @@ Read this first. It is the fast-read brief. Read PKM_ROADMAP.md for architecture
 
 ---
 
-## Current State (as of 2026-05-09)
+## Current State (as of 2026-05-16)
 
-Stable. All core features work. A structural refactor was just completed.
+Stable. All core features work. Refactor complete. Phase 1 design decisions made.
 
-**Last session:** Extracted `config.lua`, `utils.lua`, `commands.lua`, `keymaps.lua`
-from `init.lua`. All commands and keymaps verified working.
+**Last sessions:**
+- Extracted `config.lua`, `utils.lua`, `commands.lua`, `keymaps.lua` from `init.lua`
+- Added `PKMTranspose`, `PKMChangeType`, cross-folder backlinks, `PKMMergeTags`
+- Decided: project organisation via **views** (saved filter definitions), not multi-wiki
+- Decided: filter system needs full boolean DSL (AND/OR/NOT over tag/title/text)
+- Decided: in-memory index required before filter system is performant at scale
+- `doc/ROADMAP.md` is a stale duplicate — **delete it**; `PKM_ROADMAP.md` is canonical
 
-**Active next steps:** Module API headers, LuaDoc annotations, section separators.
-These are additive — no behavior changes.
+**Active next steps:**
+1. Code quality: module API headers, LuaDoc, section separators (additive, no behavior change)
+2. Phase 1: `filter.lua` → benchmarking baseline → `index.lua` → update `export.lua` → `views.lua`
 
 ---
 
@@ -28,12 +34,16 @@ These are additive — no behavior changes.
 | `yaml.lua` | YAML parse/generate — complex, do not touch lightly |
 | `timestamp.lua` | Timestamp formats, filename generation |
 | `citations.lua` | Bidirectional citation sync, tag index, citable item map |
-| `notes.lua` | Note CRUD, conversion, promotion, linking |
+| `notes.lua` | Note CRUD, conversion, promotion, transposition, linking |
 | `journal.lua` | Journal creation, filename-YAML sync |
-| `ui.lua` | Fallback UI (no Telescope): stats, search, tags |
+| `ui.lua` | Fallback UI (no Telescope): stats, search, tags, merge |
 | `telescope.lua` | All Telescope pickers |
 | `templates.lua` | Template application |
 | `export.lua` | Filter + copy notes — read-only, no setup() |
+| *(planned)* `filter.lua` | Filter expression parser and evaluator — pure logic, no I/O |
+| *(planned)* `index.lua` | In-memory note index with BufWritePost invalidation |
+| *(planned)* `views.lua` | Named project views from config; activate via :PKMView |
+| *(planned)* `bench.lua` | Benchmarking and load-testing utilities |
 
 ---
 
@@ -47,7 +57,9 @@ These are additive — no behavior changes.
 | Never reintroduce `status` field | Intentionally removed |
 | Never use deprecated Neovim APIs | Use `nvim_set_option_value`, `vim.keymap.set` |
 | Never reference `M` from another module | Each file's `M` is its own table; cross-module calls use `require` |
-| Commands that call `init.lua` functions must use `require('pkm')` | `M` in `commands.lua` is not `init.lua`'s `M` |
+| Commands calling `init.lua` must use `require('pkm')` | `M` in `commands.lua` is not `init.lua`'s `M` |
+| Never physically separate notes for project organisation | Projects are views over one namespace; multi-wiki is not a goal |
+| Never optimize `collect_files` without benchmarking first | Baseline measurements are required before any performance work |
 
 ---
 
@@ -71,7 +83,7 @@ Exact substring matching (never fzy):
 Telescope availability (at call time only):
 
     local ok = pcall(require, 'telescope')
-    if ok then ... else ... end
+    if ok then ... else ... fallback ... end
 
 Calling init.lua functions from commands.lua:
 
@@ -104,3 +116,31 @@ Neovim API (0.10+):
     :lua print(vim.inspect(require('pkm').config))
     :messages
     :PKMStats
+
+---
+
+## Environment
+
+| Item | Value |
+|---|---|
+| OS | Windows 10 + WSL (Ubuntu) |
+| Editor | Neovim 0.11.3 |
+| Plugin manager | Lazy.nvim |
+| Plugin path | `P:/Active/pkm-nvim/` (Windows) · `/mnt/p/Active/pkm-nvim/` (WSL) |
+| Notes path | `P:/Notes` (Windows) · `/mnt/p/Notes` (WSL) |
+| Config path | `~/AppData/Local/nvim/` (Windows) · `~/.config/nvim/` (WSL) |
+
+---
+
+## Git Conventions
+
+    <type>: <summary>
+
+    - detail
+
+Types: `feat` `fix` `docs` `refactor` `test` `chore`
+Branches: `feat/<name>`, `fix/<name>`
+
+---
+
+*Update this document when the project state changes.*
