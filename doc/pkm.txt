@@ -32,7 +32,8 @@ The system is built around a three-stage workflow:
   Consolidated →  permanent numbered knowledge base
 
 Notes are plain markdown files. No proprietary formats, no cloud dependency.
-Everything works from the filesystem.
+Everything works from the filesystem. All notes share a single flat namespace
+and a single sequential counter — note numbers are globally unique.
 
 ==============================================================================
 2. REQUIREMENTS                                             *pkm-requirements*
@@ -56,16 +57,6 @@ lazy.nvim: >
   }
 <
 
-packer: >
-  use {
-    'yourusername/pkm.nvim',
-    requires = { 'nvim-telescope/telescope.nvim' },
-    config = function()
-      require('pkm').setup({ root_path = vim.fn.expand('~/Notes') })
-    end,
-  }
-<
-
 ==============================================================================
 4. SETUP                                                           *pkm-setup*
 
@@ -75,23 +66,24 @@ Minimal: >
   })
 <
 
-With user info and keymaps: >
+With user info and custom keymaps: >
   require('pkm').setup({
     root_path = vim.fn.expand('~/Notes'),
     user = {
       name = "Your Name",
     },
     keymaps = {
-      new_note       = "<leader>nn",
-      new_journal    = "<leader>nj",
-      quick_capture  = "<leader>nq",
-      search         = "<leader>nf",
+      new_note        = "<leader>nn",
+      new_journal     = "<leader>nj",
+      quick_capture   = "<leader>nq",
+      search          = "<leader>nf",
       insert_citation = "<leader>nc",
     },
   })
 <
 
 PKM creates the folder structure under root_path on first use.
+Set any keymap value to `false` to disable it.
 
 ==============================================================================
 5. WORKFLOW                                                     *pkm-workflow*
@@ -121,8 +113,8 @@ structured citation. The cited note automatically receives a backlink in its
 `cited_by` frontmatter field. This is maintained bidirectionally.
 
 SEARCH~
-Use |:PKMSearch| to search content, |:PKMTags| to browse by tag, or
-|:PKMFind| to find by filename.
+Use |:PKMSearch| to search note contents (requires ripgrep), or
+|:PKMTags| to browse by tag.
 
 ==============================================================================
 6. COMMANDS                                                     *pkm-commands*
@@ -157,6 +149,14 @@ LIFECYCLE~
 :PKMPromote             Promote a scratchpad to a consolidated note or journal
                         entry. Only available from the scratchpad folder.
 
+:PKMTranspose           Move the current note to a different PKM folder and
+                        convert it to the appropriate type for that folder.
+                        Useful when a note has outgrown its current context.
+
+:PKMChangeType          Change the type of the current consolidated note
+                        between 'note', 'agg', and 'bib'. Renames the file
+                        and updates the frontmatter template fields.
+
 :PKMDeleteNote          Safely delete the current note. Scans all other notes
                         for references to this file and removes them before
                         deletion. Always use this instead of deleting files
@@ -178,10 +178,12 @@ SEARCH & BROWSE~
 
 :PKMSearch              Search note contents using Telescope and ripgrep.
 
-:PKMFind                Find notes by filename using Telescope.
-
 :PKMTags                Browse notes by tag using Telescope. Select a tag,
                         then select a file to open.
+
+:PKMMergeTags           Merge one or more tags into a target tag across all
+                        notes. Uses a three-step Telescope picker (target →
+                        sources → confirm), or a fallback UI without Telescope.
 
 :PKMStats               Open a statistics window showing note counts, top
                         tags, and citation counts.
@@ -197,24 +199,9 @@ CITATIONS~
 :PKMUpdateReferences    Scan the current buffer for citation strings and
                         rebuild the `cites` frontmatter list to match.
 
-:PKMSync                Force a full reference synchronization across all
-                        notes. Also cleans up frontmatter inconsistencies.
-                        Equivalent to running :PKMUpdateReferences on every
-                        file plus cleanup.
-
 EXPORT~
 
 :PKMExport              Open the export filter form. See |pkm-export|.
-
-UTILITIES~
-
-:PKMToggleAutoSync      Toggle automatic reference sync on save.
-
-:PKMValidate            Validate the current file's citation references and
-                        report stale entries.
-
-:PKMCleanupFrontmatter  Remove corrupted or unexpected frontmatter keys from
-                        all notes.
 
 ==============================================================================
 7. CITATIONS                                                   *pkm-citations*
@@ -294,10 +281,9 @@ Matching is exact substring — never fuzzy.
 
 RESULTS PICKER~
 
-After pressing <CR>, matched notes open in a Telescope picker. Type to
-narrow further by exact filename substring. Use <Tab> to select individual
-files for export. Press <CR> to confirm the selection, then enter a
-destination folder path (pre-filled with a timestamped default).
+After pressing <CR>, matched notes open in a Telescope picker (or a
+scrollable float if Telescope is unavailable). Press <CR> to confirm the
+selection, then enter a destination folder path.
 
 PROGRAMMATIC API~
 >
@@ -319,8 +305,8 @@ PROGRAMMATIC API~
 >
   require('pkm').setup({
     -- Path to notes root directory. Required.
-    -- Auto-detects ~/Documents/Notes if omitted.
-    root_path = nil,
+    -- Defaults to ~/Notes if omitted.
+    root_path = vim.fn.expand('~/Notes'),
 
     folders = {
       scratchpad   = "01-Scratchpad",
@@ -351,22 +337,24 @@ PROGRAMMATIC API~
     },
 
     keymaps = {
-      -- Set any key to false or omit to disable
-      new_note        = "<leader>nn",
-      new_journal     = "<leader>nj",
-      new_scratchpad  = "<leader>ns",
-      quick_capture   = "<leader>nq",
-      convert_note    = "<leader>nx",
-      promote_note    = "<leader>np",
-      import_note     = "<leader>ni",
-      delete_note     = "<leader>nd",
-      insert_citation = "<leader>nc",
-      goto_citation   = "<leader>ng",
-      link_note       = "<leader>nl",
-      follow_link     = "gf",
-      backlinks       = "<leader>nb",
-      search          = "<leader>nf",
-      browse_tags     = "<leader>nt",
+      -- Set any value to false to disable that keymap
+      new_note         = "<leader>nn",
+      new_journal      = "<leader>nj",
+      new_scratchpad   = "<leader>ns",
+      quick_capture    = "<leader>nq",
+      convert_note     = "<leader>nx",
+      promote_note     = "<leader>np",
+      transpose_note   = "<leader>nT",
+      change_note_type = "<leader>nC",
+      import_note      = "<leader>ni",
+      delete_note      = "<leader>nd",
+      insert_citation  = "<leader>nc",
+      goto_citation    = "<leader>ng",
+      link_note        = "<leader>nl",
+      follow_link      = "gf",
+      backlinks        = "<leader>nb",
+      search           = "<leader>nf",
+      browse_tags      = "<leader>nt",
     },
   })
 <
@@ -382,6 +370,8 @@ Default keymaps (all overridable via the `keymaps` config table):
   <leader>nq   :PKMQuickCapture
   <leader>nx   :PKMConvertNote
   <leader>np   :PKMPromote
+  <leader>nT   :PKMTranspose
+  <leader>nC   :PKMChangeType
   <leader>ni   :PKMImport
   <leader>nd   :PKMDeleteNote
   <leader>nc   :PKMInsertCitation
@@ -433,12 +423,8 @@ BIBLIOGRAPHY ENTRY~
   ---
   title: ""
   source_author: ""
-  note_author: ""
   created_on: "YYYY-MM-DD_HH-MM-SS"
   last_updated_on: "YYYY-MM-DD_HH-MM-SS"
-  citation: ""
-  source_type: "book"
-  source_location: ""
   tags: []
   cites:
     notes: []
@@ -472,7 +458,7 @@ CONSOLIDATED NOTES~
 
   NNNN_type_Title_Words.md
 
-  NNNN   Four-digit zero-padded sequential number
+  NNNN   Four-digit zero-padded sequential number (globally unique)
   type   One of: note, bib, agg
   Title  Words from the title, joined by underscores, sanitized
 
