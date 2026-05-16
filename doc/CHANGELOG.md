@@ -2,7 +2,34 @@
 
 ---
 
-## [Unreleased]
+## [Unreleased - dev view]
+
+### Added
+- `lua/pkm/filter.lua` — new module: filter expression parser and evaluator.
+  No I/O, no Neovim API calls. Fully testable in isolation.
+  - `filter.parse(expr)` → `tree, nil` | `nil, error_string` — hand-rolled
+    recursive descent parser for the boolean filter DSL (fields: `tag`,
+    `title`, `text`; operators: `AND`, `OR`, `NOT`; parentheses supported;
+    quoted values with spaces supported).
+  - `filter.eval(tree, note)` → `boolean` — evaluates a parsed tree against
+    a note data table `{path, title, tags, body}`. Tag matching is exact
+    (case-insensitive); title and text matching are plain substring.
+  - `filter.from_legacy(tbl)` → `tree | nil` — converts the old `export.lua`
+    filter table `{tags_any, tags_all, title, text}` into a tree for backward
+    compatibility.
+- `lua/pkm/bench.lua` — developer benchmarking and load-testing utilities.
+  Not user-facing; no commands registered.
+  - `bench.time(fn)` → elapsed ms (float) via `vim.uv.hrtime()` (nanosecond
+    resolution).
+  - `bench.gen_notes(n, dest)` — writes n synthetic consolidated `.md` notes
+    to dest with realistic frontmatter (title, tags, timestamps, citation
+    structure) and filler body text. Deterministic: fixed seed 42.
+  - `bench.baseline()` — times `scan_and_parse` (readfile + parse_frontmatter)
+    across the real corpus. Run before building `index.lua` to record the
+    pre-index baseline.
+  - `bench.run_suite(bench_dir, extended?)` — timed suite at 100 / 1k / 10k
+    synthetic notes (100k if `extended=true`). Each tier warm-cycled once
+    before timing. Projects 100k cost linearly from the largest measured tier.
 
 ### Known Bugs (queued)
 
