@@ -36,7 +36,11 @@ local utils = require('pkm.utils')
 -- =============================================================================
 -- SECTION: State
 -- =============================================================================
+-- Normalize path separators for cross-platform key lookup.
+local function norm(p)
+  return p:gsub('\\', '/')
 
+end
 local _index  = {}      -- path → entry table
 local _built  = false   -- true after first full scan
 local _config = nil     -- set by setup()
@@ -156,7 +160,7 @@ local function build()
     for _, path in ipairs(glob_md(dir)) do
       local entry = read_entry(path)
       if entry then
-        _index[path] = entry
+        _index[norm(path)] = entry
       end
     end
   end
@@ -187,7 +191,7 @@ end
 ---@return table|nil entry
 function M.get(path)
   if not _built then build() end
-  return _index[path]
+  return _index[norm(path)]
 end
 
 --- Re-read one file and update its index entry.
@@ -195,16 +199,16 @@ end
 --- Called automatically by the BufWritePost autocmd.
 ---@param path string  Absolute path
 function M.invalidate(path)
+  local key = norm(path)
   if vim.fn.filereadable(path) == 0 then
-    _index[path] = nil
+    _index[key] = nil
     return
   end
-
   local entry = read_entry(path)
   if entry then
-    _index[path] = entry
+    _index[key] = entry
   else
-    _index[path] = nil
+    _index[key] = nil
   end
 end
 

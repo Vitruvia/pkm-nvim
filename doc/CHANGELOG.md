@@ -4,7 +4,6 @@
 
 ## Unreleased
 
-## [1.1.5, dev-view] — 2026-05-16
 
 ### Known Bugs (queued)
 
@@ -50,6 +49,23 @@
   separators on WSL. Fix: accept bench_dir as-is and join subdirs with the
   correct separator for the path type, or document that bench_dir must use
   the native separator.   
+
+### Benchmarks - Post-index integration benchmark (bench_dir on NTFS/WSL, P:
+drive):
+  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
+  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
+  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
+  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
+    filesystem speed, not a regression.
+
+## [1.1.6, dev-view] — 2026-05-16
+
+### Fixed
+- `index.lua`: `get()` and `invalidate()` now normalize path separators
+  (`\` → `/`) before key lookup. Previously, callers passing Unix-style paths
+  on Windows received nil even for indexed files.
+
+## [1.1.5, dev-view] — 2026-05-16
 
 ### Added
 - `lua/pkm/filter.lua` — new module: filter expression parser and evaluator.
