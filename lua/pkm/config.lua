@@ -73,7 +73,7 @@ local defaults = {
   },
 
   projects = {
-      ringforge = 'tag:ringforge',
+      ringforge = 'tag:ringforge AND tag:rpg',
     },
   -- Named project views. Each key is a view name; each value is a filter
   -- expression string. Activated with :PKMView <name>.
