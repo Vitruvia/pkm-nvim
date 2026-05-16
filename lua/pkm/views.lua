@@ -1,26 +1,38 @@
 -- =============================================================================
 -- pkm.views — Named project views over the note index
 -- =============================================================================
--- Dependencies : pkm.filter, pkm.index (lazy)
--- Consumed by  : pkm.commands (:PKMView, :PKMViews)
+-- Dependencies : pkm.filter, pkm.index (lazy), pkm.utils
+-- Consumed by  : pkm.commands (:PKMView, :PKMViews, :PKMViewNew,
+--                :PKMViewEdit, :PKMViewDelete)
 --
--- A view is a named filter expression stored in config.projects. Activating a
--- view runs the filter against the in-memory index and opens the results in a
--- Telescope picker (or a fallback float if Telescope is unavailable).
+-- A view is a named filter expression. Views are stored in views.json at the
+-- PKM root and optionally in config.projects. The sidecar file takes
+-- precedence over config on name collision.
 --
--- Views are read-only projections — they never create, move, or modify notes.
--- The underlying notes remain in the single flat PKM namespace.
+-- views.json lives alongside notes and can be version-controlled with them.
+-- It requires no Neovim config changes to add, edit, or remove views.
 --
--- config.projects format:
---   projects = {
---     rpg    = 'tag:rpg AND (title:ringforge OR text:ringforge)',
---     clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
+-- views.json format:
+--   {
+--     "rpg":    "tag:rpg AND (title:ringforge OR text:ringforge)",
+--     "clinic": "tag:medicine AND tag:protocol AND NOT tag:draft"
 --   }
 --
+-- Loading order:
+--   config.projects  →  base definitions (optional, declared in Lazy config)
+--   views.json       →  overrides config on name collision
+--
+-- Caches are invalidated automatically when views.json is saved from inside
+-- Neovim via a BufWritePost autocmd registered in setup(). External edits
+-- are picked up on the next access after the cache is stale.
+--
 -- Public API:
---   list()            → string[]  sorted view names from config
---   match_all(name)   → string[]  paths matching the named view's filter
---   open(name?)       → open view picker; prompts for name if nil
+--   setup()             → register BufWritePost autocmd for views.json
+--   list()              → string[]  sorted view names (sidecar + config)
+--   match_all(name)     → string[]  paths matching the named view's filter
+--   open(name?)         → activate a view; prompts for name if nil
+--   save(name, expr)    → write or update a view in views.json
+--   delete(name)        → remove a view from views.json
 -- =============================================================================
 
 local M = {}
@@ -28,28 +40,75 @@ local M = {}
 local utils = require('pkm.utils')
 
 -- =============================================================================
--- SECTION: Helpers
+-- SECTION: State
 -- =============================================================================
 
---- Return the resolved PKM config.
----@return table
+local _sidecar_cache = nil   -- table loaded from views.json; nil when stale
+local _tree_cache    = {}    -- name → parsed filter tree
+
+-- =============================================================================
+-- SECTION: Internal helpers — config and sidecar
+-- =============================================================================
+
 local function get_config()
   return require('pkm').config
 end
 
---- Parse and cache filter trees per view name to avoid re-parsing on every call.
-local _tree_cache = {}
+local function sidecar_path()
+  return utils.join(get_config().root_path, 'views.json')
+end
 
---- Return the filter tree for a named view, or nil with an error string.
+--- Load views.json and return its contents as a table.
+--- Returns {} if the file is absent or malformed.
+local function load_sidecar()
+  local path = sidecar_path()
+  if vim.fn.filereadable(path) == 0 then return {} end
+
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok or type(lines) ~= 'table' then return {} end
+
+  local raw = table.concat(lines, '\n')
+  if raw:match('^%s*$') then return {} end
+
+  local ok2, data = pcall(vim.json.decode, raw)
+  if not ok2 or type(data) ~= 'table' then
+    vim.notify('PKMView: views.json is malformed — ignoring', vim.log.levels.WARN)
+    return {}
+  end
+
+  return data
+end
+
+--- Return merged projects: config.projects merged with sidecar, sidecar wins.
+local function get_projects()
+  if not _sidecar_cache then
+    _sidecar_cache = load_sidecar()
+  end
+
+  local merged          = {}
+  local config_projects = get_config().projects or {}
+
+  for k, v in pairs(config_projects) do merged[k] = v end
+  for k, v in pairs(_sidecar_cache)  do merged[k] = v end  -- sidecar wins
+
+  return merged
+end
+
+--- Invalidate sidecar and tree caches.
+local function invalidate()
+  _sidecar_cache = nil
+  _tree_cache    = {}
+end
+
+--- Parse and cache the filter tree for a named view.
 ---@param name string
 ---@return table|nil tree
 ---@return string|nil err
 local function get_tree(name)
   if _tree_cache[name] then return _tree_cache[name], nil end
 
-  local config = get_config()
-  local projects = config.projects
-  if not projects or not projects[name] then
+  local projects = get_projects()
+  if not projects[name] then
     return nil, string.format("PKMView: no view named '%s'", name)
   end
 
@@ -68,26 +127,76 @@ local function get_tree(name)
   return tree, nil
 end
 
+--- Write a views table to views.json in human-readable form.
+--- Keys are sorted alphabetically; one entry per line.
+---@param data table
+---@return boolean success
+local function save_sidecar(data)
+  local path = sidecar_path()
+  local keys = vim.tbl_keys(data)
+  table.sort(keys)
+
+  local lines = { '{' }
+  for i, k in ipairs(keys) do
+    local comma = i < #keys and ',' or ''
+    lines[#lines + 1] = string.format('  %s: %s%s',
+      vim.json.encode(k), vim.json.encode(data[k]), comma)
+  end
+  lines[#lines + 1] = '}'
+
+  local ok, err = pcall(vim.fn.writefile, lines, path)
+  if not ok then
+    vim.notify('PKMView: failed to write views.json — ' .. (err or ''), vim.log.levels.ERROR)
+    return false
+  end
+
+  -- Invalidate immediately; the BufWritePost autocmd will also fire if the
+  -- file is open in a buffer, but we invalidate here too for safety.
+  invalidate()
+  return true
+end
+
 -- =============================================================================
--- SECTION: Public API
+-- SECTION: Setup
 -- =============================================================================
 
---- Return a sorted list of view names defined in config.projects.
+--- Register the BufWritePost autocmd that invalidates caches when views.json
+--- is saved from inside Neovim. Must be called from pkm.init.setup().
+function M.setup()
+  local augroup = vim.api.nvim_create_augroup('PKMViews', { clear = true })
+
+  vim.api.nvim_create_autocmd('BufWritePost', {
+    group    = augroup,
+    pattern  = 'views.json',
+    callback = function()
+      -- Guard: only invalidate for the PKM views.json, not an unrelated file.
+      local written  = vim.fn.expand('<afile>:p'):gsub('\\', '/')
+      local root     = get_config().root_path:gsub('\\', '/')
+      local expected = root:gsub('[/\\]+$', '') .. '/views.json'
+      if written:lower() == expected:lower() then
+        invalidate()
+        vim.notify('PKMView: views reloaded from views.json', vim.log.levels.INFO)
+      end
+    end,
+  })
+end
+
+-- =============================================================================
+-- SECTION: Public API — read
+-- =============================================================================
+
+--- Return a sorted list of all view names (sidecar + config.projects merged).
 ---@return string[]
 function M.list()
-  local config = get_config()
-  local projects = config.projects
-  if not projects then return {} end
-
-  local names = vim.tbl_keys(projects)
+  local names = vim.tbl_keys(get_projects())
   table.sort(names)
   return names
 end
 
 --- Return all note paths matching the named view's filter expression.
---- Returns an empty array if the view does not exist or the filter errors.
----@param name string  View name from config.projects
----@return string[]    Sorted array of absolute paths
+--- Returns an empty array and notifies on error.
+---@param name string
+---@return string[]  Sorted array of absolute paths
 function M.match_all(name)
   local tree, err = get_tree(name)
   if not tree then
@@ -95,7 +204,7 @@ function M.match_all(name)
     return {}
   end
 
-  local filter = require('pkm.filter')
+  local filter  = require('pkm.filter')
   local entries = require('pkm.index').get_all()
   local matched = {}
 
@@ -113,13 +222,63 @@ function M.match_all(name)
 end
 
 -- =============================================================================
--- SECTION: Telescope picker
+-- SECTION: Public API — write
 -- =============================================================================
 
---- Open a Telescope picker showing the notes matched by a view.
---- Uses exact-substring filtering on prompt input (never fzy).
----@param name   string   View name
----@param paths  string[] Pre-matched paths
+--- Add or replace a named view in views.json.
+--- Validates the filter expression before writing.
+---@param name string
+---@param expr string
+---@return boolean success
+function M.save(name, expr)
+  local _, err = require('pkm.filter').parse(expr)
+  if err then
+    vim.notify('PKMView: invalid expression — ' .. err, vim.log.levels.ERROR)
+    return false
+  end
+
+  local data = load_sidecar()
+  data[name] = expr
+  local ok   = save_sidecar(data)
+  if ok then
+    vim.notify(string.format("PKMView: saved view '%s'", name), vim.log.levels.INFO)
+  end
+  return ok
+end
+
+--- Remove a named view from views.json.
+--- Config-only views cannot be deleted this way.
+---@param name string
+---@return boolean success
+function M.delete(name)
+  local data = load_sidecar()
+  if not data[name] then
+    local in_config = (get_config().projects or {})[name]
+    if in_config then
+      vim.notify(
+        string.format(
+          "PKMView: '%s' is defined in your Neovim config, not views.json. Remove it there.",
+          name),
+        vim.log.levels.WARN)
+    else
+      vim.notify(string.format("PKMView: no view named '%s'", name), vim.log.levels.WARN)
+    end
+    return false
+  end
+
+  data[name] = nil
+  local ok   = save_sidecar(data)
+  if ok then
+    vim.notify(string.format("PKMView: deleted view '%s'", name), vim.log.levels.INFO)
+  end
+  return ok
+end
+
+-- =============================================================================
+-- SECTION: Pickers
+-- =============================================================================
+
+--- Telescope picker over pre-matched note paths. Exact substring prompt.
 local function telescope_view_picker(name, paths)
   local pickers      = require('telescope.pickers')
   local finders      = require('telescope.finders')
@@ -140,11 +299,9 @@ local function telescope_view_picker(name, paths)
   end
 
   local count = #entries
-  local title = string.format('PKMView: %s  (%d note%s)',
-    name, count, count == 1 and '' or 's')
-
   pickers.new({}, {
-    prompt_title = title,
+    prompt_title = string.format('PKMView: %s  (%d note%s)',
+      name, count, count == 1 and '' or 's'),
 
     finder = finders.new_dynamic({
       fn = function(prompt)
@@ -161,7 +318,7 @@ local function telescope_view_picker(name, paths)
       entry_maker = function(e) return e end,
     }),
 
-    -- Pass-through sorter: no fzy reordering.
+    -- Pass-through sorter: prevents any fzy reordering.
     sorter = sorters.Sorter:new({
       scoring_function = function() return 0 end,
     }),
@@ -181,29 +338,15 @@ local function telescope_view_picker(name, paths)
   }):find()
 end
 
--- =============================================================================
--- SECTION: Fallback float picker
--- =============================================================================
-
---- Open a scrollable floating window listing matched notes.
---- <CR> or <Enter> opens the note under cursor; q/<Esc> closes.
----@param name  string
----@param paths string[]
+--- Scrollable float picker. <CR> opens note at cursor; q/<Esc> closes.
 local function float_view_picker(name, paths)
-  if #paths == 0 then
-    vim.notify(
-      string.format("PKMView '%s': no notes matched.", name),
-      vim.log.levels.INFO)
-    return
-  end
-
-  local lines = {}
   local header = string.format(
     '  View: %s  ·  %d note%s  ·  <CR> open  ·  q/<Esc> close',
     name, #paths, #paths == 1 and '' or 's')
-  lines[1] = header
-  lines[2] = '  ' .. string.rep('─', math.max(#header - 2, 10))
-
+  local lines = {
+    header,
+    '  ' .. string.rep('─', math.max(#header - 2, 10)),
+  }
   for _, p in ipairs(paths) do
     lines[#lines + 1] = '  ' .. vim.fn.fnamemodify(p, ':t')
   end
@@ -227,10 +370,9 @@ local function float_view_picker(name, paths)
     title_pos = 'center',
   })
 
-  -- Position cursor on the first note line (line 3, index 2).
-  local first_note_line = 3
-  if #lines >= first_note_line then
-    vim.api.nvim_win_set_cursor(win, { first_note_line, 2 })
+  -- Place cursor on the first note line (row 3; rows 1-2 are header/separator).
+  if #lines >= 3 then
+    vim.api.nvim_win_set_cursor(win, { 3, 2 })
   end
 
   local function close()
@@ -240,9 +382,8 @@ local function float_view_picker(name, paths)
   end
 
   local function open_at_cursor()
-    local row = vim.api.nvim_win_get_cursor(win)[1]
-    -- Rows 1 and 2 are header and separator; notes start at row 3.
-    local note_idx = row - 2
+    local row      = vim.api.nvim_win_get_cursor(win)[1]
+    local note_idx = row - 2   -- rows 1-2 are header/separator
     if note_idx < 1 or note_idx > #paths then return end
     close()
     vim.cmd('edit ' .. vim.fn.fnameescape(paths[note_idx]))
@@ -254,19 +395,15 @@ local function float_view_picker(name, paths)
   vim.keymap.set('n', '<Esc>', close,          ko)
 end
 
--- =============================================================================
--- SECTION: View name picker
--- =============================================================================
-
---- Let the user choose a view from a picker when no name is given.
---- Opens the selected view after selection.
+--- Prompt the user to choose a view from all defined views.
 local function pick_view()
   local names = M.list()
   if #names == 0 then
-    vim.notify('PKMView: no views defined in config.projects', vim.log.levels.WARN)
+    vim.notify(
+      'PKMView: no views defined. Use :PKMViewNew to create one.',
+      vim.log.levels.WARN)
     return
   end
-
   vim.ui.select(names, {
     prompt      = 'Open view:',
     format_item = function(n) return n end,
@@ -276,15 +413,12 @@ local function pick_view()
 end
 
 -- =============================================================================
--- SECTION: open()
+-- SECTION: Public API — open
 -- =============================================================================
 
 --- Activate a named project view.
---- If name is nil, presents a picker of available views.
---- Runs the view's filter expression against the index and opens results in
---- a Telescope picker (exact-substring prompt, file preview) or a fallback
---- float if Telescope is unavailable.
----@param name string|nil  View name, or nil to prompt
+--- If name is nil or empty, presents a picker of all defined views.
+---@param name string|nil
 function M.open(name)
   if not name or name == '' then
     pick_view()

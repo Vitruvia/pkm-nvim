@@ -98,21 +98,53 @@ function M.register()
   vim.api.nvim_create_user_command('PKMView', function(opts)
     require('pkm.views').open(opts.args ~= '' and opts.args or nil)
   end, {
-    nargs = '?',
-    complete = function()
-      return require('pkm.views').list()
-    end,
-    desc = 'Open a named project view (tab-completes view names)',
+    nargs    = '?',
+    complete = function() return require('pkm.views').list() end,
+    desc     = 'Open a named project view (tab-completes view names)',
   })
 
   vim.api.nvim_create_user_command('PKMViews', function()
     local names = require('pkm.views').list()
     if #names == 0 then
-      vim.notify('PKMView: no views defined in config.projects', vim.log.levels.INFO)
+      vim.notify('PKMView: no views defined. Use :PKMViewNew to create one.', vim.log.levels.INFO)
       return
     end
     vim.notify('Defined views: ' .. table.concat(names, ', '), vim.log.levels.INFO)
   end, { desc = 'List all defined project views' })
+
+  vim.api.nvim_create_user_command('PKMViewNew', function()
+    vim.ui.input({ prompt = 'View name: ' }, function(name)
+      if not name or name:match('^%s*$') then return end
+      vim.ui.input({ prompt = 'Filter expression: ' }, function(expr)
+        if not expr or expr:match('^%s*$') then return end
+        require('pkm.views').save(name, expr)
+      end)
+    end)
+  end, { desc = 'Create or update a named project view' })
+
+  vim.api.nvim_create_user_command('PKMViewEdit', function()
+    local path = require('pkm.utils').join(require('pkm').config.root_path, 'views.json')
+    if vim.fn.filereadable(path) == 0 then
+      vim.fn.writefile({ '{}' }, path)
+    end
+    vim.cmd('edit ' .. vim.fn.fnameescape(path))
+  end, { desc = 'Open views.json for direct editing' })
+
+  vim.api.nvim_create_user_command('PKMViewDelete', function(opts)
+    local name = opts.args ~= '' and opts.args or nil
+    if not name then
+      local views = require('pkm.views')
+      vim.ui.select(views.list(), { prompt = 'Delete view:' }, function(sel)
+        if sel then views.delete(sel) end
+      end)
+      return
+    end
+    require('pkm.views').delete(name)
+  end, {
+    nargs    = '?',
+    complete = function() return require('pkm.views').list() end,
+    desc     = 'Delete a named project view from views.json',
+  })
 end
 
 return M

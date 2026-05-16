@@ -46,6 +46,7 @@ function M.setup(user_config)
 
   -- Activate index
   require('pkm.index').setup(M.config)
+  require('pkm.views').setup()
 
 end 
 
