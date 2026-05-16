@@ -17,7 +17,7 @@ desktop.ini
 
 # Test artifacts
 test/temp/
-test/bech
+test/bench/
 *.log
 
 # Plugin manager artifacts
