@@ -58,6 +58,19 @@ drive):
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
 
+## [1.2.0, dev-view] — 2026-05-16
+
+### Added
+- `lua/pkm/views.lua` — named project views over the note index.
+  - `views.list()` → sorted view names from `config.projects`
+  - `views.match_all(name)` → sorted paths matching the view's filter
+  - `views.open(name?)` → activates a view; prompts for name if nil.
+    Telescope picker with exact-substring prompt and file preview, or
+    scrollable float fallback. Filter trees cached after first parse.
+- `config.lua`: added `projects = {}` to defaults.
+- `commands.lua`: `:PKMView [name]` — open a named view (tab-completes
+  view names). `:PKMViews` — list all defined views.
+
 ## [1.1.6, dev-view] — 2026-05-16
 
 ### Fixed

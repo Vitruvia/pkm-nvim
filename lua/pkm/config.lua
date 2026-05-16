@@ -72,6 +72,15 @@ local defaults = {
     auto_timestamp = true,
   },
 
+  projects = {},
+  -- Named project views. Each key is a view name; each value is a filter
+  -- expression string. Activated with :PKMView <name>.
+  -- Example:
+  --   projects = {
+  --     rpg    = 'tag:rpg AND (title:ringforge OR text:ringforge)',
+  --     clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
+  --   }
+
   user = {
     name  = "",
     email = "",

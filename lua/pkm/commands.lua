@@ -94,6 +94,25 @@ function M.register()
   vim.api.nvim_create_user_command('PKMStats', function()
       require('pkm.ui').show_stats()
   end, { desc = "Show PKM statistics" })
+
+  vim.api.nvim_create_user_command('PKMView', function(opts)
+    require('pkm.views').open(opts.args ~= '' and opts.args or nil)
+  end, {
+    nargs = '?',
+    complete = function()
+      return require('pkm.views').list()
+    end,
+    desc = 'Open a named project view (tab-completes view names)',
+  })
+
+  vim.api.nvim_create_user_command('PKMViews', function()
+    local names = require('pkm.views').list()
+    if #names == 0 then
+      vim.notify('PKMView: no views defined in config.projects', vim.log.levels.INFO)
+      return
+    end
+    vim.notify('Defined views: ' .. table.concat(names, ', '), vim.log.levels.INFO)
+  end, { desc = 'List all defined project views' })
 end
 
 return M
