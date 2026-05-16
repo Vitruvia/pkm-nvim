@@ -321,6 +321,79 @@ else
 end
 
 -- =============================================================================
+-- 6. Views
+-- =============================================================================
+section("views")
+
+local views = require('pkm.views')
+
+-- list() returns a table
+local names = views.list()
+ok("views.list returns table", type(names) == 'table')
+
+-- list() is sorted
+if #names > 1 then
+  local sorted = true
+  for i = 2, #names do
+    if names[i] < names[i-1] then sorted = false end
+  end
+  ok("views.list is sorted", sorted)
+end
+
+-- match_all on nonexistent view → empty + error, no crash
+local result = views.match_all('__nonexistent_view__')
+ok("match_all nonexistent view returns empty table", type(result) == 'table' and #result == 0)
+
+-- If any views are defined, test match_all and open
+if #names > 0 then
+  local first = names[1]
+  local paths = views.match_all(first)
+  ok("match_all returns table", type(paths) == 'table')
+
+  -- All returned paths are strings
+  local all_strings = true
+  for _, p in ipairs(paths) do
+    if type(p) ~= 'string' then all_strings = false end
+  end
+  ok("match_all all paths are strings", all_strings)
+
+  -- Results are sorted by filename
+  if #paths > 1 then
+    local sorted = true
+    for i = 2, #paths do
+      local a = vim.fn.fnamemodify(paths[i-1], ':t')
+      local b = vim.fn.fnamemodify(paths[i],   ':t')
+      if a > b then sorted = false end
+    end
+    ok("match_all result is sorted", sorted)
+  end
+
+  -- match_all and export.collect_files with equivalent filter agree
+  local config = require('pkm').config
+  local expr   = config.projects[first]
+  local tree   = require('pkm.filter').parse(expr)
+  if tree then
+    local export  = require('pkm.export')
+    -- Build a legacy-style filter isn't possible for arbitrary DSL expressions,
+    -- so compare match_all directly against manual index filtering.
+    local filter  = require('pkm.filter')
+    local entries = require('pkm.index').get_all()
+    local manual  = {}
+    for _, e in ipairs(entries) do
+      if filter.eval(tree, e) then manual[e.path] = true end
+    end
+    local match_set = {}
+    for _, p in ipairs(paths) do match_set[p] = true end
+    local sets_agree = true
+    for p in pairs(manual)    do if not match_set[p] then sets_agree = false end end
+    for p in pairs(match_set) do if not manual[p]    then sets_agree = false end end
+    ok("match_all agrees with direct index filter", sets_agree)
+  end
+else
+  print("  NOTE: no views defined in config.projects — define at least one to test match_all")
+end
+
+-- =============================================================================
 -- Report
 -- =============================================================================
 report()

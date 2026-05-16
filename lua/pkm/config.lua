@@ -72,7 +72,9 @@ local defaults = {
     auto_timestamp = true,
   },
 
-  projects = {},
+  projects = {
+      ringforge = 'tag:ringforge',
+    },
   -- Named project views. Each key is a view name; each value is a filter
   -- expression string. Activated with :PKMView <name>.
   -- Example:
