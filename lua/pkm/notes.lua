@@ -179,7 +179,7 @@ function M.create_new_note(note_type)
   table.insert(frontmatter_lines, "")
   
   vim.fn.writefile(frontmatter_lines, filepath)
-  
+  require('pkm.index').invalidate(filepath)
   vim.cmd("edit " .. vim.fn.fnameescape(filepath))
   
   vim.cmd("normal! G")
@@ -210,6 +210,7 @@ function M.create_scratchpad()
   table.insert(frontmatter_lines, "")
 
   vim.fn.writefile(frontmatter_lines, filepath)
+  require('pkm.index').invalidate(filepath)
   vim.cmd("edit " .. vim.fn.fnameescape(filepath))
   vim.cmd("normal! G")
   vim.notify("Created scratchpad: " .. filename, vim.log.levels.INFO)
@@ -344,12 +345,15 @@ end
 ---@param original_path string Absolute path of the source file
 ---@param new_path string Absolute path of the newly created file
 local function _finish_convert(original_path, new_path)
+  require('pkm.index').invalidate(new_path)   -- file just written; index it now
+
   vim.fn.inputsave()
   local delete_original = vim.fn.input("Delete original? (y/N): ")
   vim.fn.inputrestore()
 
   if delete_original:lower() == "y" then
     vim.fn.delete(original_path)
+    require('pkm.index').invalidate(original_path)  -- remove stale entry
     vim.notify("Original deleted: " .. vim.fn.fnamemodify(original_path, ":t"), vim.log.levels.INFO)
   end
 
@@ -526,6 +530,7 @@ function M.convert_note()
     local new_fm_lines = yaml.create_frontmatter(fm_key, existing_fm)
     local new_content = vim.list_extend(new_fm_lines, content)
     vim.fn.writefile(new_content, current_path)
+    require('pkm.index').invalidate(current_path)
     vim.cmd("edit!")
     vim.notify("Converted to " .. folder_type .. " format", vim.log.levels.INFO)
   end
@@ -598,16 +603,17 @@ function M.convert_note()
         local new_content  = vim.list_extend(new_fm_lines, content)
 
         vim.fn.writefile(new_content, new_path)
-
         local old_basename = vim.fn.fnamemodify(current_path, ":t:r")
         local new_basename = vim.fn.fnamemodify(new_path, ":t:r")
         require('pkm.citations').update_references_on_rename(old_basename, new_basename, title)
+        require('pkm.index').invalidate(new_path)
 
         vim.fn.inputsave()
         local del = vim.fn.input("Delete original file? (y/N): ")
         vim.fn.inputrestore()
         if del:lower() == "y" then
           vim.fn.delete(current_path)
+          require('pkm.index').invalidate(current_path)
         end
 
         vim.cmd("edit " .. vim.fn.fnameescape(new_path))
@@ -703,7 +709,12 @@ function M.change_note_type()
     -- Propagate rename through citations
     local old_basename = vim.fn.fnamemodify(current_path, ":t:r")
     local new_basename = vim.fn.fnamemodify(new_path, ":t:r")
-    require('pkm.citations').update_references_on_rename(old_basename, new_basename, existing_fm.title)
+    require('pkm.citations').update_references_on_rename(old_basename,
+    new_basename, existing_fm.title)
+
+    local index = require('pkm.index')
+    index.invalidate(current_path)  -- renamed away; remove stale entry
+    index.invalidate(new_path)      -- written with new frontmatter; index it
 
     -- Redirect buffer to new file
     vim.cmd("file " .. vim.fn.fnameescape(new_path))
@@ -754,12 +765,14 @@ function M.rename_from_yaml(filepath, new_title)
   end
   
   if vim.fn.rename(filepath, new_filepath) == 0 then
+    local index = require('pkm.index')
+    index.invalidate(filepath)      -- old path gone
+    index.invalidate(new_filepath)  -- new path now exists with same content
+
     vim.cmd("file " .. vim.fn.fnameescape(new_filepath))
     vim.notify("Renamed to: " .. new_filename, vim.log.levels.INFO)
-    
     local new_filename_no_ext = vim.fn.fnamemodify(new_filepath, ":t:r")
     require('pkm.citations').update_references_on_rename(old_filename_no_ext, new_filename_no_ext, new_title)
-    
     return new_filepath
   else
     vim.notify("Failed to rename file", vim.log.levels.ERROR)
@@ -1112,22 +1125,20 @@ function M.import_note()
 
       -- Write File
       vim.fn.writefile(final_content, target_path)
-      
-      -- Handle Old Buffer/File
-      local delete_old = false
+      require('pkm.index').invalidate(target_path)
+
       if current_path ~= "" and vim.fn.filereadable(current_path) == 1 then
         vim.ui.select({"Delete original", "Keep original"}, { prompt = "Import successful. Original file:" }, function(choice)
             if choice == "Delete original" then
                 vim.fn.delete(current_path)
+                require('pkm.index').invalidate(current_path)
             end
-            -- Switch buffer to new file
             vim.cmd("edit " .. vim.fn.fnameescape(target_path))
         end)
       else
-        -- Unnamed buffer, just switch
         vim.cmd("edit " .. vim.fn.fnameescape(target_path))
       end
-      
+
       vim.notify("Imported: " .. filename, vim.log.levels.INFO)
     end)
   end)

@@ -1,4 +1,4 @@
--- =============================================================================
+=============================================================================
 -- pkm.citations — Bidirectional citation engine
 -- =============================================================================
 -- Dependencies : pkm.yaml, pkm.utils
@@ -306,6 +306,7 @@ local function manage_backlink(citing_path, target_path, action)
       end
     end
     yaml.save_frontmatter(fm, content_start, target_path)
+    require('pkm.index').invalidate(target_path)
   end
 end
 
@@ -374,6 +375,7 @@ local function migrate_legacy_links(filepath)
       table.insert(final_content, line)
     end
     vim.fn.writefile(final_content, filepath)
+    require('pkm.index').invalidate(filepath)
   end
 end
 
@@ -486,6 +488,9 @@ function M.update_references(target_file)
   
   -- 6. Save (Buffer or Disk)
   yaml.save_frontmatter(frontmatter, content_start, target_file)
+  if target_file then
+    require('pkm.index').invalidate(target_file)
+  end
   
   -- 7. Cross-Update Backlinks
   for id, _ in pairs(old_cites_map) do
@@ -674,8 +679,10 @@ function M.update_references_on_rename(old_basename, new_basename, new_title)
                     table.insert(final_content, new_content_lines[i])
                   end
                   vim.fn.writefile(final_content, file)
+                  require('pkm.index').invalidate(file)
               else
                   vim.fn.writefile(new_content_lines, file)
+                  require('pkm.index').invalidate(file)
               end
           end
         end
@@ -782,8 +789,8 @@ function M.merge_tags(source_tags, target_tag)
 
           if changed then
             fm.tags = new_tags
-            -- filepath provided → save_frontmatter reads content_start itself (Case B)
             yaml.save_frontmatter(fm, nil, file)
+            require('pkm.index').invalidate(file)
             modified = modified + 1
           end
         end

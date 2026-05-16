@@ -43,9 +43,11 @@ function M.setup(user_config)
   require('pkm.commands').register()
   require('pkm.keymaps').register(M.config)
   if M.config.sync.enabled then M.setup_sync_autocmds() end
-end 
+
   -- Activate index
   require('pkm.index').setup(M.config)
+
+end 
 
 -- =============================================================================
 -- SECTION: Sync autocmds
@@ -146,6 +148,7 @@ function M.delete_note_safely()
   vim.cmd("bdelete!")
   
   if vim.fn.delete(filepath) == 0 then
+    require('pkm.index').invalidate(filepath)
     vim.notify("Note deleted.", vim.log.levels.INFO)
   else
     vim.notify("Failed to delete file.", vim.log.levels.ERROR)

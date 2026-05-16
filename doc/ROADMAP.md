@@ -295,32 +295,37 @@ After this step, `collect_files` goes from O(n × file-read) to O(n × table-loo
 
 ---
 
-### Phase 2: Preview System
-
-**`lua/pkm/preview.lua`**
-- Browser-based live preview: Markdown + LaTeX (MathJax)
-- WebSocket live updates on save
-- Cross-platform browser opening
-- Terminal fallback (glow/mdcat)
-
-**Image and visualization support**
-- Embed images in notes with normalized paths
-- Mermaid diagram support in preview
-- Possibly inline rendering in terminal (kitty/iterm2 protocols)
 
 ---
 
+### Potential additions (not a current goal, but may be added in the mid-term)
+
+**`lua/pkm/preview.lua`**
+  - Browser-based live preview: Markdown + LaTeX (MathJax)
+  - WebSocket live updates on save
+  - Cross-platform browser opening
+  - Terminal fallback (glow/mdcat)
+- **Persistent index:** serialize the in-memory index to disk (msgpack or JSON), with
+  mtime-based incremental updates on startup. Needed only if startup scan time becomes
+  unacceptable at very large corpus sizes (likely >50k notes). Consider other solutions
+  for speed at >10k notes, and especially at 100k notes.
+
+
 ### Distant Future (not a current goal — do not design toward)
+
+- **Alternative PKM modes:** Obsidian-style backlink graph, pure Zettelkasten ID-based
+  linking, etc. Would be selectable configurations, not the default.
+- **Image and visualization support**
+  - Embed images in notes with normalized paths
+  - Mermaid diagram support in preview
+- Possibly inline rendering in terminal (kitty/iterm2 protocols)
+
+### Postponed or Out of Consideration
 
 - **Multi-wiki:** multiple independent note namespaces with separate counters and citation
   permission rules. Superseded by the project-view system for all realistic use cases.
   The single global counter is a guarantee of note uniqueness; do not break it.
   Could be revisited only if physical namespace isolation becomes a concrete requirement.
-- **Alternative PKM modes:** Obsidian-style backlink graph, pure Zettelkasten ID-based
-  linking, etc. Would be selectable configurations, not the default.
-- **Persistent index:** serialize the in-memory index to disk (msgpack or JSON), with
-  mtime-based incremental updates on startup. Needed only if startup scan time becomes
-  unacceptable at very large corpus sizes (likely >50k notes).
 - **Non-flat citations:** hierarchical or categorized citation structure beyond the current
   `notes`/`bib` grouping. Undecided; the current structure may be permanently sufficient.
 

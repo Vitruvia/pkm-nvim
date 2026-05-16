@@ -2,7 +2,54 @@
 
 ---
 
-## [Unreleased - dev view]
+## Unreleased
+
+## [1.1.5, dev-view] — 2026-05-16
+
+### Known Bugs (queued)
+
+- **Rename from inside note requires manual `e!`** — when a note's title is
+  changed in frontmatter and saved, `sync_filename_on_save` renames the file
+  on disk but the buffer remains associated with the old path. The user must
+  run `:e!` to reload. Fix requires: (1) write content to new path, (2) delete
+  old file, (3) redirect buffer via `keepalt file` + `edit`. A secondary E484
+  error from `migrate_legacy_links` attempting to read the old (now deleted)
+  path is separately fixed by adding a `filereadable` guard at the top of
+  `update_references`.
+
+- **Greedy timestamp pattern in `journal.lua` querying functions** —
+  `find_by_date_range`, `list_recent`, and `find_by_tag` all use the greedy
+  pattern `filename:match("^(.+)_(.+)$")` which returns only the last
+  component of a multi-part timestamp. Fix: replace with
+  `filename:match("^journal_(.+)$")` in all three functions.
+
+- **`PKMSearch` and `PKMTags` have no Telescope fallback** — both commands
+  call `require('pkm.telescope')` directly. If Telescope is unavailable they
+  error instead of falling back to `ui.search_notes()` and `ui.browse_tags()`.
+  `PKMMergeTags` correctly uses a `pcall` check and should be the model.
+
+- **`quick_capture` keymap calls wrong command** — `keymaps.lua` maps
+  `k.quick_capture` to `<cmd>PKMNewNote<cr>` instead of a dedicated
+  `PKMQuickCapture` command. `notes.quick_capture()` exists but is unreachable
+  via keymap. Fix: add `PKMQuickCapture` command in `commands.lua` and update
+  the keymap.
+
+- **`telescope.lua` checks Telescope at load time** — top-level
+  `pcall(require, 'telescope')` returns an empty M if Telescope hasn't loaded
+  yet. Under Lazy.nvim deferred loading this can silently make all pickers
+  unavailable. All other modules check availability at call time.
+
+- **`templates.lua` `apply_template` silently fails when Telescope is loaded**
+  — calls `tele.template_picker(templates, on_select)` which is an empty stub.
+  Fix: either implement the picker in `telescope.lua` or fall through to
+  `vim.ui.select` unconditionally.
+
+- `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
+  malformed paths when bench_dir is a Unix-style path (e.g. `/tmp/pkm_bench`).
+  Files are still created correctly because vim.fn.mkdir/glob tolerate mixed
+  separators on WSL. Fix: accept bench_dir as-is and join subdirs with the
+  correct separator for the path type, or document that bench_dir must use
+  the native separator.   
 
 ### Added
 - `lua/pkm/filter.lua` — new module: filter expression parser and evaluator.
@@ -47,52 +94,61 @@
   - Entry shape: `{path, title, tags, body, mtime}`
 - `pkm.init`: added `require('pkm.index').setup(M.config)` call in `setup()`.
 
+### Changed
+- `export.lua`: `match_file` now consults `pkm.index` for note data and
+  delegates filter evaluation to `pkm.filter.eval()` via `filter.from_legacy()`.
+  Returns false if the path is not in the index. Public API and filter
+  semantics are unchanged.
+- `export.lua`: `collect_files` now calls `index.get_all()` instead of
+  globbing the filesystem per query. Filter evaluation via `filter.eval()`.
+  Scope (consolidated, journal, scratchpad only) is preserved — the index
+  excludes templates by construction.
+- `init.lua`: `delete_note_safely()` calls `index.invalidate(filepath)` after
+  successful deletion so the stale entry is removed immediately.
+- `notes.lua`: `create_new_note()` and `create_scratchpad()` call
+  `index.invalidate(filepath)` after `writefile` so newly created notes are
+  immediately queryable.
+- `notes.lua`: `apply_in_place()` (inside `convert_note()`) calls
+  `index.invalidate(current_path)` after `writefile` — the write bypasses
+  BufWritePost so the autocmd would not fire.
+- `notes.lua`: unnamed-file branch of `convert_note()` calls
+  `index.invalidate(new_path)` after write and `index.invalidate(current_path)`
+  after optional delete.
+- `notes.lua`: `import_note()` calls `index.invalidate(target_path)` after
+  write and `index.invalidate(current_path)` if the original is deleted.
+- `citations.lua`: `manage_backlink()` calls `index.invalidate(target_path)`
+  after `save_frontmatter` when a backlink is added or removed.
+- `citations.lua`: `migrate_legacy_links()` calls `index.invalidate(filepath)`
+  after `writefile`.
+- `citations.lua`: `update_references()` calls `index.invalidate(target_file)`
+  after `save_frontmatter` when operating in disk mode (target_file provided).
+  Buffer mode is excluded — BufWritePost handles that path.
+- `citations.lua`: `update_references_on_rename()` calls
+  `index.invalidate(file)` after each `writefile` in both the fm and non-fm
+  branches.
+- `citations.lua`: `merge_tags()` calls `index.invalidate(file)` after
+  `save_frontmatter` for each modified file.
+- `notes.lua`: `_finish_convert()` calls `index.invalidate(new_path)` after
+  the new file is written and `index.invalidate(original_path)` if the user
+  deletes the original. Covers all `do_convert` branches including transpose.
+- `notes.lua`: `change_note_type()` calls `index.invalidate(current_path)`
+  and `index.invalidate(new_path)` after rename and frontmatter write.
+- `notes.lua`: `rename_from_yaml()` calls `index.invalidate(filepath)` and
+  `index.invalidate(new_filepath)` after a successful rename.
+- `notes.lua`: `promote_note()` — covered via `_finish_convert()`;
+  no direct changes needed.
+
+### Dead Code
+- `normalise_tags` in `export.lua` — no longer called after `match_file`
+  rewrite. Queued for removal.
+
 ### Known Bugs
 - `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
   malformed paths when bench_dir is a Unix-style path (e.g. `/tmp/pkm_bench`).
   Files are still created correctly because vim.fn.mkdir/glob tolerate mixed
   separators on WSL. Fix: accept bench_dir as-is and join subdirs with the
   correct separator for the path type, or document that bench_dir must use
-  the native separator.   before timing. Projects 100k cost linearly from the largest measured tier.
-
-### Known Bugs (queued)
-
-- **Rename from inside note requires manual `e!`** — when a note's title is
-  changed in frontmatter and saved, `sync_filename_on_save` renames the file
-  on disk but the buffer remains associated with the old path. The user must
-  run `:e!` to reload. Fix requires: (1) write content to new path, (2) delete
-  old file, (3) redirect buffer via `keepalt file` + `edit`. A secondary E484
-  error from `migrate_legacy_links` attempting to read the old (now deleted)
-  path is separately fixed by adding a `filereadable` guard at the top of
-  `update_references`.
-
-- **Greedy timestamp pattern in `journal.lua` querying functions** —
-  `find_by_date_range`, `list_recent`, and `find_by_tag` all use the greedy
-  pattern `filename:match("^(.+)_(.+)$")` which returns only the last
-  component of a multi-part timestamp. Fix: replace with
-  `filename:match("^journal_(.+)$")` in all three functions.
-
-- **`PKMSearch` and `PKMTags` have no Telescope fallback** — both commands
-  call `require('pkm.telescope')` directly. If Telescope is unavailable they
-  error instead of falling back to `ui.search_notes()` and `ui.browse_tags()`.
-  `PKMMergeTags` correctly uses a `pcall` check and should be the model.
-
-- **`quick_capture` keymap calls wrong command** — `keymaps.lua` maps
-  `k.quick_capture` to `<cmd>PKMNewNote<cr>` instead of a dedicated
-  `PKMQuickCapture` command. `notes.quick_capture()` exists but is unreachable
-  via keymap. Fix: add `PKMQuickCapture` command in `commands.lua` and update
-  the keymap.
-
-- **`telescope.lua` checks Telescope at load time** — top-level
-  `pcall(require, 'telescope')` returns an empty M if Telescope hasn't loaded
-  yet. Under Lazy.nvim deferred loading this can silently make all pickers
-  unavailable. All other modules check availability at call time.
-
-- **`templates.lua` `apply_template` silently fails when Telescope is loaded**
-  — calls `tele.template_picker(templates, on_select)` which is an empty stub.
-  Fix: either implement the picker in `telescope.lua` or fall through to
-  `vim.ui.select` unconditionally.
-
+  the native separator.   
 
 ### Suspended Functions (queued for decision)
 

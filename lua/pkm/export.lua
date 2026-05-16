@@ -1,19 +1,20 @@
 -- =============================================================================
 -- pkm.export — Note filtering and copy utility
 -- =============================================================================
--- Dependencies : pkm.yaml (lazy), pkm.init (for config), telescope (optional)
+-- Dependencies : pkm.utils, pkm.filter (lazy), pkm.index (lazy),
+--                pkm.yaml (lazy, fallback only), pkm.init (for config),
+--                telescope (optional)
 -- Consumed by  : pkm.commands (:PKMExport)
 --
 -- READ-ONLY — never modifies any note file.
 --
--- Filter semantics:
---   tags_any  (OR)  — note has at least one of the listed tags
---   tags_all  (AND) — note has every one of the listed tags
---   title           — case-insensitive exact substring of frontmatter title
---   text            — case-insensitive exact substring anywhere in body
+-- Filter semantics: the public API accepts the legacy filter table format
+-- {tags_any, tags_all, title, text} for backward compatibility. Internally
+-- this is converted to a filter.lua tree via filter.from_legacy() and
+-- evaluated with filter.eval(). See pkm.filter for the full DSL.
 --
--- All string matching uses string.find with plain=true — exact byte substring,
--- never a pattern, never fuzzy.
+-- All string matching is exact substring (case-insensitive, plain=true,
+-- never fuzzy) as enforced by filter.eval().
 --
 -- Public API:
 --   match_file(path, filters)  → boolean — test one file against filters
@@ -95,87 +96,37 @@ local function normalise_tags(raw)
 end
 
 --- Test whether a single note file satisfies all active filters.
---- A nil or empty filter field is inactive (always passes).
----@param path string Absolute path to note file
----@param filters {tags_any?:string[], tags_all?:string[], title?:string, text?:string}
+--- Consults the index first; falls back to reading the file directly if the
+--- index does not have an entry for this path (e.g. before first save).
+--- A nil or empty filters table is inactive and always returns true.
+---@param path    string  Absolute path to note file
+---@param filters table   Legacy filter table {tags_any?, tags_all?, title?, text?}
 ---@return boolean
 function M.match_file(path, filters)
-  local fm, content_start, lines = get_file_data(path)
-  if not fm then return false end
+  local filter_mod = require('pkm.filter')
+  local tree       = filter_mod.from_legacy(filters or {})
+  if not tree then return true end
 
-  local note_tags = normalise_tags(fm.tags)
+  local entry = require('pkm.index').get(path)
+  if not entry then return false end
 
-  -- tags_any: OR — note must have at least one listed tag
-  if filters.tags_any and #filters.tags_any > 0 then
-    local found = false
-    for _, wanted in ipairs(filters.tags_any) do
-      local wl = wanted:lower()
-      for _, actual in ipairs(note_tags) do
-        if actual == wl then found = true; break end
-      end
-      if found then break end
-    end
-    if not found then return false end
-  end
-
-  -- tags_all: AND — note must have every listed tag
-  if filters.tags_all and #filters.tags_all > 0 then
-    for _, wanted in ipairs(filters.tags_all) do
-      local wl    = wanted:lower()
-      local found = false
-      for _, actual in ipairs(note_tags) do
-        if actual == wl then found = true; break end
-      end
-      if not found then return false end
-    end
-  end
-
-  -- title: exact case-insensitive substring (plain=true disables patterns)
-  if filters.title and filters.title ~= "" then
-    local note_title = type(fm.title) == "string" and fm.title:lower() or ""
-    if not note_title:find(filters.title:lower(), 1, true) then return false end
-  end
-
-  -- text: exact substring anywhere in the body (lines after frontmatter)
-  if filters.text and filters.text ~= "" then
-    if not lines or not content_start then return false end
-    local needle = filters.text:lower()
-    local found  = false
-    for i = content_start, #lines do
-      -- plain=true: third argument 1 is init position, true is plain flag
-      if lines[i]:lower():find(needle, 1, true) then
-        found = true; break
-      end
-    end
-    if not found then return false end
-  end
-
-  return true
+  return filter_mod.eval(tree, entry)
 end
 
---- Collect all .md files from PKM folders that satisfy filters.
---- Scans consolidated, journal, and scratchpad folders only. The templates
---- folder is intentionally excluded.
----@param filters table Same structure as match_file filters
----@return string[] Sorted list of absolute paths
+--- Collect all notes that satisfy filters, using the in-memory index.
+--- Scope is identical to before: consolidated, journal, and scratchpad only
+--- (the index itself excludes the templates folder).
+---@param filters table  Legacy filter table {tags_any?, tags_all?, title?, text?}
+---@return string[]  Sorted list of absolute paths
 function M.collect_files(filters)
-  local config  = require('pkm').config
-  local matched = {}
+  local filter_mod = require('pkm.filter')
+  local tree       = filter_mod.from_legacy(filters or {})
+  local entries    = require('pkm.index').get_all()
+  local matched    = {}
 
-  local note_folders = {
-    config.folders.consolidated,
-    config.folders.journal,
-    config.folders.scratchpad,
-  }
-  for _, folder in ipairs(note_folders) do
-    local dir = utils.join(config.root_path, folder)
-    if vim.fn.isdirectory(dir) == 1 then
-      local files = vim.fn.glob(dir .. utils.sep .. "*.md", false, true)
-      for _, filepath in ipairs(files) do
-        if M.match_file(filepath, filters) then
-          table.insert(matched, filepath)
-        end
-      end
+  for _, entry in ipairs(entries) do
+    if not tree or filter_mod.eval(tree, entry) then
+      matched[#matched + 1] = entry.path
     end
   end
 

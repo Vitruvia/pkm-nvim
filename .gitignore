@@ -16,9 +16,11 @@ Thumbs.db
 desktop.ini
 
 # Test artifacts
-tests/temp/
+test/temp/
+test/bech
 *.log
 
 # Plugin manager artifacts
 lazy-lock.json
+
 
