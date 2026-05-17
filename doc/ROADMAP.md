@@ -43,13 +43,14 @@ The note namespace is intentionally **flat and global** — all notes share a si
 - ✅ Export utility: filter notes by tag/title/body text, copy to folder (`:PKMExport`)
 - ✅ Statistics window (`:PKMStats`)
 - ✅ Cross-platform: Windows, WSL, Linux, macOS
-- ✅ Filter system with boolean search
-- ✅ Project view system (named saved filters)
+- ✅ Boolean filter system — full DSL over tag/title/text (AND, OR, NOT, parentheses)
+- ✅ In-memory note index with incremental invalidation (~290× faster than per-query scan)
+- ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD commands
 
 **Known limitations:**
-- ⚠️ No in-memory index — filter queries scan all files on every call
 - ⚠️ No preview system
 - ⚠️ No image embedding or visualization support
+- ⚠️ Several queued bugs (see CHANGELOG.md Known Bugs section)
 
 **Metadata notes:**
 - The `status` field has been **removed** from frontmatter. Do not reintroduce it.
@@ -78,7 +79,7 @@ pkm.nvim/
 │   ├── export.lua      # Note filtering and copy utility (read-only, no setup() needed)
 │   ├── filter.lua      # Filter expression parser and evaluator (pure logic, no I/O)
 │   ├── index.lua       # In-memory note index with incremental invalidation
-│   ├── views.lua       # Named project views: load from config, activate, list
+│   ├── views.lua       # Named project views: sidecar file, CRUD, activate, list
 │   └── bench.lua       # Benchmarking and load-testing utilities (infrastructure)
 ├── plugin/pkm.lua      # Auto-load marker
 ├── doc/
@@ -86,7 +87,7 @@ pkm.nvim/
 │   ├── PKM_ROADMAP.md  # This file
 │   ├── LLM_CONTEXT.md  # Fast-read session brief for LLMs
 │   └── CHANGELOG.md    # Session history
-├── tests/              # Test files
+├── test/               # Test files
 └── README.md
 ```
 
@@ -101,7 +102,7 @@ direct access to `M.config`.
 
 **config.lua** — pure data. Holds the default config table and `resolve(user_config)`,
 which merges defaults with user input, resolves paths, validates, and injects author
-into templates. No side effects. Will gain a `projects` table in Phase 1.
+into templates. No side effects. Contains a `projects` table for named view definitions.
 
 **utils.lua** — shared utilities. `utils.join(...)`, `utils.sep`, `utils.normalize(path)`,
 `utils.ensure_dir(path)`, `utils.is_windows`, `utils.is_wsl`. No setup() needed.
@@ -131,52 +132,27 @@ follow link, backlinks, filename-YAML sync.
 time — critical for Lazy.nvim).
 
 **export.lua** — filter notes by frontmatter fields and body text; copy matches to a
-destination folder. No `setup()`. Never modifies note files. In Phase 1, its filter
-evaluation will delegate to `filter.lua` and its file collection will use `index.lua`.
+destination folder. No `setup()`. Never modifies note files. Delegates filter
+evaluation to `filter.lua` and file collection to `index.lua`.
 
----
+**filter.lua** — pure logic, no I/O. Parses filter expression strings into ASTs and
+evaluates them against note data tables. Grammar: AND/OR/NOT over tag/title/text
+predicates with parentheses and quoted values. `from_legacy()` converts old
+`{tags_any, tags_all, title, text}` tables for backward compatibility.
 
-### Planned Module Responsibilities (Phase 1)
+**index.lua** — in-memory note index. Lazy build on first `get_all()` call.
+Incremental invalidation via `BufWritePost` autocmd and explicit `invalidate(path)`
+calls after every programmatic file write or delete. Path keys are normalized
+(`\` → `/`) for cross-platform lookup consistency.
 
-**filter.lua** — pure logic, no I/O, no side effects.
-- `filter.parse(expr)` → tree — parses a filter expression string into an AST
-- `filter.eval(tree, note)` → boolean — evaluates a parsed tree against a note data table
-- `filter.from_legacy(tbl)` → tree — converts old `{tags_any, tags_all, title, text}` tables for backward compatibility
+**views.lua** — named project views. Reads from `views.json` (sidecar at PKM root)
+and `config.projects`; sidecar wins on collision. `setup()` registers a
+`BufWritePost` autocmd to reload on sidecar save. Full CRUD via `save()`, `delete()`.
+Telescope picker with exact-substring prompt and file preview; float fallback.
 
-Filter expression language (hand-rolled recursive descent parser, ~80 lines):
-```
-expr     = and_expr  (OR and_expr)*
-and_expr = not_expr  (AND not_expr)*
-not_expr = NOT? atom
-atom     = "(" expr ")" | predicate
-predicate= field ":" value
-field    = "tag" | "title" | "text"
-value    = bare_word | "quoted string"
-```
-
-Examples:
-```
-tag:rpg AND (title:ringforge OR text:ringforge)
-tag:medicine AND tag:protocol AND NOT tag:draft
-(tag:mathematics OR tag:physics) AND text:Fourier
-```
-
-**index.lua** — in-memory note index. Lazy: built on first query, not at startup.
-- `index.get_all()` → array of note data tables (frontmatter + body + path)
-- `index.get(path)` → single note data table
-- `index.invalidate(path)` — called by BufWritePost autocmd; refreshes one entry
-- `index.rebuild()` — full rescan; called on first use and on demand
-- Memory cost: ~1–5 MB per 10k notes (frontmatter only, without body caching)
-
-**views.lua** — named project views over the single note namespace.
-- `views.list()` → array of view names from config
-- `views.open(name)` → runs saved filter, opens results in Telescope or fallback picker
-- `views.match_all(name)` → returns paths matching the named view's filter expression
-
-**bench.lua** — benchmarking and load-testing. Not user-facing; developer tooling.
-- `bench.time(fn)` → microseconds elapsed
-- `bench.run_suite()` — timed suite: index build, filter query at N=100/1k/10k/100k
-- `bench.gen_notes(n, dest)` — generates N synthetic notes for load testing
+**bench.lua** — developer benchmarking and load-testing. Not user-facing, no commands.
+Four-phase suite: raw scan, index build, index query, filter eval. Self-cleaning
+(synthetic files deleted after run). `baseline()` times real corpus read-only.
 
 ---
 
@@ -209,9 +185,8 @@ require('pkm').setup({
     institution = "",
   },
 
-  -- PLANNED (Phase 1): Named project views.
-  -- Each value is a filter expression string.
-  -- Activated with :PKMView <name>.
+  -- Optional: define views declaratively. Prefer :PKMViewNew / views.json
+  -- for views that change frequently. Sidecar (views.json) wins on collision.
   projects = {
     rpg     = 'tag:rpg AND (title:ringforge OR text:ringforge)',
     clinic  = 'tag:medicine AND tag:protocol',
@@ -244,79 +219,100 @@ require('pkm').setup({
 
 ## Development Roadmap
 
-### Active: Code Quality
+### Active
 
-- [ ] Module API header blocks (one per file)
-- [ ] LuaDoc annotations on all exported functions
-- [ ] Section separators inside large files (citations.lua, notes.lua)
-
-These are additive — no behavior changes.
+(none)
 
 ---
 
-### Phase 1: Filter System & Project Views
+### Next Steps
 
-**Motivation:** The current filter system (AND-only, fixed fields) cannot express
-project-scoped queries. Notes should never be physically separated from the main
-namespace — projects are views over a single flat note collection, not isolated
-sub-wikis. This phase adds the infrastructure to define and activate those views.
+**1. Fix queued bugs**
 
-**Step 1 — `filter.lua`**
-Parser and evaluator for the filter expression language. Pure logic; no I/O.
-Testable in isolation before any other Phase 1 work.
-Also adds `filter.from_legacy()` to preserve backward compatibility with the
-existing `export.lua` filter table format.
+Several bugs are flagged in `CHANGELOG.md` under Known Bugs. Address these before
+starting new features. The two highest-impact:
 
-**Step 2 — Benchmarking baseline (`bench.lua`, basic)**
-Before touching performance-critical code, establish a baseline:
-- Measure current `collect_files` time on the real corpus
-- Use `bench.gen_notes(n)` to simulate larger corpora (1k, 10k, 100k)
-- Record results so post-index improvements can be validated against them
-
-This step is not optional. Optimizing without a baseline is guesswork.
-
-**Step 3 — `index.lua`**
-In-memory note index. Eliminates the per-query full-filesystem scan.
-Hooked into the existing BufWritePost autocmd for incremental invalidation.
-After this step, `collect_files` goes from O(n × file-read) to O(n × table-lookup).
-
-**Step 4 — Update `export.lua`**
-- Replace internal filter evaluation with `filter.eval()`
-- Replace `collect_files` scan with `index.get_all()` + filter pass
-- Preserve the existing public API unchanged (backward compat via `from_legacy`)
-
-**Step 5 — `views.lua` + commands + UI**
-- Add `projects` table to `config.lua` defaults
-- Implement `views.lua`
-- Register `:PKMView [name]` and `:PKMViews` commands in `commands.lua`
-- Wire Telescope / fallback picker for view results in `telescope.lua` / `ui.lua`
+- `quick_capture` keymap calls wrong command — unreachable via keymap; add
+  `PKMQuickCapture` command and fix keymap.
+- `telescope.lua` checks Telescope at load time — silently breaks all pickers
+  under Lazy.nvim deferred loading; move check to call time.
 
 ---
 
+**2. Subproject hierarchy for views**
+
+Views can declare a parent view; the subproject's effective filter is the parent
+filter AND-ed with its own constraints. Sibling subprojects can overlap freely
+since all notes remain in the flat namespace.
+
+**Design:**
+
+`views.json` is extended with an optional `parent` field. String values remain
+simple views (backward compatible); table values with a `parent` field are
+subprojects:
+
+```json
+{
+  "ringforge": "tag:ringforge",
+  "ringforge-mechanics": {
+    "parent": "ringforge",
+    "filter": "tag:mechanics"
+  },
+  "ringforge-references": {
+    "parent": "ringforge",
+    "filter": "tag:reference"
+  }
+}
+```
+
+The effective filter for `ringforge-mechanics` resolves to:
+`tag:ringforge AND tag:mechanics`
+
+Resolution walks the parent chain at query time and composes trees using
+`filter.lua`'s existing AND node. No new parser work needed.
+
+**Depth:** unbounded in principle; enforce a practical limit of ~8 levels during
+validation with a clear error message. Cycles are detected by tracking visited
+names during resolution.
+
+**UI — Phase 1 (initial):** a keymap inside the view picker cycles between the
+active view and its sibling subprojects, each opening a new picker.
+
+**UI — Phase 2 (future):** dedicated subproject picker — see Potential Additions.
 
 ---
 
-### Potential additions (not a current goal, but may be added in the mid-term)
+### Potential Additions (mid-term to long-term)
+
+**Dedicated subproject UI**
+Custom Telescope layout with a sidebar: left panel lists available subprojects,
+right panel shows the active view's notes. Selecting a subproject on the left
+updates the right panel without closing the picker. This is the natural evolution
+of the Phase 1 keymap-cycling approach.
 
 **`lua/pkm/preview.lua`**
-  - Browser-based live preview: Markdown + LaTeX (MathJax)
-  - WebSocket live updates on save
-  - Cross-platform browser opening
-  - Terminal fallback (glow/mdcat)
-- **Persistent index:** serialize the in-memory index to disk (msgpack or JSON), with
-  mtime-based incremental updates on startup. Needed only if startup scan time becomes
-  unacceptable at very large corpus sizes (likely >50k notes). Consider other solutions
-  for speed at >10k notes, and especially at 100k notes.
+Browser-based live preview: Markdown + LaTeX (MathJax), WebSocket live updates
+on save, cross-platform browser opening, terminal fallback (glow/mdcat).
 
+**Persistent index**
+Serialize the in-memory index to disk (msgpack or JSON) with mtime-based
+incremental updates on startup. Needed only if startup scan time becomes
+unacceptable at very large corpus sizes (likely >50k notes). Evaluate other
+solutions for speed at >10k notes before committing to this.
+
+---
 
 ### Distant Future (not a current goal — do not design toward)
 
 - **Alternative PKM modes:** Obsidian-style backlink graph, pure Zettelkasten ID-based
   linking, etc. Would be selectable configurations, not the default.
-- **Image and visualization support**
-  - Embed images in notes with normalized paths
-  - Mermaid diagram support in preview
-- Possibly inline rendering in terminal (kitty/iterm2 protocols)
+- **Image and visualization support:** embed images with normalized paths, Mermaid
+  diagram support in preview, possibly inline rendering (kitty/iTerm2 protocols).
+- **Review queue**. Enables the user to select and keep track of notes intended
+  for review. Might include organizers, separators, or interact with filters to
+  enable the user to categorize such notes according to priority, subject, etc.
+
+---
 
 ### Postponed or Out of Consideration
 
@@ -408,7 +404,6 @@ cited_by:
 :lua print(vim.inspect(require('pkm').config))
 :messages
 :PKMStats
-:PKMValidate
 :lua require('pkm.yaml').validate_frontmatter()
 ```
 

@@ -4,7 +4,6 @@
 
 ## Unreleased
 
-
 ### Known Bugs (queued)
 
 - **Rename from inside note requires manual `e!`** — when a note's title is
@@ -58,13 +57,11 @@ drive):
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
 
+## [1.2.0, dev-view] — 2026-05-16
 
-## [1.2.1, dev-view] — 2026-05-16
 
-### Fixed
-- `index.lua`: `get()` and `invalidate()` normalize path separators (`\` → `/`)
-  before key lookup. Callers passing Unix-style paths on Windows received nil
-  even for indexed files.
+### Added
+- `docs/PHILOSOPHY.MD` - a brief on the project's philosophy and scope.
 
 ## [1.2.0, dev-view] — 2026-05-16
 

@@ -2,6 +2,9 @@
 
 Read this first. It is the fast-read brief. Read PKM_ROADMAP.md for architecture detail.
 
+Read `doc/PHILOSOPHY.md` before proposing features or design changes. Its
+principles are non-negotiable constraints on all architectural decisions.
+
 ---
 
 ## Current State (as of 2026-05-16)
