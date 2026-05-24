@@ -282,6 +282,22 @@ active view and its sibling subprojects, each opening a new picker.
 
 ---
 
+### Near-term additions
+
+**Enhanced markdown support**: a markdown.lua file to help improve the
+routinely use of markdown files in a variety of tasks. The changes should not
+bloat the already vast list of keymaps and it should not conflate with
+existing, famous plugins such as vim.surround. in fact, it should be designed
+to work alongside such plugins and to complement them, leaving redundant
+commands only for cases where the user does not have such plugins installed. Or
+perhaps it should consider incorporating them, but only in the case of
+extremely stable and well-supported plugins that cannot be adequately coded
+into our own system.
+
+Examples:
+- Automating `:%s/^#\(#*\)/\1/g` and `'<,'>s/^#\(#*\)/\1` to decrease the level
+  of all headers in the file or in a selection.
+
 ### Potential Additions (mid-term to long-term)
 
 **Dedicated subproject UI**
@@ -343,22 +359,49 @@ solutions for speed at >10k notes before committing to this.
 
 ### Always do this
 
+- File-level header block
 ```lua
--- Cross-platform paths
+-- =============================================================================
+-- pkm.module — One-line description
+-- =============================================================================
+-- Dependencies : modules this file requires
+-- Consumed by  : modules that require this file
+--
+-- Public API:
+--   function_name(params) → return description
+-- =============================================================================
+```
+
+- `local M = {}` and module-level locals
+
+
+- Section separators** between logical groups:
+```lua
+-- =============================================================================
+-- SECTION: Section name
+-- =============================================================================
+```
+
+- Cross-platform paths
+```lua
 local path = utils.join(dir, file)
 local files = vim.fn.glob(dir .. utils.sep .. "*.md", false, true)
+```
 
--- Exact substring matching (never fzy)
+- Exact substring matching (never fzy)
+```lua
 if haystack:lower():find(needle:lower(), 1, true) then ... end
+```
 
--- Telescope at call time
+- Telescope at call time
+```lua
 local ok = pcall(require, 'telescope')
 if ok then ... else ... end
+```
 
--- Option setting (Neovim 0.10+)
+- Option setting (Neovim 0.10+)
+```lua
 vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-
--- Buffer-local keymaps
 vim.keymap.set('n', 'q', fn, { noremap = true, silent = true, buffer = buf })
 ```
 
