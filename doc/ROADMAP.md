@@ -239,7 +239,27 @@ starting new features. The two highest-impact:
 
 ---
 
-**2. Subproject hierarchy for views**
+**2. Unified note browser (`PKMBrowse`) — consolidate PKMSearch and PKMTags**
+
+*Motivation:* PKMSearch and PKMTags both answer the same question ("find a note to open") but bypass `filter.lua`, the structured query engine the project already owns. PKMTags uses `grep_string` (full-text ripgrep), which produces false positives and duplicate results instead of matching against frontmatter. PKMSearch uses `live_grep`, which cannot be combined with tag or title constraints. PKMExport already does this correctly via `index.lua` + `filter.lua` and is the model to follow; it is kept separate because its purpose (batch file export) is categorically different from interactive browsing.
+
+**Design:**
+
+`:PKMBrowse [filter_expr]` — open a Telescope picker over all PKM notes, optionally pre-filtered by an expression in the `filter.lua` grammar (`tag:math AND title:fourier`, etc.). Empty input shows all notes.
+
+- Uses `index.get_all()` + `filter.eval()` for evaluation — same pipeline as `export.lua`.
+- Picker uses `finders.new_dynamic` with exact substring filtering on the display string and a pass-through sorter, same as `telescope_results_picker` in `export.lua`. This prevents fzy from contaminating structured results.
+- `PKMTags` becomes a thin wrapper: pick a tag from the list, then open `PKMBrowse` pre-filtered to `tag:<selected>`.
+- `PKMSearch` (`live_grep`) may be retained as a power-user shortcut for incremental streaming text search — the one case where ripgrep's live feedback is a genuine UX advantage over the index. If retained, it must be clearly scoped to "raw text search only" and documented accordingly. Otherwise it is deprecated in favour of `PKMBrowse text:<query>`.
+- `ui.lua` gets a matching `M.browse(filter_expr)` fallback using `vim.ui.select` with the same index + filter pipeline.
+
+**Keymap:** `browse_tags` (`<leader>nt`) points to `PKMBrowse`; optionally a new `browse` key replaces it or the same key is reused. The filter expression language is the same as `PKMView`, so users work with one syntax everywhere.
+
+**Dependency:** `index.lua` invalidation (already reliable post-refactor). No new infrastructure needed.
+
+---
+
+**3. Subproject hierarchy for views**
 
 Views can declare a parent view; the subproject's effective filter is the parent
 filter AND-ed with its own constraints. Sibling subprojects can overlap freely
@@ -283,6 +303,8 @@ active view and its sibling subprojects, each opening a new picker.
 ---
 
 ### Near-term additions
+
+**Unified note browser (`PKMBrowse`)**
 
 **Enhanced markdown support**: a markdown.lua file to help improve the
 routinely use of markdown files in a variety of tasks. The changes should not
