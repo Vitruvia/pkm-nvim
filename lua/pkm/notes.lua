@@ -716,7 +716,8 @@ function M.change_note_type()
     index.invalidate(new_path)      -- written with new frontmatter; index it
 
     -- Redirect buffer to new file
-    vim.cmd("file " .. vim.fn.fnameescape(new_path))
+    vim.cmd("keepalt file " .. vim.fn.fnameescape(new_path))
+    vim.bo.modified = false
     vim.notify(string.format("Changed type: %s → %s", current_type, sel.value), vim.log.levels.INFO)
   end)
 end
@@ -742,7 +743,7 @@ function M.rename_from_yaml(filepath, new_title)
   local old_filename_no_ext = vim.fn.fnamemodify(filepath, ":t:r")
   local dir = vim.fn.fnamemodify(filepath, ":h")
   
-  local number, note_type, old_title = old_filename_no_ext:match("^(%d+)_([a-z]+)_(.+)$")
+  local number, note_type, _ = old_filename_no_ext:match("^(%d+)_([a-z]+)_(.+)$")
   if not number or not note_type then
     return nil -- Not a valid consolidated note
   end
@@ -768,7 +769,8 @@ function M.rename_from_yaml(filepath, new_title)
     index.invalidate(filepath)      -- old path gone
     index.invalidate(new_filepath)  -- new path now exists with same content
 
-    vim.cmd("file " .. vim.fn.fnameescape(new_filepath))
+    vim.cmd("keepalt file " .. vim.fn.fnameescape(new_filepath))
+    vim.bo.modified = false
     vim.notify("Renamed to: " .. new_filename, vim.log.levels.INFO)
     local new_filename_no_ext = vim.fn.fnamemodify(new_filepath, ":t:r")
     require('pkm.citations').update_references_on_rename(old_filename_no_ext, new_filename_no_ext, new_title)
