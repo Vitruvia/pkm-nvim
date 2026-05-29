@@ -16,7 +16,6 @@
 --   rename_from_yaml(filepath, new_title)     → Rename file to match YAML title
 --   sync_filename_on_save()                   → Sync filename to YAML title on BufWritePost
 --   sync_yaml_on_rename()                     → Sync YAML title to filename on BufReadPost
---   quick_capture()                           → Open or create today's scratchpad
 --   link_to_note()                            → Insert [[wiki-link]] at cursor
 --   follow_link()                             → Open note linked under cursor
 --   show_backlinks()                          → Show all notes linking to current note
@@ -833,45 +832,6 @@ function M.sync_yaml_on_rename()
     vim.notify("Updated title in YAML to match filename", vim.log.levels.INFO)
   end
 end
-
-
-
--- =============================================================================
--- SECTION: Quick capture
--- =============================================================================
---- Open today's most recent scratchpad or create a new one.
---- Appends a timestamp heading and enters insert mode at the bottom.
----@return string filepath Absolute path of the scratchpad
-function M.quick_capture()
-  local today = timestamp.now()
-  local date_str = timestamp.format_timestamp(today, "date_only")
-  
-  local scratchpad_path = utils.join(config.root_path, config.folders.scratchpad)
-  local pattern = utils.join(scratchpad_path, "scratch_" .. date_str .. "*.md")
-  local files = vim.fn.glob(pattern, false, true)
-  
-  local filepath
-  if #files > 0 then
-    -- Use most recent scratchpad from today
-    table.sort(files)
-    filepath = files[#files]
-    vim.cmd("edit " .. vim.fn.fnameescape(filepath))
-    vim.cmd("normal! G")
-  else
-    filepath = M.create_scratchpad()
-  end
-  
-  -- Add timestamp marker
-  local ts = timestamp.now()
-  local time_marker = "## " .. timestamp.to_human(ts)
-  
-  vim.api.nvim_buf_set_lines(0, -1, -1, false, {"", time_marker, ""})
-  vim.cmd("normal! G")
-  vim.cmd("startinsert")
-  
-  return filepath
-end
-
 
 -- =============================================================================
 -- SECTION: Navigation

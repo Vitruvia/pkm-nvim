@@ -98,7 +98,6 @@ local defaults = {
     link_note       = "<leader>nl",
     follow_link     = "gf",
     backlinks       = "<leader>nb",
-    quick_capture   = "<leader>nq",
     import_note     = "<leader>ni",
     convert_note    = "<leader>nx",
     promote_note    = "<leader>np",

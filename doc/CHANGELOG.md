@@ -57,6 +57,17 @@ drive):
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
 
+## [1.2.1]
+
+### Removed
+- `M.quick_capture()` in `notes.lua` — the function assumed a "daily aggregator"
+  scratchpad (one file per day, entries appended with timestamp headings) that
+  has no basis in the system design. Scratchpads are independent timestamped
+  notes; there is no "today's scratchpad" concept. Removed the function,
+  the `quick_capture` keymap entry from `config.lua` and `keymaps.lua`, and
+  the `:PKMQuickCapture` documentation. `:PKMNewScratchpad` is the replacement;
+  the title prompt can be dismissed with Enter for minimum friction.
+
 ## [1.2.0, dev-view] — 2026-05-16
 
 

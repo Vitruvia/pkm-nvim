@@ -70,9 +70,23 @@ function M.register()
     require('pkm.notes').change_note_type()
   end, { desc = "Change the type of a consolidated note (note/agg/bib)" })
 
-  vim.api.nvim_create_user_command('PKMSearch', function() require('pkm.telescope').search_notes() end, {})
+  vim.api.nvim_create_user_command('PKMSearch', function()
+    local has_tele = pcall(require, 'telescope')
+    if has_tele then
+      require('pkm.telescope').search_notes()
+    else
+      require('pkm.ui').search_notes()
+    end
+  end, { desc = "Search note contents (Telescope live_grep or ui fallback)" })
 
-  vim.api.nvim_create_user_command('PKMTags', function() require('pkm.telescope').browse_tags() end, {})
+  vim.api.nvim_create_user_command('PKMTags', function()
+    local has_tele = pcall(require, 'telescope')
+    if has_tele then
+      require('pkm.telescope').browse_tags()
+    else
+      require('pkm.ui').browse_tags()
+    end
+  end, { desc = "Browse notes by tag (Telescope picker or ui fallback)" })
 
   vim.api.nvim_create_user_command('PKMMergeTags', function()
     local has_tele = pcall(require, 'telescope')

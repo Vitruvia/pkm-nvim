@@ -75,7 +75,6 @@ With user info and custom keymaps: >
     keymaps = {
       new_note        = "<leader>nn",
       new_journal     = "<leader>nj",
-      quick_capture   = "<leader>nq",
       search          = "<leader>nf",
       insert_citation = "<leader>nc",
     },
@@ -89,7 +88,7 @@ Set any keymap value to `false` to disable it.
 5. WORKFLOW                                                     *pkm-workflow*
 
 CAPTURE~
-Use |:PKMQuickCapture| or |:PKMNewScratchpad| to write down ideas immediately.
+Use |:PKMNewScratchpad| to write down ideas immediately.
 Scratchpads are timestamped files in 01-Scratchpad/. They carry minimal
 frontmatter and require no decisions at creation time.
 
@@ -130,9 +129,6 @@ CREATION~
 
 :PKMNewScratchpad       Create a new scratchpad with an optional title.
 
-:PKMQuickCapture        Open today's scratchpad (creates it if missing) and
-                        append a timestamp header at the end. Useful for
-                        rapid notes during the day.
 
 :PKMImport              Import the currently open file into the PKM structure.
                         Adds the appropriate frontmatter template for its
@@ -363,7 +359,6 @@ PROGRAMMATIC API~
       new_note         = "<leader>nn",
       new_journal      = "<leader>nj",
       new_scratchpad   = "<leader>ns",
-      quick_capture    = "<leader>nq",
       convert_note     = "<leader>nx",
       promote_note     = "<leader>np",
       transpose_note   = "<leader>nT",
@@ -389,7 +384,6 @@ Default keymaps (all overridable via the `keymaps` config table):
   <leader>nn   :PKMNewNote
   <leader>nj   :PKMNewJournal
   <leader>ns   :PKMNewScratchpad
-  <leader>nq   :PKMQuickCapture
   <leader>nx   :PKMConvertNote
   <leader>np   :PKMPromote
   <leader>nT   :PKMTranspose

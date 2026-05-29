@@ -7,9 +7,6 @@
 -- NOTE: register(config) must receive the resolved config table because
 -- keymap lhs strings are needed immediately at registration time.
 --
--- Known issue: quick_capture maps to PKMNewNote instead of a dedicated
--- PKMQuickCapture command. See dead code / known bugs list.
---
 -- Public API:
 --   register(config) → Register all <leader> keymaps from config.keymaps
 -- =============================================================================
@@ -46,7 +43,6 @@ function M.register(config)
   map(k.link_note, "<cmd>PKMLinkNote<cr>", "Link Note")
   map(k.follow_link, "<cmd>PKMFollowLink<cr>", "Follow Link")
   map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Backlinks")
-  map(k.quick_capture, "<cmd>PKMNewNote<cr>", "Quick Capture")
   map(k.import_note, "<cmd>PKMImport<cr>", "Import Note")
   map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
   map(k.transpose_note, "<cmd>PKMTranspose<cr>", "Transpose Note")
