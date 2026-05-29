@@ -1,19 +1,14 @@
 -- =============================================================================
 -- pkm.telescope — Telescope pickers for notes, tags, citations, and export
 -- =============================================================================
--- Dependencies : pkm.citations, telescope.nvim (required at module load time)
+-- Dependencies : pkm.citations, telescope.nvim (optional, checked at call time)
 -- Consumed by  : pkm.commands
 --
--- WARNING: This module checks Telescope availability at LOAD TIME (top-level
--- pcall) and returns an empty M if unavailable. This differs from the
--- call-time check pattern used elsewhere (notes.lua, keymaps.lua) and is
--- fragile under Lazy.nvim deferred loading. See changelog known bugs.
+-- Telescope availability is checked at call time inside require_telescope(),
+-- consistent with the project-wide pattern. The module always loads cleanly;
+-- each function notifies and returns early when Telescope is unavailable.
 --
--- If Telescope is not installed, the module returns {} silently. Commands
--- in commands.lua that call this module directly (PKMSearch, PKMTags) will
--- error in that case. See changelog for the missing fallback bug.
---
--- Public API (only available when Telescope is loaded):
+-- Public API:
 --   insert_citation_picker()  → fuzzy citation picker, inserts on select
 --   browse_tags()             → tag list → ripgrep by tag
 --   find_notes()              → telescope find_files over PKM root
@@ -23,20 +18,31 @@
 local M = {}
 
 local citations = require('pkm.citations')
-local has_telescope, telescope = pcall(require, 'telescope')
-
-if not has_telescope then return M end
-
-local pickers = require('telescope.pickers')
-local finders = require('telescope.finders')
-local conf = require('telescope.config').values
-local actions = require('telescope.actions')
-local action_state = require('telescope.actions.state')
-local builtin = require('telescope.builtin')
 
 -- =============================================================================
 -- SECTION: Helpers
 -- =============================================================================
+
+--- Require Telescope and all sub-modules used by the pickers.
+--- Checked at call time — never at module load time. Each caller checks the
+--- return value and returns early if nil.
+---@return table|nil t { pickers, finders, conf, actions, state, builtin }
+local function require_telescope()
+  local ok = pcall(require, 'telescope')
+  if not ok then
+    vim.notify("PKM: Telescope is required for this picker.", vim.log.levels.WARN)
+    return nil
+  end
+  return {
+    pickers = require('telescope.pickers'),
+    finders = require('telescope.finders'),
+    conf    = require('telescope.config').values,
+    actions = require('telescope.actions'),
+    state   = require('telescope.actions.state'),
+    builtin = require('telescope.builtin'),
+  }
+end
+
 local function check_ripgrep()
   if vim.fn.executable("rg") == 0 then
     vim.notify("PKM Error: 'rg' (Ripgrep) not found. Please install it.", vim.log.levels.ERROR)
@@ -51,27 +57,30 @@ end
 --- Fuzzy picker over all citable notes. Inserts citation token at cursor on select.
 --- Calls citations.complete_insertion() which also triggers update_references().
 function M.insert_citation_picker()
+  local t = require_telescope()
+  if not t then return end
+
   local items = citations.get_citable_items_list()
-  
-  pickers.new({}, {
+
+  t.pickers.new({}, {
     prompt_title = "Insert Citation",
-    finder = finders.new_table {
+    finder = t.finders.new_table {
       results = items,
       entry_maker = function(entry)
         return {
-          value = entry,
+          value   = entry,
           display = entry.display,
           ordinal = entry.display,
         }
-      end
+      end,
     },
-    sorter = conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr, map)
-      actions.select_default:replace(function()
-        actions.close(prompt_bufnr)
-        local selection = action_state.get_selected_entry()
+    sorter = t.conf.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr, _)
+      t.actions.select_default:replace(function()
+        t.actions.close(prompt_bufnr)
+        local selection = t.state.get_selected_entry()
         if selection then
-            citations.complete_insertion(selection.value)
+          citations.complete_insertion(selection.value)
         end
       end)
       return true
@@ -86,31 +95,34 @@ end
 --- PKM root using telescope builtin.grep_string. Requires ripgrep.
 function M.browse_tags()
   if not check_ripgrep() then return end
-  
+
+  local t = require_telescope()
+  if not t then return end
+
   local tags = citations.get_all_tags()
   local root = require('pkm').config.root_path
-  
-  pickers.new({}, {
+
+  t.pickers.new({}, {
     prompt_title = "Browse Notes by Tag",
-    finder = finders.new_table {
+    finder = t.finders.new_table {
       results = tags,
-      entry_maker = function(entry) 
-          return { value = entry, display = entry, ordinal = entry } 
-      end
+      entry_maker = function(entry)
+        return { value = entry, display = entry, ordinal = entry }
+      end,
     },
-    sorter = conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr, map)
-      actions.select_default:replace(function()
-        actions.close(prompt_bufnr)
-        local selection = action_state.get_selected_entry()
+    sorter = t.conf.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr, _)
+      t.actions.select_default:replace(function()
+        t.actions.close(prompt_bufnr)
+        local selection = t.state.get_selected_entry()
         if selection then
-            local tag = selection.value
-            builtin.grep_string({
-              prompt_title = "Notes with tag: " .. tag,
-              search = tag, 
-              cwd = root,
-              additional_args = function() return { "--hidden" } end
-            })
+          local tag = selection.value
+          t.builtin.grep_string({
+            prompt_title    = "Notes with tag: " .. tag,
+            search          = tag,
+            cwd             = root,
+            additional_args = function() return { "--hidden" } end,
+          })
         end
       end)
       return true
@@ -120,11 +132,14 @@ end
 
 --- Open telescope find_files over the PKM root. Searches by filename only.
 function M.find_notes()
-  builtin.find_files({
+  local t = require_telescope()
+  if not t then return end
+
+  t.builtin.find_files({
     prompt_title = "Find Notes (Filename)",
-    cwd = require('pkm').config.root_path,
-    hidden = true,
-    no_ignore = true,
+    cwd          = require('pkm').config.root_path,
+    hidden       = true,
+    no_ignore    = true,
   })
 end
 
@@ -133,20 +148,21 @@ end
 function M.search_notes()
   if not check_ripgrep() then return end
 
+  local t = require_telescope()
+  if not t then return end
+
   local root = require('pkm').config.root_path
-  
+
   if vim.fn.isdirectory(root) == 0 then
-     vim.notify("PKM Error: Invalid root path for search: " .. tostring(root), vim.log.levels.ERROR)
-     return
+    vim.notify("PKM Error: Invalid root path for search: " .. tostring(root), vim.log.levels.ERROR)
+    return
   end
 
-  builtin.live_grep({
-    prompt_title = "Search Note Content",
-    cwd = root,
-    glob_pattern = "*.md",
-    additional_args = function() 
-        return { "--hidden", "--no-ignore" } 
-    end
+  t.builtin.live_grep({
+    prompt_title    = "Search Note Content",
+    cwd             = root,
+    glob_pattern    = "*.md",
+    additional_args = function() return { "--hidden", "--no-ignore" } end,
   })
 end
 
@@ -158,8 +174,11 @@ end
 ---   Step 2 — pick SOURCE tags (multi-select with Tab)
 ---   Step 3 — confirm via vim.fn.confirm, then call citations.merge_tags()
 function M.merge_tags_picker()
+  local t = require_telescope()
+  if not t then return end
+
   local citations_mod = require('pkm.citations')
-  local all_tags = citations_mod.get_all_tags()
+  local all_tags      = citations_mod.get_all_tags()
 
   if #all_tags == 0 then
     vim.notify("PKM: No tags found.", vim.log.levels.INFO)
@@ -167,24 +186,24 @@ function M.merge_tags_picker()
   end
 
   -- ── Step 1: pick TARGET ────────────────────────────────────────────────
-  pickers.new({}, {
+  t.pickers.new({}, {
     prompt_title = "Merge Tags — Step 1: Pick TARGET tag",
-    finder = finders.new_table {
+    finder = t.finders.new_table {
       results = all_tags,
-      entry_maker = function(t)
-        return { value = t, display = t, ordinal = t }
+      entry_maker = function(tag)
+        return { value = tag, display = tag, ordinal = tag }
       end,
     },
-    sorter = conf.generic_sorter({}),
+    sorter = t.conf.generic_sorter({}),
     attach_mappings = function(prompt_bufnr)
-      actions.select_default:replace(function()
-        actions.close(prompt_bufnr)
-        local sel = action_state.get_selected_entry()
+      t.actions.select_default:replace(function()
+        t.actions.close(prompt_bufnr)
+        local sel = t.state.get_selected_entry()
         if not sel then return end
         local target = sel.value
 
         local source_candidates = vim.tbl_filter(
-          function(t) return t ~= target end, all_tags
+          function(tag) return tag ~= target end, all_tags
         )
 
         if #source_candidates == 0 then
@@ -194,35 +213,33 @@ function M.merge_tags_picker()
 
         -- ── Step 2: pick SOURCES (multi-select) ──────────────────────────
         vim.schedule(function()
-          pickers.new({}, {
+          t.pickers.new({}, {
             prompt_title = "Merge Tags — Step 2: Sources → '"
               .. target .. "'  (<Tab> multi-select, <CR> confirm)",
-            finder = finders.new_table {
+            finder = t.finders.new_table {
               results = source_candidates,
-              entry_maker = function(t)
-                return { value = t, display = t, ordinal = t }
+              entry_maker = function(tag)
+                return { value = tag, display = tag, ordinal = tag }
               end,
             },
-            sorter = conf.generic_sorter({}),
+            sorter = t.conf.generic_sorter({}),
             attach_mappings = function(prompt_bufnr2, map2)
-              -- Standard multi-select binding
               map2('i', '<Tab>', function()
-                actions.toggle_selection(prompt_bufnr2)
-                actions.move_selection_next(prompt_bufnr2)
+                t.actions.toggle_selection(prompt_bufnr2)
+                t.actions.move_selection_next(prompt_bufnr2)
               end)
               map2('n', '<Tab>', function()
-                actions.toggle_selection(prompt_bufnr2)
-                actions.move_selection_next(prompt_bufnr2)
+                t.actions.toggle_selection(prompt_bufnr2)
+                t.actions.move_selection_next(prompt_bufnr2)
               end)
 
-              actions.select_default:replace(function()
-                local picker2  = action_state.get_current_picker(prompt_bufnr2)
-                local multi    = picker2:get_multi_selection()
-                actions.close(prompt_bufnr2)
+              t.actions.select_default:replace(function()
+                local picker2 = t.state.get_current_picker(prompt_bufnr2)
+                local multi   = picker2:get_multi_selection()
+                t.actions.close(prompt_bufnr2)
 
-                -- Fall back to the highlighted entry if nothing was toggled
                 if #multi == 0 then
-                  local cur = action_state.get_selected_entry()
+                  local cur = t.state.get_selected_entry()
                   if cur then multi = { cur } end
                 end
 
@@ -231,7 +248,7 @@ function M.merge_tags_picker()
                   return
                 end
 
-                local sources  = vim.tbl_map(function(e) return e.value end, multi)
+                local sources = vim.tbl_map(function(e) return e.value end, multi)
 
                 -- ── Step 3: confirm ──────────────────────────────────────
                 vim.schedule(function()
