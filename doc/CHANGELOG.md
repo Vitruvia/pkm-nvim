@@ -123,14 +123,16 @@
 ### Removed
 
 - **Dead code:**
- - `is_empty_table` and `is_array_table` in `yaml.lua` — the two functions
-   only called each other; nothing outside the pair called `is_array_table`.
-   `generate_yaml` uses its own inline array check. Both deleted.
- - `normalise_tags` in `export.lua` — orphaned by the `filter.lua` rewrite;
-   `match_file` now delegates to `filter.eval()`. Deleted.
- - `normalize_path` in `notes.lua` — defined but never called. Deleted.
- - `show_stats_window`, `select_note_enhanced`, `show_graph`, `show_analytics`
-  in `ui.lua` — none called from any command or live code path. Deleted.
+  - `is_empty_table` and `is_array_table` in `yaml.lua` — the two functions
+    only called each other; nothing outside the pair called `is_array_table`.
+    `generate_yaml` uses its own inline array check. Both deleted.
+  - `normalise_tags` in `export.lua` — orphaned by the `filter.lua` rewrite;
+    `match_file` now delegates to `filter.eval()`. Deleted.
+  - `normalize_path` in `notes.lua` — defined but never called. Deleted.
+  - `show_stats_window`, `select_note_enhanced`, `show_graph`, `show_analytics`
+    in `ui.lua` — none called from any command or live code path. Deleted.
+  - `M.setup_auto_update()` and `M.update_last_modified()` in `yaml.lua`, both
+    which were overriden by functions in `init.lua`.
 
 - **`M.quick_capture()`** in `notes.lua` — the function assumed a "daily
   aggregator" scratchpad (one file per day, entries appended with timestamp

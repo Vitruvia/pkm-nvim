@@ -17,7 +17,6 @@
 --   format_value(value)                   → YAML-safe string from Lua value
 --   create_frontmatter(note_type, data?)  → string[] full frontmatter block with delimiters
 --   save_frontmatter(fm, content_start, filepath?) → write fm to buffer or file
---   update_last_modified()                → update last_updated_on in current
 --                                           buffer
 --   update_frontmatter()                  → interactive field editor
 --   validate_frontmatter()                → check required fields against template
