@@ -289,6 +289,65 @@ active view and its sibling subprojects, each opening a new picker.
 
 ---
 
+**3. `:PKMViewLast` — reopen last active view**
+
+*Motivation:* After the Search Merge, `:PKMView <name>` requires recalling and
+typing the view name each invocation. There is no equivalent of Neovim's
+alternate-buffer (`<C-6>`) for views.
+
+**Design:**
+
+A module-level variable `_last_view` in `views.lua` is set whenever `M.open()`
+activates a view successfully. `:PKMViewLast` calls `M.open(_last_view)` if
+set, or notifies that no view has been activated yet.
+
+- New command `:PKMViewLast` in `commands.lua`.
+- New keymap key `view_last` (suggested default: `<leader>nV`) in `config.lua`
+  and `keymaps.lua`.
+- No new infrastructure. `_last_view` is session-scoped; it does not persist
+  across Neovim restarts, which is intentional — a restart implies a context
+  change.
+
+**Dependency:** None. Implement immediately after Search Merge.
+
+---
+
+**4. Views sidebar — persistent split buffer for view navigation**
+
+*Motivation:* Both `:PKMView` and `:PKMViewLast` are modal and one-shot: the
+picker closes when a note is opened. There is no way to stay inside a view's
+scope while editing — to glance at the view's note list, open a note, return to
+the list, open another. The sidebar solves this the same way the QuickFix window
+solves it for compiler errors: a persistent, non-modal result list that stays
+open alongside the editing area.
+
+**Design:**
+
+`:PKMViewSidebar [name]` opens a vertical split on the left (configurable side)
+containing a scratch buffer. The buffer lists the active view's notes, one per
+line, prefixed with their index. Navigation keymaps in the buffer:
+
+- `<CR>` — open note under cursor in the main window (not a new split)
+- `r` — refresh (re-run the view's filter against the current index)
+- `q` / `<Esc>` — close the sidebar
+- `<Tab>` (with subprojects) — cycle to a sibling or child view
+
+The sidebar is toggled: a second `:PKMViewSidebar` call with the same view
+closes it; with a different view name, it replaces the contents.
+
+Window management follows the nvim-tree convention: one sidebar window per
+Neovim instance, tracked by window ID in module state. If the window is closed
+externally (`:q`), the state is cleared on next toggle.
+
+**Relationship to the tree UI:**
+
+Without subproject hierarchy, the sidebar shows a flat sorted list of the
+current view's notes. This is already useful: it is the persistent-context
+version of `views.open()`.
+
+With subproject hierarchy implemented, the same buffer gains a tree header
+showing the view's position in the hierarchy and its children:
+
 ### Near-term additions
 
 **Unified note browser (`PKMBrowse`)**
