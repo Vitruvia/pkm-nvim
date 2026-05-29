@@ -4,19 +4,13 @@
 -- Dependencies : pkm.yaml, pkm.utils, pkm.citations (lazy)
 -- Consumed by  : pkm.commands, pkm.telescope (fallback)
 --
--- NOTE: show_stats_window and select_note_enhanced are unused in the current
--- command set. show_graph and show_analytics are stubs. See dead code list.
---
 -- Public API:
---   setup(user_config)          → Initialize with resolved PKM config
---   search_notes(query?)        → Full-text search with vim.ui.select results
---   browse_tags()               → Two-level tag → file picker
---   merge_tags_ui()             → Interactive tag merge (fallback for PKMMergeTags)
---   show_stats()                → Show note counts via vim.notify
---   show_stats_window(stats)    → Floating window stats display (currently unused)
---   select_note_enhanced(...)   → Telescope-or-fallback note picker (currently unused)
---   show_graph()                → Stub placeholder
---   show_analytics()            → Stub placeholder
+--   setup(user_config)       → Initialize with resolved PKM config
+--   search_notes(query?)     → Full-text search with vim.ui.select results
+--   browse_tags()            → Two-level tag → file picker
+--   insert_citation_ui()     → Citation picker fallback (no Telescope)
+--   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
+--   show_stats()             → Show note counts via vim.notify
 -- =============================================================================
 local M = {}
 
@@ -122,76 +116,6 @@ function M.search_notes(query)
 end
 
 -- =============================================================================
--- SECTION: Statistics
--- =============================================================================
---- Display a floating window with PKM statistics.
---- NOTE: Currently unused — show_stats() is used instead. The stats
---- parameter structure (total_notes, notes_by_status, notes_by_tag) is
---- not populated anywhere in the codebase.
----@param stats table {total_notes, total_journals, total_scratchpads, total_citations, notes_by_status, notes_by_tag}
-function M.show_stats_window(stats)
-  -- Create buffer for stats
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-  
-  -- Build stats content
-  local lines = {
-    "=== PKM Statistics ===",
-    "",
-    "Notes:",
-    string.format("  Total: %d", stats.total_notes),
-    string.format("  Journals: %d", stats.total_journals),
-    string.format("  Scratchpads: %d", stats.total_scratchpads),
-    string.format("  Citations: %d", stats.total_citations),
-    "",
-    "Notes by Status:",
-  }
-  
-  for status, count in pairs(stats.notes_by_status) do
-    table.insert(lines, string.format("  %s: %d", status, count))
-  end
-  
-  table.insert(lines, "")
-  table.insert(lines, "Top Tags:")
-  
-  -- Sort tags by count
-  local sorted_tags = {}
-  for tag, count in pairs(stats.notes_by_tag) do
-    table.insert(sorted_tags, {tag = tag, count = count})
-  end
-  table.sort(sorted_tags, function(a, b) return a.count > b.count end)
-  
-  for i = 1, math.min(10, #sorted_tags) do
-    table.insert(lines, string.format("  %s: %d", sorted_tags[i].tag, sorted_tags[i].count))
-  end
-  
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(buf, 'modifiable', false)
-  
-  -- Create floating window
-  local width = 50
-  local height = #lines + 2
-  local opts = {
-    relative = 'editor',
-    width = width,
-    height = height,
-    col = (vim.o.columns - width) / 2,
-    row = (vim.o.lines - height) / 2,
-    style = 'minimal',
-    border = 'rounded',
-    title = " PKM Statistics ",
-    title_pos = 'center',
-  }
-  
-  local win = vim.api.nvim_open_win(buf, true, opts)
-  
-  -- Close on any key
-  vim.api.nvim_buf_set_keymap(buf, 'n', 'q', '<cmd>close<CR>', {noremap = true, silent = true})
-  vim.api.nvim_buf_set_keymap(buf, 'n', '<Esc>', '<cmd>close<CR>', {noremap = true, silent = true})
-end
-
--- =============================================================================
 -- SECTION: Tag browsing
 -- =============================================================================
 --- Two-level tag browser: first pick a tag, then pick a file with that tag.
@@ -270,77 +194,28 @@ function M.browse_tags()
 end
 
 -- =============================================================================
--- SECTION: Enhanced selectors (unused / future)
+-- SECTION: Citation insertion fallback
 -- =============================================================================
---- Telescope-or-fallback note picker. Uses Telescope if available at call
---- time, otherwise falls back to vim.ui.select.
---- NOTE: Currently unused in the command set.
----@param notes {display:string}[] Array of note items with display field
----@param prompt string Picker prompt text
----@param callback function Called with selected item or nil
-function M.select_note_enhanced(notes, prompt, callback)
-  -- Check if Telescope is available
-  local has_telescope, telescope = pcall(require, "telescope")
-  
-  if has_telescope then
-    -- Use Telescope for enhanced selection
-    local pickers = require("telescope.pickers")
-    local finders = require("telescope.finders")
-    local conf = require("telescope.config").values
-    local actions = require("telescope.actions")
-    local action_state = require("telescope.actions.state")
-    
-    pickers.new({}, {
-      prompt_title = prompt,
-      finder = finders.new_table {
-        results = notes,
-        entry_maker = function(entry)
-          return {
-            value = entry,
-            display = entry.display,
-            ordinal = entry.display,
-          }
-        end,
-      },
-      sorter = conf.generic_sorter({}),
-      attach_mappings = function(prompt_bufnr, map)
-        actions.select_default:replace(function()
-          actions.close(prompt_bufnr)
-          local selection = action_state.get_selected_entry()
-          if selection then
-            callback(selection.value)
-          else
-            callback(nil)
-          end
-        end)
-        return true
-      end,
-    }):find()
-  else
-    -- Fallback to vim.ui.select
-    vim.ui.select(notes, {
-      prompt = prompt,
-      format_item = function(item) return item.display end,
-    }, callback)
+--- Fallback citation picker using vim.ui.select. Used by PKMInsertCitation
+--- when Telescope is unavailable. Delegates insertion to complete_insertion()
+--- so frontmatter sync fires on the same path as the Telescope picker.
+function M.insert_citation_ui()
+  local citations = require('pkm.citations')
+  local items = citations.get_citable_items_for_picker()
+
+  if #items == 0 then
+    vim.notify("PKM: No citable notes found.", vim.log.levels.INFO)
+    return
   end
-end
 
---- Stub placeholder for future graph visualization.
-function M.show_graph()
-  vim.notify("Graph view not yet implemented", vim.log.levels.INFO)
-  -- This would show a visual graph of note connections
-  -- Could use graphviz or similar for visualization
-end
-
---- Stub placeholder for future analytics dashboard.
-function M.show_analytics()
-  -- This would show:
-  -- - Reading time estimates
-  -- - Word counts per note/journal
-  -- - Writing patterns (when you write most)
-  -- - Connection density
-  -- - Growth over time
-  vim.notify("Analytics dashboard not yet implemented", vim.log.levels.INFO)
+  vim.ui.select(items, {
+    prompt      = "Insert Citation:",
+    format_item = function(item) return item.display end,
+  }, function(selected)
+    if selected then
+      citations.complete_insertion(selected)
+    end
+  end)
 end
 
 -- =============================================================================

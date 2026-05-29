@@ -84,17 +84,6 @@ end
 -- FILTER ENGINE
 -- ============================================================================
 
---- Normalise frontmatter tags to a flat list of lowercase strings.
-local function normalise_tags(raw)
-  if type(raw) == "string" then raw = { raw } end
-  if type(raw) ~= "table"  then return {}      end
-  local out = {}
-  for _, t in ipairs(raw) do
-    if type(t) == "string" then table.insert(out, t:lower()) end
-  end
-  return out
-end
-
 --- Test whether a single note file satisfies all active filters.
 --- Consults the index first; falls back to reading the file directly if the
 --- index does not have an entry for this path (e.g. before first save).

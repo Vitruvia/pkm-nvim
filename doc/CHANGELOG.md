@@ -6,77 +6,148 @@
 
 ### Known Bugs (queued)
 
-- **Rename from inside note requires manual `e!`** — when a note's title is
-  changed in frontmatter and saved, `sync_filename_on_save` renames the file
-  on disk but the buffer remains associated with the old path. The user must
-  run `:e!` to reload. Fix requires: (1) write content to new path, (2) delete
-  old file, (3) redirect buffer via `keepalt file` + `edit`. A secondary E484
-  error from `migrate_legacy_links` attempting to read the old (now deleted)
-  path is separately fixed by adding a `filereadable` guard at the top of
-  `update_references`.
-
-- **Greedy timestamp pattern in `journal.lua` querying functions** —
-  `find_by_date_range`, `list_recent`, and `find_by_tag` all use the greedy
-  pattern `filename:match("^(.+)_(.+)$")` which returns only the last
-  component of a multi-part timestamp. Fix: replace with
-  `filename:match("^journal_(.+)$")` in all three functions.
-
-- **`PKMSearch` and `PKMTags` have no Telescope fallback** — both commands
-  call `require('pkm.telescope')` directly. If Telescope is unavailable they
-  error instead of falling back to `ui.search_notes()` and `ui.browse_tags()`.
-  `PKMMergeTags` correctly uses a `pcall` check and should be the model.
-
-- **`quick_capture` keymap calls wrong command** — `keymaps.lua` maps
-  `k.quick_capture` to `<cmd>PKMNewNote<cr>` instead of a dedicated
-  `PKMQuickCapture` command. `notes.quick_capture()` exists but is unreachable
-  via keymap. Fix: add `PKMQuickCapture` command in `commands.lua` and update
-  the keymap.
-
-- **`telescope.lua` checks Telescope at load time** — top-level
-  `pcall(require, 'telescope')` returns an empty M if Telescope hasn't loaded
-  yet. Under Lazy.nvim deferred loading this can silently make all pickers
-  unavailable. All other modules check availability at call time.
-
-- **`templates.lua` `apply_template` silently fails when Telescope is loaded**
-  — calls `tele.template_picker(templates, on_select)` which is an empty stub.
-  Fix: either implement the picker in `telescope.lua` or fall through to
-  `vim.ui.select` unconditionally.
-
 - `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
   malformed paths when bench_dir is a Unix-style path (e.g. `/tmp/pkm_bench`).
   Files are still created correctly because vim.fn.mkdir/glob tolerate mixed
   separators on WSL. Fix: accept bench_dir as-is and join subdirs with the
   correct separator for the path type, or document that bench_dir must use
-  the native separator.   
+  the native separator.
 
-### Benchmarks - Post-index integration benchmark (bench_dir on NTFS/WSL, P:
-drive):
+- **`PKMInsertCitation` has no non-Telescope fallback** — the command calls
+  `require('pkm.telescope').insert_citation_picker()` directly. After the
+  1.2.1 telescope.lua refactor this degrades to a `vim.notify` warning rather
+  than silently doing nothing, but there is no `vim.ui.select` fallback path.
+  `ui.lua` would need a `select_note_for_citation()` function to complete the
+  fallback.
+
+### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
+
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
   - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
   - 100k projection (raw scan): ~14.2s; post-index: ~65ms
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
 
-## [1.2.1]
+### Suspended Functions (queued for decision)
+
+- **`journal.sync_yaml_on_rename`** — reads the journal filename, parses the
+  timestamp from it, and writes `date` and `time` fields back into YAML.
+  Called from the `BufReadPost` autocmd in `init.lua`.
+
+  Was silently broken by the greedy pattern bug — the function exited without
+  writing anything. When the pattern was fixed in 1.1.1, it began writing
+  `date` and `time` to every journal note on open. These fields are not in
+  the journal template and conflict with the `created_on`/`last_updated_on`
+  design.
+
+  **Current state:** the `BufReadPost` call in `init.lua` is commented out.
+  The function definition in `journal.lua` is left intact.
+
+  **Options:**
+  - Delete — if `date`/`time` fields are never wanted.
+  - Add to template and reinstate — if split date/time fields are wanted.
+  - Replace with a function that syncs `created_on` from the filename instead.
+
+  Note: `notes.sync_yaml_on_rename` (consolidated folder) is unrelated — it
+  syncs `title` only and is not affected.
+
+### Dead Code (queued for removal)
+
+- `normalize_path(path)` in `notes.lua` — defined but never called.
+- `is_empty_table(t)` in `yaml.lua` — defined but never called.
+- `is_array_table(t)` in `yaml.lua` — defined but never called.
+- `show_stats_window(stats)` in `ui.lua` — stats table never constructed;
+  `show_stats()` is the live implementation.
+- `select_note_enhanced` in `ui.lua` — defined but not called from any command.
+- `normalise_tags` in `export.lua` — no longer called after `match_file`
+  rewrite.
+
+## [1.2.1] — 2026-05-28
+
+### Fixed
+
+- **`telescope.lua` load-time Telescope check** — top-level
+  `pcall(require, 'telescope')` + `if not has_telescope then return M end`
+  made the entire module return an empty table if Telescope had not yet loaded
+  (always the case under Lazy.nvim deferred loading). Removed the early return.
+  Added `require_telescope()` helper that checks availability at call time and
+  returns a table of all sub-modules. All five exported functions now call this
+  helper as their first act, consistent with the project-wide pattern.
+
+- **`PKMSearch` and `PKMTags` had no Telescope fallback** — both commands
+  called `require('pkm.telescope')` directly. Now use
+  `pcall(require, 'telescope')` with fallback to `ui.search_notes()` and
+  `ui.browse_tags()`, matching the established `PKMMergeTags` pattern.
+
+- **`templates.lua` `apply_template` silently failed when Telescope was
+  loaded** — the Telescope branch called `tele.template_picker()`, an empty
+  stub. Removed the Telescope branch entirely; `vim.ui.select` is now the
+  unconditional implementation.
+
+- **Rename from inside note required manual `:e!`** — `rename_from_yaml` used
+  `vim.cmd("file ...")` to redirect the buffer after an atomic filesystem
+  rename. `:file` marks the buffer as modified even when disk content is
+  correct. Changed to `vim.cmd("keepalt file ...")` + `vim.bo.modified = false`
+  to redirect cleanly without the spurious modified flag.
+
+- **Same buffer-redirect bug in `change_note_type`** — identical root cause
+  and fix: `keepalt file` + `vim.bo.modified = false`.
+
+- **Secondary E484 on rename** — `BufWritePost` calls `sync_filename_on_save`
+  (which renames the file) and then `update_references(old_filepath)`. After
+  rename, the old path no longer exists; `migrate_legacy_links` attempted
+  `vim.fn.readfile(old_filepath)` and threw E484. Added a `filereadable` guard
+  at the top of `update_references`: exits silently when `target_file` is
+  provided but no longer readable.
+
+- **Journal greedy pattern bug (CHANGELOG entry was stale)** —
+  `find_by_date_range`, `list_recent`, and `find_by_tag` in `journal.lua`
+  already use `filename:match("^journal_(.+)$")`. The Known Bugs entry
+  incorrectly described them as still using the old greedy pattern.
+
+- **Write-only captures in `update_references_on_rename`** — `old_type` and
+  `new_type` were assigned from `get_note_type_and_id` but their values were
+  never read. Replaced both with `_`.
+
+- **`ftype` write-only in `get_citable_items_map`** — second return value of
+  `uv.fs_scandir_next` was named `ftype` but never read. Replaced with `_`.
+
+- **Duplicate comment in `update_references`** — `-- 5. Scan Text for
+  Citations` appeared twice. Duplicate removed.
+
+- **`PKMInsertCitation` now has a `vim.ui.select` fallback** — the command
+  previously called `insert_citation_picker()` directly with no fallback.
+  Added `M.insert_citation_ui()` to `ui.lua` and updated the command to use
+  the `pcall`/fallback pattern matching the other picker commands.
 
 ### Removed
-- `M.quick_capture()` in `notes.lua` — the function assumed a "daily aggregator"
-  scratchpad (one file per day, entries appended with timestamp headings) that
-  has no basis in the system design. Scratchpads are independent timestamped
-  notes; there is no "today's scratchpad" concept. Removed the function,
-  the `quick_capture` keymap entry from `config.lua` and `keymaps.lua`, and
-  the `:PKMQuickCapture` documentation. `:PKMNewScratchpad` is the replacement;
-  the title prompt can be dismissed with Enter for minimum friction.
 
-## [1.2.0, dev-view] — 2026-05-16
+- **Dead code:**
+ - `is_empty_table` and `is_array_table` in `yaml.lua` — the two functions
+   only called each other; nothing outside the pair called `is_array_table`.
+   `generate_yaml` uses its own inline array check. Both deleted.
+ - `normalise_tags` in `export.lua` — orphaned by the `filter.lua` rewrite;
+   `match_file` now delegates to `filter.eval()`. Deleted.
+ - `normalize_path` in `notes.lua` — defined but never called. Deleted.
+ - `show_stats_window`, `select_note_enhanced`, `show_graph`, `show_analytics`
+  in `ui.lua` — none called from any command or live code path. Deleted.
 
+- **`M.quick_capture()`** in `notes.lua` — the function assumed a "daily
+  aggregator" scratchpad (one file per day, entries appended with timestamp
+  headings) that has no basis in the system design. Scratchpads are independent
+  timestamped notes; there is no "today's scratchpad" concept. Removed the
+  function, the `quick_capture` keymap entry from `config.lua` and
+  `keymaps.lua`, and the `:PKMQuickCapture` documentation.
+  `:PKMNewScratchpad` is the replacement; the title prompt can be dismissed
+  with Enter for minimum friction.
+
+- **`M.template_picker` stub** in `templates.lua` — empty function, never
+  called externally, listed as dead code since 1.1.3. Deleted.
+
+## [1.2.0, dev-view] - 2026-5-16
 
 ### Added
 - `docs/PHILOSOPHY.MD` - a brief on the project's philosophy and scope.
-
-## [1.2.0, dev-view] — 2026-05-16
-
-### Added
 - `lua/pkm/views.lua` — named project views over the note index.
   - `views.list()` → sorted view names from `config.projects`
   - `views.match_all(name)` → sorted paths matching the view's filter

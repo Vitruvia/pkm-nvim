@@ -157,7 +157,7 @@ function M.get_citable_items_map()
         
         if req then
           while true do
-            local name, ftype = uv.fs_scandir_next(req)
+            local name, _ = uv.fs_scandir_next(req)
             if not name then break end
             
             if name:match("%.md$") then
@@ -391,6 +391,11 @@ function M.update_references(target_file)
   -- 1. Determine Context (Buffer vs Disk)
   local current_path = target_file or vim.fn.expand("%:p")
   if not current_path or current_path == "" then return end
+
+  -- Guard: abort silently if the file no longer exists at this path.
+  -- This happens when sync_filename_on_save renames the file before
+  -- the BufWritePost autocmd calls update_references(old_filepath).
+  if target_file and vim.fn.filereadable(target_file) == 0 then return end
   
   -- Only migrate legacy links if we are working on disk (Sync mode)
   if target_file then
@@ -453,7 +458,6 @@ function M.update_references(target_file)
   local new_cites = {notes = {}, bib = {}, journal = {}, scratch = {}}
   local new_cites_map = {}
   
--- 5. Scan Text for Citations
   for i = content_start, #lines do
     for match in lines[i]:gmatch("[%a][%w_%-]*%[[%w%-_]+%]") do
       local cite_type, short_id = M.parse_citation(match)
@@ -584,10 +588,10 @@ end
 ---@param new_basename string Filename without extension after rename, or "__DELETED__"
 ---@param new_title string|nil New title to update in citation entries, or nil
 function M.update_references_on_rename(old_basename, new_basename, new_title)
-  local old_type, old_id = M.get_note_type_and_id(old_basename .. ".md")
-  local new_type, new_id = nil, nil
+  local _, old_id = M.get_note_type_and_id(old_basename .. ".md")
+  local _, new_id = nil, nil
   if new_basename ~= "__DELETED__" then
-      new_type, new_id = M.get_note_type_and_id(new_basename .. ".md")
+      _, new_id = M.get_note_type_and_id(new_basename .. ".md")
   end
   
   if not old_id then return end
