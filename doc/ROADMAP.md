@@ -50,7 +50,6 @@ The note namespace is intentionally **flat and global** — all notes share a si
 **Known limitations:**
 - ⚠️ No preview system
 - ⚠️ No image embedding or visualization support
-- ⚠️ Several queued bugs (see CHANGELOG.md Known Bugs section)
 
 **Metadata notes:**
 - The `status` field has been **removed** from frontmatter. Do not reintroduce it.
@@ -227,19 +226,7 @@ require('pkm').setup({
 
 ### Next Steps
 
-**1. Fix queued bugs**
-
-Several bugs are flagged in `CHANGELOG.md` under Known Bugs. Address these before
-starting new features. The two highest-impact:
-
-- `quick_capture` keymap calls wrong command — unreachable via keymap; add
-  `PKMQuickCapture` command and fix keymap.
-- `telescope.lua` checks Telescope at load time — silently breaks all pickers
-  under Lazy.nvim deferred loading; move check to call time.
-
----
-
-**2. Unified note browser (`PKMBrowse`) — consolidate PKMSearch and PKMTags**
+**1. Unified note browser (`PKMBrowse`) — consolidate PKMSearch and PKMTags**
 
 *Motivation:* PKMSearch and PKMTags both answer the same question ("find a note to open") but bypass `filter.lua`, the structured query engine the project already owns. PKMTags uses `grep_string` (full-text ripgrep), which produces false positives and duplicate results instead of matching against frontmatter. PKMSearch uses `live_grep`, which cannot be combined with tag or title constraints. PKMExport already does this correctly via `index.lua` + `filter.lua` and is the model to follow; it is kept separate because its purpose (batch file export) is categorically different from interactive browsing.
 
@@ -259,7 +246,7 @@ starting new features. The two highest-impact:
 
 ---
 
-**3. Subproject hierarchy for views**
+**2. Subproject hierarchy for views**
 
 Views can declare a parent view; the subproject's effective filter is the parent
 filter AND-ed with its own constraints. Sibling subprojects can overlap freely

@@ -13,12 +13,10 @@
   correct separator for the path type, or document that bench_dir must use
   the native separator.
 
-- **`PKMInsertCitation` has no non-Telescope fallback** — the command calls
-  `require('pkm.telescope').insert_citation_picker()` directly. After the
-  1.2.1 telescope.lua refactor this degrades to a `vim.notify` warning rather
-  than silently doing nothing, but there is no `vim.ui.select` fallback path.
-  `ui.lua` would need a `select_note_for_citation()` function to complete the
-  fallback.
+- Attempting to save a note that has had its name changed from within metadata
+  "title" prompts for a "!" to force the command. (Does this mean that editing
+  a consolidated note from within its metadata "title" does not cause the
+  buffer to reload that same file, or is it something else?).
 
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
@@ -50,17 +48,6 @@
 
   Note: `notes.sync_yaml_on_rename` (consolidated folder) is unrelated — it
   syncs `title` only and is not affected.
-
-### Dead Code (queued for removal)
-
-- `normalize_path(path)` in `notes.lua` — defined but never called.
-- `is_empty_table(t)` in `yaml.lua` — defined but never called.
-- `is_array_table(t)` in `yaml.lua` — defined but never called.
-- `show_stats_window(stats)` in `ui.lua` — stats table never constructed;
-  `show_stats()` is the live implementation.
-- `select_note_enhanced` in `ui.lua` — defined but not called from any command.
-- `normalise_tags` in `export.lua` — no longer called after `match_file`
-  rewrite.
 
 ## [1.2.1] — 2026-05-28
 
