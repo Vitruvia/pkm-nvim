@@ -348,6 +348,24 @@ version of `views.open()`.
 With subproject hierarchy implemented, the same buffer gains a tree header
 showing the view's position in the hierarchy and its children:
 
+```
+▼ ringforge (14)
+▶ ringforge-mechanics (6)
+▶ ringforge-references (8)
+──────────────────────────────
+note_0042_Damage_Systems.md
+note_0051_Spell_Targeting.md
+...
+```
+
+The tree header is navigable: `<CR>` on a child view reloads the sidebar for
+that view; `<BS>` navigates to the parent view.
+
+**Dependency:** The flat list version has no dependencies beyond Search Merge
+and `:PKMViewLast`. The tree header requires subproject hierarchy (item 2).
+Implement the flat version first; extend to the tree when subprojects land.
+
+
 ### Near-term additions
 
 **Unified note browser (`PKMBrowse`)**
@@ -367,12 +385,6 @@ Examples:
   of all headers in the file or in a selection.
 
 ### Potential Additions (mid-term to long-term)
-
-**Dedicated subproject UI**
-Custom Telescope layout with a sidebar: left panel lists available subprojects,
-right panel shows the active view's notes. Selecting a subproject on the left
-updates the right panel without closing the picker. This is the natural evolution
-of the Phase 1 keymap-cycling approach.
 
 **`lua/pkm/preview.lua`**
 Browser-based live preview: Markdown + LaTeX (MathJax), WebSocket live updates
