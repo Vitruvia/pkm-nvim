@@ -167,6 +167,22 @@ function M.register()
     complete = function() return require('pkm.views').list() end,
     desc     = 'Delete a named project view from views.json',
   })
+
+-- =============================================================================
+-- SECTION: Markdown editing
+-- =============================================================================
+  vim.api.nvim_create_user_command('PKMNextHeader', function()
+    require('pkm.markdown').append_next_header()
+  end, { desc = "Duplicate current header with counter incremented, append at EOF" })
+
+  vim.api.nvim_create_user_command('PKMHeaderLevelUp', function(opts)
+    require('pkm.markdown').shift_header_level('up', opts.line1, opts.line2)
+  end, { range = '%', desc = "Increase header level in range (default: whole buffer)" })
+
+  vim.api.nvim_create_user_command('PKMHeaderLevelDown', function(opts)
+    require('pkm.markdown').shift_header_level('down', opts.line1, opts.line2)
+  end, { range = '%', desc = "Decrease header level in range (default: whole buffer)" })
+
 end
 
 return M

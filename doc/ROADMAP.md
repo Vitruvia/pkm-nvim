@@ -220,7 +220,8 @@ require('pkm').setup({
 
 ### Active
 
-(none)
+**1. `markdown.lua`** — general markdown editing utilities.
+Initial functions: `append_next_header`, `shift_header_level`. No setup() needed.
 
 ---
 
@@ -370,15 +371,7 @@ Implement the flat version first; extend to the tree when subprojects land.
 
 **Unified note browser (`PKMBrowse`)**
 
-**Enhanced markdown support**: a markdown.lua file to help improve the
-routinely use of markdown files in a variety of tasks. The changes should not
-bloat the already vast list of keymaps and it should not conflate with
-existing, famous plugins such as vim.surround. in fact, it should be designed
-to work alongside such plugins and to complement them, leaving redundant
-commands only for cases where the user does not have such plugins installed. Or
-perhaps it should consider incorporating them, but only in the case of
-extremely stable and well-supported plugins that cannot be adequately coded
-into our own system.
+**Enhanced markdown support**: see Active.
 
 Examples:
 - Automating `:%s/^#\(#*\)/\1/g` and `'<,'>s/^#\(#*\)/\1` to decrease the level

@@ -47,6 +47,23 @@ function M.register(config)
   map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
   map(k.transpose_note, "<cmd>PKMTranspose<cr>", "Transpose Note")
   map(k.change_note_type, "<cmd>PKMChangeType<cr>", "Change Note Type")
+
+  -- Markdown Editing
+  map(k.next_header, "<cmd>PKMNextHeader<cr>", "Next Header (increment counter)")
+
+  if k.header_level_up then
+    vim.keymap.set('n', k.header_level_up, '<cmd>PKMHeaderLevelUp<cr>',
+      { desc = "PKM: Header Level Up (buffer)", silent = true })
+    vim.keymap.set('v', k.header_level_up, ':PKMHeaderLevelUp<cr>',
+      { desc = "PKM: Header Level Up (selection)", silent = true })
+  end
+
+  if k.header_level_down then
+    vim.keymap.set('n', k.header_level_down, '<cmd>PKMHeaderLevelDown<cr>',
+      { desc = "PKM: Header Level Down (buffer)", silent = true })
+    vim.keymap.set('v', k.header_level_down, ':PKMHeaderLevelDown<cr>',
+      { desc = "PKM: Header Level Down (selection)", silent = true })
+  end
 end
 
 return M

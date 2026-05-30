@@ -2,7 +2,24 @@
 
 ---
 
-## Unreleased
+## [Unreleased]
+
+### Added
+- `lua/pkm/markdown.lua` — new module for general markdown editing utilities.
+  No setup() required; required lazily by command handlers.
+  - `append_next_header()`: duplicates the header on the current line with its
+    trailing counter incremented by one, appends at EOF after a blank separator.
+    Handles trailing non-digit annotations (e.g. " (FGV)") transparently.
+    Skips the separator if the buffer already ends with an empty line.
+  - `shift_header_level(direction, start_line, end_line)`: shifts the `#`-level
+    of all header lines in the given range up or down by one step. Level-1
+    headers are left unchanged on decrease. Non-header lines pass through unmodified.
+- `:PKMNextHeader` — invoke `append_next_header()` from the current line.
+- `:PKMHeaderLevelUp` — increase header level in range; default range is whole buffer.
+- `:PKMHeaderLevelDown` — decrease header level in range; default range is whole buffer.
+  Both level commands accept `'<,'>` prefix in visual mode for selection-scoped operation.
+- Config: `keymaps.next_header` (default `<leader>mh`), `keymaps.header_level_up`,
+  `keymaps.header_level_down` (both default `false`).
 
 ### Known Bugs (queued)
 

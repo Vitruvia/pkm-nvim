@@ -103,6 +103,10 @@ local defaults = {
     promote_note    = "<leader>np",
     transpose_note  = "<leader>nT",
     change_note_type = "<leader>nC",
+    -- Markdown editing
+    next_header        = "<leader>mh",
+    header_level_up    = false,
+    header_level_down  = false,
   },
 }
 
