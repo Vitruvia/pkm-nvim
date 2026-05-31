@@ -107,6 +107,12 @@ local defaults = {
     next_header        = "<leader>mh",
     header_level_up    = false,
     header_level_down  = false,
+    -- Emphasis wrapping (motion-based in normal mode; selection in visual mode)
+    wrap_italic      = false,   -- "*"   italic
+    wrap_bold        = false,   -- "**"  bold
+    wrap_bold_italic = false,   -- "***" bold + italic
+    wrap_code        = false,   -- "`"   inline code
+    wrap_strike      = false,   -- "~~"  strikethrough (GFM)
   },
 }
 

@@ -35,6 +35,12 @@
   a consolidated note from within its metadata "title" does not cause the
   buffer to reload that same file, or is it something else?).
 
+- `:PKMTags' inserts non-tag matches as if they were tags. For example:
+  "português" is found as a tag despite there not being such a tag in any
+  note's metadata, because such word exists in some note's title or body text
+  ("português-acentuação-paroxítona"). *This should be fixed during the integration
+  of searching methods, which is noted to be done in the roadmap.*
+
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
