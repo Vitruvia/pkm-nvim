@@ -14,6 +14,21 @@
   - `shift_header_level(direction, start_line, end_line)`: shifts the `#`-level
     of all header lines in the given range up or down by one step. Level-1
     headers are left unchanged on decrease. Non-header lines pass through unmodified.
+  - `wrap_with_marker(marker)`: enters operator-pending mode; the next motion
+    defines the target range. Accepts any delimiter string.
+  - `_wrap_operator(motion_type)`: operatorfunc callback invoked by Neovim
+    after a g@ motion completes. Do not call directly.
+  - `_wrap_visual(marker)`: wraps or unwraps the current visual selection.
+    Called from visual-mode keymaps.
+  - Toggle behaviour: same marker on an already-wrapped range removes it.
+    Different marker replaces the existing emphasis without stacking.
+    Longest-first matching (`***` before `**` before `*`) prevents partial
+    stripping of compound markers.
+  - Multi-line ranges are rejected with a warning; single-line only.
+- Config: `keymaps.wrap_italic`, `wrap_bold`, `wrap_bold_italic`, `wrap_code`,
+  `wrap_strike` — all default `false`. Assign in your setup call to enable.
+- `keymaps.lua`: `map_emphasis` helper registers both n and v mode bindings
+  from a single call per marker.
 - `:PKMNextHeader` — invoke `append_next_header()` from the current line.
 - `:PKMHeaderLevelUp` — increase header level in range; default range is whole buffer.
 - `:PKMHeaderLevelDown` — decrease header level in range; default range is whole buffer.

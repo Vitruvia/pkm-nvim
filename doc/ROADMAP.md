@@ -221,7 +221,8 @@ require('pkm').setup({
 ### Active
 
 **1. `markdown.lua`** — general markdown editing utilities.
-Initial functions: `append_next_header`, `shift_header_level`. No setup() needed.
+Functions: `append_next_header`, `shift_header_level`, `wrap_with_marker`,
+`_wrap_operator`, `_wrap_visual`. No setup() needed.
 
 ---
 
