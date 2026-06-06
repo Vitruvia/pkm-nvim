@@ -222,7 +222,10 @@ require('pkm').setup({
 
 **1. `markdown.lua`** — general markdown editing utilities.
 Functions: `append_next_header`, `shift_header_level`, `wrap_with_marker`,
-`_wrap_operator`, `_wrap_visual`. No setup() needed.
+`_wrap_operator`, `_wrap_visual`. No setup() needed. Next steps: consider
+shortcuts for frequently typed symbols, such as `—`, `º`, and `§`. These
+may be "textual replacement" shortcuts, or "macros" instead of full nvim
+keymaps.
 
 ---
 
@@ -367,16 +370,49 @@ that view; `<BS>` navigates to the parent view.
 and `:PKMViewLast`. The tree header requires subproject hierarchy (item 2).
 Implement the flat version first; extend to the tree when subprojects land.
 
+---
+
+**5. Free-form `title` field — decouple note title from filename**
+
+*Motivation:* The `title` field currently serves double duty: it drives the filename (via `sync_filename_on_save` / `rename_from_yaml`) and acts as the human-readable display name. Because the filename must be filesystem-safe, `sanitize_title` strips characters like `:`, `"`, and `*`. `sync_yaml_on_rename` then reconstructs `title` from the filename on every `BufReadPost`, permanently overwriting any user enrichment. The round-trip is lossy: `"Fourier: Convergence and Applications"` writes to disk, the colon is stripped from the filename, and on the next buffer open the YAML title is silently overwritten to `"Fourier Convergence and Applications"`. Users cannot author expressive titles.
+
+The fix is to break the coupling entirely. `title` becomes an optional, free-form field — no sync in either direction. The filename is set at creation time and changed only via an explicit command.
+
+**Design:**
+
+- `title` remains in all frontmatter templates as an optional field. The system neither reads it to rename files nor overwrites it to match filenames. Users may leave it blank or write any text they wish.
+- At creation time (`create_note`, `promote_note`, `do_convert`, `import_note`), the filename is derived from user input via `sanitize_title` as today. `fm.title` is set to the raw user input, not the sanitized form. This is already the case for most creation paths; removing the sync autocmds is what makes the raw value persist.
+- Post-creation rename is explicit only: a new `:PKMRenameNote` command prompts for a new filename-safe name, sanitizes it, renames the file on disk, and calls `update_references_on_rename`. It does not touch `title`.
+- The `title:` predicate in `filter.lua` must continue to work for notes with no explicit title set. The index entry for each note should resolve the title as: the `title` frontmatter field if non-nil and non-empty, otherwise the filename name-part with underscores replaced by spaces. This fallback is computed in `index.lua` at index-build time and stored in the `title` field of each entry; `filter.lua` needs no change.
+- The same fallback applies in `citations.lua` for display purposes.
+
+**Files affected:**
+
+- `notes.lua`: Remove `sync_filename_on_save` and `sync_yaml_on_rename` entirely (both the functions and their LuaDoc). Add `M.rename_note()`: prompts for a new name, calls `sanitize_title`, renames the file, calls `update_references_on_rename`. Update the module API header.
+- `init.lua`: Remove the call to `notes.sync_filename_on_save()` from the `BufWritePost` autocmd. Remove the call to `notes.sync_yaml_on_rename()` from the `BufReadPost` autocmd (the journal equivalent is already commented out; both hooks can be removed entirely if no other sync logic remains in them).
+- `index.lua`: Change the title computation at index-build time to `(type(fm.title) == 'string' and fm.title ~= '') and fm.title or name_part:gsub("_", " ")`, where `name_part` is extracted from the filename. Ensures the `title` field in every index entry is always a non-empty string.
+- `citations.lua`: Apply the same fallback in `get_note_title(file)` — return `fm.title` if non-empty, otherwise derive from the filename.
+- `commands.lua`: Register `:PKMRenameNote`.
+- `keymaps.lua`: Add `rename_note` entry (suggested default: `<leader>nr`).
+- `config.lua`: Add `rename_note` to the keymaps defaults table.
+- `doc/pkm.txt`: Update the FRONTMATTER section to document `title` as optional and free-form. Update the FILE NAMING section to replace the description of automatic filename-YAML sync with a reference to `:PKMRenameNote`.
+
+**Migration:** None required. Existing notes have `title` set to the filename-derived name (whatever the user typed at creation, possibly overwritten by the old sync). That value is a valid free-form title and the system will use it as-is. Users can enrich their titles at any time. No files need to be modified.
+
+---
 
 ### Near-term additions
 
-**Unified note browser (`PKMBrowse`)**
+1. **Unified note browser (`PKMBrowse`)**
 
-**Enhanced markdown support**: see Active.
+2. **Enhanced markdown support**: see Active.
 
 Examples:
 - Automating `:%s/^#\(#*\)/\1/g` and `'<,'>s/^#\(#*\)/\1` to decrease the level
   of all headers in the file or in a selection.
+
+3. Commands for meta-data modifications (like changing title and adding tags,
+   which are currently done by manually editing the YAML block on each file).
 
 ### Potential Additions (mid-term to long-term)
 
