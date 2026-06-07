@@ -211,7 +211,12 @@ end
 ---@param note_type string
 ---@return string  e.g. "[note   ]" or "[journal]"
 local function type_prefix(note_type)
-  return string.format('[%-7s]', note_type or 'other')
+  local label = note_type or 'other'
+  local width = 7  -- length of 'journal' / 'scratch', the longest types
+  local pad   = width - #label
+  local lpad  = math.floor(pad / 2) + 1  -- +1 for inner margin
+  local rpad  = math.ceil(pad  / 2) + 1
+  return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
 end
 
 --- Parse and cache the filter tree for a named view.
@@ -486,8 +491,32 @@ local function telescope_view_picker(name, paths)
   local sorters      = require('telescope.sorters')
   local index        = require('pkm.index')
 
-  local sorted  = sort_paths_by_type(paths)
-  local entries = {}
+  local children = get_view_children(name)
+  local sorted   = sort_paths_by_type(paths)
+  local entries  = {}
+
+  -- Subview entries first (shown at top with ascending sort)
+  for _, child in ipairs(children) do
+    local c_count = #M.match_all(child)
+    entries[#entries + 1] = {
+      value      = child,
+      display    = string.format('[ %-7s ] %s  (%d notes)', 'subview', child, c_count),
+      ordinal    = string.format('%05d', #entries + 1),
+      is_subview = true,
+    }
+  end
+
+  -- Separator when both subviews and notes are present
+  if #children > 0 and #sorted > 0 then
+    entries[#entries + 1] = {
+      value        = nil,
+      display      = '  ' .. string.rep('─', 52),
+      ordinal      = string.format('%05d', #entries + 1),
+      is_separator = true,
+    }
+  end
+
+  -- Note entries
   for _, path in ipairs(sorted) do
     local e         = index.get(path)
     local note_type = e and e.note_type or 'other'
@@ -496,15 +525,17 @@ local function telescope_view_picker(name, paths)
       value   = path,
       display = type_prefix(note_type) .. ' ' .. title,
       ordinal = string.format('%05d', #entries + 1),
-      path    = path,
     }
   end
 
-  local count = #entries
-  pickers.new({}, {
+  local total = #sorted + #children
+  pickers.new({
+    sorting_strategy = 'ascending',
+    layout_config    = { prompt_position = 'top' },
+  }, {
     prompt_title = string.format(
       'PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs',
-      name, count, count == 1 and '' or 's'),
+      name, total, total == 1 and '' or 's'),
 
     finder = finders.new_dynamic({
       fn = function(prompt)
@@ -512,7 +543,8 @@ local function telescope_view_picker(name, paths)
         local needle   = prompt:lower()
         local filtered = {}
         for _, e in ipairs(entries) do
-          if e.display:lower():find(needle, 1, true) then
+          if not e.is_separator
+          and e.display:lower():find(needle, 1, true) then
             filtered[#filtered + 1] = e
           end
         end
@@ -521,14 +553,19 @@ local function telescope_view_picker(name, paths)
       entry_maker = function(e) return e end,
     }),
 
-    sorter = sorters.Sorter:new({ scoring_function = function() return 0 end }),
+    sorter    = sorters.Sorter:new({ scoring_function = function() return 0 end }),
     previewer = previewers.vim_buffer_cat.new({}),
 
     attach_mappings = function(prompt_bufnr, map)
       actions.select_default:replace(function()
         local entry = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
-        if entry then vim.cmd('edit ' .. vim.fn.fnameescape(entry.value)) end
+        if not entry or entry.is_separator then return end
+        if entry.is_subview then
+          vim.schedule(function() M.open(entry.value) end)
+        else
+          vim.cmd('edit ' .. vim.fn.fnameescape(entry.value))
+        end
       end)
 
       local function go_back()
@@ -547,14 +584,14 @@ local function telescope_view_picker(name, paths)
       end
 
       local function go_children()
-        local children = get_view_children(name)
-        if #children == 0 then
+        local ch = get_view_children(name)
+        if #ch == 0 then
           vim.notify('[pkm] this view has no subviews', vim.log.levels.INFO)
           return
         end
         actions.close(prompt_bufnr)
         vim.schedule(function()
-          vim.ui.select(children, {
+          vim.ui.select(ch, {
             prompt      = string.format("Subviews of '%s':", name),
             format_item = function(n)
               return string.format('%s  (%d)', n, #M.match_all(n))
@@ -577,21 +614,36 @@ end
 
 --- Scrollable float picker. <CR> opens note at cursor; q/<Esc> closes.
 local function float_view_picker(name, paths)
-  local index  = require('pkm.index')
-  local sorted = sort_paths_by_type(paths)
+  local index    = require('pkm.index')
+  local children = get_view_children(name)
+  local sorted   = sort_paths_by_type(paths)
 
   local header = string.format(
     '  View: %s  ·  %d note%s  ·  <CR> open  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  q close',
-    name, #sorted, #sorted == 1 and '' or 's')
-  local lines = {
-    header,
-    '  ' .. string.rep('─', math.max(#header - 2, 10)),
-  }
+    name, #sorted + #children, (#sorted + #children) == 1 and '' or 's')
+  local lines       = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
+  local line_paths  = {}    -- 1-based line index → path (notes)
+  local line_subs   = {}    -- 1-based line index → child name (subviews)
+
+  -- Subviews first
+  for _, child in ipairs(children) do
+    local c_count = #M.match_all(child)
+    lines[#lines + 1] = string.format(
+      '  [ %-7s ] %s  (%d notes)', 'subview', child, c_count)
+    line_subs[#lines] = child
+  end
+
+  if #children > 0 and #sorted > 0 then
+    lines[#lines + 1] = '  ' .. string.rep('─', 52)
+  end
+
+  -- Notes
   for _, p in ipairs(sorted) do
     local e         = index.get(p)
     local note_type = e and e.note_type or 'other'
     local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
     lines[#lines + 1] = '  ' .. type_prefix(note_type) .. ' ' .. title
+    line_paths[#lines] = p
   end
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -620,10 +672,16 @@ local function float_view_picker(name, paths)
   end
 
   local function open_at_cursor()
-    local note_idx = vim.api.nvim_win_get_cursor(win)[1] - 2
-    if note_idx < 1 or note_idx > #sorted then return end
-    close()
-    vim.cmd('edit ' .. vim.fn.fnameescape(sorted[note_idx]))
+    local row = vim.api.nvim_win_get_cursor(win)[1]
+    if line_subs[row] then
+      close()
+      vim.schedule(function() M.open(line_subs[row]) end)
+      return
+    end
+    if line_paths[row] then
+      close()
+      vim.cmd('edit ' .. vim.fn.fnameescape(line_paths[row]))
+    end
   end
 
   local function go_back()
@@ -640,14 +698,14 @@ local function float_view_picker(name, paths)
   end
 
   local function go_children()
-    local children = get_view_children(name)
-    if #children == 0 then
+    local ch = get_view_children(name)
+    if #ch == 0 then
       vim.notify('[pkm] this view has no subviews', vim.log.levels.INFO)
       return
     end
     close()
     vim.schedule(function()
-      vim.ui.select(children, {
+      vim.ui.select(ch, {
         prompt      = string.format("Subviews of '%s':", name),
         format_item = function(n)
           return string.format('%s  (%d)', n, #M.match_all(n))
@@ -685,7 +743,7 @@ local function telescope_views_tree_picker()
     items[#items + 1] = {
       name    = e.name,
       display = string.format('%s%s%s  (%d)', indent, marker, e.name, count),
-      ordinal = string.format('%05d', #items + 1),  -- position-encoded: preserves tree order
+      ordinal = string.format('%05d', #items + 1),
     }
   end
 
@@ -694,7 +752,10 @@ local function telescope_views_tree_picker()
     return
   end
 
-  pickers.new({}, {
+  pickers.new({
+    sorting_strategy = 'ascending',
+    layout_config    = { prompt_position = 'top' },
+  }, {
     prompt_title = 'PKM Views',
     finder = finders.new_dynamic {
       fn = function(prompt)

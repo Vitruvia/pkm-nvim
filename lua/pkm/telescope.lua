@@ -138,7 +138,14 @@ function M.browse(filter_expr)
 
   local items = {}
   for _, e in ipairs(entries) do
-    local prefix = string.format('[%-7s]', e.note_type or 'other')
+  local function type_prefix(note_type)
+    local label = note_type or 'other'
+    local width = 7  -- length of 'journal' / 'scratch', the longest types
+    local pad   = width - #label
+    local lpad  = math.floor(pad / 2) + 1  -- +1 for inner margin
+    local rpad  = math.ceil(pad  / 2) + 1
+    return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
+  end
     items[#items + 1] = {
       path    = e.path,
       display = prefix .. ' ' .. e.title .. '  (' .. e.filename .. ')',

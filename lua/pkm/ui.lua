@@ -158,7 +158,14 @@ function M.browse(filter_expr)
   vim.ui.select(entries, {
     prompt = filter_expr and ('Browse: ' .. filter_expr) or 'Browse Notes',
     format_item = function(e)
-      local prefix = string.format('[%-7s]', e.note_type or 'other')
+    local function type_prefix(note_type)
+      local label = note_type or 'other'
+      local width = 7  -- length of 'journal' / 'scratch', the longest types
+      local pad   = width - #label
+      local lpad  = math.floor(pad / 2) + 1  -- +1 for inner margin
+      local rpad  = math.ceil(pad  / 2) + 1
+      return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
+    end
       return prefix .. ' ' .. e.title .. '  (' .. e.filename .. ')'
     end,
   }, function(sel)
