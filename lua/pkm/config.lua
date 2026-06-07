@@ -97,8 +97,6 @@ local defaults = {
     new_journal     = "<leader>nj",
     new_scratchpad  = "<leader>ns",
     rename_note     = "<leader>nr",
-    search          = "<leader>nf",
-    browse_tags     = "<leader>nt",
     insert_citation = "<leader>nc",
     goto_citation   = "<leader>ng",
     delete_note     = "<leader>nd",
@@ -110,6 +108,10 @@ local defaults = {
     promote_note    = "<leader>np",
     transpose_note  = "<leader>nT",
     change_note_type = "<leader>nC",
+    -- Search and browsing
+    search          = "<leader>nf",
+    browse_tags     = "<leader>nt",
+    browse = false,
     -- Markdown editing
     next_header        = "<leader>mh",
     header_level_up    = false,

@@ -10,7 +10,8 @@
 --
 -- Public API:
 --   insert_citation_picker()  → fuzzy citation picker, inserts on select
---   browse_tags()             → tag list → ripgrep by tag
+--   browse(filter_expr?)         → Browse notes with optional filter expression
+--   browse_tags()                → Tag picker → browse pre-filtered to tag:<selected>
 --   find_notes()              → telescope find_files over PKM root
 --   search_notes()            → telescope live_grep over PKM root (requires rg)
 --   merge_tags_picker()       → 3-step: pick target, multi-select sources, confirm
@@ -36,6 +37,7 @@ local function require_telescope()
   return {
     pickers = require('telescope.pickers'),
     finders = require('telescope.finders'),
+    sorters = require('telescope.sorters'),
     conf    = require('telescope.config').values,
     actions = require('telescope.actions'),
     state   = require('telescope.actions.state'),
@@ -89,41 +91,109 @@ function M.insert_citation_picker()
 end
 
 -- =============================================================================
--- SECTION: Tag and note browsing
+-- SECTION: Note browser
 -- =============================================================================
---- Show all tags in a picker. On select, runs ripgrep for that tag across the
---- PKM root using telescope builtin.grep_string. Requires ripgrep.
-function M.browse_tags()
-  if not check_ripgrep() then return end
 
+--- Open a picker over all PKM notes, optionally pre-filtered by a filter
+--- expression. Empty or nil expr shows all notes. The Telescope prompt applies
+--- exact substring narrowing over the pre-filtered set; fzy is not used.
+---@param filter_expr string|nil  Filter expression string or nil for all notes
+function M.browse(filter_expr)
+  local t = require_telescope()
+  if not t then return end
+
+  local filter = require('pkm.filter')
+  local index  = require('pkm.index')
+
+  local all_entries = index.get_all()
+  local entries
+
+  if filter_expr and filter_expr ~= '' then
+    local tree, err = filter.parse(filter_expr)
+    if not tree then
+      vim.notify('[pkm] invalid filter: ' .. err, vim.log.levels.ERROR)
+      return
+    end
+    entries = {}
+    for _, e in ipairs(all_entries) do
+      if filter.eval(tree, e) then entries[#entries + 1] = e end
+    end
+  else
+    entries = all_entries
+  end
+
+  if #entries == 0 then
+    vim.notify('[pkm] no notes match', vim.log.levels.INFO)
+    return
+  end
+
+  table.sort(entries, function(a, b) return a.filename < b.filename end)
+
+  local items = {}
+  for _, e in ipairs(entries) do
+    items[#items + 1] = {
+      path    = e.path,
+      display = e.title .. '  (' .. e.filename .. ')',
+      ordinal = (e.title .. ' ' .. e.filename):lower(),
+    }
+  end
+
+  t.pickers.new({}, {
+    prompt_title = filter_expr and ('PKMBrowse: ' .. filter_expr) or 'PKMBrowse',
+    finder = t.finders.new_dynamic {
+      fn = function(prompt)
+        if not prompt or prompt == '' then return items end
+        local needle = prompt:lower()
+        local out = {}
+        for _, item in ipairs(items) do
+          if item.ordinal:find(needle, 1, true) then out[#out + 1] = item end
+        end
+        return out
+      end,
+      entry_maker = function(item)
+        return { value = item.path, display = item.display, ordinal = item.ordinal }
+      end,
+    },
+    sorter    = t.sorters.empty(),
+    previewer = t.conf.file_previewer({}),
+    attach_mappings = function(prompt_bufnr)
+      t.actions.select_default:replace(function()
+        t.actions.close(prompt_bufnr)
+        local sel = t.state.get_selected_entry()
+        if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.value)) end
+      end)
+      return true
+    end,
+  }):find()
+end
+
+--- Tag picker. On selection, opens PKMBrowse pre-filtered to tag:<selected>.
+--- No longer uses ripgrep; tag list is sourced from the citation index.
+function M.browse_tags()
   local t = require_telescope()
   if not t then return end
 
   local tags = citations.get_all_tags()
-  local root = require('pkm').config.root_path
+
+  if #tags == 0 then
+    vim.notify('[pkm] no tags found', vim.log.levels.INFO)
+    return
+  end
 
   t.pickers.new({}, {
-    prompt_title = "Browse Notes by Tag",
+    prompt_title = 'Browse by Tag',
     finder = t.finders.new_table {
       results = tags,
-      entry_maker = function(entry)
-        return { value = entry, display = entry, ordinal = entry }
+      entry_maker = function(tag)
+        return { value = tag, display = tag, ordinal = tag }
       end,
     },
     sorter = t.conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr, _)
+    attach_mappings = function(prompt_bufnr)
       t.actions.select_default:replace(function()
         t.actions.close(prompt_bufnr)
-        local selection = t.state.get_selected_entry()
-        if selection then
-          local tag = selection.value
-          t.builtin.grep_string({
-            prompt_title    = "Notes with tag: " .. tag,
-            search          = tag,
-            cwd             = root,
-            additional_args = function() return { "--hidden" } end,
-          })
-        end
+        local sel = t.state.get_selected_entry()
+        if sel then M.browse('tag:' .. sel.value) end
       end)
       return true
     end,

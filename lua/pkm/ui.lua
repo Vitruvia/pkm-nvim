@@ -11,12 +11,12 @@
 --   insert_citation_ui()     → Citation picker fallback (no Telescope)
 --   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
 --   show_stats()             → Show note counts via vim.notify
+--   browse(filter_expr?)     → Browse notes with optional filter expression
 -- =============================================================================
 local M = {}
 
 local utils = require('pkm.utils')
 local config = {}
-local yaml = nil
 
 -- =============================================================================
 -- SECTION: Setup
@@ -24,7 +24,6 @@ local yaml = nil
 ---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config
-  yaml = require('pkm.yaml')
 end
 
 -- =============================================================================
@@ -116,80 +115,64 @@ function M.search_notes(query)
 end
 
 -- =============================================================================
--- SECTION: Tag browsing
+-- SECTION: Note browser
 -- =============================================================================
---- Two-level tag browser: first pick a tag, then pick a file with that tag.
---- Scans consolidated and journal folders. Uses vim.ui.select.
-function M.browse_tags()
-  -- Collect tags from all notes
-  local all_paths = {
-    utils.join(config.root_path, config.folders.consolidated),
-    utils.join(config.root_path, config.folders.journal),
-  }
-  
-  local tag_files = {}
-  
-  for _, search_path in ipairs(all_paths) do
-    local files = vim.fn.glob(search_path .. utils.sep .. "*.md", false, true)
-    
-    for _, file in ipairs(files) do
-      local content = vim.fn.readfile(file)
-      local frontmatter, _ = yaml.parse_frontmatter(content)
-      
-      if frontmatter and frontmatter.tags then
-        for _, tag in ipairs(frontmatter.tags) do
-          if not tag_files[tag] then
-            tag_files[tag] = {}
-          end
-          table.insert(tag_files[tag], {
-            path = file,
-            filename = vim.fn.fnamemodify(file, ":t"),
-          })
-        end
-      end
+
+--- Browse PKM notes with optional filter expression. Fallback for PKMBrowse
+--- when Telescope is unavailable. Uses vim.ui.select.
+---@param filter_expr string|nil
+function M.browse(filter_expr)
+  local filter = require('pkm.filter')
+  local index  = require('pkm.index')
+
+  local all_entries = index.get_all()
+  local entries
+
+  if filter_expr and filter_expr ~= '' then
+    local tree, err = filter.parse(filter_expr)
+    if not tree then
+      vim.notify('[pkm] invalid filter: ' .. err, vim.log.levels.ERROR)
+      return
     end
+    entries = {}
+    for _, e in ipairs(all_entries) do
+      if filter.eval(tree, e) then entries[#entries + 1] = e end
+    end
+  else
+    entries = all_entries
   end
-  
-  if not next(tag_files) then
-    vim.notify("No tags found", vim.log.levels.INFO)
+
+  if #entries == 0 then
+    vim.notify('[pkm] no notes match', vim.log.levels.INFO)
     return
   end
-  
-  -- Create tag list
-  local tag_list = {}
-  for tag, files in pairs(tag_files) do
-    table.insert(tag_list, {
-      tag = tag,
-      count = #files,
-      files = files,
-    })
-  end
-  
-  table.sort(tag_list, function(a, b)
-    if a.count ~= b.count then
-      return a.count > b.count
-    end
-    return a.tag < b.tag
-  end)
-  
-  -- First selection: choose tag
-  vim.ui.select(tag_list, {
-    prompt = "Browse by tag:",
-    format_item = function(item)
-      return string.format("%s (%d)", item.tag, item.count)
+
+  table.sort(entries, function(a, b) return a.filename < b.filename end)
+
+  vim.ui.select(entries, {
+    prompt = filter_expr and ('Browse: ' .. filter_expr) or 'Browse Notes',
+    format_item = function(e)
+      return e.title .. '  (' .. e.filename .. ')'
     end,
-  }, function(selected_tag)
-    if not selected_tag then return end
-    
-    -- Second selection: choose file
-    vim.ui.select(selected_tag.files, {
-      prompt = string.format("Files tagged '%s':", selected_tag.tag),
-      format_item = function(item) return item.filename end,
-    }, function(selected_file)
-      if selected_file then
-        vim.cmd("edit " .. vim.fn.fnameescape(selected_file.path))
-      end
-    end)
+  }, function(sel)
+    if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
+  end)
+end
+
+--- Tag picker. On selection, opens browse() pre-filtered to tag:<selected>.
+function M.browse_tags()
+  local tags = require('pkm.citations').get_all_tags()
+
+  if #tags == 0 then
+    vim.notify('[pkm] no tags found', vim.log.levels.INFO)
+    return
+  end
+
+  vim.ui.select(tags, {
+    prompt = 'Browse by Tag',
+    format_item = function(t) return t end,
+  }, function(sel)
+    if sel then M.browse('tag:' .. sel) end
   end)
 end
 

@@ -92,7 +92,20 @@ function M.register()
     else
       require('pkm.ui').search_notes()
     end
-  end, { desc = 'Search note contents (Telescope live_grep or ui fallback)' })
+  end, { desc = 'Raw text search via ripgrep (Telescope live_grep)' })
+
+  vim.api.nvim_create_user_command('PKMBrowse', function(opts)
+    local expr = opts.args ~= '' and opts.args or nil
+    local has_tele = pcall(require, 'telescope')
+    if has_tele then
+      require('pkm.telescope').browse(expr)
+    else
+      require('pkm.ui').browse(expr)
+    end
+  end, {
+    nargs = '?',
+    desc  = 'Browse PKM notes with optional filter expression (tag:x AND title:y etc.)',
+  })
 
   vim.api.nvim_create_user_command('PKMTags', function()
     local has_tele = pcall(require, 'telescope')

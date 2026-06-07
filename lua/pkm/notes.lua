@@ -803,8 +803,8 @@ function M.link_to_note()
       local number, note_type, name = basename:match("^(%d+)_([a-z]+)_(.+)$")
       
       if number and note_type and name then
-        local display_name = string.format("[%s%s] %s", 
-          note_type, number, name:gsub("_", " "))
+        local display_name = string.format("[%s%s] %s", note_type, number,
+        require('pkm.citations').get_note_title(file))
         
         table.insert(notes, {
           path = file,
@@ -828,7 +828,7 @@ function M.link_to_note()
     
     local link = "[[" .. selected.basename .. "]]"
     
-    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+    local _, col = unpack(vim.api.nvim_win_get_cursor(0))
     local line = vim.api.nvim_get_current_line()
     local new_line = line:sub(1, col) .. link .. line:sub(col + 1)
     vim.api.nvim_set_current_line(new_line)
@@ -926,7 +926,7 @@ function M.show_backlinks()
         if has_link then
           table.insert(backlinks, {
             path = file,
-            display = vim.fn.fnamemodify(file, ":t"),
+            display = require('pkm.citations').get_note_title(file),
           })
         end
       end

@@ -10,7 +10,6 @@
 --   create_entry_custom()                 → Create entry with interactive timestamp
 --   rename_from_yaml(filepath, iso)       → Rename file to match created_on timestamp
 --   sync_filename_on_save()               → Sync filename to created_on on BufWritePost
---   sync_yaml_on_rename()                 → Sync YAML timestamp to filename on BufReadPost
 --   find_by_date_range(start, end)        → Return entries within a date range
 --   list_recent(count?)                   → Show picker of N most recent entries
 --   find_by_tag(tag)                      → Return entries matching a tag

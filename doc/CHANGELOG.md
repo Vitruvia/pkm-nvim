@@ -66,6 +66,18 @@
     not touch the `title` frontmatter field. Consolidated notes only.
   - `:PKMRenameNote` — invoke `rename_note()` from the current buffer.
   - Config: `keymaps.rename_note` (default `<leader>nr`).
+- `telescope.lua`: `M.browse(filter_expr?)` — new note browser. Pre-filters the
+  index using a `filter.lua` expression at open time; the Telescope prompt then
+  applies exact substring narrowing over the pre-filtered set. `finders.new_dynamic`
+  + `sorters.empty()` ensures fzy is never applied to structured filter results.
+  Empty or nil expression shows all notes. Display format: `title  (filename)`.
+- `ui.lua`: `M.browse(filter_expr?)` — `vim.ui.select` fallback with identical
+  index + filter pipeline and display format.
+- `:PKMBrowse [filter_expr]` — browse PKM notes with an optional filter expression
+  in the `filter.lua` grammar (`tag:math AND title:fourier`, `filename:0042`, etc.).
+  Tab-completable predicates: `tag:`, `title:`, `text:`, `filename:`. Telescope
+  picker when available; `ui.browse` fallback otherwise.
+- Config: `keymaps.browse` (default `false`).
 
 ### Changed
 
@@ -84,6 +96,16 @@
   (Note creation / Note file operations / Note conversion and promotion / Sync
   control / Search and browse / Citations / Navigation and linking / Stats /
   Views / Markdown editing). No functional changes.
+- `telescope.lua` `browse_tags()`: rewritten to use `citations.get_all_tags()` +
+  the index+filter pipeline. Now a simple tag picker that opens `M.browse('tag:<selected>')`.
+  Ripgrep dependency removed entirely from this function.
+- `ui.lua` `browse_tags()`: same rewrite as the Telescope version.
+- `ui.lua`: removed unused `yaml` module-level variable and its `setup()` assignment;
+  the old `browse_tags` was the only caller.
+- `telescope.lua` `require_telescope()`: added `sorters` to the returned table
+  (required by `M.browse`).
+- `:PKMSearch` description updated to clarify scope: raw streaming text search via
+  ripgrep (`live_grep`). Not a replacement for `:PKMBrowse`.
 
 ### Removed
 
@@ -110,22 +132,6 @@
   mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
   the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
-
-- `:PKMTags` inserts non-tag matches as tags. For example, `"português"` is
-  returned as a tag despite not existing in any note's `tags` field, because
-  the word appears in a note's title or body (`"português-acentuação-paroxítona"`).
-  Root cause: `PKMTags` uses Telescope `grep_string` (full-text ripgrep) rather
-  than the `index + filter` pipeline. Will be resolved when `PKMBrowse`
-  consolidates the search interface.
-
-- `init.lua` `BufWritePost`: `yaml.save_frontmatter` writes the file and then
-  `vim.cmd("checktime")` forces Neovim to reload the buffer, triggering the
-  modeline scanner. Notes whose body contains patterns matching Vim's modeline
-  format (e.g. `ex:`) can produce `E518`. Root cause: `save_frontmatter`
-  updates frontmatter by writing to disk and reloading rather than updating the
-  buffer directly. Fix: replace the write+checktime approach with
-  `vim.api.nvim_buf_set_lines` to update the buffer in place, eliminating the
-  reload entirely.
 
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 

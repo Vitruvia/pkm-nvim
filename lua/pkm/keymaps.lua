@@ -50,6 +50,7 @@ function M.register(config)
   map(k.transpose_note, "<cmd>PKMTranspose<cr>", "Transpose Note")
   map(k.change_note_type, "<cmd>PKMChangeType<cr>", "Change Note Type")
   map(k.rename_note, "<cmd>PKMRenameNote<cr>", "Rename Note")
+  map(k.browse, "<cmd>PKMBrowse<cr>", "Browse Notes")
 
   -- --------------------------------------------------------------------------
   -- KEYMAPS: MARKDOWN EDITING
