@@ -4,7 +4,10 @@
 
 ## [Unreleased]
 
+## [Unreleased]
+
 ### Added
+
 - `lua/pkm/markdown.lua` — new module for general markdown editing utilities.
   No setup() required; required lazily by command handlers.
   - `append_next_header()`: duplicates the header on the current line with its
@@ -25,55 +28,104 @@
     Longest-first matching (`***` before `**` before `*`) prevents partial
     stripping of compound markers.
   - Multi-line ranges are rejected with a warning; single-line only.
+  - `setup_symbols(symbols)`: registers buffer-local insert-mode abbreviations
+    and keymaps from a list of `{trigger?, key?, expansion}` entries. Called
+    from the `BufReadPost` autocmd so registrations are scoped per buffer.
+    Both fields are optional — an entry may have either, or both.
+  - `goto_heading(direction)`: jumps to the next or previous ATX heading line
+    (`#`-prefixed) in the current buffer. Notifies if none is found.
 - Config: `keymaps.wrap_italic`, `wrap_bold`, `wrap_bold_italic`, `wrap_code`,
   `wrap_strike` — all default `false`. Assign in your setup call to enable.
-- `keymaps.lua`: `map_emphasis` helper registers both n and v mode bindings
-  from a single call per marker.
+- Config: `symbols = {}` — top-level list of `{trigger?, key?, expansion}`
+  tables. Default empty. Populated by the user; no default symbols are shipped.
+- `keymaps.lua`: `map_emphasis` helper registers both normal and visual mode
+  bindings from a single call per marker.
 - `:PKMNextHeader` — invoke `append_next_header()` from the current line.
-- `:PKMHeaderLevelUp` — increase header level in range; default range is whole buffer.
-- `:PKMHeaderLevelDown` — decrease header level in range; default range is whole buffer.
-  Both level commands accept `'<,'>` prefix in visual mode for selection-scoped operation.
+- `:PKMHeaderLevelUp` — increase header level in range; default range is whole
+  buffer. Accepts `'<,'>` prefix for selection-scoped operation.
+- `:PKMHeaderLevelDown` — decrease header level in range; default range is whole
+  buffer. Accepts `'<,'>` prefix for selection-scoped operation.
+- `:PKMHeadingNext` — jump to the next ATX heading in the buffer.
+- `:PKMHeadingPrev` — jump to the previous ATX heading in the buffer.
 - Config: `keymaps.next_header` (default `<leader>mh`), `keymaps.header_level_up`,
-  `keymaps.header_level_down` (both default `false`).
+  `keymaps.header_level_down`, `keymaps.heading_next`, `keymaps.heading_prev`
+  (all except `next_header` default `false`).
+- **Free-form `title` field — title decoupled from filename.**
+  - `filter.lua`: `filename:` predicate added to the filter grammar. Matches
+    the file stem (without extension) as a case-insensitive substring. The note
+    data table now carries a `filename` field alongside `path`, `title`, `tags`,
+    and `body`.
+  - `index.lua`: `filename` field added to every index entry (file stem without
+    extension). Title computation updated: uses `fm.title` if non-empty,
+    otherwise derives from the filename stem with underscores replaced by spaces.
+    This fallback ensures `title:` predicates always have a non-empty value to
+    match against even for notes without an explicit `title` field.
+  - `notes.lua`: `M.rename_note()` — prompts for a new name, sanitizes it,
+    renames the file on disk, invalidates both paths in the index, redirects the
+    buffer via `keepalt file`, and propagates the rename through citations. Does
+    not touch the `title` frontmatter field. Consolidated notes only.
+  - `:PKMRenameNote` — invoke `rename_note()` from the current buffer.
+  - Config: `keymaps.rename_note` (default `<leader>nr`).
 
-### Deleted
+### Changed
 
-- **`journal.sync_yaml_on_rename`** — read the journal filename, parsed the
-  timestamp from it, and wrote `date` and `time` fields back into YAML.
-  Called from the `BufReadPost` autocmd in `init.lua`.
+- `filter.lua`: the `title:` predicate now matches the free-form YAML title
+  with a filename-derived fallback (consistent with the index entry). The
+  grammar comment and note data table comment updated to reflect the `filename`
+  field. `parse_atom` error message updated to list all four valid fields.
+- `index.lua`: entry shape extended with `filename` (file stem without
+  extension). Title fallback logic added to `read_entry`. `Consumed by` comment
+  updated to remove stale `(planned)` annotations.
+- `init.lua`: `BufWritePost` autocmd no longer calls `notes.sync_filename_on_save`;
+  `notes` local removed from the callback. `BufReadPost` autocmd no longer calls
+  `notes.sync_yaml_on_rename`; now calls `require('pkm.markdown').setup_symbols`
+  instead. `setup_sync_autocmds` LuaDoc updated to reflect current behaviour.
+- `commands.lua`: `register()` reorganized with inline section separators
+  (Note creation / Note file operations / Note conversion and promotion / Sync
+  control / Search and browse / Citations / Navigation and linking / Stats /
+  Views / Markdown editing). No functional changes.
 
-  Was silently broken by the greedy pattern bug — the function exited without
-  writing anything. When the pattern was fixed in 1.1.1, it began writing
-  `date` and `time` to every journal note on open. These fields are not in
-  the journal template and conflict with the `created_on`/`last_updated_on`
-  desigin.
+### Removed
+
+- **`notes.sync_filename_on_save`** — automatically renamed the consolidated
+  note file on every `BufWritePost` to match the `title` frontmatter field.
+  Removed as part of the title decoupling: `title` is now a free-form field
+  and the system never drives filename changes from it. The `BufWritePost` call
+  site in `init.lua` removed.
+- **`notes.sync_yaml_on_rename`** — automatically overwrote the `title`
+  frontmatter field on every `BufReadPost` with a value derived from the
+  filename. The round-trip was lossy (special characters stripped by
+  `sanitize_title` were never recoverable). Removed as part of the title
+  decoupling. The `BufReadPost` call site in `init.lua` removed.
+- **`journal.sync_yaml_on_rename`** — was writing `date` and `time` fields not
+  present in the journal template, conflicting with `created_on`/`last_updated_on`
+  design. The `BufReadPost` call had already been commented out. Function body
+  deleted from `journal.lua`; commented-out call removed from `init.lua`.
 
 ### Known Bugs (queued)
 
 - `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
-  malformed paths when bench_dir is a Unix-style path (e.g. `/tmp/pkm_bench`).
-  Files are still created correctly because vim.fn.mkdir/glob tolerate mixed
-  separators on WSL. Fix: accept bench_dir as-is and join subdirs with the
-  correct separator for the path type, or document that bench_dir must use
+  malformed paths when `bench_dir` is a Unix-style path (e.g. `/tmp/pkm_bench`).
+  Files are still created correctly because `vim.fn.mkdir`/`glob` tolerate
+  mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
+  the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
 
-- Attempting to save a note that has had its name changed from within metadata
-  "title" prompts for a "!" to force the command. (Does this mean that editing
-  a consolidated note from within its metadata "title" does not cause the
-  buffer to reload that same file, or is it something else?).
+- `:PKMTags` inserts non-tag matches as tags. For example, `"português"` is
+  returned as a tag despite not existing in any note's `tags` field, because
+  the word appears in a note's title or body (`"português-acentuação-paroxítona"`).
+  Root cause: `PKMTags` uses Telescope `grep_string` (full-text ripgrep) rather
+  than the `index + filter` pipeline. Will be resolved when `PKMBrowse`
+  consolidates the search interface.
 
-- `:PKMTags' inserts non-tag matches as if they were tags. For example:
-  "português" is found as a tag despite there not being such a tag in any
-  note's metadata, because such word exists in some note's title or body text
-  ("português-acentuação-paroxítona"). *This should be fixed during the integration
-  of searching methods, which is noted to be done in the roadmap.*
-
-- `checktime/E518`: "The checktime call in `init.lua`'s `BufWritePost` callback
-  triggers Vim's modeline scanner after frontmatter is written. Notes with ex:
-  patterns in their body can produce `E518`. Root cause: `save_frontmatter`
-  forces a buffer reload; the fix is to update the buffer in place via
-  `nvim_buf_set_lines` instead of writing to disk and calling checktime.
-  Tracked as future work."
+- `init.lua` `BufWritePost`: `yaml.save_frontmatter` writes the file and then
+  `vim.cmd("checktime")` forces Neovim to reload the buffer, triggering the
+  modeline scanner. Notes whose body contains patterns matching Vim's modeline
+  format (e.g. `ex:`) can produce `E518`. Root cause: `save_frontmatter`
+  updates frontmatter by writing to disk and reloading rather than updating the
+  buffer directly. Fix: replace the write+checktime approach with
+  `vim.api.nvim_buf_set_lines` to update the buffer in place, eliminating the
+  reload entirely.
 
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
@@ -82,12 +134,6 @@
   - 100k projection (raw scan): ~14.2s; post-index: ~65ms
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
-
-### Suspended Functions (queued for decision)
-
-
-  Note: `notes.sync_yaml_on_rename` (consolidated folder) is unrelated — it
-  syncs `title` only and is not affected.
 
 ## [1.2.1] — 2026-05-28
 

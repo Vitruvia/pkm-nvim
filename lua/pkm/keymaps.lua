@@ -56,6 +56,8 @@ function M.register(config)
   -- -------------------------------------------------------------------------- 
   -- Header Editing
   map(k.next_header, "<cmd>PKMNextHeader<cr>", "Next Header (increment counter)")
+  map(k.heading_next, "<cmd>PKMHeadingNext<cr>", "Next Heading")
+  map(k.heading_prev, "<cmd>PKMHeadingPrev<cr>", "Previous Heading")
 
   if k.header_level_up then
     vim.keymap.set('n', k.header_level_up, '<cmd>PKMHeaderLevelUp<cr>',
@@ -71,8 +73,6 @@ function M.register(config)
       { desc = "PKM: Header Level Down (selection)", silent = true })
   end
 
-  heading_next    = false,
-  heading_prev    = false,
 
   -- Emphasis wrapping
   local function map_emphasis(lhs, marker)
