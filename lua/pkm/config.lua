@@ -117,7 +117,7 @@ local defaults = {
     -- Projects/Views
     view_last    = "<leader>nV",
     view_sidebar = false,
-    view_list    = false,
+    view_list    = "<leader>nv",
     -- Search and browsing
     search          = "<leader>nf",
     browse_tags     = "<leader>nt",
