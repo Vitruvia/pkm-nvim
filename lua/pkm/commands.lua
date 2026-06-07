@@ -192,6 +192,50 @@ function M.register()
     end)
   end, { desc = 'Create or update a named project view' })
 
+  vim.api.nvim_create_user_command('PKMViewNewSub', function()
+    local views = require('pkm.views')
+    local names = views.list()
+
+    if #names == 0 then
+      vim.notify(
+        '[pkm] no views defined. Create a parent view first with :PKMViewNew.',
+        vim.log.levels.WARN)
+      return
+    end
+
+    vim.ui.input({ prompt = 'Subproject name: ' }, function(name)
+      if not name or name:match('^%s*$') then return end
+      name = name:match('^%s*(.-)%s*$')
+
+      vim.ui.select(names, {
+        prompt      = 'Select parent view:',
+        format_item = function(n) return n end,
+      }, function(parent)
+        if not parent then return end
+
+        vim.ui.input({
+          prompt = string.format("Filter for '%s' (constraint added to '%s'): ", name, parent),
+        }, function(expr)
+          if not expr or expr:match('^%s*$') then return end
+          expr = expr:match('^%s*(.-)%s*$')
+
+          vim.fn.inputsave()
+          local answer = vim.fn.input(string.format(
+            "Create subproject '%s' under '%s' with filter '%s'? (yes/no): ",
+            name, parent, expr))
+          vim.fn.inputrestore()
+
+          if answer:lower() ~= 'yes' then
+            vim.notify('[pkm] subproject creation cancelled', vim.log.levels.INFO)
+            return
+          end
+
+          views.save_subproject(name, parent, expr)
+        end)
+      end)
+    end)
+  end, { desc = 'Create a subproject view under an existing parent view' })
+
   vim.api.nvim_create_user_command('PKMViewEdit', function()
     local path = require('pkm.utils').join(require('pkm').config.root_path, 'views.json')
     if vim.fn.filereadable(path) == 0 then

@@ -38,6 +38,7 @@
 --   open_last()         → reopen the last activated view (session-scoped)
 --   open_sidebar(name?) → open or toggle the persistent sidebar for a view
 --   save(name, expr)    → write or update a view in views.json
+--   save_subproject(name, parent, filter_expr) → write a subproject entry to views.json
 --   delete(name)        → remove a view from views.json
 -- =============================================================================
 
@@ -376,6 +377,40 @@ function M.save(name, expr)
   local ok   = save_sidecar(data)
   if ok then
     vim.notify(string.format("PKMView: saved view '%s'", name), vim.log.levels.INFO)
+  end
+  return ok
+end
+
+--- Add or replace a subproject view in views.json.
+--- Validates that the parent exists and the filter expression is valid.
+--- The effective filter is the parent's filter AND-ed with filter_expr;
+--- the parent chain is composed automatically at query time.
+---@param name        string  New subproject name
+---@param parent      string  Existing view name to use as parent
+---@param filter_expr string  Own additional filter expression
+---@return boolean success
+function M.save_subproject(name, parent, filter_expr)
+  local projects = get_projects()
+  if not projects[parent] then
+    vim.notify(
+      string.format("PKMViewNewSub: no view named '%s'", parent),
+      vim.log.levels.ERROR)
+    return false
+  end
+
+  local _, err = require('pkm.filter').parse(filter_expr)
+  if err then
+    vim.notify('PKMViewNewSub: invalid filter — ' .. err, vim.log.levels.ERROR)
+    return false
+  end
+
+  local data = load_sidecar()
+  data[name] = { parent = parent, filter = filter_expr }
+  local ok   = save_sidecar(data)
+  if ok then
+    vim.notify(
+      string.format("PKMView: saved subproject '%s' under '%s'", name, parent),
+      vim.log.levels.INFO)
   end
   return ok
 end

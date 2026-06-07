@@ -13,6 +13,17 @@
   the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
 
+- `init.lua` `BufWritePost`: `yaml.save_frontmatter` writes frontmatter to
+  disk and then calls `vim.cmd("checktime")`, forcing a buffer reload that
+  triggers Vim's modeline scanner. Notes whose body contains `ex:`-style
+  patterns can produce `E518`. 
+  Fix: 
+  - Option 1: replace the write+checktime approach with
+  `vim.api.nvim_buf_set_lines` to update the buffer in place, eliminating the
+  reload entirely.
+  - Option 2 (current): User-habit workoround: do not start or end text with
+  `ex:`. If doing so is necessary, wrap it in parentheses (`(ex: ...)`).
+
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
@@ -20,6 +31,20 @@
   - 100k projection (raw scan): ~14.2s; post-index: ~65ms
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
+
+## [1.3.2] - 2026-6-7
+
+### Added
+- `views.lua`: `M.save_subproject(name, parent, filter_expr)` — validates the
+  parent exists in the current view set and the filter expression is valid, then
+  writes `{parent=parent, filter=filter_expr}` to views.json. The effective
+  filter (parent chain composed via AND) is resolved at query time by
+  `get_tree()`; no pre-computation needed here.
+- `:PKMViewNewSub` — interactive command to create a subproject view. Prompts
+  for subproject name, presents a picker of all existing views for parent
+  selection, prompts for the own filter expression (the additional constraint
+  only), then confirms before writing. Removes the need to edit views.json
+  directly for subproject creation.
 
 ## [1.3.1] - 2026-6-7
 
@@ -35,7 +60,7 @@
 - `:PKMViews` updated — now opens the tree picker (`M.list_views()`) instead
   of a `vim.notify` comma list. Previous behaviour was unreadable beyond a
   handful of views.
-- Config: `keymaps.view_list` (default `false`).
+- Config: `keymaps.view_list` (default `"<leader>nv"`).
 
 ## [1.3.0] - 2026-6-6
 
