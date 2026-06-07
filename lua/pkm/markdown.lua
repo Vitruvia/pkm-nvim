@@ -11,6 +11,11 @@
 -- Public API:
 --   append_next_header()                       → Duplicate current header with counter +1, append at EOF
 --   shift_header_level(direction, start, end)  → Shift header '#'-level up or down in line range
+--   wrap_with_marker(marker)                   → Enter operator-pending mode; next motion defines target
+--   _wrap_operator(motion_type)                → Operatorfunc callback (do not call directly)
+--   _wrap_visual(marker)                       → Wrap/unwrap current visual selection
+--   setup_symbols(symbols)                     → Register buffer-local iabbrevs and insert-mode keymaps
+--   goto_heading(direction)                    → Jump to next or previous ATX heading
 -- =============================================================================
 
 local M = {}
@@ -64,11 +69,8 @@ function M.shift_header_level(direction, start_line, end_line)
 
   for i, line in ipairs(lines) do
     if direction == 'up' then
-      -- Prepend one '#' to any line that starts with one or more '#'
       lines[i] = line:gsub('^([#]+)', function(h) return '#' .. h end)
     else
-      -- Remove the leading '#' only when there are 2 or more (level 2+)
-      -- [#][#]+ matches exactly two or more '#', leaving level-1 untouched
       lines[i] = line:gsub('^([#][#]+)', function(h) return h:sub(2) end)
     end
   end
@@ -124,9 +126,9 @@ local function apply_marker(marker, srow, scol, erow, ecol)
   if #text > 2 * mlen
     and text:sub(1, mlen) == marker
     and text:sub(-mlen)   == marker then
-    new_text = text:sub(mlen + 1, -(mlen + 1))   -- toggle off
+    new_text = text:sub(mlen + 1, -(mlen + 1))
   else
-    new_text = marker .. strip_emphasis(text) .. marker  -- replace or wrap
+    new_text = marker .. strip_emphasis(text) .. marker
   end
 
   local new_line = line:sub(1, scol) .. new_text .. line:sub(ecol + 2)
@@ -167,6 +169,66 @@ function M.wrap_with_marker(marker)
   _pending_marker = marker
   vim.o.operatorfunc = "v:lua.require'pkm.markdown'._wrap_operator"
   vim.api.nvim_feedkeys('g@', 'n', false)
+end
+
+-- =============================================================================
+-- SECTION: Symbol abbreviations
+-- =============================================================================
+
+--- Register buffer-local insert-mode abbreviations and keymaps for user-defined
+--- symbol expansions. Each entry may have: trigger (iabbrev), key (insert-mode
+--- keymap), expansion (the symbol string). Silently skips malformed entries.
+--- Call from a BufReadPost autocmd to scope registrations per buffer.
+---@param symbols table  List of {trigger?, key?, expansion=string} entries
+---@return nil
+function M.setup_symbols(symbols)
+  if not symbols or #symbols == 0 then return end
+  for _, s in ipairs(symbols) do
+    if type(s.expansion) ~= 'string' or s.expansion == '' then goto continue end
+
+    if type(s.trigger) == 'string' and s.trigger ~= '' then
+      vim.cmd(string.format('iabbrev <buffer> %s %s', s.trigger, s.expansion))
+    end
+
+    if type(s.key) == 'string' and s.key ~= '' then
+      vim.keymap.set('i', s.key, s.expansion,
+        { buffer = true, silent = true, desc = 'PKM: insert ' .. s.expansion })
+    end
+
+    ::continue::
+  end
+end
+
+-- =============================================================================
+-- SECTION: Heading navigation
+-- =============================================================================
+
+--- Jump to the next or previous ATX heading line in the buffer.
+--- Notifies if no heading is found in the given direction.
+---@param direction string  'next' | 'prev'
+---@return nil
+function M.goto_heading(direction)
+  local cur_row = vim.api.nvim_win_get_cursor(0)[1]
+  local total   = vim.api.nvim_buf_line_count(0)
+  local lines   = vim.api.nvim_buf_get_lines(0, 0, total, false)
+
+  if direction == 'next' then
+    for i = cur_row + 1, total do
+      if lines[i]:match('^#+ ') then
+        vim.api.nvim_win_set_cursor(0, { i, 0 })
+        return
+      end
+    end
+    vim.notify('[pkm] no next heading', vim.log.levels.INFO)
+  else
+    for i = cur_row - 1, 1, -1 do
+      if lines[i]:match('^#+ ') then
+        vim.api.nvim_win_set_cursor(0, { i, 0 })
+        return
+      end
+    end
+    vim.notify('[pkm] no previous heading', vim.log.levels.INFO)
+  end
 end
 
 return M

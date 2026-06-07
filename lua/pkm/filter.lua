@@ -3,7 +3,7 @@
 -- =============================================================================
 -- Dependencies : none
 -- Consumed by  : pkm.export (match_file, collect_files),
---                pkm.views (planned), pkm.index (planned)
+--                pkm.views, pkm.index
 --
 -- Implements a small boolean filter language over note fields.
 -- All matching is case-insensitive. Tag matching is EXACT (case-insensitive):
@@ -17,7 +17,7 @@
 --   not_expr = NOT? atom
 --   atom     = "(" expr ")" | predicate
 --   predicate= field ":" value
---   field    = "tag" | "title" | "text"
+--   field    = "tag" | "title" | "text" | "filename"
 --   value    = bare_word | "quoted string"
 --
 -- The parser is a hand-rolled recursive descent parser (~90 lines).
@@ -25,11 +25,12 @@
 -- Keywords (AND, OR, NOT) are case-insensitive.
 --
 -- Note data table consumed by eval():
---   { path=string, title=string, tags=string[], body=string }
---   path  — absolute file path (not used by eval, but carried for callers)
---   title — frontmatter title field
---   tags  — frontmatter tags array (strings)
---   body  — full body text, lines joined with newline, from content_start onward
+--   { path=string, filename=string, title=string, tags=string[], body=string }
+--   path     — absolute file path (not used by eval, but carried for callers)
+--   filename — file stem without extension (e.g. "0042_note_Fourier_Analysis")
+--   title    — frontmatter title if set; filename stem with underscores replaced if not
+--   tags     — frontmatter tags array (strings)
+--   body     — full body text, lines joined with newline, from content_start onward
 --
 -- Public API:
 --   parse(expr)        → tree, nil  |  nil, error_string
@@ -207,9 +208,10 @@ parse_atom = function(tokens, pos)
     return node, new_pos + 1
 
   elseif tok.type == 'PRED' then
-    if tok.field ~= 'tag' and tok.field ~= 'title' and tok.field ~= 'text' then
+    if tok.field ~= 'tag'  and tok.field ~= 'title'
+    and tok.field ~= 'text' and tok.field ~= 'filename' then
       return nil, string.format(
-        "unknown field '%s' — valid fields are: tag, title, text", tok.field)
+        "unknown field '%s' — valid fields are: tag, title, text, filename", tok.field)
     end
     return { type = 'PRED', field = tok.field, value = tok.value }, pos + 1
 
@@ -227,7 +229,8 @@ end
 --- Returns (tree, nil) on success, (nil, error_string) on any parse failure.
 ---
 --- The returned tree is a nested table of nodes:
----   Predicate : { type="PRED", field="tag"|"title"|"text", value=string }
+---   Predicate : { type="PRED", field="tag"|"title"|"text"|"filename",
+---                 value=string }
 ---   Boolean   : { type="AND"|"OR", args={node, node, ...} }
 ---   Negation  : { type="NOT", args={node} }
 ---
@@ -271,14 +274,17 @@ end
 --- Returns true if the note satisfies all constraints in the tree.
 ---
 --- Matching rules:
----   tag:value   — EXACT match (case-insensitive) against each entry in note.tags
----   title:value — substring match (case-insensitive) in note.title
----   text:value  — substring match (case-insensitive) in note.body
+---   tag:value      — EXACT match (case-insensitive) against each entry in
+---                    note.tags
+---   title:value    — substring match (case-insensitive) in note.title
+---   text:value     — substring match (case-insensitive) in note.body
+---   filename:value — substring match (case-insensitive) in note.filename
 ---
 --- The note table must contain:
 ---   note.tags   string[]  (may be nil or empty — treated as no tags)
 ---   note.title  string    (may be nil — treated as empty string)
 ---   note.body   string    (may be nil — treated as empty string)
+---   note.filename string    (may be nil — treated as empty string)
 ---
 ---@param tree table   AST node produced by M.parse()
 ---@param note table   Note data table
@@ -298,6 +304,10 @@ function M.eval(tree, note)
 
     elseif tree.field == 'text' then
       return tostring(note.body or ''):lower():find(val, 1, true) ~= nil
+
+    elseif tree.field == 'filename' then
+      return tostring(note.filename or ''):lower():find(val, 1, true) ~= nil
+
     end
 
     return false  -- unreachable after field validation in parse_atom, but safe

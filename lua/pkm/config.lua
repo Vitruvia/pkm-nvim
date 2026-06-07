@@ -86,10 +86,17 @@ local defaults = {
     email = "",
   },
 
+  symbols = {
+    { trigger = 'emdash', key = '<M-->', expansion = '—' },
+    { trigger = '^$',   key = '<M-s>', expansion = '§' },
+    { trigger = '^o',   key = '<M-o>', expansion = 'º' },
+  },
+
   keymaps = {
     new_note        = "<leader>nn",
     new_journal     = "<leader>nj",
     new_scratchpad  = "<leader>ns",
+    rename_note     = "<leader>nr",
     search          = "<leader>nf",
     browse_tags     = "<leader>nt",
     insert_citation = "<leader>nc",

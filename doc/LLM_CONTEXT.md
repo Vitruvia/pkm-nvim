@@ -7,21 +7,28 @@ principles are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current State (as of 2026-05-16)
+## Current State (as of 2026-06-06)
 
-Stable. All core features work. Refactor complete. Phase 1 design decisions made.
+Stable. All Phase 1 infrastructure complete. Active work is on `markdown.lua` additions.
 
 **Last sessions:**
-- Extracted `config.lua`, `utils.lua`, `commands.lua`, `keymaps.lua` from `init.lua`
-- Added `PKMTranspose`, `PKMChangeType`, cross-folder backlinks, `PKMMergeTags`
-- Decided: project organisation via **views** (saved filter definitions), not multi-wiki
-- Decided: filter system needs full boolean DSL (AND/OR/NOT over tag/title/text)
-- Decided: in-memory index required before filter system is performant at scale
-- `doc/ROADMAP.md` is a stale duplicate — **delete it**; `PKM_ROADMAP.md` is canonical
+- Completed Phase 1: `filter.lua` (boolean DSL parser/evaluator), `bench.lua`
+  (benchmarking suite), `index.lua` (in-memory index, ~290× faster than per-query
+  scan), `views.lua` (named project views, sidecar `views.json`, full CRUD)
+- 1.2.1: Fixed `telescope.lua` load-time check, `PKMSearch`/`PKMTags` fallbacks,
+  `templates.lua` empty stub, buffer-redirect bugs (`keepalt` + `vim.bo.modified`),
+  secondary E484 on rename, write-only captures. Removed `quick_capture`,
+  `normalise_tags`, and several other dead code items.
+- Added `markdown.lua` (Unreleased): `append_next_header`, `shift_header_level`,
+  emphasis wrapping system (`wrap_with_marker`, `_wrap_operator`, `_wrap_visual`)
+- Deleted `journal.sync_yaml_on_rename` — was writing `date`/`time` fields not in
+  the journal template, conflicting with `created_on`/`last_updated_on` design
 
 **Active next steps:**
-1. Code quality: module API headers, LuaDoc, section separators (additive, no behavior change)
-2. Phase 1: `filter.lua` → benchmarking baseline → `index.lua` → update `export.lua` → `views.lua`
+1. `markdown.lua` additions: special character abbreviations (`config.symbols`),
+   checkbox toggle, heading navigation, wiki-link wrapping, block-quote toggle
+2. `PKMViewLast` — small, no dependencies; close out after markdown work
+3. `PKMBrowse` — unified note browser replacing `PKMSearch`/`PKMTags` (next major)
 
 ---
 
@@ -38,15 +45,16 @@ Stable. All core features work. Refactor complete. Phase 1 design decisions made
 | `timestamp.lua` | Timestamp formats, filename generation |
 | `citations.lua` | Bidirectional citation sync, tag index, citable item map |
 | `notes.lua` | Note CRUD, conversion, promotion, transposition, linking |
-| `journal.lua` | Journal creation, filename-YAML sync |
-| `ui.lua` | Fallback UI (no Telescope): stats, search, tags, merge |
-| `telescope.lua` | All Telescope pickers |
+| `journal.lua` | Journal creation; filename-YAML sync for consolidated only |
+| `ui.lua` | Fallback UI (no Telescope): stats, search, tags, merge, browse |
+| `telescope.lua` | All Telescope pickers — checked at call time, never load time |
 | `templates.lua` | Template application |
 | `export.lua` | Filter + copy notes — read-only, no setup() |
-| *(planned)* `filter.lua` | Filter expression parser and evaluator — pure logic, no I/O |
-| *(planned)* `index.lua` | In-memory note index with BufWritePost invalidation |
-| *(planned)* `views.lua` | Named project views from config; activate via :PKMView |
-| *(planned)* `bench.lua` | Benchmarking and load-testing utilities |
+| `filter.lua` | Filter expression parser and evaluator — pure logic, no I/O |
+| `index.lua` | In-memory note index with incremental BufWritePost invalidation |
+| `views.lua` | Named project views — sidecar `views.json`, CRUD, Telescope/float picker |
+| `bench.lua` | Developer benchmarking suite — not user-facing, no commands |
+| `markdown.lua` | Markdown editing utilities — headers, emphasis, wrapping; no setup() |
 
 ---
 

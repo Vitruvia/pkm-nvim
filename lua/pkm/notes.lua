@@ -13,9 +13,7 @@
 --   convert_note()                            → Normalize current note to its folder's format
 --   change_note_type()                        → Change type of consolidated note and rename file
 --   transpose_note()                          → Move note to different folder and convert
---   rename_from_yaml(filepath, new_title)     → Rename file to match YAML title
---   sync_filename_on_save()                   → Sync filename to YAML title on BufWritePost
---   sync_yaml_on_rename()                     → Sync YAML title to filename on BufReadPost
+--   rename_note()                             → Prompt for new name and rename current note
 --   link_to_note()                            → Insert [[wiki-link]] at cursor
 --   follow_link()                             → Open note linked under cursor
 --   show_backlinks()                          → Show all notes linking to current note
@@ -723,108 +721,63 @@ function M.change_note_type()
 end
 
 -- =============================================================================
--- SECTION: Filename-YAML synchronization
+-- SECTION: Note renaming
 -- =============================================================================
---- Rename a consolidated note file to match a new title.
+
+--- Prompt for a new name and rename the current consolidated note file.
 --- Derives the new filename from the existing number and type prefix.
+--- Does not modify the title frontmatter field.
 --- Propagates the rename through citations via update_references_on_rename.
----@param filepath string Current absolute path of the note
----@param new_title string New title from frontmatter
----@return string|nil new_filepath New absolute path if renamed, nil if unchanged or failed
-function M.rename_from_yaml(filepath, new_title)
-  local old_filename_no_ext = vim.fn.fnamemodify(filepath, ":t:r")
-  local dir = vim.fn.fnamemodify(filepath, ":h")
-  
-  local number, note_type, _ = old_filename_no_ext:match("^(%d+)_([a-z]+)_(.+)$")
-  if not number or not note_type then
-    return nil -- Not a valid consolidated note
+---@return nil
+function M.rename_note()
+  local filepath = vim.fn.expand('%:p')
+  local old_stem = vim.fn.fnamemodify(filepath, ':t:r')
+  local dir      = vim.fn.fnamemodify(filepath, ':h')
+
+  local number, note_type, name_part = old_stem:match('^(%d+)_([a-z]+)_(.+)$')
+  if not number then
+    vim.notify('[pkm] not a consolidated note', vim.log.levels.WARN)
+    return
   end
-  
-  local safe_title = sanitize_title(new_title)
-  local new_filename = string.format("%04d_%s_%s.md", tonumber(number), note_type, safe_title)
+
+  vim.fn.inputsave()
+  local input = vim.fn.input('Rename note: ', name_part:gsub('_', ' '))
+  vim.fn.inputrestore()
+  if not input or input == '' then return end
+
+  local safe_name    = sanitize_title(input)
+  local new_filename = string.format('%04d_%s_%s.md', tonumber(number), note_type, safe_name)
   local new_filepath = utils.join(dir, new_filename)
-  
-  local normalized_new = new_filepath:gsub("\\", "/")
-  local normalized_current = filepath:gsub("\\", "/")
 
-  if normalized_new == normalized_current then
-    return nil
-  end
-  
+  if new_filepath:gsub('\\', '/') == filepath:gsub('\\', '/') then return end
+
   if vim.fn.filereadable(new_filepath) == 1 then
-    vim.notify("Cannot rename: file already exists: " .. new_filename, vim.log.levels.ERROR)
-    return nil
-  end
-  
-  if vim.fn.rename(filepath, new_filepath) == 0 then
-    local index = require('pkm.index')
-    index.invalidate(filepath)      -- old path gone
-    index.invalidate(new_filepath)  -- new path now exists with same content
-
-    vim.cmd("keepalt file " .. vim.fn.fnameescape(new_filepath))
-    vim.bo.modified = false
-    vim.notify("Renamed to: " .. new_filename, vim.log.levels.INFO)
-    local new_filename_no_ext = vim.fn.fnamemodify(new_filepath, ":t:r")
-    require('pkm.citations').update_references_on_rename(old_filename_no_ext, new_filename_no_ext, new_title)
-    return new_filepath
-  else
-    vim.notify("Failed to rename file", vim.log.levels.ERROR)
-    return nil
-  end
-end
-
---- Called on BufWritePost. Reads title from current buffer's frontmatter
---- and renames the file if the title has changed. Consolidated folder only.
-function M.sync_filename_on_save()
-  local filepath = vim.fn.expand("%:p")
-  
-  -- Only process files in consolidated folder
-  if not filepath:find(config.folders.consolidated, 1, true) then
+    vim.notify('[pkm] cannot rename: target already exists: ' .. new_filename, vim.log.levels.ERROR)
     return
   end
-  
-  -- Read frontmatter
+
+  if vim.fn.rename(filepath, new_filepath) ~= 0 then
+    vim.notify('[pkm] rename failed', vim.log.levels.ERROR)
+    return
+  end
+
+  local index = require('pkm.index')
+  index.invalidate(filepath)
+  index.invalidate(new_filepath)
+
+  vim.cmd('keepalt file ' .. vim.fn.fnameescape(new_filepath))
+  vim.bo.modified = false
+
+  -- Use frontmatter title as display title if set; otherwise derive from new stem.
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, _ = yaml.parse_frontmatter(lines)
-  
-  if not frontmatter or not frontmatter.title then
-    return
-  end
-  
-  -- Rename if title changed
-  M.rename_from_yaml(filepath, frontmatter.title)
-end
+  local fm, _ = yaml.parse_frontmatter(lines)
+  local display_title = (fm and type(fm.title) == 'string' and fm.title ~= '')
+                        and fm.title
+                        or safe_name:gsub('_', ' ')
 
---- Called on BufReadPost. Reads the filename and updates the YAML title
---- field if it differs. Handles external renames (e.g. from the file system).
---- Consolidated folder only.
-function M.sync_yaml_on_rename()
-  local filepath = vim.fn.expand("%:p")
-  
-  -- Only process consolidated notes
-  if not filepath:find(config.folders.consolidated, 1, true) then
-    return
-  end
-  
-  local filename = vim.fn.fnamemodify(filepath, ":t:r")
-  local _, _, name_part = filename:match("^(%d+)_([a-z]+)_(.+)$")
-  
-  if not name_part then
-    return
-  end
-  
-  -- Convert filename to readable title
-  local title = name_part:gsub("_", " ")
-  
-  -- Update YAML
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local frontmatter, content_start = yaml.parse_frontmatter(lines)
-  
-  if frontmatter and frontmatter.title ~= title then
-    frontmatter.title = title
-    yaml.save_frontmatter(frontmatter, content_start)
-    vim.notify("Updated title in YAML to match filename", vim.log.levels.INFO)
-  end
+  local new_stem = vim.fn.fnamemodify(new_filepath, ':t:r')
+  require('pkm.citations').update_references_on_rename(old_stem, new_stem, display_title)
+  vim.notify('[pkm] renamed to: ' .. new_filename, vim.log.levels.INFO)
 end
 
 -- =============================================================================

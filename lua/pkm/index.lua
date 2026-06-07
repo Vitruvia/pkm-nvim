@@ -2,8 +2,7 @@
 -- pkm.index — In-memory note index with incremental invalidation
 -- =============================================================================
 -- Dependencies : pkm.utils, pkm.yaml (lazy)
--- Consumed by  : pkm.export (collect_files), pkm.views (planned),
---                pkm.bench (run_suite)
+-- Consumed by  : pkm.export (collect_files), pkm.views, pkm.bench (run_suite)
 --
 -- Eliminates the per-query readfile + parse_frontmatter scan by caching all
 -- note data in a Lua table. The index is built lazily on the first call to
@@ -11,11 +10,13 @@
 --
 -- Index entry shape:
 --   index[path] = {
---     path  : string    absolute path (duplicated for convenience)
---     title : string    frontmatter title, or "" if absent
---     tags  : string[]  frontmatter tags array, or {}
---     body  : string    note body (lines after frontmatter joined with "\n")
---     mtime : number    vim.fn.getftime() at last index time
+--     path     : string    absolute path (duplicated for convenience)
+--     filename : string    file stem without extension (e.g. "0042_note_Title")
+--     title    : string    frontmatter title if non-empty; filename stem with
+--                          underscores replaced by spaces otherwise
+--     tags     : string[]  frontmatter tags array, or {}
+--     body     : string    note body (lines after frontmatter joined with "\n")
+--     mtime    : number    vim.fn.getftime() at last index time
 --   }
 --
 -- Thread-safety: Neovim Lua is single-threaded; no locking needed.
@@ -92,10 +93,16 @@ local function read_entry(path)
   local fm, content_start = yaml.parse_frontmatter(lines)
   if not fm then return nil end
 
-  -- Extract title (string or empty).
-  local title = ''
-  if type(fm.title) == 'string' then
+  -- File stem used for the filename: predicate and as the title fallback.
+  local filename = vim.fn.fnamemodify(path, ':t:r')
+
+  -- Title: free-form frontmatter field if present and non-empty;
+  -- otherwise derive from the filename stem.
+  local title
+  if type(fm.title) == 'string' and fm.title ~= '' then
     title = fm.title
+  else
+    title = filename:gsub('_', ' ')
   end
 
   -- Normalise tags to a flat array of lowercase strings.
@@ -118,11 +125,12 @@ local function read_entry(path)
   end
 
   return {
-    path  = path,
-    title = title,
-    tags  = tags,
-    body  = table.concat(body_parts, '\n'),
-    mtime = vim.fn.getftime(path),
+    path     = path,
+    filename = filename,
+    title    = title,
+    tags     = tags,
+    body     = table.concat(body_parts, '\n'),
+    mtime    = vim.fn.getftime(path),
   }
 end
 

@@ -54,8 +54,8 @@ end
 -- SECTION: Sync autocmds
 -- =============================================================================
 --- Register BufWritePost and BufReadPost autocmds for the PKMSync augroup.
---- BufWritePost: updates last_updated_on, syncs filename↔YAML, updates citations.
---- BufReadPost: syncs YAML title/timestamp when file is opened after external rename.
+--- BufWritePost: updates last_updated_on, syncs journal filename to created_on, updates citations.
+--- BufReadPost: registers buffer-local symbol abbreviations for PKM notes.
 --- Only fires for .md files within M.config.root_path.
 function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
@@ -74,7 +74,6 @@ function M.setup_sync_autocmds()
 
         local yaml = require('pkm.yaml')
         local timestamp = require('pkm.timestamp')
-        local notes = require('pkm.notes')
         local journal = require('pkm.journal')
         local citations = require('pkm.citations')
 
@@ -89,8 +88,8 @@ function M.setup_sync_autocmds()
             yaml.save_frontmatter(frontmatter, content_start, filepath)
         end
 
-        if filepath:find(M.config.folders.consolidated, 1, true) then notes.sync_filename_on_save() end
-        if filepath:find(M.config.folders.journal, 1, true) then journal.sync_filename_on_save() end
+        if filepath:find(M.config.folders.journal, 1, true) then
+            journal.sync_filename_on_save() end
         
         if M.config.sync.auto_sync_on_save then 
             citations.update_references(filepath) 
@@ -109,8 +108,7 @@ function M.setup_sync_autocmds()
       local norm_path = filepath:gsub("\\", "/")
       local norm_root = root:gsub("\\", "/")
       if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
-      if filepath:find(M.config.folders.consolidated, 1, true) then require('pkm.notes').sync_yaml_on_rename() end
-      -- if filepath:find(M.config.folders.journal, 1, true) then require('pkm.journal').sync_yaml_on_rename() end
+      require('pkm.markdown').setup_symbols(M.config.symbols)
     end,
   })
 end

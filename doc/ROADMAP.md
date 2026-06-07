@@ -193,23 +193,32 @@ require('pkm').setup({
   },
 
   keymaps = {
-    new_note         = "<leader>nn",
-    new_journal      = "<leader>nj",
-    new_scratchpad   = "<leader>ns",
-    quick_capture    = "<leader>nq",
-    convert_note     = "<leader>nx",
-    promote_note     = "<leader>np",
-    insert_citation  = "<leader>nc",
-    goto_citation    = "<leader>ng",
-    link_note        = "<leader>nl",
-    follow_link      = "gf",
-    backlinks        = "<leader>nb",
-    search           = "<leader>nf",
-    browse_tags      = "<leader>nt",
-    import_note      = "<leader>ni",
-    delete_note      = "<leader>nd",
-    transpose_note   = "<leader>nT",
+    new_note        = "<leader>nn",
+    new_journal     = "<leader>nj",
+    new_scratchpad  = "<leader>ns",
+    search          = "<leader>nf",
+    browse_tags     = "<leader>nt",
+    insert_citation = "<leader>nc",
+    goto_citation   = "<leader>ng",
+    delete_note     = "<leader>nd",
+    link_note       = "<leader>nl",
+    follow_link     = "gf",
+    backlinks       = "<leader>nb",
+    import_note     = "<leader>ni",
+    convert_note    = "<leader>nx",
+    promote_note    = "<leader>np",
+    transpose_note  = "<leader>nT",
     change_note_type = "<leader>nC",
+    -- Markdown editing
+    next_header        = "<leader>mh",
+    header_level_up    = false,
+    header_level_down  = false,
+    -- Emphasis wrapping (motion-based in normal mode; selection in visual mode)
+    wrap_italic      = false,   -- "*"   italic
+    wrap_bold        = false,   -- "**"  bold
+    wrap_bold_italic = false,   -- "***" bold + italic
+    wrap_code        = false,   -- "`"   inline code
+    wrap_strike      = false,   -- "~~"  strikethrough (GFM)
   },
 })
 ```

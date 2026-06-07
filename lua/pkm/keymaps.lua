@@ -21,7 +21,9 @@ local M = {}
 function M.register(config)
   local k = config.keymaps
 
-  --- KEYMAPS ---
+  -- --------------------------------------------------------------------------
+  -- KEYMAPS: NOTE OPERATIONS
+  -- --------------------------------------------------------------------------
   local function map(lhs, cmd, desc)
     if lhs then vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) end
   end
@@ -47,8 +49,12 @@ function M.register(config)
   map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
   map(k.transpose_note, "<cmd>PKMTranspose<cr>", "Transpose Note")
   map(k.change_note_type, "<cmd>PKMChangeType<cr>", "Change Note Type")
+  map(k.rename_note, "<cmd>PKMRenameNote<cr>", "Rename Note")
 
-  -- Markdown Editing
+  -- --------------------------------------------------------------------------
+  -- KEYMAPS: MARKDOWN EDITING
+  -- -------------------------------------------------------------------------- 
+  -- Header Editing
   map(k.next_header, "<cmd>PKMNextHeader<cr>", "Next Header (increment counter)")
 
   if k.header_level_up then
@@ -64,6 +70,9 @@ function M.register(config)
     vim.keymap.set('v', k.header_level_down, ':PKMHeaderLevelDown<cr>',
       { desc = "PKM: Header Level Down (selection)", silent = true })
   end
+
+  heading_next    = false,
+  heading_prev    = false,
 
   -- Emphasis wrapping
   local function map_emphasis(lhs, marker)

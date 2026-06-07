@@ -36,6 +36,18 @@
 - Config: `keymaps.next_header` (default `<leader>mh`), `keymaps.header_level_up`,
   `keymaps.header_level_down` (both default `false`).
 
+### Deleted
+
+- **`journal.sync_yaml_on_rename`** — read the journal filename, parsed the
+  timestamp from it, and wrote `date` and `time` fields back into YAML.
+  Called from the `BufReadPost` autocmd in `init.lua`.
+
+  Was silently broken by the greedy pattern bug — the function exited without
+  writing anything. When the pattern was fixed in 1.1.1, it began writing
+  `date` and `time` to every journal note on open. These fields are not in
+  the journal template and conflict with the `created_on`/`last_updated_on`
+  desigin.
+
 ### Known Bugs (queued)
 
 - `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
@@ -56,6 +68,13 @@
   ("português-acentuação-paroxítona"). *This should be fixed during the integration
   of searching methods, which is noted to be done in the roadmap.*
 
+- `checktime/E518`: "The checktime call in `init.lua`'s `BufWritePost` callback
+  triggers Vim's modeline scanner after frontmatter is written. Notes with ex:
+  patterns in their body can produce `E518`. Root cause: `save_frontmatter`
+  forces a buffer reload; the fix is to update the buffer in place via
+  `nvim_buf_set_lines` instead of writing to disk and calling checktime.
+  Tracked as future work."
+
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
@@ -66,23 +85,6 @@
 
 ### Suspended Functions (queued for decision)
 
-- **`journal.sync_yaml_on_rename`** — reads the journal filename, parses the
-  timestamp from it, and writes `date` and `time` fields back into YAML.
-  Called from the `BufReadPost` autocmd in `init.lua`.
-
-  Was silently broken by the greedy pattern bug — the function exited without
-  writing anything. When the pattern was fixed in 1.1.1, it began writing
-  `date` and `time` to every journal note on open. These fields are not in
-  the journal template and conflict with the `created_on`/`last_updated_on`
-  design.
-
-  **Current state:** the `BufReadPost` call in `init.lua` is commented out.
-  The function definition in `journal.lua` is left intact.
-
-  **Options:**
-  - Delete — if `date`/`time` fields are never wanted.
-  - Add to template and reinstate — if split date/time fields are wanted.
-  - Replace with a function that syncs `created_on` from the filename instead.
 
   Note: `notes.sync_yaml_on_rename` (consolidated folder) is unrelated — it
   syncs `title` only and is not affected.
