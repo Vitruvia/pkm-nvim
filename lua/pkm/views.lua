@@ -506,16 +506,6 @@ local function telescope_view_picker(name, paths)
     }
   end
 
-  -- Separator when both subviews and notes are present
-  if #children > 0 and #sorted > 0 then
-    entries[#entries + 1] = {
-      value        = nil,
-      display      = '  ' .. string.rep('─', 52),
-      ordinal      = string.format('%05d', #entries + 1),
-      is_separator = true,
-    }
-  end
-
   -- Note entries
   for _, path in ipairs(sorted) do
     local e         = index.get(path)
@@ -538,13 +528,12 @@ local function telescope_view_picker(name, paths)
       name, total, total == 1 and '' or 's'),
 
     finder = finders.new_dynamic({
-      fn = function(prompt)
+    fn = function(prompt)
         if not prompt or prompt == '' then return entries end
-        local needle   = prompt:lower()
+        local needle = prompt:lower()
         local filtered = {}
         for _, e in ipairs(entries) do
-          if not e.is_separator
-          and e.display:lower():find(needle, 1, true) then
+          if e.display:lower():find(needle, 1, true) then
             filtered[#filtered + 1] = e
           end
         end
@@ -560,7 +549,7 @@ local function telescope_view_picker(name, paths)
       actions.select_default:replace(function()
         local entry = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
-        if not entry or entry.is_separator then return end
+        if not entry then return end
         if entry.is_subview then
           vim.schedule(function() M.open(entry.value) end)
         else
@@ -1032,7 +1021,7 @@ function M.open_sidebar(name)
     vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
     vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, new_lines)
     vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
-    if #new_hcount > 0 then
+    if #new_sorted > 0 then
       vim.api.nvim_win_set_cursor(_sidebar_win, { new_hcount + 1, 0 })
     end
     return

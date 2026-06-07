@@ -17,7 +17,16 @@ local M = {}
 
 local utils = require('pkm.utils')
 local config = {}
+
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
+local function type_prefix(note_type)
+  local label = note_type or 'other'
+  local width = 7
+  local pad   = width - #label
+  local lpad  = math.floor(pad / 2) + 1
+  local rpad  = math.ceil(pad  / 2) + 1
+  return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
+end
 
 -- =============================================================================
 -- SECTION: Setup
@@ -158,15 +167,7 @@ function M.browse(filter_expr)
   vim.ui.select(entries, {
     prompt = filter_expr and ('Browse: ' .. filter_expr) or 'Browse Notes',
     format_item = function(e)
-    local function type_prefix(note_type)
-      local label = note_type or 'other'
-      local width = 7  -- length of 'journal' / 'scratch', the longest types
-      local pad   = width - #label
-      local lpad  = math.floor(pad / 2) + 1  -- +1 for inner margin
-      local rpad  = math.ceil(pad  / 2) + 1
-      return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
-    end
-      return prefix .. ' ' .. e.title .. '  (' .. e.filename .. ')'
+      return type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
     end,
   }, function(sel)
     if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end

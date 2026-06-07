@@ -25,10 +25,19 @@ local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, othe
 -- SECTION: Helpers
 -- =============================================================================
 
+local function type_prefix(note_type)
+  local label = note_type or 'other'
+  local width = 7
+  local pad   = width - #label
+  local lpad  = math.floor(pad / 2) + 1
+  local rpad  = math.ceil(pad  / 2) + 1
+  return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
+end
+
 --- Require Telescope and all sub-modules used by the pickers.
 --- Checked at call time — never at module load time. Each caller checks the
 --- return value and returns early if nil.
----@return table|nil t { pickers, finders, conf, actions, state, builtin }
+---@return table|nil t { pickers, finders, sorters, conf, actions, state, builtin }
 local function require_telescope()
   local ok = pcall(require, 'telescope')
   if not ok then
@@ -138,17 +147,9 @@ function M.browse(filter_expr)
 
   local items = {}
   for _, e in ipairs(entries) do
-  local function type_prefix(note_type)
-    local label = note_type or 'other'
-    local width = 7  -- length of 'journal' / 'scratch', the longest types
-    local pad   = width - #label
-    local lpad  = math.floor(pad / 2) + 1  -- +1 for inner margin
-    local rpad  = math.ceil(pad  / 2) + 1
-    return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
-  end
     items[#items + 1] = {
       path    = e.path,
-      display = prefix .. ' ' .. e.title .. '  (' .. e.filename .. ')',
+      display = type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')',
       ordinal = string.format('%05d', #items + 1),
     }
   end
