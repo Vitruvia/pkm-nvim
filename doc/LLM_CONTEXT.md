@@ -9,26 +9,29 @@ principles are non-negotiable constraints on all architectural decisions.
 
 ## Current State (as of 2026-06-06)
 
-Stable. All Phase 1 infrastructure complete. Active work is on `markdown.lua` additions.
+Stable. All planned features through the views sidebar tree header are complete.
+Active development is paused; next item is metadata commands.
 
 **Last sessions:**
-- Completed Phase 1: `filter.lua` (boolean DSL parser/evaluator), `bench.lua`
-  (benchmarking suite), `index.lua` (in-memory index, ~290× faster than per-query
-  scan), `views.lua` (named project views, sidecar `views.json`, full CRUD)
-- 1.2.1: Fixed `telescope.lua` load-time check, `PKMSearch`/`PKMTags` fallbacks,
-  `templates.lua` empty stub, buffer-redirect bugs (`keepalt` + `vim.bo.modified`),
-  secondary E484 on rename, write-only captures. Removed `quick_capture`,
-  `normalise_tags`, and several other dead code items.
-- Added `markdown.lua` (Unreleased): `append_next_header`, `shift_header_level`,
-  emphasis wrapping system (`wrap_with_marker`, `_wrap_operator`, `_wrap_visual`)
-- Deleted `journal.sync_yaml_on_rename` — was writing `date`/`time` fields not in
-  the journal template, conflicting with `created_on`/`last_updated_on` design
+- Completed Phase 1: `filter.lua`, `bench.lua`, `index.lua`, `views.lua`
+- 1.2.1: Multiple bug fixes; removed `quick_capture`, various dead code
+- Added `markdown.lua`: `append_next_header`, `shift_header_level`, emphasis
+  wrapping, `setup_symbols`, `goto_heading`
+- Title decoupling: `title` is free-form; `sync_filename_on_save` and
+  `sync_yaml_on_rename` removed; `:PKMRenameNote` added; `filename:` predicate
+  added to `filter.lua`; `filename` field added to index entries
+- `PKMBrowse`: unified note browser via index+filter; `PKMTags` now uses
+  index+filter (ripgrep removed from tag browsing)
+- `PKMViewLast`, `PKMViewSidebar` (flat list), subproject hierarchy in
+  `get_tree()`, sidebar tree header with `<CR>` navigation and `<BS>` parent nav
+- Deleted `journal.sync_yaml_on_rename`
 
 **Active next steps:**
-1. `markdown.lua` additions: special character abbreviations (`config.symbols`),
-   checkbox toggle, heading navigation, wiki-link wrapping, block-quote toggle
-2. `PKMViewLast` — small, no dependencies; close out after markdown work
-3. `PKMBrowse` — unified note browser replacing `PKMSearch`/`PKMTags` (next major)
+1. Metadata commands: `:PKMSetTitle`, `:PKMAddTag`, `:PKMRemoveTag` (buffer-only)
+2. `:PKMViewNewSub` — create subprojects from a command
+3. Performance benchmarks: `bench.views_suite()` for 50/100/300/1000 views
+4. Investigate potential bugs: sidebar + tab pages, stale sidebar on delete,
+   external file deletion in sidebar
 
 ---
 
@@ -44,17 +47,17 @@ Stable. All Phase 1 infrastructure complete. Active work is on `markdown.lua` ad
 | `yaml.lua` | YAML parse/generate — complex, do not touch lightly |
 | `timestamp.lua` | Timestamp formats, filename generation |
 | `citations.lua` | Bidirectional citation sync, tag index, citable item map |
-| `notes.lua` | Note CRUD, conversion, promotion, transposition, linking |
-| `journal.lua` | Journal creation; filename-YAML sync for consolidated only |
-| `ui.lua` | Fallback UI (no Telescope): stats, search, tags, merge, browse |
+| `notes.lua` | Note CRUD, conversion, promotion, transposition, linking; free-form title |
+| `journal.lua` | Journal creation; timestamp-based filename sync |
+| `ui.lua` | Fallback UI (no Telescope): stats, search, tags, browse, merge |
 | `telescope.lua` | All Telescope pickers — checked at call time, never load time |
 | `templates.lua` | Template application |
 | `export.lua` | Filter + copy notes — read-only, no setup() |
-| `filter.lua` | Filter expression parser and evaluator — pure logic, no I/O |
-| `index.lua` | In-memory note index with incremental BufWritePost invalidation |
-| `views.lua` | Named project views — sidecar `views.json`, CRUD, Telescope/float picker |
+| `filter.lua` | Filter expression parser/evaluator — tag/title/text/filename fields |
+| `index.lua` | In-memory note index — {path, filename, title, tags, body, mtime} |
+| `views.lua` | Named views — sidecar, CRUD, subproject hierarchy, sidebar, PKMViewLast |
 | `bench.lua` | Developer benchmarking suite — not user-facing, no commands |
-| `markdown.lua` | Markdown editing utilities — headers, emphasis, wrapping; no setup() |
+| `markdown.lua` | Markdown editing utilities — headers, emphasis, symbols, navigation |
 
 ---
 
@@ -64,13 +67,13 @@ Stable. All Phase 1 infrastructure complete. Active work is on `markdown.lua` ad
 |---|---|
 | Never modify `yaml.lua` without strong justification | Complex fixed bugs; regression corrupts note files |
 | Check Telescope at call time, not load time | Lazy.nvim defers loading; `package.loaded` is wrong at module load |
-| Never use `generic_sorter` for exact-match contexts | It applies fzy fuzzy matching; use `string.find(..., 1, true)` |
+| Never use `generic_sorter` for exact-match contexts | It applies fzy matching; use `finders.new_dynamic` with `string.find(..., 1, true)` |
 | Never reintroduce `status` field | Intentionally removed |
 | Never use deprecated Neovim APIs | Use `nvim_set_option_value`, `vim.keymap.set` |
 | Never reference `M` from another module | Each file's `M` is its own table; cross-module calls use `require` |
 | Commands calling `init.lua` must use `require('pkm')` | `M` in `commands.lua` is not `init.lua`'s `M` |
-| Never physically separate notes for project organisation | Projects are views over one namespace; multi-wiki is not a goal |
-| Never optimize `collect_files` without benchmarking first | Baseline measurements are required before any performance work |
+| Never physically separate notes for project organisation | Projects are views, not folders; all notes share one namespace |
+| Never optimize `collect_files` without benchmarking first | Baseline measurements required before any performance work |
 
 ---
 
@@ -82,15 +85,6 @@ Cross-platform paths:
     local path  = utils.join(dir, file)
     local files = vim.fn.glob(dir .. utils.sep .. "*.md", false, true)
 
-OS detection:
-
-    utils.is_windows  -- boolean
-    utils.is_wsl      -- boolean
-
-Exact substring matching (never fzy):
-
-    if haystack:lower():find(needle:lower(), 1, true) then ... end
-
 Telescope availability (at call time only):
 
     local ok = pcall(require, 'telescope')
@@ -99,7 +93,6 @@ Telescope availability (at call time only):
 Calling init.lua functions from commands.lua:
 
     require('pkm').delete_note_safely()
-    require('pkm').setup_sync_autocmds()
 
 Neovim API (0.10+):
 

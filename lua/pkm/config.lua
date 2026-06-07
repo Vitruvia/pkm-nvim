@@ -76,7 +76,11 @@ local defaults = {
   -- expression string. Activated with :PKMView <name>.
   -- Example:
   --   projects = {
-  --     rpg    = 'tag:rpg AND (title:ringforge OR text:ringforge)',
+  --     "rpg":    "tag:rpg AND (title:ringforge OR text:ringforge)",
+  --     "ringforge-mechanics": {
+  --       "parent": "ringforge",
+  --       "filter": "tag:mechanics"
+  --     }
   --     clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
   --   }
   projects = {},

@@ -172,17 +172,36 @@ NAVIGATION~
 
 SEARCH & BROWSE~
 
-:PKMSearch              Search note contents using Telescope and ripgrep.
+:PKMSearch              Raw streaming text search via Telescope live_grep
+                        and ripgrep. Requires ripgrep. Scoped to note body
+                        content only; use :PKMBrowse for structured queries.
 
-:PKMTags                Browse notes by tag using Telescope. Select a tag,
-                        then select a file to open.
+:PKMBrowse [expr]       Browse PKM notes with an optional filter expression.
+                        Supports tag:, title:, text:, and filename: predicates
+                        combined with AND, OR, NOT, and parentheses. Examples:
+                          :PKMBrowse
+                          :PKMBrowse tag:math AND title:fourier
+                          :PKMBrowse filename:0042
+                        Uses the Telescope picker when available, vim.ui.select
+                        otherwise. The prompt applies exact substring narrowing
+                        over the pre-filtered set.
+
+:PKMTags                Browse notes by tag. Select a tag from the full tag
+                        list, then :PKMBrowse opens pre-filtered to that tag.
+                        Uses the index — no ripgrep required.
 
 :PKMMergeTags           Merge one or more tags into a target tag across all
-                        notes. Uses a three-step Telescope picker (target →
-                        sources → confirm), or a fallback UI without Telescope.
+                        notes. Three-step Telescope picker (target → sources →
+                        confirm), or a fallback UI without Telescope.
 
-:PKMStats               Open a statistics window showing note counts, top
-                        tags, and citation counts.
+:PKMStats               Show note counts per folder via vim.notify.
+
+LIFECYCLE~
+
+:PKMRenameNote          Prompt for a new filename (pre-filled with the current
+                        stem). Sanitizes the input, renames the file on disk,
+                        redirects the buffer, and propagates the rename through
+                        all citations. Does not modify the title field.
 
 CITATIONS~
 
@@ -199,21 +218,68 @@ EXPORT~
 
 :PKMExport              Open the export filter form. See |pkm-export|.
 
-VIEWS
+VIEWS~
 
-:PKMView [name]     Open a named project view. Without a name, presents a
-                    picker of all defined views. Tab-completes view names.
+:PKMView [name]         Open a named project view. Without a name, presents a
+                        picker of all defined views. Tab-completes view names.
+                        Simple views are filter expressions (strings). Subproject
+                        views are defined in views.json with parent and filter
+                        fields; their effective filter is the parent's AND own.
 
-:PKMViews           List all defined project views.
+:PKMViews               List all defined project views via vim.notify.
 
-:PKMViewNew         Prompt for a name and filter expression, then save the
-                    view to views.json.
+:PKMViewNew             Prompt for a name and filter expression, then save to
+                        views.json. For subprojects, use :PKMViewEdit directly.
 
-:PKMViewEdit        Open views.json for direct editing. Saving the file
-                    automatically reloads all views.
+:PKMViewEdit            Open views.json for direct editing. Saving the file
+                        automatically reloads all views. Use this to define
+                        subprojects:
+                          {
+                            "physics": "tag:physics",
+                            "physics-mechanics": {
+                              "parent": "physics",
+                              "filter": "tag:mechanics"
+                            }
+                          }
 
-:PKMViewDelete      Remove a named view from views.json. Tab-completes
-                    view names.
+:PKMViewDelete          Remove a named view from views.json. Tab-completes
+                        view names.
+
+:PKMViewLast            Reopen the last view activated in this session.
+                        Session-scoped; does not persist across restarts.
+
+:PKMViewSidebar [name]  Open or toggle the persistent sidebar for a named view.
+                        Without a name, prompts for one (or closes if open).
+                        Same name again → closes; different name → replaces.
+                        When the view participates in the subproject hierarchy,
+                        a tree header is shown above the note list:
+                          ▶ parent-view  (N notes)
+                          ▼ current-view (N notes)
+                          ▶ child-view   (N notes)
+                          ──────────────────────
+                          ...note list...
+                        Sidebar keymaps:
+                          <CR>   open note in last focused window (on note line)
+                                 or navigate to that view (on tree header line)
+                          <BS>   navigate to parent view
+                          r      refresh against current index
+                          q / <Esc>   close sidebar
+
+MARKDOWN EDITING~
+
+:PKMNextHeader          Duplicate the header on the current line with its
+                        trailing counter incremented, append at EOF.
+
+:PKMHeaderLevelUp       Increase the # depth of all headers in the range.
+                        Default range: whole buffer. Also accepts '<,'> prefix
+                        for visual selection.
+
+:PKMHeaderLevelDown     Decrease the # depth of all headers in the range.
+                        Level-1 headers are protected.
+
+:PKMHeadingNext         Jump to the next ATX heading (# …) in the buffer.
+
+:PKMHeadingPrev         Jump to the previous ATX heading in the buffer.
 
 ==============================================================================
 7. CITATIONS                                                   *pkm-citations*
@@ -348,11 +414,29 @@ PROGRAMMATIC API~
       institution = "",
     },
 
-  -- Named project views (optional — prefer :PKMViewNew over editing config)
-  projects = {
-    rpg    = 'tag:rpg AND (title:ringforge OR text:ringforge)',
-    clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
-  },
+  -- Named project views. Each key is a view name; each value is a filter
+  expression string. Activated with :PKMView <name>.
+  Example:
+    projects = {
+      "rpg":    "tag:rpg AND (title:ringforge OR text:ringforge)",
+      "ringforge-mechanics": {
+        "parent": "ringforge",
+        "filter": "tag:mechanics"
+      }
+      clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
+    }
+
+  -- Width of the :PKMViewSidebar window (default 40 columns)
+    sidebar_width = 40,
+
+    -- Buffer-local symbol abbreviations and insert-mode keymaps.
+    -- Registered per PKM note buffer via BufReadPost.
+    -- trigger (iabbrev) and key (insert-mode map) are both optional.
+    symbols = {
+      { trigger = 'emdash', key = '<M-->', expansion = '—' },
+      { trigger = 'sect',   key = '<M-s>', expansion = '§' },
+      { trigger = 'ordm',   key = '<M-o>', expansion = 'º' },
+    },
 
     keymaps = {
       -- Set any value to false to disable that keymap
@@ -372,6 +456,15 @@ PROGRAMMATIC API~
       backlinks        = "<leader>nb",
       search           = "<leader>nf",
       browse_tags      = "<leader>nt",
+      rename_note      = "<leader>nr",
+      browse           = false,       -- :PKMBrowse (direct)
+      view_last        = "<leader>nV",
+      view_sidebar     = false,
+      next_header      = "<leader>mh",
+      header_level_up  = false,
+      header_level_down = false,
+      heading_next     = false,
+      heading_prev     = false,
     },
   })
 <
@@ -397,11 +490,19 @@ Default keymaps (all overridable via the `keymaps` config table):
   <leader>nb   :PKMBacklinks
   <leader>nf   :PKMSearch
   <leader>nt   :PKMTags
+  <leader>nr   :PKMRenameNote
+  <leader>nV   :PKMViewLast
+  <leader>mh   :PKMNextHeader
 
 ==============================================================================
 11. FRONTMATTER                                               *pkm-frontmatter*
 
 CONSOLIDATED NOTE~
+
+The `title` field is free-form. The system sets it at creation time from user
+input but never overwrites it afterward. To rename the file, use
+:PKMRenameNote — this changes the filename on disk without touching the title
+field.
 >
   ---
   title: ""
@@ -482,7 +583,11 @@ Examples: >
   0042_note_Introduction_to_Fourier_Analysis.md
   0003_bib_Fourier_Analysis_Stein_Shakarchi.md
   0007_agg_Real_Analysis_Reading_List.md
-<
+
+To rename a consolidated note after creation, use |:PKMRenameNote|. It prompts
+for a new name, sanitizes it, renames the file on disk, updates the buffer
+reference, and propagates the change through all citations. The `title`
+frontmatter field is never touched by the rename operation.
 
 JOURNAL ENTRIES~
 

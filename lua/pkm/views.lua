@@ -56,6 +56,8 @@ local _sidebar_win   = nil      -- window handle of open sidebar, or nil
 local _sidebar_buf   = nil      -- buffer handle of open sidebar, or nil
 local _sidebar_name  = nil      -- view name currently shown
 local _sidebar_paths = {}       -- path list currently shown
+local _sidebar_tree         = {}   -- array of {name, is_current} per tree header line
+local _sidebar_header_count = 0    -- total non-note lines (tree header + sep + blank)
 
 -- =============================================================================
 -- SECTION: Internal helpers — config and sidecar
@@ -109,6 +111,31 @@ end
 local function invalidate()
   _sidecar_cache = nil
   _tree_cache    = {}
+end
+
+--- Return the parent view name for a subproject, or nil for root views.
+---@param name string
+---@return string|nil
+local function get_view_parent(name)
+  local expr = get_projects()[name]
+  if type(expr) == 'table' and type(expr.parent) == 'string' then
+    return expr.parent
+  end
+  return nil
+end
+
+--- Return sorted names of all views whose parent field equals name.
+---@param name string
+---@return string[]
+local function get_view_children(name)
+  local children = {}
+  for k, v in pairs(get_projects()) do
+    if type(v) == 'table' and v.parent == name then
+      children[#children + 1] = k
+    end
+  end
+  table.sort(children)
+  return children
 end
 
 --- Parse and cache the filter tree for a named view.
@@ -520,32 +547,66 @@ end
 -- =============================================================================
 
 --- Build the display lines for the sidebar buffer.
+--- Returns lines, tree_entries, header_count.
+--- tree_entries: array of {name, is_current} indexed by line number (1-based).
+--- header_count: number of lines before the first note entry.
 ---@param name  string
 ---@param paths string[]
----@return string[]
+---@return string[], table, integer
 local function sidebar_build_lines(name, paths)
-  local index = require('pkm.index')
-  local count = #paths
-  local lines = {
-    '  PKMView: ' .. name .. '  (' .. count .. ' note' .. (count == 1 and '' or 's') .. ')',
-    '  ' .. string.rep('─', 38),
-    '',
-  }
+  local index    = require('pkm.index')
+  local parent   = get_view_parent(name)
+  local children = get_view_children(name)
+  local lines    = {}
+  local tree_entries = {}
+
+  if parent or #children > 0 then
+    -- Tree header: parent (if any), current, children
+    if parent then
+      local p_count = #M.match_all(parent)
+      lines[#lines + 1] = string.format('  ▶ %s  (%d)', parent, p_count)
+      tree_entries[#lines] = { name = parent, is_current = false }
+    end
+
+    lines[#lines + 1] = string.format('  ▼ %s  (%d)', name, #paths)
+    tree_entries[#lines] = { name = name, is_current = true }
+
+    for _, child in ipairs(children) do
+      local c_count = #M.match_all(child)
+      lines[#lines + 1] = string.format('  ▶ %s  (%d)', child, c_count)
+      tree_entries[#lines] = { name = child, is_current = false }
+    end
+
+    lines[#lines + 1] = '  ' .. string.rep('─', 38)
+    lines[#lines + 1] = ''
+  else
+    -- Simple header when no hierarchy exists
+    local count = #paths
+    lines[#lines + 1] = '  PKMView: ' .. name
+      .. '  (' .. count .. ' note' .. (count == 1 and '' or 's') .. ')'
+    lines[#lines + 1] = '  ' .. string.rep('─', 38)
+    lines[#lines + 1] = ''
+  end
+
+  local header_count = #lines
+
   for i, path in ipairs(paths) do
     local entry = index.get(path)
     local title = entry and entry.title or vim.fn.fnamemodify(path, ':t:r')
     lines[#lines + 1] = string.format('  %3d  %s', i, title)
   end
-  if count == 0 then
+  if #paths == 0 then
     lines[#lines + 1] = '  (no notes match)'
   end
-  return lines
+
+  return lines, tree_entries, header_count
 end
 
 --- Open or toggle the persistent view sidebar.
 --- nil/'' with sidebar open → close. nil/'' with sidebar closed → prompt.
 --- Same name called again → close. Different name → replace contents.
---- <CR> opens note in the alternate window (last focused non-sidebar window).
+--- Tree header (when view has parent/children): <CR> navigates to that view.
+--- <CR> on note line opens note in alternate window. <BS> navigates to parent.
 --- r refreshes against the current index. q/<Esc> closes.
 ---@param name string|nil
 ---@return nil
@@ -554,9 +615,10 @@ function M.open_sidebar(name)
   if _sidebar_win and not vim.api.nvim_win_is_valid(_sidebar_win) then
     _sidebar_win = nil; _sidebar_buf = nil
     _sidebar_name = nil; _sidebar_paths = {}
+    _sidebar_tree = {}; _sidebar_header_count = 0
   end
 
-  -- No name given: close if open, else prompt
+  -- No name: close if open, else prompt
   if not name or name == '' then
     if _sidebar_win then
       vim.api.nvim_win_close(_sidebar_win, true)
@@ -564,9 +626,7 @@ function M.open_sidebar(name)
     end
     local names = M.list()
     if #names == 0 then
-      vim.notify(
-        '[pkm] no views defined. Use :PKMViewNew to create one.',
-        vim.log.levels.WARN)
+      vim.notify('[pkm] no views defined. Use :PKMViewNew to create one.', vim.log.levels.WARN)
       return
     end
     vim.ui.select(names, {
@@ -587,13 +647,19 @@ function M.open_sidebar(name)
   local paths = M.match_all(name)
   _sidebar_name  = name
   _sidebar_paths = paths
-  local lines    = sidebar_build_lines(name, paths)
+
+  local lines, tree_entries, header_count = sidebar_build_lines(name, paths)
+  _sidebar_tree         = tree_entries
+  _sidebar_header_count = header_count
 
   -- Replace contents when sidebar is already open for a different view
   if _sidebar_win then
     vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
     vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, lines)
     vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
+    if #paths > 0 then
+      vim.api.nvim_win_set_cursor(_sidebar_win, { header_count + 1, 0 })
+    end
     return
   end
 
@@ -610,8 +676,8 @@ function M.open_sidebar(name)
   vim.api.nvim_win_set_width(_sidebar_win, width)
 
   for opt, val in pairs({
-    winfixwidth = true,  wrap = false,
-    number      = false, cursorline = true, signcolumn = 'no',
+    winfixwidth = true, wrap = false,
+    number = false, cursorline = true, signcolumn = 'no',
   }) do
     vim.api.nvim_set_option_value(opt, val, { win = _sidebar_win })
   end
@@ -626,31 +692,38 @@ function M.open_sidebar(name)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
 
-  -- Place cursor on first note line (rows 1-3: header, separator, blank)
   if #paths > 0 then
-    vim.api.nvim_win_set_cursor(_sidebar_win, { 4, 0 })
+    vim.api.nvim_win_set_cursor(_sidebar_win, { header_count + 1, 0 })
   end
 
-  -- Clear state when buffer is wiped (covers :q and external window close)
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer   = buf,
     once     = true,
     callback = function()
       _sidebar_win = nil; _sidebar_buf = nil
       _sidebar_name = nil; _sidebar_paths = {}
+      _sidebar_tree = {}; _sidebar_header_count = 0
     end,
   })
 
   local ko = { noremap = true, silent = true, buffer = buf }
 
-  -- <CR>: open note in the last focused non-sidebar window
+  -- <CR>: tree header line → navigate to that view; note line → open note
   vim.keymap.set('n', '<CR>', function()
     local row = vim.api.nvim_win_get_cursor(_sidebar_win)[1]
-    local idx = row - 3   -- rows 1-3: header, separator, blank
+
+    -- Tree header line
+    local te = _sidebar_tree[row]
+    if te then
+      if not te.is_current then M.open_sidebar(te.name) end
+      return
+    end
+
+    -- Note line
+    local idx = row - _sidebar_header_count
     if idx < 1 or idx > #_sidebar_paths then return end
     local path = _sidebar_paths[idx]
 
-    -- Use Neovim's alternate window (#) — the window the user came from
     local target
     local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
     if alt_id ~= 0 and alt_id ~= _sidebar_win
@@ -658,31 +731,39 @@ function M.open_sidebar(name)
     and vim.api.nvim_win_get_config(alt_id).relative == '' then
       target = alt_id
     end
-
-    -- Fallback: first non-sidebar non-float window in the current tab
     if not target then
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if win ~= _sidebar_win
         and vim.api.nvim_win_get_config(win).relative == '' then
-          target = win
-          break
+          target = win; break
         end
       end
     end
-
     if target then
       vim.api.nvim_set_current_win(target)
       vim.cmd('edit ' .. vim.fn.fnameescape(path))
     else
-      -- No other window exists; open one to the right of the sidebar
       vim.cmd('rightbelow vsplit ' .. vim.fn.fnameescape(path))
+    end
+  end, ko)
+
+  -- <BS>: navigate to parent view
+  vim.keymap.set('n', '<BS>', function()
+    local parent = get_view_parent(_sidebar_name)
+    if parent then
+      M.open_sidebar(parent)
+    else
+      vim.notify('[pkm] this view has no parent', vim.log.levels.INFO)
     end
   end, ko)
 
   -- r: refresh against current index
   vim.keymap.set('n', 'r', function()
     _sidebar_paths = M.match_all(_sidebar_name)
-    local new_lines = sidebar_build_lines(_sidebar_name, _sidebar_paths)
+    local new_lines, new_tree, new_hcount =
+      sidebar_build_lines(_sidebar_name, _sidebar_paths)
+    _sidebar_tree         = new_tree
+    _sidebar_header_count = new_hcount
     vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
     vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, new_lines)
     vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
@@ -698,7 +779,6 @@ function M.open_sidebar(name)
   vim.keymap.set('n', 'q',     close_sidebar, ko)
   vim.keymap.set('n', '<Esc>', close_sidebar, ko)
 
-  -- Return focus to the previous window
   vim.api.nvim_set_current_win(prev_win)
 end
 

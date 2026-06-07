@@ -2,7 +2,7 @@
 
 ---
 
-## [Unreleased]
+## [1.2.2] - 2026-6-6
 
 ### Added
 
@@ -119,6 +119,24 @@
   - New command `:PKMViewSidebar [name]` (tab-completes view names) in
     `commands.lua`. New keymap `view_sidebar` (default `false`) in `config.lua`
     and `keymaps.lua`. New config key `sidebar_width` (default `40`).
+- **Sidebar tree header** — the sidebar buffer gains a navigable tree header
+  when the active view participates in the subproject hierarchy (has a parent
+  or children). Flat views (no parent, no children) retain the original simple
+  header unchanged.
+  - Layout (top to bottom): optional parent line `▶ name (N)`, current view
+    line `▼ name (N)`, zero or more child lines `▶ name (N)`, separator, blank,
+    note entries. Note count for each related view is computed via `match_all`.
+  - `<CR>` on any `▶` line calls `M.open_sidebar(name)` for that view.
+    `<CR>` on the `▼` line (current view) is a no-op.
+  - `<BS>` navigates to the parent view, or notifies if no parent exists.
+  - `sidebar_build_lines(name, paths)` refactored to return
+    `(lines, tree_entries, header_count)`. `tree_entries` is a sparse table
+    keyed by 1-based line number; `header_count` is the total number of
+    non-note prefix lines. Both are stored in new module state variables
+    `_sidebar_tree` and `_sidebar_header_count`, cleared by `BufWipeout` and
+    the external-close guard.
+  - Two new internal helpers: `get_view_parent(name)` and
+    `get_view_children(name)`.
 
 ### Changed
 
