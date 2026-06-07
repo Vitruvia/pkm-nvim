@@ -4,8 +4,6 @@
 
 ## [Unreleased]
 
-## [Unreleased]
-
 ### Added
 
 - `lua/pkm/markdown.lua` — new module for general markdown editing utilities.
@@ -78,6 +76,49 @@
   Tab-completable predicates: `tag:`, `title:`, `text:`, `filename:`. Telescope
   picker when available; `ui.browse` fallback otherwise.
 - Config: `keymaps.browse` (default `false`).
+- **Subproject hierarchy for views** — `get_tree()` in `views.lua` now handles
+  both string values (simple views) and table values (subprojects). A subproject
+  entry has `parent` and `filter` fields; its effective filter is the parent's
+  filter AND-ed with its own. Resolution walks the parent chain recursively at
+  query time using `filter.lua`'s existing AND node — no new parser work needed.
+  Cycle detection tracks visited names and returns an error on re-entry. Depth
+  is capped at 8 levels. Caching is unaffected: composed trees are cached after
+  first resolution; `invalidate()` clears all caches on any views.json change.
+  Subprojects are authored via `:PKMViewEdit` (direct views.json editing).
+  `views.json` format extended: string values remain simple views (backward
+  compatible); table values declare subprojects:
+```json
+  {
+    "ringforge": "tag:ringforge",
+    "ringforge-mechanics": { "parent": "ringforge", "filter": "tag:mechanics" }
+  }
+```
+
+- **`:PKMViewLast`** — reopens the last view activated in the current session.
+  `views.lua` tracks `_last_view` (set in `M.open()` on every successful
+  activation). `M.open_last()` calls `M.open(_last_view)` if set, or notifies
+  if no view has been activated yet. Session-scoped by design: does not persist
+  across Neovim restarts. New command `:PKMViewLast` in `commands.lua`. New
+  keymap `view_last` (default `<leader>nV`) in `config.lua` and `keymaps.lua`.
+
+- **`:PKMViewSidebar` — persistent split buffer for view navigation** — opens a
+  full-height vertical split at the far left listing the active view's notes.
+  `M.open_sidebar(name?)` in `views.lua`:
+  - No name + sidebar open → closes. No name + sidebar closed → prompts for view.
+  - Same name called again → toggles closed. Different name → replaces contents.
+  - Buffer keymaps: `<CR>` opens the note under cursor in the last focused
+    non-sidebar window (uses `winnr('#')` — Neovim's alternate window — with
+    fallback to first non-sidebar non-float window, then `rightbelow vsplit` if
+    no other window exists); `r` refreshes against the current index;
+    `q` / `<Esc>` closes.
+  - Window is `winfixwidth`, no line numbers, `cursorline` enabled. Buffer is
+    `nofile`/`bufhidden=wipe`. State (`_sidebar_win`, `_sidebar_buf`,
+    `_sidebar_name`, `_sidebar_paths`) is cleared automatically by a
+    `BufWipeout` autocmd, covering `:q` and external window destruction.
+  - Focus returns to the previous window after the sidebar opens.
+  - New command `:PKMViewSidebar [name]` (tab-completes view names) in
+    `commands.lua`. New keymap `view_sidebar` (default `false`) in `config.lua`
+    and `keymaps.lua`. New config key `sidebar_width` (default `40`).
 
 ### Changed
 

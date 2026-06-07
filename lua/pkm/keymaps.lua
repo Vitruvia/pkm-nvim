@@ -53,6 +53,12 @@ function M.register(config)
   map(k.browse, "<cmd>PKMBrowse<cr>", "Browse Notes")
 
   -- --------------------------------------------------------------------------
+  -- KEYMAPS: PROJECTS/VIEWS
+  -- -------------------------------------------------------------------------- 
+  map(k.view_last,    "<cmd>PKMViewLast<cr>",    "Last View")
+  map(k.view_sidebar, "<cmd>PKMViewSidebar<cr>", "View Sidebar")
+
+  -- --------------------------------------------------------------------------
   -- KEYMAPS: MARKDOWN EDITING
   -- -------------------------------------------------------------------------- 
   -- Header Editing

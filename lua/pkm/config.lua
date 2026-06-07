@@ -81,6 +81,8 @@ local defaults = {
   --   }
   projects = {},
 
+  sidebar_width = 40,
+
   user = {
     name  = "",
     email = "",
@@ -108,6 +110,9 @@ local defaults = {
     promote_note    = "<leader>np",
     transpose_note  = "<leader>nT",
     change_note_type = "<leader>nC",
+    -- Projects/Views
+    view_last    = "<leader>nV",
+    view_sidebar = false,
     -- Search and browsing
     search          = "<leader>nf",
     browse_tags     = "<leader>nt",

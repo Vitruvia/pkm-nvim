@@ -221,6 +221,18 @@ function M.register()
     desc     = 'Delete a named project view from views.json',
   })
 
+  vim.api.nvim_create_user_command('PKMViewLast', function()
+    require('pkm.views').open_last()
+  end, { desc = 'Reopen the last activated view (session-scoped)' })
+
+  vim.api.nvim_create_user_command('PKMViewSidebar', function(opts)
+    require('pkm.views').open_sidebar(opts.args ~= '' and opts.args or nil)
+  end, {
+    nargs    = '?',
+    complete = function() return require('pkm.views').list() end,
+    desc     = 'Open or toggle the persistent view sidebar',
+  })
+
 -- =============================================================================
 -- SECTION: Markdown editing
 -- =============================================================================

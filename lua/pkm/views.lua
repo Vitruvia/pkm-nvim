@@ -12,10 +12,13 @@
 -- views.json lives alongside notes and can be version-controlled with them.
 -- It requires no Neovim config changes to add, edit, or remove views.
 --
--- views.json format:
+-- views.json format (string = simple view; table = subproject):
 --   {
 --     "rpg":    "tag:rpg AND (title:ringforge OR text:ringforge)",
---     "clinic": "tag:medicine AND tag:protocol AND NOT tag:draft"
+--     "ringforge-mechanics": {
+--       "parent": "ringforge",
+--       "filter": "tag:mechanics"
+--     }
 --   }
 --
 -- Loading order:
@@ -31,6 +34,8 @@
 --   list()              → string[]  sorted view names (sidecar + config)
 --   match_all(name)     → string[]  paths matching the named view's filter
 --   open(name?)         → activate a view; prompts for name if nil
+--   open_last()         → reopen the last activated view (session-scoped)
+--   open_sidebar(name?) → open or toggle the persistent sidebar for a view
 --   save(name, expr)    → write or update a view in views.json
 --   delete(name)        → remove a view from views.json
 -- =============================================================================
@@ -45,6 +50,12 @@ local utils = require('pkm.utils')
 
 local _sidecar_cache = nil   -- table loaded from views.json; nil when stale
 local _tree_cache    = {}    -- name → parsed filter tree
+local _last_view = nil          -- name of last successfully activated view
+
+local _sidebar_win   = nil      -- window handle of open sidebar, or nil
+local _sidebar_buf   = nil      -- buffer handle of open sidebar, or nil
+local _sidebar_name  = nil      -- view name currently shown
+local _sidebar_paths = {}       -- path list currently shown
 
 -- =============================================================================
 -- SECTION: Internal helpers — config and sidecar
@@ -101,26 +112,76 @@ local function invalidate()
 end
 
 --- Parse and cache the filter tree for a named view.
----@param name string
+--- Handles string expressions (simple views) and table values
+--- (subprojects: {parent=string, filter=string}). Detects cycles.
+---@param name    string
+---@param _visited table|nil  Internal cycle-detection set; do not pass
 ---@return table|nil tree
 ---@return string|nil err
-local function get_tree(name)
+local function get_tree(name, _visited)
   if _tree_cache[name] then return _tree_cache[name], nil end
+
+  _visited = _visited or {}
+  if _visited[name] then
+    return nil, string.format(
+      "PKMView: cycle detected in view hierarchy at '%s'", name)
+  end
+  if vim.tbl_count(_visited) >= 8 then
+    return nil, string.format(
+      "PKMView: hierarchy depth limit (8) reached at '%s'", name)
+  end
 
   local projects = get_projects()
   if not projects[name] then
     return nil, string.format("PKMView: no view named '%s'", name)
   end
 
-  local expr = projects[name]
-  if type(expr) ~= 'string' or expr:match('^%s*$') then
-    return nil, string.format("PKMView: view '%s' has an empty filter expression", name)
-  end
-
+  _visited[name] = true
+  local expr   = projects[name]
   local filter = require('pkm.filter')
-  local tree, err = filter.parse(expr)
-  if not tree then
-    return nil, string.format("PKMView: parse error in view '%s': %s", name, err)
+  local tree, err
+
+  if type(expr) == 'string' then
+    if expr:match('^%s*$') then
+      return nil, string.format(
+        "PKMView: view '%s' has an empty filter expression", name)
+    end
+    tree, err = filter.parse(expr)
+    if not tree then
+      return nil, string.format(
+        "PKMView: parse error in view '%s': %s", name, err)
+    end
+
+  elseif type(expr) == 'table' then
+    local parent_name = expr.parent
+    local sub_filter  = expr.filter
+
+    if type(parent_name) ~= 'string' or parent_name == '' then
+      return nil, string.format(
+        "PKMView: subproject '%s' missing valid 'parent' field", name)
+    end
+    if type(sub_filter) ~= 'string' or sub_filter:match('^%s*$') then
+      return nil, string.format(
+        "PKMView: subproject '%s' missing valid 'filter' field", name)
+    end
+
+    local parent_tree, parent_err = get_tree(parent_name, _visited)
+    if not parent_tree then
+      return nil, string.format(
+        "PKMView: error resolving parent '%s' for '%s': %s",
+        parent_name, name, parent_err)
+    end
+
+    local sub_tree, sub_err = filter.parse(sub_filter)
+    if not sub_tree then
+      return nil, string.format(
+        "PKMView: parse error in subproject '%s': %s", name, sub_err)
+    end
+
+    tree = { type = 'AND', args = { parent_tree, sub_tree } }
+  else
+    return nil, string.format(
+      "PKMView: view '%s' must be a string or a {parent, filter} table", name)
   end
 
   _tree_cache[name] = tree
@@ -433,6 +494,7 @@ function M.open(name)
       vim.log.levels.INFO)
     return
   end
+  _last_view = name
 
   local has_telescope = pcall(require, 'telescope')
   if has_telescope then
@@ -440,6 +502,204 @@ function M.open(name)
   else
     float_view_picker(name, paths)
   end
+end
+
+--- Reopen the last view activated in this session.
+--- Session-scoped: does not persist across Neovim restarts.
+---@return nil
+function M.open_last()
+  if not _last_view then
+    vim.notify('[pkm] no view has been activated yet this session', vim.log.levels.INFO)
+    return
+  end
+  M.open(_last_view)
+end
+
+-- =============================================================================
+-- SECTION: Sidebar
+-- =============================================================================
+
+--- Build the display lines for the sidebar buffer.
+---@param name  string
+---@param paths string[]
+---@return string[]
+local function sidebar_build_lines(name, paths)
+  local index = require('pkm.index')
+  local count = #paths
+  local lines = {
+    '  PKMView: ' .. name .. '  (' .. count .. ' note' .. (count == 1 and '' or 's') .. ')',
+    '  ' .. string.rep('─', 38),
+    '',
+  }
+  for i, path in ipairs(paths) do
+    local entry = index.get(path)
+    local title = entry and entry.title or vim.fn.fnamemodify(path, ':t:r')
+    lines[#lines + 1] = string.format('  %3d  %s', i, title)
+  end
+  if count == 0 then
+    lines[#lines + 1] = '  (no notes match)'
+  end
+  return lines
+end
+
+--- Open or toggle the persistent view sidebar.
+--- nil/'' with sidebar open → close. nil/'' with sidebar closed → prompt.
+--- Same name called again → close. Different name → replace contents.
+--- <CR> opens note in the alternate window (last focused non-sidebar window).
+--- r refreshes against the current index. q/<Esc> closes.
+---@param name string|nil
+---@return nil
+function M.open_sidebar(name)
+  -- Clear stale state if the window was destroyed externally
+  if _sidebar_win and not vim.api.nvim_win_is_valid(_sidebar_win) then
+    _sidebar_win = nil; _sidebar_buf = nil
+    _sidebar_name = nil; _sidebar_paths = {}
+  end
+
+  -- No name given: close if open, else prompt
+  if not name or name == '' then
+    if _sidebar_win then
+      vim.api.nvim_win_close(_sidebar_win, true)
+      return
+    end
+    local names = M.list()
+    if #names == 0 then
+      vim.notify(
+        '[pkm] no views defined. Use :PKMViewNew to create one.',
+        vim.log.levels.WARN)
+      return
+    end
+    vim.ui.select(names, {
+      prompt      = 'Open sidebar for view:',
+      format_item = function(n) return n end,
+    }, function(sel)
+      if sel then M.open_sidebar(sel) end
+    end)
+    return
+  end
+
+  -- Toggle: same view → close
+  if _sidebar_win and _sidebar_name == name then
+    vim.api.nvim_win_close(_sidebar_win, true)
+    return
+  end
+
+  local paths = M.match_all(name)
+  _sidebar_name  = name
+  _sidebar_paths = paths
+  local lines    = sidebar_build_lines(name, paths)
+
+  -- Replace contents when sidebar is already open for a different view
+  if _sidebar_win then
+    vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
+    vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, lines)
+    vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
+    return
+  end
+
+  -- Open new sidebar window at the far left (full height)
+  local prev_win = vim.api.nvim_get_current_win()
+  local width    = (require('pkm').config.sidebar_width or 40)
+
+  vim.cmd('noautocmd topleft vsplit')
+  _sidebar_win = vim.api.nvim_get_current_win()
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  _sidebar_buf = buf
+  vim.api.nvim_win_set_buf(_sidebar_win, buf)
+  vim.api.nvim_win_set_width(_sidebar_win, width)
+
+  for opt, val in pairs({
+    winfixwidth = true,  wrap = false,
+    number      = false, cursorline = true, signcolumn = 'no',
+  }) do
+    vim.api.nvim_set_option_value(opt, val, { win = _sidebar_win })
+  end
+
+  for opt, val in pairs({
+    bufhidden = 'wipe', buftype = 'nofile', swapfile = false,
+  }) do
+    vim.api.nvim_set_option_value(opt, val, { buf = buf })
+  end
+
+  vim.api.nvim_set_option_value('modifiable', true,  { buf = buf })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+
+  -- Place cursor on first note line (rows 1-3: header, separator, blank)
+  if #paths > 0 then
+    vim.api.nvim_win_set_cursor(_sidebar_win, { 4, 0 })
+  end
+
+  -- Clear state when buffer is wiped (covers :q and external window close)
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    buffer   = buf,
+    once     = true,
+    callback = function()
+      _sidebar_win = nil; _sidebar_buf = nil
+      _sidebar_name = nil; _sidebar_paths = {}
+    end,
+  })
+
+  local ko = { noremap = true, silent = true, buffer = buf }
+
+  -- <CR>: open note in the last focused non-sidebar window
+  vim.keymap.set('n', '<CR>', function()
+    local row = vim.api.nvim_win_get_cursor(_sidebar_win)[1]
+    local idx = row - 3   -- rows 1-3: header, separator, blank
+    if idx < 1 or idx > #_sidebar_paths then return end
+    local path = _sidebar_paths[idx]
+
+    -- Use Neovim's alternate window (#) — the window the user came from
+    local target
+    local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
+    if alt_id ~= 0 and alt_id ~= _sidebar_win
+    and vim.api.nvim_win_is_valid(alt_id)
+    and vim.api.nvim_win_get_config(alt_id).relative == '' then
+      target = alt_id
+    end
+
+    -- Fallback: first non-sidebar non-float window in the current tab
+    if not target then
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if win ~= _sidebar_win
+        and vim.api.nvim_win_get_config(win).relative == '' then
+          target = win
+          break
+        end
+      end
+    end
+
+    if target then
+      vim.api.nvim_set_current_win(target)
+      vim.cmd('edit ' .. vim.fn.fnameescape(path))
+    else
+      -- No other window exists; open one to the right of the sidebar
+      vim.cmd('rightbelow vsplit ' .. vim.fn.fnameescape(path))
+    end
+  end, ko)
+
+  -- r: refresh against current index
+  vim.keymap.set('n', 'r', function()
+    _sidebar_paths = M.match_all(_sidebar_name)
+    local new_lines = sidebar_build_lines(_sidebar_name, _sidebar_paths)
+    vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
+    vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, new_lines)
+    vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
+    vim.notify('[pkm] sidebar refreshed', vim.log.levels.INFO)
+  end, ko)
+
+  -- q / <Esc>: close
+  local function close_sidebar()
+    if _sidebar_win and vim.api.nvim_win_is_valid(_sidebar_win) then
+      vim.api.nvim_win_close(_sidebar_win, true)
+    end
+  end
+  vim.keymap.set('n', 'q',     close_sidebar, ko)
+  vim.keymap.set('n', '<Esc>', close_sidebar, ko)
+
+  -- Return focus to the previous window
+  vim.api.nvim_set_current_win(prev_win)
 end
 
 return M
