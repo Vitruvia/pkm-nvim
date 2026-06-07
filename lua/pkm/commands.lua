@@ -179,13 +179,8 @@ function M.register()
   })
 
   vim.api.nvim_create_user_command('PKMViews', function()
-    local names = require('pkm.views').list()
-    if #names == 0 then
-      vim.notify('PKMView: no views defined. Use :PKMViewNew to create one.', vim.log.levels.INFO)
-      return
-    end
-    vim.notify('Defined views: ' .. table.concat(names, ', '), vim.log.levels.INFO)
-  end, { desc = 'List all defined project views' })
+    require('pkm.views').list_views()
+  end, { desc = 'Browse all defined views in a tree picker' })
 
   vim.api.nvim_create_user_command('PKMViewNew', function()
     vim.ui.input({ prompt = 'View name: ' }, function(name)

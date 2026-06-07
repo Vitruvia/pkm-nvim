@@ -32,6 +32,7 @@
 -- Public API:
 --   setup()             → register BufWritePost autocmd for views.json
 --   list()              → string[]  sorted view names (sidecar + config)
+--   list_views()        → open tree picker over all views (Telescope or float)
 --   match_all(name)     → string[]  paths matching the named view's filter
 --   open(name?)         → activate a view; prompts for name if nil
 --   open_last()         → reopen the last activated view (session-scoped)
@@ -136,6 +137,51 @@ local function get_view_children(name)
   end
   table.sort(children)
   return children
+end
+
+--- Build a depth-first ordered list of all views for tree display.
+--- Root views (no parent, or parent not in projects) come first, sorted.
+--- Each entry carries name, depth, and whether it has children.
+---@return table[]  Array of {name=string, depth=integer, has_children=boolean}
+local function build_tree_entries()
+  local projects     = get_projects()
+  local children_map = {}
+
+  for name, expr in pairs(projects) do
+    local parent = type(expr) == 'table'
+                   and type(expr.parent) == 'string'
+                   and projects[expr.parent] ~= nil
+                   and expr.parent or nil
+    if parent then
+      children_map[parent] = children_map[parent] or {}
+      children_map[parent][#children_map[parent] + 1] = name
+    end
+  end
+  for _, children in pairs(children_map) do table.sort(children) end
+
+  local roots = {}
+  for name, expr in pairs(projects) do
+    local has_parent = type(expr) == 'table'
+                       and type(expr.parent) == 'string'
+                       and projects[expr.parent] ~= nil
+    if not has_parent then roots[#roots + 1] = name end
+  end
+  table.sort(roots)
+
+  local entries = {}
+  local function visit(name, depth)
+    entries[#entries + 1] = {
+      name         = name,
+      depth        = depth,
+      has_children = children_map[name] ~= nil,
+    }
+    for _, child in ipairs(children_map[name] or {}) do
+      visit(child, depth + 1)
+    end
+  end
+  for _, root in ipairs(roots) do visit(root, 0) end
+
+  return entries
 end
 
 --- Parse and cache the filter tree for a named view.
@@ -483,6 +529,111 @@ local function float_view_picker(name, paths)
   vim.keymap.set('n', '<Esc>', close,          ko)
 end
 
+--- Telescope tree picker over all defined views.
+--- Selecting a view opens it via M.open(). Uses generic_sorter (fzy is
+--- appropriate here — we are matching short view names, not structured content).
+local function telescope_views_tree_picker()
+  local pickers      = require('telescope.pickers')
+  local finders      = require('telescope.finders')
+  local conf         = require('telescope.config').values
+  local actions      = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+
+  local tree    = build_tree_entries()
+  local entries = {}
+
+  for _, e in ipairs(tree) do
+    local count  = #M.match_all(e.name)
+    local indent = string.rep('  ', e.depth)
+    local marker = e.has_children and '▶ ' or '• '
+    entries[#entries + 1] = {
+      name    = e.name,
+      display = string.format('%s%s%s  (%d)', indent, marker, e.name, count),
+      ordinal = e.name,
+    }
+  end
+
+  if #entries == 0 then
+    vim.notify('[pkm] no views defined. Use :PKMViewNew to create one.', vim.log.levels.WARN)
+    return
+  end
+
+  pickers.new({}, {
+    prompt_title = 'PKM Views',
+    finder = finders.new_table {
+      results = entries,
+      entry_maker = function(e)
+        return { value = e.name, display = e.display, ordinal = e.ordinal }
+      end,
+    },
+    sorter = conf.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr)
+      actions.select_default:replace(function()
+        actions.close(prompt_bufnr)
+        local sel = action_state.get_selected_entry()
+        if sel then M.open(sel.value) end
+      end)
+      return true
+    end,
+  }):find()
+end
+
+--- Scrollable float tree picker over all defined views.
+--- <CR> opens the view under the cursor; q/<Esc> closes.
+local function float_views_tree_picker()
+  local tree = build_tree_entries()
+
+  if #tree == 0 then
+    vim.notify('[pkm] no views defined. Use :PKMViewNew to create one.', vim.log.levels.WARN)
+    return
+  end
+
+  local header = '  PKM Views  ·  <CR> open  ·  q/<Esc> close'
+  local lines  = { header, '  ' .. string.rep('─', math.max(#header - 2, 20)) }
+  local names  = {}  -- line number → view name (only view lines, not header)
+
+  for _, e in ipairs(tree) do
+    local count  = #M.match_all(e.name)
+    local indent = string.rep('  ', e.depth)
+    local marker = e.has_children and '▶ ' or '• '
+    lines[#lines + 1] = string.format('  %s%s%s  (%d)', indent, marker, e.name, count)
+    names[#lines]     = e.name
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
+
+  local width  = math.min(72, vim.o.columns - 4)
+  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.7))
+  local win    = vim.api.nvim_open_win(buf, true, {
+    relative  = 'editor',
+    width     = width,
+    height    = height,
+    col       = math.floor((vim.o.columns - width)  / 2),
+    row       = math.floor((vim.o.lines   - height) / 2),
+    style     = 'minimal',
+    border    = 'rounded',
+    title     = ' PKM Views ',
+    title_pos = 'center',
+  })
+
+  if #lines >= 3 then vim.api.nvim_win_set_cursor(win, { 3, 0 }) end
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
+  end
+
+  local ko = { noremap = true, silent = true, buffer = buf }
+  vim.keymap.set('n', '<CR>', function()
+    local name = names[vim.api.nvim_win_get_cursor(win)[1]]
+    if name then close(); M.open(name) end
+  end, ko)
+  vim.keymap.set('n', 'q',     close, ko)
+  vim.keymap.set('n', '<Esc>', close, ko)
+end
+
 --- Prompt the user to choose a view from all defined views.
 local function pick_view()
   local names = M.list()
@@ -540,6 +691,19 @@ function M.open_last()
     return
   end
   M.open(_last_view)
+end
+
+--- Open the views tree picker showing all views in parent-child hierarchy.
+--- Telescope picker when available; scrollable float otherwise.
+--- Selecting a view opens it via M.open().
+---@return nil
+function M.list_views()
+  local has_telescope = pcall(require, 'telescope')
+  if has_telescope then
+    telescope_views_tree_picker()
+  else
+    float_views_tree_picker()
+  end
 end
 
 -- =============================================================================

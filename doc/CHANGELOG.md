@@ -2,7 +2,42 @@
 
 ---
 
-## [1.2.2] - 2026-6-6
+## [Unreleased]
+
+### Known Bugs (queued)
+
+- `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
+  malformed paths when `bench_dir` is a Unix-style path (e.g. `/tmp/pkm_bench`).
+  Files are still created correctly because `vim.fn.mkdir`/`glob` tolerate
+  mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
+  the correct separator for the path type, or document that `bench_dir` must use
+  the native separator.
+
+### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
+
+  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
+  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
+  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
+  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
+    filesystem speed, not a regression.
+
+## [1.3.1] - 2026-6-7
+
+### Added
+- `views.lua`: `M.list_views()` — opens a tree-structured picker over all
+  defined views in depth-first parent-child order. Each view displays its
+  indented name with `▶` (has children) or `•` (leaf) and its current note
+  count. Selecting a view calls `M.open()`. Telescope picker with
+  `generic_sorter` (fzy is appropriate here — matching short view names, not
+  structured content) when available; scrollable float fallback otherwise.
+  Internal helper `build_tree_entries()` produces a depth-first ordered array
+  of `{name, depth, has_children}` shared by both picker variants.
+- `:PKMViews` updated — now opens the tree picker (`M.list_views()`) instead
+  of a `vim.notify` comma list. Previous behaviour was unreadable beyond a
+  handful of views.
+- Config: `keymaps.view_list` (default `false`).
+
+## [1.3.0] - 2026-6-6
 
 ### Added
 
@@ -183,22 +218,6 @@
   design. The `BufReadPost` call had already been commented out. Function body
   deleted from `journal.lua`; commented-out call removed from `init.lua`.
 
-### Known Bugs (queued)
-
-- `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
-  malformed paths when `bench_dir` is a Unix-style path (e.g. `/tmp/pkm_bench`).
-  Files are still created correctly because `vim.fn.mkdir`/`glob` tolerate
-  mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
-  the correct separator for the path type, or document that `bench_dir` must use
-  the native separator.
-
-### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
-
-  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
-  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
-  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
-  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
-    filesystem speed, not a regression.
 
 ## [1.2.1] — 2026-05-28
 

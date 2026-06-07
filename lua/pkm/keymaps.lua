@@ -57,6 +57,7 @@ function M.register(config)
   -- -------------------------------------------------------------------------- 
   map(k.view_last,    "<cmd>PKMViewLast<cr>",    "Last View")
   map(k.view_sidebar, "<cmd>PKMViewSidebar<cr>", "View Sidebar")
+  map(k.view_list, "<cmd>PKMViews<cr>", "List Views")
 
   -- --------------------------------------------------------------------------
   -- KEYMAPS: MARKDOWN EDITING

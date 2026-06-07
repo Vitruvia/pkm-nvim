@@ -49,6 +49,7 @@ The note namespace is intentionally **flat and global** — all notes share a si
 - ✅ Subproject hierarchy — table-valued view entries with `parent`/`filter`; composes AND chain
 - ✅ `:PKMViewLast` — reopen the last activated view (session-scoped)
 - ✅ `:PKMViewSidebar` — persistent split buffer listing view notes; navigable tree header
+- ✅ `:PKMViews` — tree-structured picker showing all views in parent-child hierarchy with note counts
 - ✅ `:PKMBrowse [expr]` — unified note browser via index+filter; replaces PKMTags ripgrep path
 - ✅ Markdown utilities — header counter, level shift, emphasis wrapping, symbol abbreviations,
      heading navigation (`goto_heading`)
@@ -163,9 +164,12 @@ and `config.projects`; sidecar wins on collision. Supports both string values
 composes parent chain via AND, with cycle detection and depth limit of 8).
 `setup()` registers BufWritePost autocmd to reload on sidecar save. Full CRUD.
 Telescope picker with exact-substring prompt and file preview; float fallback.
+`:PKMViews` opens a separate tree-structured picker (`list_views()`) showing
+the full hierarchy with note counts; uses `build_tree_entries()` for depth-first
+ordering. Internal helpers: `get_view_parent`, `get_view_children`,
+`build_tree_entries`.
 Persistent sidebar (`open_sidebar`) with navigable tree header showing parent and
-children. Last-view tracking (`open_last`). Internal helpers: `get_view_parent`,
-`get_view_children`.
+children. Last-view tracking (`open_last`). Telescope picker with exact-substring prompt and file preview; float fallback.
 
 **bench.lua** — developer benchmarking and load-testing. Not user-facing, no commands.
 Four-phase suite: raw scan, index build, index query, filter eval. Self-cleaning

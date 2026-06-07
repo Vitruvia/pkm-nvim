@@ -226,7 +226,17 @@ VIEWS~
                         views are defined in views.json with parent and filter
                         fields; their effective filter is the parent's AND own.
 
-:PKMViews               List all defined project views via vim.notify.
+:PKMViews               Open a tree-structured picker of all defined views,
+                        showing the parent-child hierarchy with note counts.
+                        Root views appear first; subprojects are indented under
+                        their parent. Select a view to open it.
+                        Example display:
+                          • rpg  (8)
+                          ▶ ringforge  (14)
+                            ▶ ringforge-mechanics  (6)
+                            • ringforge-references  (8)
+                        Uses Telescope when available; scrollable float
+                        otherwise.
 
 :PKMViewNew             Prompt for a name and filter expression, then save to
                         views.json. For subprojects, use :PKMViewEdit directly.
