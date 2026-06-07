@@ -42,6 +42,36 @@
   - `<C-s>` — open a subview picker; if only one subview exists opens it
     directly; notifies if none exist
   These keymaps are documented in the picker's prompt title.
+- `index.lua`: `note_type` field added to every index entry. Computed at
+  index-build time from the filename stem: `note`, `agg`, or `bib` for
+  consolidated notes; `journal` for journal entries; `scratch` for scratchpads;
+  `other` for anything else. Local helper `get_note_type(stem)` encapsulates
+  the classification logic.
+- `views.lua`: `sort_paths_by_type(paths)` — sorts a path list by note type
+  (note → agg → bib → journal → scratch → other) then alphabetically by title
+  within each type. `type_prefix(note_type)` — formats a type as a fixed-width
+  bracket label `[note   ]`, `[journal]`, etc. for display alignment.
+  `_TYPE_ORDER` module-level table encodes the sort priority.
+
+### Changed
+
+- All note-listing pickers now display notes grouped by type with a fixed-width
+  `[type   ]` prefix and sorted note→agg→bib→journal→scratch within each view.
+  Applies to `telescope_view_picker`, `float_view_picker`, `sidebar_build_lines`
+  in `views.lua`; `M.browse` in `telescope.lua` and `ui.lua`.
+- `telescope_views_tree_picker`: ordinals are now position-encoded
+  (`%05d` sequential index) instead of view names, so `sorters.empty()`
+  preserves the exact depth-first order from `build_tree_entries()`. Prompt
+  filtering matches against `item.name` (not ordinal), fixing the bug where
+  subviews appeared under the wrong parent.
+- `go_children` in both `telescope_view_picker` and `float_view_picker`:
+  removed the single-child fast-path that called `M.open()` directly. Now
+  always presents a `vim.ui.select` picker, giving the user explicit control
+  regardless of how many subviews exist.
+- `sidebar_build_lines` now returns a 4th value `sorted_paths` — the type-sorted
+  path array whose order matches the displayed note lines. All three call sites
+  in `open_sidebar` (initial open, replace-contents branch, and `r` refresh)
+  updated to capture and assign this value to `_sidebar_paths`.
 
 ### Fixed
 - `telescope_views_tree_picker`: replaced `generic_sorter` with

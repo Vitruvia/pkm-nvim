@@ -10,13 +10,13 @@
 --
 -- Index entry shape:
 --   index[path] = {
---     path     : string    absolute path (duplicated for convenience)
---     filename : string    file stem without extension (e.g. "0042_note_Title")
---     title    : string    frontmatter title if non-empty; filename stem with
---                          underscores replaced by spaces otherwise
---     tags     : string[]  frontmatter tags array, or {}
---     body     : string    note body (lines after frontmatter joined with "\n")
---     mtime    : number    vim.fn.getftime() at last index time
+--     path      : string    absolute path (duplicated for convenience)
+--     filename  : string    file stem without extension
+--     note_type : string    'note' | 'agg' | 'bib' | 'journal' | 'scratch' | 'other'
+--     title     : string    frontmatter title if non-empty; filename stem with underscores replaced
+--     tags      : string[]  frontmatter tags array, or {}
+--     body      : string    note body (lines after frontmatter joined with "\n")
+--     mtime     : number    vim.fn.getftime() at last index time
 --   }
 --
 -- Thread-safety: Neovim Lua is single-threaded; no locking needed.
@@ -81,6 +81,17 @@ end
 -- =============================================================================
 -- SECTION: Internal helpers
 -- =============================================================================
+--
+--- Classify a note's type from its filename stem.
+---@param stem string
+---@return string  'note' | 'agg' | 'bib' | 'journal' | 'scratch' | 'other'
+local function get_note_type(stem)
+  if stem:match('^scratch_') then return 'scratch' end
+  if stem:match('^journal_') then return 'journal' end
+  local t = stem:match('^%d+_([a-z]+)_')
+  if t == 'note' or t == 'agg' or t == 'bib' then return t end
+  return 'other'
+end
 
 --- Read one file and return an index entry, or nil if unreadable/no frontmatter.
 ---@param path string  Absolute path to a .md note file
@@ -95,6 +106,7 @@ local function read_entry(path)
 
   -- File stem used for the filename: predicate and as the title fallback.
   local filename = vim.fn.fnamemodify(path, ':t:r')
+  local note_type = get_note_type(filename)
 
   -- Title: free-form frontmatter field if present and non-empty;
   -- otherwise derive from the filename stem.
@@ -127,6 +139,7 @@ local function read_entry(path)
   return {
     path     = path,
     filename = filename,
+    note_type = note_type,
     title    = title,
     tags     = tags,
     body     = table.concat(body_parts, '\n'),

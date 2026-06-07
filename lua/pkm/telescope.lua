@@ -19,6 +19,7 @@
 local M = {}
 
 local citations = require('pkm.citations')
+local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 
 -- =============================================================================
 -- SECTION: Helpers
@@ -127,14 +128,21 @@ function M.browse(filter_expr)
     return
   end
 
-  table.sort(entries, function(a, b) return a.filename < b.filename end)
+  -- Sort entries by type then title
+  table.sort(entries, function(a, b)
+    local ta = _TYPE_ORDER[a.note_type] or 6
+    local tb = _TYPE_ORDER[b.note_type] or 6
+    if ta ~= tb then return ta < tb end
+    return (a.title or ''):lower() < (b.title or ''):lower()
+  end)
 
   local items = {}
   for _, e in ipairs(entries) do
+    local prefix = string.format('[%-7s]', e.note_type or 'other')
     items[#items + 1] = {
       path    = e.path,
-      display = e.title .. '  (' .. e.filename .. ')',
-      ordinal = (e.title .. ' ' .. e.filename):lower(),
+      display = prefix .. ' ' .. e.title .. '  (' .. e.filename .. ')',
+      ordinal = string.format('%05d', #items + 1),
     }
   end
 
@@ -146,7 +154,7 @@ function M.browse(filter_expr)
         local needle = prompt:lower()
         local out = {}
         for _, item in ipairs(items) do
-          if item.ordinal:find(needle, 1, true) then out[#out + 1] = item end
+          if item.display:lower():find(needle, 1, true) then out[#out + 1] = item end
         end
         return out
       end,

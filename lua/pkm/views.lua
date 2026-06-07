@@ -61,6 +61,9 @@ local _sidebar_paths = {}       -- path list currently shown
 local _sidebar_tree         = {}   -- array of {name, is_current} per tree header line
 local _sidebar_header_count = 0    -- total non-note lines (tree header + sep + blank)
 
+local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5,
+other = 6 }
+
 -- =============================================================================
 -- SECTION: Internal helpers — config and sidecar
 -- =============================================================================
@@ -183,6 +186,32 @@ local function build_tree_entries()
   for _, root in ipairs(roots) do visit(root, 0) end
 
   return entries
+end
+
+--- Sort a path list by note type (note→agg→bib→journal→scratch) then title.
+---@param paths string[]
+---@return string[]  New sorted array
+local function sort_paths_by_type(paths)
+  local index  = require('pkm.index')
+  local sorted = vim.list_extend({}, paths)
+  table.sort(sorted, function(a, b)
+    local ea = index.get(a)
+    local eb = index.get(b)
+    local ta = ea and (_TYPE_ORDER[ea.note_type] or 6) or 6
+    local tb = eb and (_TYPE_ORDER[eb.note_type] or 6) or 6
+    if ta ~= tb then return ta < tb end
+    local ta_t = (ea and ea.title or vim.fn.fnamemodify(a, ':t:r')):lower()
+    local tb_t = (eb and eb.title or vim.fn.fnamemodify(b, ':t:r')):lower()
+    return ta_t < tb_t
+  end)
+  return sorted
+end
+
+--- Format a note type as a fixed-width bracket label for display alignment.
+---@param note_type string
+---@return string  e.g. "[note   ]" or "[journal]"
+local function type_prefix(note_type)
+  return string.format('[%-7s]', note_type or 'other')
 end
 
 --- Parse and cache the filter tree for a named view.
@@ -455,21 +484,26 @@ local function telescope_view_picker(name, paths)
   local action_state = require('telescope.actions.state')
   local previewers   = require('telescope.previewers')
   local sorters      = require('telescope.sorters')
+  local index        = require('pkm.index')
 
+  local sorted  = sort_paths_by_type(paths)
   local entries = {}
-  for _, path in ipairs(paths) do
-    local display = vim.fn.fnamemodify(path, ':t')
+  for _, path in ipairs(sorted) do
+    local e         = index.get(path)
+    local note_type = e and e.note_type or 'other'
+    local title     = e and e.title or vim.fn.fnamemodify(path, ':t:r')
     entries[#entries + 1] = {
       value   = path,
-      display = display,
-      ordinal = display,
+      display = type_prefix(note_type) .. ' ' .. title,
+      ordinal = string.format('%05d', #entries + 1),
       path    = path,
     }
   end
 
   local count = #entries
   pickers.new({}, {
-    prompt_title = string.format('PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs',
+    prompt_title = string.format(
+      'PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs',
       name, count, count == 1 and '' or 's'),
 
     finder = finders.new_dynamic({
@@ -478,7 +512,7 @@ local function telescope_view_picker(name, paths)
         local needle   = prompt:lower()
         local filtered = {}
         for _, e in ipairs(entries) do
-          if e.ordinal:lower():find(needle, 1, true) then
+          if e.display:lower():find(needle, 1, true) then
             filtered[#filtered + 1] = e
           end
         end
@@ -488,7 +522,6 @@ local function telescope_view_picker(name, paths)
     }),
 
     sorter = sorters.Sorter:new({ scoring_function = function() return 0 end }),
-
     previewer = previewers.vim_buffer_cat.new({}),
 
     attach_mappings = function(prompt_bufnr, map)
@@ -521,16 +554,12 @@ local function telescope_view_picker(name, paths)
         end
         actions.close(prompt_bufnr)
         vim.schedule(function()
-          if #children == 1 then
-            M.open(children[1])
-          else
-            vim.ui.select(children, {
-              prompt      = string.format("Subviews of '%s':", name),
-              format_item = function(n)
-                return string.format('%s  (%d)', n, #M.match_all(n))
-              end,
-            }, function(sel) if sel then M.open(sel) end end)
-          end
+          vim.ui.select(children, {
+            prompt      = string.format("Subviews of '%s':", name),
+            format_item = function(n)
+              return string.format('%s  (%d)', n, #M.match_all(n))
+            end,
+          }, function(sel) if sel then M.open(sel) end end)
         end)
       end
 
@@ -548,15 +577,21 @@ end
 
 --- Scrollable float picker. <CR> opens note at cursor; q/<Esc> closes.
 local function float_view_picker(name, paths)
+  local index  = require('pkm.index')
+  local sorted = sort_paths_by_type(paths)
+
   local header = string.format(
     '  View: %s  ·  %d note%s  ·  <CR> open  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  q close',
-    name, #paths, #paths == 1 and '' or 's')
+    name, #sorted, #sorted == 1 and '' or 's')
   local lines = {
     header,
     '  ' .. string.rep('─', math.max(#header - 2, 10)),
   }
-  for _, p in ipairs(paths) do
-    lines[#lines + 1] = '  ' .. vim.fn.fnamemodify(p, ':t')
+  for _, p in ipairs(sorted) do
+    local e         = index.get(p)
+    local note_type = e and e.note_type or 'other'
+    local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
+    lines[#lines + 1] = '  ' .. type_prefix(note_type) .. ' ' .. title
   end
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -586,21 +621,19 @@ local function float_view_picker(name, paths)
 
   local function open_at_cursor()
     local note_idx = vim.api.nvim_win_get_cursor(win)[1] - 2
-    if note_idx < 1 or note_idx > #paths then return end
+    if note_idx < 1 or note_idx > #sorted then return end
     close()
-    vim.cmd('edit ' .. vim.fn.fnameescape(paths[note_idx]))
+    vim.cmd('edit ' .. vim.fn.fnameescape(sorted[note_idx]))
   end
 
   local function go_back()
-    close()
-    vim.schedule(function() M.list_views() end)
+    close(); vim.schedule(function() M.list_views() end)
   end
 
   local function go_parent()
     local parent = get_view_parent(name)
     if parent then
-      close()
-      vim.schedule(function() M.open(parent) end)
+      close(); vim.schedule(function() M.open(parent) end)
     else
       vim.notify('[pkm] this view has no parent', vim.log.levels.INFO)
     end
@@ -614,16 +647,12 @@ local function float_view_picker(name, paths)
     end
     close()
     vim.schedule(function()
-      if #children == 1 then
-        M.open(children[1])
-      else
-        vim.ui.select(children, {
-          prompt      = string.format("Subviews of '%s':", name),
-          format_item = function(n)
-            return string.format('%s  (%d)', n, #M.match_all(n))
-          end,
-        }, function(sel) if sel then M.open(sel) end end)
-      end
+      vim.ui.select(children, {
+        prompt      = string.format("Subviews of '%s':", name),
+        format_item = function(n)
+          return string.format('%s  (%d)', n, #M.match_all(n))
+        end,
+      }, function(sel) if sel then M.open(sel) end end)
     end)
   end
 
@@ -656,7 +685,7 @@ local function telescope_views_tree_picker()
     items[#items + 1] = {
       name    = e.name,
       display = string.format('%s%s%s  (%d)', indent, marker, e.name, count),
-      ordinal = e.name,
+      ordinal = string.format('%05d', #items + 1),  -- position-encoded: preserves tree order
     }
   end
 
@@ -673,7 +702,7 @@ local function telescope_views_tree_picker()
         local needle = prompt:lower()
         local out = {}
         for _, item in ipairs(items) do
-          if item.ordinal:lower():find(needle, 1, true) then
+          if item.name:lower():find(needle, 1, true) then
             out[#out + 1] = item
           end
         end
@@ -828,12 +857,11 @@ end
 -- =============================================================================
 
 --- Build the display lines for the sidebar buffer.
---- Returns lines, tree_entries, header_count.
---- tree_entries: array of {name, is_current} indexed by line number (1-based).
---- header_count: number of lines before the first note entry.
+--- Returns lines, tree_entries, header_count, sorted_paths.
+--- sorted_paths: paths in type-sorted display order (matches note line positions).
 ---@param name  string
 ---@param paths string[]
----@return string[], table, integer
+---@return string[], table, integer, string[]
 local function sidebar_build_lines(name, paths)
   local index    = require('pkm.index')
   local parent   = get_view_parent(name)
@@ -842,7 +870,6 @@ local function sidebar_build_lines(name, paths)
   local tree_entries = {}
 
   if parent or #children > 0 then
-    -- Tree header: parent (if any), current, children
     if parent then
       local p_count = #M.match_all(parent)
       lines[#lines + 1] = string.format('  ▶ %s  (%d)', parent, p_count)
@@ -861,7 +888,6 @@ local function sidebar_build_lines(name, paths)
     lines[#lines + 1] = '  ' .. string.rep('─', 38)
     lines[#lines + 1] = ''
   else
-    -- Simple header when no hierarchy exists
     local count = #paths
     lines[#lines + 1] = '  PKMView: ' .. name
       .. '  (' .. count .. ' note' .. (count == 1 and '' or 's') .. ')'
@@ -870,17 +896,19 @@ local function sidebar_build_lines(name, paths)
   end
 
   local header_count = #lines
+  local sorted       = sort_paths_by_type(paths)
 
-  for i, path in ipairs(paths) do
-    local entry = index.get(path)
-    local title = entry and entry.title or vim.fn.fnamemodify(path, ':t:r')
-    lines[#lines + 1] = string.format('  %3d  %s', i, title)
+  for i, path in ipairs(sorted) do
+    local entry     = index.get(path)
+    local note_type = entry and entry.note_type or 'other'
+    local title     = entry and entry.title or vim.fn.fnamemodify(path, ':t:r')
+    lines[#lines + 1] = string.format('  %3d  %s %s', i, type_prefix(note_type), title)
   end
-  if #paths == 0 then
+  if #sorted == 0 then
     lines[#lines + 1] = '  (no notes match)'
   end
 
-  return lines, tree_entries, header_count
+  return lines, tree_entries, header_count, sorted
 end
 
 --- Open or toggle the persistent view sidebar.
@@ -929,17 +957,22 @@ function M.open_sidebar(name)
   _sidebar_name  = name
   _sidebar_paths = paths
 
-  local lines, tree_entries, header_count = sidebar_build_lines(name, paths)
+  local lines, tree_entries, header_count, sorted_paths = sidebar_build_lines(name, paths)
   _sidebar_tree         = tree_entries
   _sidebar_header_count = header_count
+  _sidebar_paths        = sorted_paths
 
   -- Replace contents when sidebar is already open for a different view
   if _sidebar_win then
+    local new_lines, new_tree, new_hcount, new_sorted = sidebar_build_lines(name, paths)
+    _sidebar_tree         = new_tree
+    _sidebar_header_count = new_hcount
+    _sidebar_paths        = new_sorted
     vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
-    vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, lines)
+    vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, new_lines)
     vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
-    if #paths > 0 then
-      vim.api.nvim_win_set_cursor(_sidebar_win, { header_count + 1, 0 })
+    if #new_hcount > 0 then
+      vim.api.nvim_win_set_cursor(_sidebar_win, { new_hcount + 1, 0 })
     end
     return
   end
@@ -1040,11 +1073,12 @@ function M.open_sidebar(name)
 
   -- r: refresh against current index
   vim.keymap.set('n', 'r', function()
-    _sidebar_paths = M.match_all(_sidebar_name)
-    local new_lines, new_tree, new_hcount =
-      sidebar_build_lines(_sidebar_name, _sidebar_paths)
+    local raw_paths = M.match_all(_sidebar_name)
+    local new_lines, new_tree, new_hcount, new_sorted =
+      sidebar_build_lines(_sidebar_name, raw_paths)
     _sidebar_tree         = new_tree
     _sidebar_header_count = new_hcount
+    _sidebar_paths        = new_sorted
     vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
     vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, new_lines)
     vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })

@@ -17,6 +17,7 @@ local M = {}
 
 local utils = require('pkm.utils')
 local config = {}
+local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 
 -- =============================================================================
 -- SECTION: Setup
@@ -147,12 +148,18 @@ function M.browse(filter_expr)
     return
   end
 
-  table.sort(entries, function(a, b) return a.filename < b.filename end)
+  table.sort(entries, function(a, b)
+    local ta = _TYPE_ORDER[a.note_type] or 6
+    local tb = _TYPE_ORDER[b.note_type] or 6
+    if ta ~= tb then return ta < tb end
+    return (a.title or ''):lower() < (b.title or ''):lower()
+  end)
 
   vim.ui.select(entries, {
     prompt = filter_expr and ('Browse: ' .. filter_expr) or 'Browse Notes',
     format_item = function(e)
-      return e.title .. '  (' .. e.filename .. ')'
+      local prefix = string.format('[%-7s]', e.note_type or 'other')
+      return prefix .. ' ' .. e.title .. '  (' .. e.filename .. ')'
     end,
   }, function(sel)
     if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
