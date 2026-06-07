@@ -469,7 +469,7 @@ local function telescope_view_picker(name, paths)
 
   local count = #entries
   pickers.new({}, {
-    prompt_title = string.format('PKMView: %s  (%d note%s)',
+    prompt_title = string.format('PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs',
       name, count, count == 1 and '' or 's'),
 
     finder = finders.new_dynamic({
@@ -487,21 +487,60 @@ local function telescope_view_picker(name, paths)
       entry_maker = function(e) return e end,
     }),
 
-    -- Pass-through sorter: prevents any fzy reordering.
-    sorter = sorters.Sorter:new({
-      scoring_function = function() return 0 end,
-    }),
+    sorter = sorters.Sorter:new({ scoring_function = function() return 0 end }),
 
     previewer = previewers.vim_buffer_cat.new({}),
 
-    attach_mappings = function(prompt_bufnr)
+    attach_mappings = function(prompt_bufnr, map)
       actions.select_default:replace(function()
         local entry = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
-        if entry then
-          vim.cmd('edit ' .. vim.fn.fnameescape(entry.value))
-        end
+        if entry then vim.cmd('edit ' .. vim.fn.fnameescape(entry.value)) end
       end)
+
+      local function go_back()
+        actions.close(prompt_bufnr)
+        vim.schedule(function() M.list_views() end)
+      end
+
+      local function go_parent()
+        local parent = get_view_parent(name)
+        if parent then
+          actions.close(prompt_bufnr)
+          vim.schedule(function() M.open(parent) end)
+        else
+          vim.notify('[pkm] this view has no parent', vim.log.levels.INFO)
+        end
+      end
+
+      local function go_children()
+        local children = get_view_children(name)
+        if #children == 0 then
+          vim.notify('[pkm] this view has no subviews', vim.log.levels.INFO)
+          return
+        end
+        actions.close(prompt_bufnr)
+        vim.schedule(function()
+          if #children == 1 then
+            M.open(children[1])
+          else
+            vim.ui.select(children, {
+              prompt      = string.format("Subviews of '%s':", name),
+              format_item = function(n)
+                return string.format('%s  (%d)', n, #M.match_all(n))
+              end,
+            }, function(sel) if sel then M.open(sel) end end)
+          end
+        end)
+      end
+
+      map('i', '<C-b>', go_back)
+      map('n', '<C-b>', go_back)
+      map('i', '<C-p>', go_parent)
+      map('n', '<C-p>', go_parent)
+      map('i', '<C-s>', go_children)
+      map('n', '<C-s>', go_children)
+
       return true
     end,
   }):find()
@@ -510,7 +549,7 @@ end
 --- Scrollable float picker. <CR> opens note at cursor; q/<Esc> closes.
 local function float_view_picker(name, paths)
   local header = string.format(
-    '  View: %s  ·  %d note%s  ·  <CR> open  ·  q/<Esc> close',
+    '  View: %s  ·  %d note%s  ·  <CR> open  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  q close',
     name, #paths, #paths == 1 and '' or 's')
   local lines = {
     header,
@@ -525,7 +564,7 @@ local function float_view_picker(name, paths)
   vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
   vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
 
-  local width  = math.min(84, vim.o.columns - 4)
+  local width  = math.min(math.max(#header + 4, 60), vim.o.columns - 4)
   local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.7))
   local win    = vim.api.nvim_open_win(buf, true, {
     relative  = 'editor',
@@ -539,27 +578,60 @@ local function float_view_picker(name, paths)
     title_pos = 'center',
   })
 
-  -- Place cursor on the first note line (row 3; rows 1-2 are header/separator).
-  if #lines >= 3 then
-    vim.api.nvim_win_set_cursor(win, { 3, 2 })
-  end
+  if #lines >= 3 then vim.api.nvim_win_set_cursor(win, { 3, 2 }) end
 
   local function close()
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
-    end
+    if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
   end
 
   local function open_at_cursor()
-    local row      = vim.api.nvim_win_get_cursor(win)[1]
-    local note_idx = row - 2   -- rows 1-2 are header/separator
+    local note_idx = vim.api.nvim_win_get_cursor(win)[1] - 2
     if note_idx < 1 or note_idx > #paths then return end
     close()
     vim.cmd('edit ' .. vim.fn.fnameescape(paths[note_idx]))
   end
 
+  local function go_back()
+    close()
+    vim.schedule(function() M.list_views() end)
+  end
+
+  local function go_parent()
+    local parent = get_view_parent(name)
+    if parent then
+      close()
+      vim.schedule(function() M.open(parent) end)
+    else
+      vim.notify('[pkm] this view has no parent', vim.log.levels.INFO)
+    end
+  end
+
+  local function go_children()
+    local children = get_view_children(name)
+    if #children == 0 then
+      vim.notify('[pkm] this view has no subviews', vim.log.levels.INFO)
+      return
+    end
+    close()
+    vim.schedule(function()
+      if #children == 1 then
+        M.open(children[1])
+      else
+        vim.ui.select(children, {
+          prompt      = string.format("Subviews of '%s':", name),
+          format_item = function(n)
+            return string.format('%s  (%d)', n, #M.match_all(n))
+          end,
+        }, function(sel) if sel then M.open(sel) end end)
+      end
+    end)
+  end
+
   local ko = { noremap = true, silent = true, buffer = buf }
   vim.keymap.set('n', '<CR>',  open_at_cursor, ko)
+  vim.keymap.set('n', '<C-b>', go_back,        ko)
+  vim.keymap.set('n', '<C-p>', go_parent,      ko)
+  vim.keymap.set('n', '<C-s>', go_children,    ko)
   vim.keymap.set('n', 'q',     close,          ko)
   vim.keymap.set('n', '<Esc>', close,          ko)
 end
@@ -570,38 +642,48 @@ end
 local function telescope_views_tree_picker()
   local pickers      = require('telescope.pickers')
   local finders      = require('telescope.finders')
-  local conf         = require('telescope.config').values
+  local sorters      = require('telescope.sorters')
   local actions      = require('telescope.actions')
   local action_state = require('telescope.actions.state')
 
-  local tree    = build_tree_entries()
-  local entries = {}
+  local tree  = build_tree_entries()
+  local items = {}
 
   for _, e in ipairs(tree) do
     local count  = #M.match_all(e.name)
     local indent = string.rep('  ', e.depth)
     local marker = e.has_children and '▶ ' or '• '
-    entries[#entries + 1] = {
+    items[#items + 1] = {
       name    = e.name,
       display = string.format('%s%s%s  (%d)', indent, marker, e.name, count),
       ordinal = e.name,
     }
   end
 
-  if #entries == 0 then
+  if #items == 0 then
     vim.notify('[pkm] no views defined. Use :PKMViewNew to create one.', vim.log.levels.WARN)
     return
   end
 
   pickers.new({}, {
     prompt_title = 'PKM Views',
-    finder = finders.new_table {
-      results = entries,
-      entry_maker = function(e)
-        return { value = e.name, display = e.display, ordinal = e.ordinal }
+    finder = finders.new_dynamic {
+      fn = function(prompt)
+        if not prompt or prompt == '' then return items end
+        local needle = prompt:lower()
+        local out = {}
+        for _, item in ipairs(items) do
+          if item.ordinal:lower():find(needle, 1, true) then
+            out[#out + 1] = item
+          end
+        end
+        return out
+      end,
+      entry_maker = function(item)
+        return { value = item.name, display = item.display, ordinal = item.ordinal }
       end,
     },
-    sorter = conf.generic_sorter({}),
+    sorter = sorters.empty(),
     attach_mappings = function(prompt_bufnr)
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)

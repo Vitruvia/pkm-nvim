@@ -32,6 +32,25 @@
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
 
+## [1.3.3] - 2026-6-7
+
+### Added
+- View picker navigation keymaps (both Telescope and float variants of
+  `telescope_view_picker` / `float_view_picker`):
+  - `<C-b>` — return to the PKM Views tree overview (`M.list_views()`)
+  - `<C-p>` — open the parent view directly; notifies if none exists
+  - `<C-s>` — open a subview picker; if only one subview exists opens it
+    directly; notifies if none exist
+  These keymaps are documented in the picker's prompt title.
+
+### Fixed
+- `telescope_views_tree_picker`: replaced `generic_sorter` with
+  `finders.new_dynamic` + `sorters.empty()`. `generic_sorter` applies fzy
+  scoring which reorders the depth-first tree entries, placing subviews under
+  the wrong parents in the display. The fix preserves the exact ordering from
+  `build_tree_entries()` while still allowing exact substring filtering on
+  view names via the prompt.
+
 ## [1.3.2] - 2026-6-7
 
 ### Added
