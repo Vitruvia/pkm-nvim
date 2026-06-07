@@ -36,6 +36,7 @@
 --   match_all(name)     → string[]  paths matching the named view's filter
 --   open(name?)         → activate a view; prompts for name if nil
 --   open_last()         → reopen the last activated view (session-scoped)
+--   get_last_view()     → active view name for context-aware features (sidebar > last)
 --   open_sidebar(name?) → open or toggle the persistent sidebar for a view
 --   save(name, expr)    → write or update a view in views.json
 --   save_subproject(name, parent, filter_expr) → write a subproject entry to views.json
@@ -60,6 +61,9 @@ local _sidebar_name  = nil      -- view name currently shown
 local _sidebar_paths = {}       -- path list currently shown
 local _sidebar_tree         = {}   -- array of {name, is_current} per tree header line
 local _sidebar_header_count = 0    -- total non-note lines (tree header + sep + blank)
+local _sidebar_mode       = nil    -- 'overview' | 'detail'
+local _sidebar_view_lines = {}     -- overview: 1-based line number → view name
+local _sidebar_history    = {}     -- navigation stack: {mode, name} entries
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5,
 other = 6 }
@@ -205,6 +209,28 @@ local function sort_paths_by_type(paths)
     return ta_t < tb_t
   end)
   return sorted
+end
+
+--- Push current sidebar state onto the navigation history stack.
+--- Capped at 50 entries; oldest entry dropped when full.
+local function sidebar_push_history()
+  if not _sidebar_mode then return end
+  if #_sidebar_history >= 50 then
+    table.remove(_sidebar_history, 1)
+  end
+  _sidebar_history[#_sidebar_history + 1] = {
+    mode = _sidebar_mode,
+    name = _sidebar_name,
+  }
+end
+
+--- Pop the most recent sidebar state from the history stack.
+---@return table|nil  {mode=string, name=string|nil} or nil if empty
+local function sidebar_pop_history()
+  if #_sidebar_history == 0 then return nil end
+  local state = _sidebar_history[#_sidebar_history]
+  _sidebar_history[#_sidebar_history] = nil
+  return state
 end
 
 --- Format a note type as a fixed-width bracket label for display alignment.
@@ -388,6 +414,17 @@ function M.match_all(name)
   end)
 
   return matched
+end
+
+--- Return the currently active view name for context-aware features.
+--- Prefers the sidebar's open detail view; falls back to the last activated view.
+---@return string|nil
+function M.get_last_view()
+  if _sidebar_win and vim.api.nvim_win_is_valid(_sidebar_win)
+  and _sidebar_mode == 'detail' and _sidebar_name then
+    return _sidebar_name
+  end
+  return _last_view
 end
 
 -- =============================================================================
@@ -745,7 +782,7 @@ local function telescope_views_tree_picker()
     sorting_strategy = 'ascending',
     layout_config    = { prompt_position = 'top' },
   }, {
-    prompt_title = 'PKM Views',
+    prompt_title = 'PKM Views  ·  <C-f> search view',
     finder = finders.new_dynamic {
       fn = function(prompt)
         if not prompt or prompt == '' then return items end
@@ -763,12 +800,32 @@ local function telescope_views_tree_picker()
       end,
     },
     sorter = sorters.empty(),
-    attach_mappings = function(prompt_bufnr)
+    attach_mappings = function(prompt_bufnr, map)
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local sel = action_state.get_selected_entry()
         if sel then M.open(sel.value) end
       end)
+
+      local function search_current()
+        local sel = action_state.get_selected_entry()
+        if not sel then return end
+        actions.close(prompt_bufnr)
+        vim.schedule(function()
+          local paths = M.match_all(sel.value)
+          local title = string.format('Search: %s', sel.value)
+          local has_tele = pcall(require, 'telescope')
+          if has_tele then
+            require('pkm.telescope').browse_paths(title, paths)
+          else
+            require('pkm.ui').browse_paths(title, paths)
+          end
+        end)
+      end
+
+      map('i', '<C-f>', search_current)
+      map('n', '<C-f>', search_current)
+
       return true
     end,
   }):find()
@@ -784,7 +841,7 @@ local function float_views_tree_picker()
     return
   end
 
-  local header = '  PKM Views  ·  <CR> open  ·  q/<Esc> close'
+  local header = '  PKM Views  ·  <CR> open  ·  <C-f> search  ·  q/<Esc> close'
   local lines  = { header, '  ' .. string.rep('─', math.max(#header - 2, 20)) }
   local names  = {}  -- line number → view name (only view lines, not header)
 
@@ -822,10 +879,28 @@ local function float_views_tree_picker()
   end
 
   local ko = { noremap = true, silent = true, buffer = buf }
+
   vim.keymap.set('n', '<CR>', function()
     local name = names[vim.api.nvim_win_get_cursor(win)[1]]
     if name then close(); M.open(name) end
   end, ko)
+
+  vim.keymap.set('n', '<C-f>', function()
+    local name = names[vim.api.nvim_win_get_cursor(win)[1]]
+    if not name then return end
+    close()
+    vim.schedule(function()
+      local paths = M.match_all(name)
+      local title = string.format('Search: %s', name)
+      local has_tele = pcall(require, 'telescope')
+      if has_tele then
+        require('pkm.telescope').browse_paths(title, paths)
+      else
+        require('pkm.ui').browse_paths(title, paths)
+      end
+    end)
+  end, ko)
+
   vim.keymap.set('n', 'q',     close, ko)
   vim.keymap.set('n', '<Esc>', close, ko)
 end
@@ -906,9 +981,29 @@ end
 -- SECTION: Sidebar
 -- =============================================================================
 
---- Build the display lines for the sidebar buffer.
---- Returns lines, tree_entries, header_count, sorted_paths.
---- sorted_paths: paths in type-sorted display order (matches note line positions).
+--- Build overview display lines listing all views in the hierarchy.
+---@return string[], table  lines, view_lines (1-based line number → view name)
+local function sidebar_build_overview()
+  local tree       = build_tree_entries()
+  local lines      = { '  PKM Views', '  ' .. string.rep('─', 38), '' }
+  local view_lines = {}
+
+  for _, e in ipairs(tree) do
+    local count  = #M.match_all(e.name)
+    local indent = string.rep('  ', e.depth + 1)
+    local marker = e.has_children and '▶ ' or '• '
+    lines[#lines + 1] = string.format('%s%s%s  (%d)', indent, marker, e.name, count)
+    view_lines[#lines] = e.name
+  end
+
+  if #tree == 0 then
+    lines[#lines + 1] = '  (no views defined — use :PKMViewNew)'
+  end
+
+  return lines, view_lines
+end
+
+--- Build detail display lines for a specific view.
 ---@param name  string
 ---@param paths string[]
 ---@return string[], table, integer, string[]
@@ -961,73 +1056,83 @@ local function sidebar_build_lines(name, paths)
   return lines, tree_entries, header_count, sorted
 end
 
+--- Write lines to the sidebar buffer.
+local function sidebar_set_content(lines)
+  vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
+  vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
+end
+
+--- Switch the open sidebar to overview mode.
+local function sidebar_switch_to_overview()
+  local lines, view_lines = sidebar_build_overview()
+  _sidebar_mode         = 'overview'
+  _sidebar_name         = nil
+  _sidebar_paths        = {}
+  _sidebar_tree         = {}
+  _sidebar_header_count = 0
+  _sidebar_view_lines   = view_lines
+  sidebar_set_content(lines)
+  if vim.api.nvim_win_is_valid(_sidebar_win) then
+    vim.api.nvim_win_set_cursor(_sidebar_win, { math.min(4, vim.api.nvim_buf_line_count(_sidebar_buf)), 0 })
+  end
+end
+
+--- Switch the open sidebar to detail mode for a named view.
+---@param name string
+local function sidebar_switch_to_detail(name)
+  local paths = M.match_all(name)
+  local lines, tree_entries, header_count, sorted =
+    sidebar_build_lines(name, paths)
+  _sidebar_mode         = 'detail'
+  _sidebar_name         = name
+  _sidebar_paths        = sorted
+  _sidebar_tree         = tree_entries
+  _sidebar_header_count = header_count
+  _sidebar_view_lines   = {}
+  sidebar_set_content(lines)
+  if vim.api.nvim_win_is_valid(_sidebar_win) and #sorted > 0 then
+    vim.api.nvim_win_set_cursor(_sidebar_win, { header_count + 1, 0 })
+  end
+end
+
 --- Open or toggle the persistent view sidebar.
---- nil/'' with sidebar open → close. nil/'' with sidebar closed → prompt.
---- Same name called again → close. Different name → replace contents.
---- Tree header (when view has parent/children): <CR> navigates to that view.
---- <CR> on note line opens note in alternate window. <BS> navigates to parent.
---- r refreshes against the current index. q/<Esc> closes.
+--- No name → close if open; open in overview mode if closed.
+--- Named view → open detail; same name again while in detail → close.
+--- Overview keymaps: <CR> enter view  <BS>/<C-b> notify  r refresh  q/<Esc> close
+--- Detail keymaps:   <CR> open note or navigate  <BS> pop history or overview
+---                   <C-b> jump to overview  / scoped search  r refresh  q/<Esc> close
 ---@param name string|nil
 ---@return nil
 function M.open_sidebar(name)
   -- Clear stale state if the window was destroyed externally
   if _sidebar_win and not vim.api.nvim_win_is_valid(_sidebar_win) then
     _sidebar_win = nil; _sidebar_buf = nil
-    _sidebar_name = nil; _sidebar_paths = {}
+    _sidebar_mode = nil; _sidebar_name = nil; _sidebar_paths = {}
     _sidebar_tree = {}; _sidebar_header_count = 0
+    _sidebar_view_lines = {}; _sidebar_history = {}
   end
 
-  -- No name: close if open, else prompt
   if not name or name == '' then
+    -- No name: close if open, else open in overview
     if _sidebar_win then
       vim.api.nvim_win_close(_sidebar_win, true)
       return
     end
-    local names = M.list()
-    if #names == 0 then
-      vim.notify('[pkm] no views defined. Use :PKMViewNew to create one.', vim.log.levels.WARN)
+  else
+    -- Named: operate on existing sidebar
+    if _sidebar_win then
+      if _sidebar_mode == 'detail' and _sidebar_name == name then
+        vim.api.nvim_win_close(_sidebar_win, true)
+        return
+      end
+      sidebar_push_history()
+      sidebar_switch_to_detail(name)
       return
     end
-    vim.ui.select(names, {
-      prompt      = 'Open sidebar for view:',
-      format_item = function(n) return n end,
-    }, function(sel)
-      if sel then M.open_sidebar(sel) end
-    end)
-    return
   end
 
-  -- Toggle: same view → close
-  if _sidebar_win and _sidebar_name == name then
-    vim.api.nvim_win_close(_sidebar_win, true)
-    return
-  end
-
-  local paths = M.match_all(name)
-  _sidebar_name  = name
-  _sidebar_paths = paths
-
-  local lines, tree_entries, header_count, sorted_paths = sidebar_build_lines(name, paths)
-  _sidebar_tree         = tree_entries
-  _sidebar_header_count = header_count
-  _sidebar_paths        = sorted_paths
-
-  -- Replace contents when sidebar is already open for a different view
-  if _sidebar_win then
-    local new_lines, new_tree, new_hcount, new_sorted = sidebar_build_lines(name, paths)
-    _sidebar_tree         = new_tree
-    _sidebar_header_count = new_hcount
-    _sidebar_paths        = new_sorted
-    vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
-    vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, new_lines)
-    vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
-    if #new_sorted > 0 then
-      vim.api.nvim_win_set_cursor(_sidebar_win, { new_hcount + 1, 0 })
-    end
-    return
-  end
-
-  -- Open new sidebar window at the far left (full height)
+  -- Open new sidebar window
   local prev_win = vim.api.nvim_get_current_win()
   local width    = (require('pkm').config.sidebar_width or 40)
 
@@ -1052,38 +1157,43 @@ function M.open_sidebar(name)
     vim.api.nvim_set_option_value(opt, val, { buf = buf })
   end
 
-  vim.api.nvim_set_option_value('modifiable', true,  { buf = buf })
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-
-  if #paths > 0 then
-    vim.api.nvim_win_set_cursor(_sidebar_win, { header_count + 1, 0 })
-  end
-
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer   = buf,
     once     = true,
     callback = function()
       _sidebar_win = nil; _sidebar_buf = nil
-      _sidebar_name = nil; _sidebar_paths = {}
+      _sidebar_mode = nil; _sidebar_name = nil; _sidebar_paths = {}
       _sidebar_tree = {}; _sidebar_header_count = 0
+      _sidebar_view_lines = {}; _sidebar_history = {}
     end,
   })
 
   local ko = { noremap = true, silent = true, buffer = buf }
 
-  -- <CR>: tree header line → navigate to that view; note line → open note
+  -- <CR>: mode-aware action
   vim.keymap.set('n', '<CR>', function()
     local row = vim.api.nvim_win_get_cursor(_sidebar_win)[1]
 
-    -- Tree header line
-    local te = _sidebar_tree[row]
-    if te then
-      if not te.is_current then M.open_sidebar(te.name) end
+    if _sidebar_mode == 'overview' then
+      local vname = _sidebar_view_lines[row]
+      if vname then
+        sidebar_push_history()
+        sidebar_switch_to_detail(vname)
+      end
       return
     end
 
-    -- Note line
+    -- detail: tree header line → navigate to that view
+    local te = _sidebar_tree[row]
+    if te then
+      if not te.is_current then
+        sidebar_push_history()
+        sidebar_switch_to_detail(te.name)
+      end
+      return
+    end
+
+    -- detail: note line → open in main window
     local idx = row - _sidebar_header_count
     if idx < 1 or idx > #_sidebar_paths then return end
     local path = _sidebar_paths[idx]
@@ -1111,27 +1221,56 @@ function M.open_sidebar(name)
     end
   end, ko)
 
-  -- <BS>: navigate to parent view
+  -- <BS>: pop history; fall back to overview from detail, notify from overview
   vim.keymap.set('n', '<BS>', function()
-    local parent = get_view_parent(_sidebar_name)
-    if parent then
-      M.open_sidebar(parent)
+    local state = sidebar_pop_history()
+    if state then
+      if state.mode == 'overview' then
+        sidebar_switch_to_overview()
+      else
+        sidebar_switch_to_detail(state.name)
+      end
+    elseif _sidebar_mode == 'overview' then
+      vim.notify('[pkm] already at views overview', vim.log.levels.INFO)
     else
-      vim.notify('[pkm] this view has no parent', vim.log.levels.INFO)
+      sidebar_switch_to_overview()
     end
   end, ko)
 
-  -- r: refresh against current index
+  -- <C-b>: jump directly to overview, push current to history
+  vim.keymap.set('n', '<C-b>', function()
+    if _sidebar_mode ~= 'overview' then
+      sidebar_push_history()
+      sidebar_switch_to_overview()
+    end
+  end, ko)
+
+  -- /: scoped search — detail searches current view paths; overview does full browse
+  vim.keymap.set('n', '/', function()
+    local has_tele = pcall(require, 'telescope')
+    if _sidebar_mode == 'detail' then
+      local title = string.format('Search: %s', _sidebar_name)
+      if has_tele then
+        require('pkm.telescope').browse_paths(title, _sidebar_paths)
+      else
+        require('pkm.ui').browse_paths(title, _sidebar_paths)
+      end
+    else
+      if has_tele then
+        require('pkm.telescope').browse()
+      else
+        require('pkm.ui').browse()
+      end
+    end
+  end, ko)
+
+  -- r: refresh current mode in place
   vim.keymap.set('n', 'r', function()
-    local raw_paths = M.match_all(_sidebar_name)
-    local new_lines, new_tree, new_hcount, new_sorted =
-      sidebar_build_lines(_sidebar_name, raw_paths)
-    _sidebar_tree         = new_tree
-    _sidebar_header_count = new_hcount
-    _sidebar_paths        = new_sorted
-    vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
-    vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, new_lines)
-    vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
+    if _sidebar_mode == 'overview' then
+      sidebar_switch_to_overview()
+    else
+      sidebar_switch_to_detail(_sidebar_name)
+    end
     vim.notify('[pkm] sidebar refreshed', vim.log.levels.INFO)
   end, ko)
 
@@ -1143,6 +1282,13 @@ function M.open_sidebar(name)
   end
   vim.keymap.set('n', 'q',     close_sidebar, ko)
   vim.keymap.set('n', '<Esc>', close_sidebar, ko)
+
+  -- Populate initial content
+  if name and name ~= '' then
+    sidebar_switch_to_detail(name)
+  else
+    sidebar_switch_to_overview()
+  end
 
   vim.api.nvim_set_current_win(prev_win)
 end

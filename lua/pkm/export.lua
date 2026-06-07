@@ -21,6 +21,7 @@
 --   collect_files(filters)     → string[] — all matching paths, sorted
 --   copy_files(paths, dest)    → (copied, errors) — copy to destination
 --   export(filters, dest)      → programmatic no-UI entry point
+--   export_direct(label, paths) → export a pre-computed path list, skipping the filter form
 --   interactive_export()       → full UI: filter form → picker → copy
 -- =============================================================================
 
@@ -352,7 +353,8 @@ end
 ---
 --- @param paths        table   Pre-filtered list of absolute paths
 --- @param default_dest string
-local function telescope_results_picker(paths, default_dest)
+--- @param title_prefix string|nil  Optional prefix for the picker title; nil uses 'PKMExport'
+local function telescope_results_picker(paths, default_dest, title_prefix)
   local pickers      = require('telescope.pickers')
   local finders      = require('telescope.finders')
   local actions      = require('telescope.actions')
@@ -378,8 +380,9 @@ local function telescope_results_picker(paths, default_dest)
 
   pickers.new({}, {
     prompt_title = string.format(
-      "PKMExport: %d match%s  ·  type for exact filter  ·  <Tab> select  ·  <CR> confirm",
-      count, count == 1 and "" or "es"),
+      "%s%d match%s  ·  type for exact filter  ·  <Tab> select  ·  <CR> confirm",
+      title_prefix and (title_prefix .. ':  ') or 'PKMExport:  ',
+      count, count == 1 and '' or 'es'),
 
     -- new_dynamic re-runs fn on every prompt change.
     -- Exact substring matching (plain=true) guarantees no fzy behaviour.
@@ -535,6 +538,36 @@ function M.interactive_export()
       )
     end
   end)
+end
+
+--- Export a pre-computed path list, skipping the filter form.
+--- Opens the results picker directly, then prompts for destination.
+--- Used by :PKMExportView and context-aware export from the sidebar.
+---@param label string   Display label shown in the picker title
+---@param paths string[] Pre-computed path list
+function M.export_direct(label, paths)
+  if #paths == 0 then
+    vim.notify('PKMExport: no notes to export', vim.log.levels.INFO)
+    return
+  end
+
+  local cfg          = require('pkm').config
+  local default_dest = utils.join(cfg.root_path, 'exports', os.date('%Y%m%d_%H%M%S'))
+
+  local has_telescope = pcall(require, 'telescope')
+  if has_telescope then
+    telescope_results_picker(paths, default_dest, label)
+  else
+    show_result_float(
+      paths,
+      function(confirmed)
+        vim.schedule(function() prompt_dest_and_copy(confirmed, default_dest) end)
+      end,
+      function()
+        vim.notify('PKMExport: Cancelled.', vim.log.levels.INFO)
+      end
+    )
+  end
 end
 
 return M

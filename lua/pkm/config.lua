@@ -114,10 +114,12 @@ local defaults = {
     promote_note    = "<leader>np",
     transpose_note  = "<leader>nT",
     change_note_type = "<leader>nC",
-    -- Projects/Views
+    -- Views
     view_last    = "<leader>nV",
     view_sidebar = false,
     view_list    = "<leader>nv",
+    view_sidebar = "<leader>nS",
+    view_buffers = false,
     -- Search and browsing
     search          = "<leader>nf",
     browse_tags     = "<leader>nt",

@@ -24,6 +24,19 @@
   - Option 2 (current): User-habit workoround: do not start or end text with
   `ex:`. If doing so is necessary, wrap it in parentheses (`(ex: ...)`).
 
+- **`:PKMRenameNote` scope and citation propagation:** title decoupling removed
+  automatic sync but `:PKMRenameNote` only operates on consolidated notes. There
+  is no command to rename journal or scratchpad files with citation propagation.
+  Renaming via Vim's own `:file` or shell tools silently breaks all citations.
+  Planned fix: extend `:PKMRenameNote` to all PKM file types and document that
+  manual renaming outside PKM commands is unsupported.
+
+- **Post-citation prompts:** Went back to getting prompts for loading file or
+  pressing ok after adding a citation. This used to be solved, with the buffer
+  self-updating after every citation. The cited note's buffer, if open, is also
+  not updating unless I save the note that cites it. Behavior if the note is
+  not open in a buffer is unknown, but this alone is an issue.
+
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
@@ -31,6 +44,40 @@
   - 100k projection (raw scan): ~14.2s; post-index: ~65ms
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
+
+### Added
+
+- **Sidebar two-mode navigation** — `open_sidebar(nil/'')`  now opens in
+  overview mode (full views hierarchy, same tree as `:PKMViews`) rather than a
+  prompt. `<CR>` on any view line enters detail mode. The two modes share one
+  persistent window; state variables `_sidebar_mode`, `_sidebar_view_lines`,
+  `_sidebar_history` track current mode, line-to-view mapping, and history.
+
+- **Sidebar navigation history** — a session-scoped stack of `{mode, name}`
+  entries capped at 50. `sidebar_push_history()` / `sidebar_pop_history()` are
+  module-level locals. `<BS>` pops to the previous state; if the stack is empty,
+  falls back to overview from detail or notifies from overview. `<C-b>` jumps
+  directly to overview, pushing the current state first. History is wiped on
+  sidebar close.
+
+- `views.get_last_view()` — returns the name of the active view for
+  context-aware consumers. Prefers the sidebar's open detail view; falls back
+  to `_last_view`.
+
+- `telescope.browse_paths(title, paths)` — scoped Telescope note picker over a
+  pre-computed path list. Sorts by type then title. Uses `sorting_strategy =
+  'ascending'` and `prompt_position = 'top'`. Never re-evaluates a filter.
+- `ui.browse_paths(title, paths)` — `vim.ui.select` fallback for the same.
+
+- **Sidebar `/` keymap** — in detail mode opens `browse_paths` scoped to the
+  current view's path list; in overview mode opens full `PKMBrowse`. Sidebar
+  remains open in the background.
+
+- **Views tree `<C-f>` keymap** — in both `telescope_views_tree_picker` and
+  `float_views_tree_picker`, `<C-f>` opens `browse_paths` scoped to the
+  highlighted view. Prompt titles updated to advertise the keymap.
+
+- Config: `keymaps.view_sidebar` default changed from `false` to `"<leader>nS"`.
 
 ## [1.3.3] - 2026-6-7
 

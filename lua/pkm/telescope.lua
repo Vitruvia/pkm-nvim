@@ -12,6 +12,7 @@
 --   insert_citation_picker()  → fuzzy citation picker, inserts on select
 --   browse(filter_expr?)         → Browse notes with optional filter expression
 --   browse_tags()                → Tag picker → browse pre-filtered to tag:<selected>
+--   browse_paths(title, paths)   → scoped picker over a pre-computed path list
 --   find_notes()              → telescope find_files over PKM root
 --   search_notes()            → telescope live_grep over PKM root (requires rg)
 --   merge_tags_picker()       → 3-step: pick target, multi-select sources, confirm
@@ -163,6 +164,79 @@ function M.browse(filter_expr)
         local out = {}
         for _, item in ipairs(items) do
           if item.display:lower():find(needle, 1, true) then out[#out + 1] = item end
+        end
+        return out
+      end,
+      entry_maker = function(item)
+        return { value = item.path, display = item.display, ordinal = item.ordinal }
+      end,
+    },
+    sorter    = t.sorters.empty(),
+    previewer = t.conf.file_previewer({}),
+    attach_mappings = function(prompt_bufnr)
+      t.actions.select_default:replace(function()
+        t.actions.close(prompt_bufnr)
+        local sel = t.state.get_selected_entry()
+        if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.value)) end
+      end)
+      return true
+    end,
+  }):find()
+end
+
+--- Open a Telescope picker over a pre-supplied path list.
+--- Paths are sorted by type then title internally. Used for scoped search
+--- from the sidebar (current view) or the views tree picker (<C-f>).
+---@param title string   Picker prompt title
+---@param paths string[] Pre-computed path list
+function M.browse_paths(title, paths)
+  local t = require_telescope()
+  if not t then return end
+
+  local index = require('pkm.index')
+
+  if #paths == 0 then
+    vim.notify('[pkm] no notes to search', vim.log.levels.INFO)
+    return
+  end
+
+  -- Sort by type then title
+  local sorted = vim.list_extend({}, paths)
+  table.sort(sorted, function(a, b)
+    local ea = index.get(a)
+    local eb = index.get(b)
+    local ta = ea and (_TYPE_ORDER[ea.note_type] or 6) or 6
+    local tb = eb and (_TYPE_ORDER[eb.note_type] or 6) or 6
+    if ta ~= tb then return ta < tb end
+    return (ea and ea.title or ''):lower() < (eb and eb.title or ''):lower()
+  end)
+
+  local items = {}
+  for _, path in ipairs(sorted) do
+    local e         = index.get(path)
+    local note_type = e and e.note_type or 'other'
+    local ttl       = e and e.title or vim.fn.fnamemodify(path, ':t:r')
+    items[#items + 1] = {
+      path    = path,
+      display = type_prefix(note_type) .. ' ' .. ttl,
+      ordinal = string.format('%05d', #items + 1),
+    }
+  end
+
+  t.pickers.new({
+    sorting_strategy = 'ascending',
+    layout_config    = { prompt_position = 'top' },
+  }, {
+    prompt_title = title,
+    finder = t.finders.new_dynamic {
+      fn = function(prompt)
+        if not prompt or prompt == '' then return items end
+        local needle = prompt:lower()
+        local out = {}
+        for _, item in ipairs(items) do
+          if item.display:lower():find(needle, 1, true) then
+            out[#out + 1] = item
+          end
         end
         return out
       end,

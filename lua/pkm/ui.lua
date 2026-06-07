@@ -8,15 +8,22 @@
 --   setup(user_config)       → Initialize with resolved PKM config
 --   search_notes(query?)     → Full-text search with vim.ui.select results
 --   browse_tags()            → Two-level tag → file picker
+--   browse_paths(title, paths)   → fallback scoped picker over a pre-computed path list
+--   browse(filter_expr?)     → Browse notes with optional filter expression
 --   insert_citation_ui()     → Citation picker fallback (no Telescope)
 --   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
 --   show_stats()             → Show note counts via vim.notify
---   browse(filter_expr?)     → Browse notes with optional filter expression
+--   toggle_bufpanel()    → toggle the persistent bottom buffer-list panel
 -- =============================================================================
 local M = {}
 
 local utils = require('pkm.utils')
 local config = {}
+
+local _bufpanel_win     = nil
+local _bufpanel_buf     = nil
+local _bufpanel_augroup = nil
+local _bufpanel_map     = {}
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 local function type_prefix(note_type)
@@ -26,6 +33,212 @@ local function type_prefix(note_type)
   local lpad  = math.floor(pad / 2) + 1
   local rpad  = math.ceil(pad  / 2) + 1
   return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
+end
+
+-- =============================================================================
+-- SECTION: Buffer panel
+-- =============================================================================
+
+--- Build buffer panel display lines.
+---@return string[], table  lines, buf_map (1-based line → bufnr)
+local function bufpanel_build_lines()
+  local index  = require('pkm.index')
+  local listed = {}
+
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if bufnr ~= _bufpanel_buf
+    and vim.api.nvim_buf_is_valid(bufnr)
+    and vim.bo[bufnr].buflisted
+    and vim.bo[bufnr].buftype == '' then
+      local name = vim.api.nvim_buf_get_name(bufnr)
+      if name ~= '' then listed[#listed + 1] = bufnr end
+    end
+  end
+
+  local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  w save+close  q close panel' }
+  local buf_map = {}
+
+  for i, bufnr in ipairs(listed) do
+    local name     = vim.api.nvim_buf_get_name(bufnr)
+    local modified = vim.bo[bufnr].modified and ' [+]' or '    '
+    local entry    = index.get(name)
+    local display
+    if entry then
+      display = string.format('  %3d  %s %s%s',
+        i, type_prefix(entry.note_type), entry.title, modified)
+    else
+      display = string.format('  %3d  %s %s%s',
+        i, type_prefix('file'), vim.fn.fnamemodify(name, ':t'), modified)
+    end
+    lines[#lines + 1] = display
+    buf_map[#lines]   = bufnr
+  end
+
+  if #listed == 0 then lines[#lines + 1] = '  (no open buffers)' end
+  return lines, buf_map
+end
+
+--- Refresh buffer panel content in place.
+local function bufpanel_refresh()
+  if not _bufpanel_buf or not vim.api.nvim_buf_is_valid(_bufpanel_buf) then return end
+  local lines, buf_map = bufpanel_build_lines()
+  _bufpanel_map = buf_map
+  vim.api.nvim_set_option_value('modifiable', true,  { buf = _bufpanel_buf })
+  vim.api.nvim_buf_set_lines(_bufpanel_buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = _bufpanel_buf })
+  if _bufpanel_win and vim.api.nvim_win_is_valid(_bufpanel_win) then
+    vim.api.nvim_win_set_height(_bufpanel_win, math.min(#lines + 1, 8))
+  end
+end
+
+--- Toggle the persistent bottom buffer-list panel.
+--- Opens at the bottom of the screen; closes if already open.
+--- <CR> opens buffer in main window. d/D close it. w saves and closes.
+--- r refreshes. q/<Esc> closes the panel.
+function M.toggle_bufpanel()
+  if _bufpanel_win and not vim.api.nvim_win_is_valid(_bufpanel_win) then
+    _bufpanel_win = nil; _bufpanel_buf = nil; _bufpanel_map = {}
+    if _bufpanel_augroup then
+      vim.api.nvim_del_augroup_by_id(_bufpanel_augroup)
+      _bufpanel_augroup = nil
+    end
+  end
+
+  if _bufpanel_win then
+    vim.api.nvim_win_close(_bufpanel_win, true)
+    return
+  end
+
+  local prev_win = vim.api.nvim_get_current_win()
+
+  vim.cmd('noautocmd botright split')
+  _bufpanel_win = vim.api.nvim_get_current_win()
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  _bufpanel_buf = buf
+  vim.api.nvim_win_set_buf(_bufpanel_win, buf)
+
+  for opt, val in pairs({
+    winfixheight = true, wrap = false,
+    number = false, cursorline = true, signcolumn = 'no',
+  }) do
+    vim.api.nvim_set_option_value(opt, val, { win = _bufpanel_win })
+  end
+
+  for opt, val in pairs({
+    bufhidden = 'wipe', buftype = 'nofile', swapfile = false,
+  }) do
+    vim.api.nvim_set_option_value(opt, val, { buf = buf })
+  end
+
+  local lines, buf_map = bufpanel_build_lines()
+  _bufpanel_map = buf_map
+  vim.api.nvim_set_option_value('modifiable', true,  { buf = buf })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+  vim.api.nvim_win_set_height(_bufpanel_win, math.min(#lines + 1, 8))
+
+  _bufpanel_augroup = vim.api.nvim_create_augroup('PKMBufPanel', { clear = true })
+  for _, event in ipairs({ 'BufAdd', 'BufDelete', 'BufWipeout', 'BufModifiedSet' }) do
+    vim.api.nvim_create_autocmd(event, {
+      group    = _bufpanel_augroup,
+      callback = function() vim.schedule(bufpanel_refresh) end,
+    })
+  end
+
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    buffer   = buf,
+    once     = true,
+    callback = function()
+      _bufpanel_win = nil; _bufpanel_buf = nil; _bufpanel_map = {}
+      if _bufpanel_augroup then
+        vim.api.nvim_del_augroup_by_id(_bufpanel_augroup)
+        _bufpanel_augroup = nil
+      end
+    end,
+  })
+
+  local ko = { noremap = true, silent = true, buffer = buf }
+
+  vim.keymap.set('n', '<CR>', function()
+    local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+    local target
+    local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
+    if alt_id ~= 0 and alt_id ~= _bufpanel_win
+    and vim.api.nvim_win_is_valid(alt_id)
+    and vim.api.nvim_win_get_config(alt_id).relative == '' then
+      target = alt_id
+    end
+    if not target then
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if win ~= _bufpanel_win
+        and vim.api.nvim_win_get_config(win).relative == '' then
+          target = win; break
+        end
+      end
+    end
+    if target then
+      vim.api.nvim_set_current_win(target)
+      vim.api.nvim_set_current_buf(bufnr)
+    end
+  end, ko)
+
+  vim.keymap.set('n', 'd', function()
+    local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
+    if bufnr then
+      local ok, err = pcall(vim.cmd, 'bdelete ' .. bufnr)
+      if not ok then
+        vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
+      end
+    end
+  end, ko)
+
+  vim.keymap.set('n', 'D', function()
+    local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
+    if bufnr then pcall(vim.cmd, 'bdelete! ' .. bufnr) end
+  end, ko)
+
+  vim.keymap.set('n', 'w', function()
+    local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
+    if not bufnr then return end
+    local target
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if win ~= _bufpanel_win
+      and vim.api.nvim_win_get_config(win).relative == '' then
+        target = win; break
+      end
+    end
+    if not target then
+      vim.notify('[pkm] no window to write buffer in', vim.log.levels.WARN)
+      return
+    end
+    local prev = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(target)
+    vim.api.nvim_set_current_buf(bufnr)
+    local ok, err = pcall(vim.cmd, 'write')
+    if ok then
+      pcall(vim.cmd, 'bdelete ' .. bufnr)
+    else
+      vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
+    end
+    vim.api.nvim_set_current_win(prev)
+  end, ko)
+
+  vim.keymap.set('n', 'r', function()
+    bufpanel_refresh()
+    vim.notify('[pkm] buffer panel refreshed', vim.log.levels.INFO)
+  end, ko)
+
+  local function close_panel()
+    if _bufpanel_win and vim.api.nvim_win_is_valid(_bufpanel_win) then
+      vim.api.nvim_win_close(_bufpanel_win, true)
+    end
+  end
+  vim.keymap.set('n', 'q',     close_panel, ko)
+  vim.keymap.set('n', '<Esc>', close_panel, ko)
+
+  vim.api.nvim_set_current_win(prev_win)
 end
 
 -- =============================================================================
@@ -169,6 +382,47 @@ function M.browse(filter_expr)
     format_item = function(e)
       return type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
     end,
+  }, function(sel)
+    if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
+  end)
+end
+
+--- Fallback scoped picker over a pre-supplied path list. Used when Telescope
+--- is unavailable. Sorts by type then title internally.
+---@param title string
+---@param paths string[]
+function M.browse_paths(title, paths)
+  local index = require('pkm.index')
+
+  if #paths == 0 then
+    vim.notify('[pkm] no notes to search', vim.log.levels.INFO)
+    return
+  end
+
+  local sorted = vim.list_extend({}, paths)
+  table.sort(sorted, function(a, b)
+    local ea = index.get(a)
+    local eb = index.get(b)
+    local ta = ea and (_TYPE_ORDER[ea.note_type] or 6) or 6
+    local tb = eb and (_TYPE_ORDER[eb.note_type] or 6) or 6
+    if ta ~= tb then return ta < tb end
+    return (ea and ea.title or ''):lower() < (eb and eb.title or ''):lower()
+  end)
+
+  local items = {}
+  for _, path in ipairs(sorted) do
+    local e         = index.get(path)
+    local note_type = e and e.note_type or 'other'
+    local ttl       = e and e.title or vim.fn.fnamemodify(path, ':t:r')
+    items[#items + 1] = {
+      path    = path,
+      display = type_prefix(note_type) .. ' ' .. ttl,
+    }
+  end
+
+  vim.ui.select(items, {
+    prompt      = title,
+    format_item = function(item) return item.display end,
   }, function(sel)
     if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
   end)

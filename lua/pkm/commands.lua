@@ -264,6 +264,24 @@ function M.register()
     require('pkm.views').open_last()
   end, { desc = 'Reopen the last activated view (session-scoped)' })
 
+  vim.api.nvim_create_user_command('PKMExportView', function(opts)
+    local views = require('pkm.views')
+    local name  = opts.args ~= '' and opts.args or nil
+    if not name then
+      vim.ui.select(views.list(), { prompt = 'Export view:' }, function(sel)
+        if sel then
+          require('pkm.export').export_direct(sel, views.match_all(sel))
+        end
+      end)
+      return
+    end
+    require('pkm.export').export_direct(name, views.match_all(name))
+  end, {
+    nargs    = '?',
+    complete = function() return require('pkm.views').list() end,
+    desc     = 'Export all notes in a named view',
+  })
+
   vim.api.nvim_create_user_command('PKMViewSidebar', function(opts)
     require('pkm.views').open_sidebar(opts.args ~= '' and opts.args or nil)
   end, {
@@ -271,6 +289,21 @@ function M.register()
     complete = function() return require('pkm.views').list() end,
     desc     = 'Open or toggle the persistent view sidebar',
   })
+
+  -- ---------------------------------------------------------------------------
+  -- Buffer panel
+  -- ---------------------------------------------------------------------------
+  vim.api.nvim_create_user_command('PKMBuffers', function()
+    require('pkm.ui').toggle_bufpanel()
+  end, { desc = 'Toggle the persistent bottom buffer-list panel' })
+
+  -- ---------------------------------------------------------------------------
+  -- Exporting
+  -- ---------------------------------------------------------------------------
+
+  vim.api.nvim_create_user_command('PKMExport', function()
+    require('pkm.export').interactive_export()
+  end, { desc = 'Open the export filter form (filter notes and copy to a folder)' })
 
 -- =============================================================================
 -- SECTION: Markdown editing

@@ -22,7 +22,7 @@ function M.register(config)
   local k = config.keymaps
 
   -- --------------------------------------------------------------------------
-  -- KEYMAPS: NOTE OPERATIONS
+  -- KEYMAPS: note operations
   -- --------------------------------------------------------------------------
   local function map(lhs, cmd, desc)
     if lhs then vim.keymap.set('n', lhs, cmd, { desc = "PKM: " .. desc, silent = true }) end
@@ -53,15 +53,17 @@ function M.register(config)
   map(k.browse, "<cmd>PKMBrowse<cr>", "Browse Notes")
 
   -- --------------------------------------------------------------------------
-  -- KEYMAPS: PROJECTS/VIEWS
+  -- KEYMAPS: views
   -- -------------------------------------------------------------------------- 
   map(k.view_last,    "<cmd>PKMViewLast<cr>",    "Last View")
   map(k.view_sidebar, "<cmd>PKMViewSidebar<cr>", "View Sidebar")
   map(k.view_list, "<cmd>PKMViews<cr>", "List Views")
+  map(k.view_buffers, "<cmd>PKMBuffers<cr>", "Buffer Panel")
 
   -- --------------------------------------------------------------------------
-  -- KEYMAPS: MARKDOWN EDITING
+  -- KEYMAPS: markdown editing
   -- -------------------------------------------------------------------------- 
+  
   -- Header Editing
   map(k.next_header, "<cmd>PKMNextHeader<cr>", "Next Header (increment counter)")
   map(k.heading_next, "<cmd>PKMHeadingNext<cr>", "Next Heading")

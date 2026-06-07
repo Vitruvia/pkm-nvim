@@ -311,16 +311,11 @@ default `false`).
 
 ---
 
-**2. `:PKMViewNewSub name parent filter` — create subprojects from a command**
-
-*Motivation:* Subprojects currently require direct editing of `views.json` via
-`:PKMViewEdit`. A dedicated command lowers the friction and validates the parent
-before writing.
-
-**Design:** Prompts for name, parent (tab-completes existing views), and filter
-expression. Validates both the parent name and the filter expression before
-writing. Calls a new `M.save_subproject(name, parent, filter_expr)` in
-`views.lua` that validates and writes the table-valued entry to `views.json`.
+**2. **Consolidate `:PKMViewNew` and `:PKMViewNewSub`** — replace both commands
+with a single `:PKMViewNew` that prompts for view type (simple / subproject)
+first. Reduces the command surface the user must memorize. `M.save()` and
+`M.save_subproject()` remain as separate internal functions; only the command
+entry point changes.
 
 ---
 
