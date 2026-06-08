@@ -352,13 +352,14 @@ function M.register()
     require('pkm.markdown').shift_header_level('down', opts.line1, opts.line2)
   end, { range = '%', desc = 'Decrease header level in range (default: whole buffer)' })
 
-  vim.api.nvim_create_user_command('PKMHeadingNext', function()
-    require('pkm.markdown').goto_heading('next')
-  end, { desc = 'Jump to next Markdown heading' })
-
-  vim.api.nvim_create_user_command('PKMHeadingPrev', function()
-    require('pkm.markdown').goto_heading('prev')
-  end, { desc = 'Jump to previous Markdown heading' })
+  vim.api.nvim_create_user_command('PKMRenumberList', function(opts)
+    local md = require('pkm.markdown')
+    if opts.range > 0 then
+      md.renumber_sequence(opts.line1, opts.line2)
+    else
+      md.renumber_at_cursor()
+    end
+  end, { range = true, desc = 'Renumber ordered sequence in range or current paragraph' })
 
 end
 

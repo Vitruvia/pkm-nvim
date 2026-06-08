@@ -23,6 +23,22 @@
 
 ## [1.4.1] - 2026-6-8
 
+### Added
+- `markdown.lua`: `M.renumber_sequence(start_line, end_line)` — renumbers
+  ordered-sequence items in a line range sequentially from 1. Family
+  (list dot, list paren, header inline ordinal, header suffix counter) is
+  detected from the first matching line; detection order (list → hdr_prefix →
+  hdr_suffix) ensures a line like `## N. title-text-3` is always treated as
+  hdr_prefix and only its leading ordinal is renumbered. Non-matching lines
+  are preserved unchanged. Trailing non-digit annotations on suffix-counter
+  headers are preserved.
+- `markdown.lua`: `M.renumber_at_cursor()` — renumbers the sequence in the
+  paragraph surrounding the cursor (blank-line bounded).
+- `:PKMRenumberList` — `range = true` command. Normal mode: auto-detects
+  paragraph. Visual mode: uses selection (bare `:` mapping lets Neovim
+  prepend `'<,'>` automatically).
+- Config key `keymaps.renumber_list` (default `false`).
+
 ### Changed
 - `:PKMViewNew` now prompts for view type (Simple view / Subproject) first,
   then follows the appropriate creation flow. Replaces the two-command surface
@@ -30,7 +46,14 @@
   `views.save_subproject()` are unchanged.
 
 ### Removed
+- `markdown.lua`: `M.goto_heading(direction)` — duplicated built-in `]]`/`[[`
+  exactly (any heading, any level). No differentiated behaviour; removed.
+- `:PKMHeadingNext`, `:PKMHeadingPrev` — commands backed by `goto_heading`.
+- Config keys `keymaps.heading_next`, `keymaps.heading_prev`.
 - `:PKMViewNewSub` — superseded by the unified `:PKMViewNew`.
+
+
+### Removed
 
 ## [1.4.0] - 2026-6-7
 

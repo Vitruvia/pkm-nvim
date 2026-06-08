@@ -99,6 +99,7 @@ local defaults = {
   },
 
   keymaps = {
+    -- Note operations
     new_note        = "<leader>nn",
     new_journal     = "<leader>nj",
     new_scratchpad  = "<leader>ns",
@@ -124,14 +125,14 @@ local defaults = {
     browse_tags     = "<leader>nt",
     browse = false,
     -- Markdown editing
-    next_header        = "<leader>mh",
-    header_level_up    = false,
-    header_level_down  = false,
-    heading_next    = false,
-    heading_prev    = false,
-    -- Emphasis wrapping (motion-based in normal mode; selection in visual mode)
-    wrap_italic      = false,   -- "*"   italic
-    wrap_bold        = false,   -- "**"  bold
+    ---- Headers
+    next_header        = "<leader>Mh",
+    header_level_up    = "<leader>M^",
+    header_level_down  = "<leader>M_",
+    renumber_list      = "<leader>Mr",
+    ---- Emphasis wrapping (motion-based in normal mode; selection in visual mode)
+    wrap_italic      = "<leader>Mi",   -- "*"   italic
+    wrap_bold        = "<leader>Mb",   -- "**"  bold
     wrap_bold_italic = false,   -- "***" bold + italic
     wrap_code        = false,   -- "`"   inline code
     wrap_strike      = false,   -- "~~"  strikethrough (GFM)

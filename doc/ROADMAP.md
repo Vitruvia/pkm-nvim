@@ -43,25 +43,29 @@ The note namespace is intentionally **flat and global** — all notes share a si
 - ✅ Export utility: filter notes by tag/title/body/filename, copy to folder (`:PKMExport`)
 - ✅ Statistics window (`:PKMStats`)
 - ✅ Cross-platform: Windows, WSL, Linux, macOS
-- ✅ Boolean filter system — full DSL over tag/title/text/filename (AND, OR, NOT, parentheses)
-- ✅ In-memory note index with incremental invalidation (~290× faster than per-query scan)
-- ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD commands
-- ✅ Subproject hierarchy — table-valued view entries with `parent`/`filter`; composes AND chain
-- ✅ `:PKMViewLast` — reopen the last activated view (session-scoped)
-- ✅ `:PKMViewSidebar` — persistent split buffer listing view notes; navigable tree header
-- ✅ `:PKMViews` — tree-structured picker showing all views in parent-child hierarchy with note counts
-- ✅ `:PKMBrowse [expr]` — unified note browser via index+filter; replaces PKMTags ripgrep path
-- ✅ Markdown utilities — header counter, level shift, emphasis wrapping, symbol abbreviations,
-     heading navigation (`goto_heading`)
-- ✅ `:PKMViewSidebar` two-mode (overview + detail) with navigation history,
-     header hints, `<BS>`/`<C-b>` navigation, `/` scoped search
-- ✅ `views.get_last_view()` — active view context for consumer features
-- ✅ Scoped note search within sidebar (`/`) and from views tree (`<C-f>`)
-- ✅ `:PKMExportView [name]` — export named view's notes, skips filter form
-- ✅ `:PKMBuffers` — persistent bottom buffer-list panel with auto-refresh
 - ✅ Context-aware citation picker — scores by active view (+2) and shared tags
      (+1); `<C-v>` view-only toggle
 - ✅ `:PKMRenameNote` extended to journal and scratchpad
+== Search ==
+- ✅ Boolean filter system — full DSL over tag/title/text/filename (AND, OR, NOT, parentheses)
+- ✅ In-memory note index with incremental invalidation (~290× faster than per-query scan)
+- ✅ `:PKMBrowse [expr]` — unified note browser via index+filter; replaces PKMTags ripgrep path
+- ✅ Markdown utilities — header counter, level shift, emphasis wrapping, symbol abbreviations,
+     heading navigation (`goto_heading`)
+== Views ==
+- ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD commands
+- ✅ Subproject hierarchy — table-valued view entries with `parent`/`filter`; composes AND chain
+- ✅ `:PKMViewNew` — Create a new view
+- ✅ `:PKMViewUpdate` — Update an existing view
+- ✅ `:PKMViewLast` — reopen the last activated view (session-scoped)
+- ✅ `:PKMViewSidebar` — persistent split buffer listing view notes; navigable tree header
+- ✅ `:PKMViews` — tree-structured picker showing all views in parent-child hierarchy with note counts
+- ✅ `:PKMViewSidebar` two-mode (overview + detail) with navigation history,
+     header hints, `<BS>`/`<C-b>` navigation, `/` scoped search
+- ✅ Scoped note search within sidebar (`/`) and from views tree (`<C-f>`)
+- ✅ `views.get_last_view()` — active view context for consumer features
+- ✅ `:PKMExportView [name]` — export named view's notes, skips filter form
+- ✅ `:PKMBuffers` — persistent bottom buffer-list panel with auto-refresh
 
 **Known limitations:**
 - ⚠️ No preview system
@@ -248,42 +252,42 @@ require('pkm').setup({
 
   keymaps = {
     -- Note operations
-    new_note         = "<leader>nn",
-    new_journal      = "<leader>nj",
-    new_scratchpad   = "<leader>ns",
-    rename_note      = "<leader>nr",
-    convert_note     = "<leader>nx",
-    promote_note     = "<leader>np",
-    transpose_note   = "<leader>nT",
+    new_note        = "<leader>nn",
+    new_journal     = "<leader>nj",
+    new_scratchpad  = "<leader>ns",
+    rename_note     = "<leader>nr",
+    insert_citation = "<leader>nc",
+    goto_citation   = "<leader>ng",
+    delete_note     = "<leader>nd",
+    link_note       = "<leader>nl",
+    follow_link     = "gf",
+    backlinks       = "<leader>nb",
+    import_note     = "<leader>ni",
+    convert_note    = "<leader>nx",
+    promote_note    = "<leader>np",
+    transpose_note  = "<leader>nT",
     change_note_type = "<leader>nC",
-    import_note      = "<leader>ni",
-    delete_note      = "<leader>nd",
-    insert_citation  = "<leader>nc",
-    goto_citation    = "<leader>ng",
-    link_note        = "<leader>nl",
-    follow_link      = "gf",
-    backlinks        = "<leader>nb",
-    -- Search and browse
-    search           = "<leader>nf",
-    browse_tags      = "<leader>nt",
-    browse           = false,
     -- Views
-    view_list        = "<leader>nv",
-    view_last        = "<leader>nV",
-    view_sidebar     = "<leader>nS,
-    view_buffers     = "<leader>vb",
+    view_last    = "<leader>nV",
+    view_list    = "<leader>nv",
+    view_sidebar = "<leader>nS",
+    view_buffers = "<leader>vb",
+    -- Search and browsing
+    search          = "<leader>nf",
+    browse_tags     = "<leader>nt",
+    browse = false,
     -- Markdown editing
-    next_header        = "<leader>mh",
-    header_level_up    = false,
-    header_level_down  = false,
-    heading_next       = false,
-    heading_prev       = false,
-    -- Emphasis wrapping
-    wrap_italic        = false,
-    wrap_bold          = false,
-    wrap_bold_italic   = false,
-    wrap_code          = false,
-    wrap_strike        = false,
+    ---- Headers
+    next_header        = "<leader>Mh",
+    header_level_up    = "<leader>M^",
+    header_level_down  = "<leader>M_",
+    renumber_list      = "<leader>Mr",
+    ---- Emphasis wrapping (motion-based in normal mode; selection in visual mode)
+    wrap_italic      = "<leader>Mi",   -- "*"   italic
+    wrap_bold        = "<leader>Mb",   -- "**"  bold
+    wrap_bold_italic = false,   -- "***" bold + italic
+    wrap_code        = false,   -- "`"   inline code
+    wrap_strike      = false,   -- "~~"  strikethrough (GFM)
   },
 ```
 
@@ -320,7 +324,6 @@ All call `index.invalidate(filepath)` after writing.
 default `false`).
 
 ---
-
 **2. Performance: views and sidebar at scale**
 
 *Motivation:* The sidebar tree header calls `M.match_all()` for the parent and

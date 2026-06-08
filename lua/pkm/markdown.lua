@@ -15,7 +15,8 @@
 --   _wrap_operator(motion_type)                → Operatorfunc callback (do not call directly)
 --   _wrap_visual(marker)                       → Wrap/unwrap current visual selection
 --   setup_symbols(symbols)                     → Register buffer-local iabbrevs and insert-mode keymaps
---   goto_heading(direction)                    → Jump to next or previous ATX heading
+--   renumber_sequence(start_line, end_line)    → Renumber ordered sequence items in line range
+--   renumber_at_cursor()                       → Renumber sequence in paragraph around cursor
 -- =============================================================================
 
 local M = {}
@@ -200,35 +201,125 @@ function M.setup_symbols(symbols)
 end
 
 -- =============================================================================
--- SECTION: Heading navigation
+-- SECTION: Sequence renumbering
 -- =============================================================================
 
---- Jump to the next or previous ATX heading line in the buffer.
---- Notifies if no heading is found in the given direction.
----@param direction string  'next' | 'prev'
----@return nil
-function M.goto_heading(direction)
-  local cur_row = vim.api.nvim_win_get_cursor(0)[1]
-  local total   = vim.api.nvim_buf_line_count(0)
-  local lines   = vim.api.nvim_buf_get_lines(0, 0, total, false)
+--- Return the 1-indexed start and end lines of the paragraph around the cursor,
+--- bounded by blank lines or buffer boundaries.
+---@return integer, integer
+local function paragraph_bounds()
+  local cur   = vim.api.nvim_win_get_cursor(0)[1]
+  local total = vim.api.nvim_buf_line_count(0)
+  local lines = vim.api.nvim_buf_get_lines(0, 0, total, false)
 
-  if direction == 'next' then
-    for i = cur_row + 1, total do
-      if lines[i]:match('^#+ ') then
-        vim.api.nvim_win_set_cursor(0, { i, 0 })
-        return
-      end
+  local s = cur
+  while s > 1 and lines[s - 1] ~= '' do s = s - 1 end
+
+  local e = cur
+  while e < total and lines[e + 1] ~= '' do e = e + 1 end
+
+  return s, e
+end
+
+--- Renumber all ordered-sequence items in the given line range sequentially
+--- from 1. The sequence family (style and indentation) is determined by the
+--- first matching line in the range; subsequent lines must share the same
+--- family to be renumbered. Non-matching lines are preserved unchanged.
+---
+--- Supported families:
+---   Ordered list (dot)    INDENT N. text   any indentation level
+---   Ordered list (paren)  INDENT N) text   any indentation level
+---   Header inline count   ## N. text       any header level
+---   Header inline count   ## N) text       any header level
+---   Header suffix count   ## text-N        any header level;
+---                                          trailing non-digit annotations preserved
+---
+--- Family detection order: list → hdr_prefix → hdr_suffix. A line matching
+--- hdr_prefix (## N. text) is never treated as hdr_suffix regardless of
+--- whether its title text also contains dash+digit sequences.
+---@param start_line integer  1-indexed, inclusive
+---@param end_line   integer  1-indexed, inclusive
+---@return nil
+function M.renumber_sequence(start_line, end_line)
+  local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+
+  local kind   = nil  -- 'list' | 'hdr_prefix' | 'hdr_suffix'
+  local indent = nil  -- leading whitespace (list) or '##+ ' (header)
+  local sep    = nil  -- '.' or ')' for list/hdr_prefix
+
+  for _, line in ipairs(lines) do
+    local ind, s = line:match('^(%s*)%d+([.)]) ')
+    if ind then
+      kind, indent, sep = 'list', ind, s
+      break
     end
-    vim.notify('[pkm] no next heading', vim.log.levels.INFO)
-  else
-    for i = cur_row - 1, 1, -1 do
-      if lines[i]:match('^#+ ') then
-        vim.api.nvim_win_set_cursor(0, { i, 0 })
-        return
-      end
+    local hdr, s2 = line:match('^(#+%s+)%d+([.)]) ')
+    if hdr then
+      kind, indent, sep = 'hdr_prefix', hdr, s2
+      break
     end
-    vim.notify('[pkm] no previous heading', vim.log.levels.INFO)
+    if line:match('^#+%s') and line:match('%-(%d+)%D*$') then
+      kind, indent = 'hdr_suffix', line:match('^(#+%s+)')
+      break
+    end
   end
+
+  if not kind then
+    vim.notify('[pkm] no renumberable sequence found in range', vim.log.levels.WARN)
+    return
+  end
+
+  local counter   = 1
+  local changed   = 0
+  local new_lines = {}
+
+  for _, line in ipairs(lines) do
+    local replaced = false
+
+    if kind == 'list' then
+      local ind, _, s, rest = line:match('^(%s*)(%d+)([.)]) (.*)$')
+      if ind == indent and s == sep then
+        new_lines[#new_lines + 1] = indent .. counter .. sep .. ' ' .. rest
+        counter, changed, replaced = counter + 1, changed + 1, true
+      end
+
+    elseif kind == 'hdr_prefix' then
+      local hdr, _, s, rest = line:match('^(#+%s+)(%d+)([.)]) (.*)$')
+      if hdr == indent and s == sep then
+        new_lines[#new_lines + 1] = indent .. counter .. sep .. ' ' .. rest
+        counter, changed, replaced = counter + 1, changed + 1, true
+      end
+
+    elseif kind == 'hdr_suffix' then
+      if line:match('^#+%s') and line:match('^(#+%s+)') == indent then
+        local pre, _, suf = line:match('^(.+)%-(%d+)(%D*)$')
+        if pre then
+          new_lines[#new_lines + 1] = pre .. '-' .. counter .. suf
+          counter, changed, replaced = counter + 1, changed + 1, true
+        end
+      end
+    end
+
+    if not replaced then
+      new_lines[#new_lines + 1] = line
+    end
+  end
+
+  vim.api.nvim_buf_set_lines(0, start_line - 1, end_line, false, new_lines)
+  if changed > 0 then
+    vim.notify(
+      string.format('[pkm] renumbered %d %s', changed, changed == 1 and 'item' or 'items'),
+      vim.log.levels.INFO
+    )
+  end
+end
+
+--- Renumber the ordered sequence in the paragraph surrounding the cursor.
+--- Paragraph bounds are determined by blank lines or buffer boundaries.
+---@return nil
+function M.renumber_at_cursor()
+  local s, e = paragraph_bounds()
+  M.renumber_sequence(s, e)
 end
 
 return M
