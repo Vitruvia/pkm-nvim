@@ -13,15 +13,6 @@
   the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
 
-
-- **`:PKMRenameNote` scope and citation propagation:** title decoupling removed
-  automatic sync but `:PKMRenameNote` only operates on consolidated notes. There
-  is no command to rename journal or scratchpad files with citation propagation.
-  Renaming via Vim's own `:file` or shell tools silently breaks all citations.
-  Planned fix: extend `:PKMRenameNote` to all PKM file types and document that
-  manual renaming outside PKM commands is unsupported.
-
-
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
@@ -29,6 +20,17 @@
   - 100k projection (raw scan): ~14.2s; post-index: ~65ms
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
+
+## [1.4.1] - 2026-6-8
+
+### Changed
+- `:PKMViewNew` now prompts for view type (Simple view / Subproject) first,
+  then follows the appropriate creation flow. Replaces the two-command surface
+  (`:PKMViewNew` + `:PKMViewNewSub`). `views.save()` and
+  `views.save_subproject()` are unchanged.
+
+### Removed
+- `:PKMViewNewSub` — superseded by the unified `:PKMViewNew`.
 
 ## [1.4.0] - 2026-6-7
 

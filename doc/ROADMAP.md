@@ -268,8 +268,10 @@ require('pkm').setup({
     browse_tags      = "<leader>nt",
     browse           = false,
     -- Views
+    view_list        = "<leader>nv",
     view_last        = "<leader>nV",
-    view_sidebar     = false,
+    view_sidebar     = "<leader>nS,
+    view_buffers     = "<leader>vb",
     -- Markdown editing
     next_header        = "<leader>mh",
     header_level_up    = false,
@@ -319,15 +321,7 @@ default `false`).
 
 ---
 
-**2. Consolidate `:PKMViewNew` and `:PKMViewNewSub`** — replace both commands
-with a single `:PKMViewNew` that prompts for view type (simple / subproject)
-first, reducing the command surface the user must memorize. `M.save()` and
-`M.save_subproject()` remain as separate internal functions; only the command
-entry point changes.
-
----
-
-**3. Performance: views and sidebar at scale**
+**2. Performance: views and sidebar at scale**
 
 *Motivation:* The sidebar tree header calls `M.match_all()` for the parent and
 every child to display note counts. Each `match_all` call does a full index scan

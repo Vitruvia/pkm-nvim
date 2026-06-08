@@ -116,10 +116,9 @@ local defaults = {
     change_note_type = "<leader>nC",
     -- Views
     view_last    = "<leader>nV",
-    view_sidebar = false,
     view_list    = "<leader>nv",
     view_sidebar = "<leader>nS",
-    view_buffers = false,
+    view_buffers = "<leader>vb",
     -- Search and browsing
     search          = "<leader>nf",
     browse_tags     = "<leader>nt",

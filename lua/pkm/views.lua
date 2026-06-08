@@ -986,9 +986,8 @@ end
 local function sidebar_build_overview()
   local tree       = build_tree_entries()
   local lines = {
-    '  PKM Views  ·  <CR> open  ·  b/<C-b> overview  ·  / browse  ·  r refresh'
-    .. '·  q close', 
-    '  ' .. string.rep('─', 38), 
+    '  PKM Views',
+    '  ' .. string.rep('─', 38),
     ''
   }
   local view_lines = {}
@@ -1037,14 +1036,12 @@ local function sidebar_build_lines(name, paths)
     end
 
     lines[#lines + 1] = '  ' .. string.rep('─', 38)
-    lines[#lines + 1] = '  b/<C-b> views  ·  / search  ·  r refresh  ·  q close'
     lines[#lines + 1] = ''
 
   else
     local count = #paths
     lines[#lines + 1] = '  PKMView: ' .. name
       .. '  (' .. count .. ' note' .. (count == 1 and '' or 's') .. ')'
-    lines[#lines + 1] = '  b/<C-b> views  ·  / search  ·  r refresh  ·  q close'
     lines[#lines + 1] = '  ' .. string.rep('─', 38)
     lines[#lines + 1] = ''
   end
@@ -1103,6 +1100,49 @@ local function sidebar_switch_to_detail(name)
   if vim.api.nvim_win_is_valid(_sidebar_win) and #sorted > 0 then
     vim.api.nvim_win_set_cursor(_sidebar_win, { header_count + 1, 0 })
   end
+end
+
+--- Open a compact help float listing all sidebar keymaps.
+local function sidebar_show_help()
+  local lines = {
+    '  <CR>    open note / enter view',
+    '  b       back (pop history)',
+    '  <BS>    same as b',
+    '  <C-b>   jump to overview',
+    '  /       search in current view',
+    '  r       refresh',
+    '  q       close sidebar',
+    '  ?       this help',
+  }
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
+
+  local width  = 36
+  local height = #lines + 2
+  local win    = vim.api.nvim_open_win(buf, true, {
+    relative  = 'editor',
+    width     = width,
+    height    = height,
+    col       = math.floor((vim.o.columns - width) / 2),
+    row       = math.floor((vim.o.lines   - height) / 2),
+    style     = 'minimal',
+    border    = 'rounded',
+    title     = ' Sidebar Keymaps ',
+    title_pos = 'center',
+  })
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end
+  local ko = { noremap = true, silent = true, buffer = buf }
+  vim.keymap.set('n', 'q',     close, ko)
+  vim.keymap.set('n', '<Esc>', close, ko)
+  vim.keymap.set('n', '?',     close, ko)
 end
 
 --- Open or toggle the persistent view sidebar.
@@ -1288,6 +1328,9 @@ function M.open_sidebar(name)
       end
     end
   end, ko)
+
+-- ?: show sidebar keymap help
+  vim.keymap.set('n', '?', sidebar_show_help, ko)
 
   -- r: refresh current mode in place
   vim.keymap.set('n', 'r', function()
