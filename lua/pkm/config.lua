@@ -130,12 +130,6 @@ local defaults = {
     header_level_up    = "<leader>M^",
     header_level_down  = "<leader>M_",
     renumber_list      = "<leader>Mr",
-    ---- Emphasis wrapping (motion-based in normal mode; selection in visual mode)
-    wrap_italic      = "<leader>Mi",   -- "*"   italic
-    wrap_bold        = "<leader>Mb",   -- "**"  bold
-    wrap_bold_italic = false,   -- "***" bold + italic
-    wrap_code        = false,   -- "`"   inline code
-    wrap_strike      = false,   -- "~~"  strikethrough (GFM)
   },
 }
 

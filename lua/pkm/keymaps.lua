@@ -87,22 +87,6 @@ function M.register(config)
     vim.keymap.set('v', k.renumber_list, ':PKMRenumberList<cr>',
       { desc = 'PKM: Renumber sequence (selection)', silent = true })
   end
-  -- Emphasis wrapping
-  local function map_emphasis(lhs, marker)
-    if not lhs then return end
-    vim.keymap.set('n', lhs,
-      function() return require('pkm.markdown').wrap_with_marker(marker) end,
-      { expr = true, desc = 'PKM: wrap ' .. marker .. ' (motion)', silent = true })
-    vim.keymap.set('v', lhs,
-      function() require('pkm.markdown')._wrap_visual(marker) end,
-      { desc = 'PKM: wrap ' .. marker .. ' (selection)', silent = true })
-  end
-
-  map_emphasis(k.wrap_italic,      '*')
-  map_emphasis(k.wrap_bold,        '**')
-  map_emphasis(k.wrap_bold_italic, '***')
-  map_emphasis(k.wrap_code,        '`')
-  map_emphasis(k.wrap_strike,      '~~')
 end
 
 return M

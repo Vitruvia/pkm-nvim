@@ -75,9 +75,11 @@
 - `:PKMHeadingNext`, `:PKMHeadingPrev` — commands backed by `goto_heading`.
 - Config keys `keymaps.heading_next`, `keymaps.heading_prev`.
 - `:PKMViewNewSub` — superseded by the unified `:PKMViewNew`.
-
-
-### Removed
+- **Emphasis wrapping** — `wrap_with_marker`, `_wrap_operator`, `_wrap_visual`,
+  and all related locals (`apply_marker`, `strip_emphasis`, `EMPHASIS_MARKERS`,
+  `_pending_marker`) removed from `markdown.lua`. `map_emphasis` and all
+  `wrap_*` keymap slots removed from `keymaps.lua` and `config.lua`. Use
+  vim-surround for all wrapping operations.
 
 ## [1.4.0] - 2026-6-7
 

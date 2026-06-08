@@ -50,8 +50,7 @@ The note namespace is intentionally **flat and global** — all notes share a si
 - ✅ Boolean filter system — full DSL over tag/title/text/filename (AND, OR, NOT, parentheses)
 - ✅ In-memory note index with incremental invalidation (~290× faster than per-query scan)
 - ✅ `:PKMBrowse [expr]` — unified note browser via index+filter; replaces PKMTags ripgrep path
-- ✅ Markdown utilities — header counter, level shift, emphasis wrapping, symbol abbreviations,
-     heading navigation (`goto_heading`)
+- ✅ Markdown utilities — header counter, level shift, symbol abbreviations, sequence renumbering
 == Views ==
 - ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD commands
 - ✅ Subproject hierarchy — table-valued view entries with `parent`/`filter`; composes AND chain
@@ -191,11 +190,8 @@ Four-phase suite: raw scan, index build, index query, filter eval. Self-cleaning
 **markdown.lua** — general markdown editing utilities. No setup() needed.
 `append_next_header`: duplicate current header with trailing counter +1, append at EOF.
 `shift_header_level(direction, start, end)`: shift `#`-level in range.
-`wrap_with_marker(marker)` + `_wrap_operator` + `_wrap_visual`: emphasis wrapping system
-with toggle and replace-without-stacking behaviour.
-`setup_symbols(symbols)`: register buffer-local iabbrevs and insert-mode keymaps from
-user-defined `{trigger?, key?, expansion}` entries.
-`goto_heading(direction)`: jump to next/previous ATX heading in buffer.
+`renumber_sequence(start, end)`: renumber ordered-sequence items in line range.
+`renumber_at_cursor()`: renumber sequence in paragraph around cursor.
 
 ---
 
@@ -282,12 +278,6 @@ require('pkm').setup({
     header_level_up    = "<leader>M^",
     header_level_down  = "<leader>M_",
     renumber_list      = "<leader>Mr",
-    ---- Emphasis wrapping (motion-based in normal mode; selection in visual mode)
-    wrap_italic      = "<leader>Mi",   -- "*"   italic
-    wrap_bold        = "<leader>Mb",   -- "**"  bold
-    wrap_bold_italic = false,   -- "***" bold + italic
-    wrap_code        = false,   -- "`"   inline code
-    wrap_strike      = false,   -- "~~"  strikethrough (GFM)
   },
 ```
 
