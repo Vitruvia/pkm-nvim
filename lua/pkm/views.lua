@@ -985,7 +985,12 @@ end
 ---@return string[], table  lines, view_lines (1-based line number → view name)
 local function sidebar_build_overview()
   local tree       = build_tree_entries()
-  local lines      = { '  PKM Views', '  ' .. string.rep('─', 38), '' }
+  local lines = {
+    '  PKM Views  ·  <CR> open  ·  b/<C-b> overview  ·  / browse  ·  r refresh
+    ·  q close', 
+    '  ' .. string.rep('─', 38), 
+    ''
+  }
   local view_lines = {}
 
   for _, e in ipairs(tree) do
@@ -1021,6 +1026,7 @@ local function sidebar_build_lines(name, paths)
       tree_entries[#lines] = { name = parent, is_current = false }
     end
 
+
     lines[#lines + 1] = string.format('  ▼ %s  (%d)', name, #paths)
     tree_entries[#lines] = { name = name, is_current = true }
 
@@ -1031,11 +1037,14 @@ local function sidebar_build_lines(name, paths)
     end
 
     lines[#lines + 1] = '  ' .. string.rep('─', 38)
+    lines[#lines + 1] = '  b/<C-b> views  ·  / search  ·  r refresh  ·  q close'
     lines[#lines + 1] = ''
+
   else
     local count = #paths
     lines[#lines + 1] = '  PKMView: ' .. name
       .. '  (' .. count .. ' note' .. (count == 1 and '' or 's') .. ')'
+    lines[#lines + 1] = '  b/<C-b> views  ·  / search  ·  r refresh  ·  q close'
     lines[#lines + 1] = '  ' .. string.rep('─', 38)
     lines[#lines + 1] = ''
   end
@@ -1241,6 +1250,22 @@ function M.open_sidebar(name)
   vim.keymap.set('n', '<C-b>', function()
     if _sidebar_mode ~= 'overview' then
       sidebar_push_history()
+      sidebar_switch_to_overview()
+    end
+  end, ko)
+
+  -- b: explicit back key — reliable alternative to <BS> on all terminals
+  vim.keymap.set('n', 'b', function()
+    local state = sidebar_pop_history()
+    if state then
+      if state.mode == 'overview' then
+        sidebar_switch_to_overview()
+      else
+        sidebar_switch_to_detail(state.name)
+      end
+    elseif _sidebar_mode == 'overview' then
+      vim.notify('[pkm] already at views overview', vim.log.levels.INFO)
+    else
       sidebar_switch_to_overview()
     end
   end, ko)
