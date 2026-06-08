@@ -1,15 +1,17 @@
 -- =============================================================================
 -- pkm.telescope — Telescope pickers for notes, tags, citations, and export
 -- =============================================================================
--- Dependencies : pkm.citations, telescope.nvim (optional, checked at call time)
--- Consumed by  : pkm.commands
+-- Dependencies : pkm.citations, pkm.index (lazy), pkm.views (lazy),
+--                telescope.nvim (optional, checked at call time)
 --
 -- Telescope availability is checked at call time inside require_telescope(),
 -- consistent with the project-wide pattern. The module always loads cleanly;
 -- each function notifies and returns early when Telescope is unavailable.
 --
 -- Public API:
---   insert_citation_picker()  → fuzzy citation picker, inserts on select
+--   insert_citation_picker()  → context-aware citation picker; sorted by
+--                                view membership (+2) and shared tags (+1);
+--                                '~' marks contextual items; <C-v> view toggle
 --   browse(filter_expr?)         → Browse notes with optional filter expression
 --   browse_tags()                → Tag picker → browse pre-filtered to tag:<selected>
 --   browse_paths(title, paths)   → scoped picker over a pre-computed path list
@@ -20,6 +22,7 @@
 local M = {}
 
 local citations = require('pkm.citations')
+local utils = require('pkm.utils')
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 
 -- =============================================================================
@@ -67,35 +70,133 @@ end
 -- =============================================================================
 -- SECTION: Citation picker
 -- =============================================================================
---- Fuzzy picker over all citable notes. Inserts citation token at cursor on select.
---- Calls citations.complete_insertion() which also triggers update_references().
+
+--- Compute a relevance score for one citable item.
+--- +2 if the item's path is in view_paths; +1 per tag shared with cur_tags.
+---@param item      table   Citable item from get_citable_items_list()
+---@param cur_tags  table   Current note's tags as a set (tag → true)
+---@param view_paths table  Active view paths as a set (normalized path → true)
+---@return integer score
+---@return boolean in_view
+local function score_item(item, cur_tags, view_paths)
+  local norm_path = utils.normalize(item.path)
+  local in_view   = view_paths[norm_path] == true
+  local score     = in_view and 2 or 0
+
+  local entry = require('pkm.index').get(item.path)
+  if entry and entry.tags then
+    for _, tag in ipairs(entry.tags) do
+      if cur_tags[tag] then score = score + 1 end
+    end
+  end
+
+  return score, in_view
+end
+
+--- Context-aware fuzzy picker over all citable notes.
+--- Items are pre-sorted by relevance (view membership + shared tags).
+--- '~ ' prefix marks contextually relevant items; '  ' prefix marks others.
+--- <C-v> toggles between full list and active-view-only list when a view
+--- is active. Calls citations.complete_insertion() on select.
 function M.insert_citation_picker()
   local t = require_telescope()
   if not t then return end
 
-  local items = citations.get_citable_items_list()
+  local citations_mod = require('pkm.citations')
+  local index         = require('pkm.index')
+  local views         = require('pkm.views')
+
+  local raw_items = citations_mod.get_citable_items_list()
+  if #raw_items == 0 then
+    vim.notify('[pkm] no citable notes found', vim.log.levels.INFO)
+    return
+  end
+
+  -- Build scoring context
+  local cur_path  = vim.fn.expand('%:p')
+  local cur_entry = index.get(cur_path)
+  local cur_tags  = {}
+  if cur_entry and cur_entry.tags then
+    for _, tag in ipairs(cur_entry.tags) do cur_tags[tag] = true end
+  end
+
+  local view_name  = views.get_last_view()
+  local view_paths = {}
+  if view_name then
+    for _, p in ipairs(views.match_all(view_name)) do
+      view_paths[utils.normalize(p)] = true
+    end
+  end
+
+  -- Score, annotate, sort
+  for _, item in ipairs(raw_items) do
+    local s, iv  = score_item(item, cur_tags, view_paths)
+    item.score   = s
+    item.in_view = iv
+  end
+  table.sort(raw_items, function(a, b)
+    if a.score ~= b.score then return a.score > b.score end
+    return a.display < b.display
+  end)
+
+  -- Build entry tables
+  local all_entries  = {}
+  local view_entries = {}
+  for _, item in ipairs(raw_items) do
+    local prefix = item.score > 0 and '~ ' or '  '
+    local e = {
+      value   = item,
+      display = prefix .. item.display,
+      ordinal = prefix .. item.display,
+    }
+    all_entries[#all_entries + 1] = e
+    if item.in_view then view_entries[#view_entries + 1] = e end
+  end
+
+  local has_view       = view_name ~= nil and #view_entries > 0
+  local show_view_only = false  -- mutable toggle state
+
+  local title = has_view
+    and ('Insert Citation  ~ = contextual  <C-v> view: ' .. view_name)
+    or  'Insert Citation  ~ = contextual'
 
   t.pickers.new({}, {
-    prompt_title = "Insert Citation",
+    prompt_title = title,
     finder = t.finders.new_table {
-      results = items,
-      entry_maker = function(entry)
-        return {
-          value   = entry,
-          display = entry.display,
-          ordinal = entry.display,
-        }
-      end,
+      results = all_entries,
+      entry_maker = function(e) return e end,
     },
     sorter = t.conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr, _)
+    attach_mappings = function(prompt_bufnr, map)
       t.actions.select_default:replace(function()
         t.actions.close(prompt_bufnr)
-        local selection = t.state.get_selected_entry()
-        if selection then
-          citations.complete_insertion(selection.value)
-        end
+        local sel = t.state.get_selected_entry()
+        if sel then citations_mod.complete_insertion(sel.value) end
       end)
+
+      if has_view then
+        local function do_toggle()
+          show_view_only = not show_view_only
+          local new_source = show_view_only and view_entries or all_entries
+          local cur_picker = t.state.get_current_picker(prompt_bufnr)
+          cur_picker:refresh(
+            t.finders.new_table {
+              results      = new_source,
+              entry_maker  = function(e) return e end,
+            },
+            { reset_prompt = false }
+          )
+          vim.notify(
+            show_view_only
+              and ('[pkm] citations: ' .. view_name .. ' only')
+              or  '[pkm] citations: all notes',
+            vim.log.levels.INFO
+          )
+        end
+        map('i', '<C-v>', do_toggle)
+        map('n', '<C-v>', do_toggle)
+      end
+
       return true
     end,
   }):find()

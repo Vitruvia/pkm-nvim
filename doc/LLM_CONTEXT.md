@@ -7,31 +7,32 @@ principles are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current State (as of 2026-06-06)
+## Current State (as of 2026-06-07)
 
-Stable. All planned features through the views sidebar tree header are complete.
-Active development is paused; next item is metadata commands.
+Stable. Navigation system complete through Step 3. Context-aware citation picker
+complete. Bug fixes applied.
 
-**Last sessions:**
-- Completed Phase 1: `filter.lua`, `bench.lua`, `index.lua`, `views.lua`
-- 1.2.1: Multiple bug fixes; removed `quick_capture`, various dead code
-- Added `markdown.lua`: `append_next_header`, `shift_header_level`, emphasis
-  wrapping, `setup_symbols`, `goto_heading`
-- Title decoupling: `title` is free-form; `sync_filename_on_save` and
-  `sync_yaml_on_rename` removed; `:PKMRenameNote` added; `filename:` predicate
-  added to `filter.lua`; `filename` field added to index entries
-- `PKMBrowse`: unified note browser via index+filter; `PKMTags` now uses
-  index+filter (ripgrep removed from tag browsing)
-- `PKMViewLast`, `PKMViewSidebar` (flat list), subproject hierarchy in
-  `get_tree()`, sidebar tree header with `<CR>` navigation and `<BS>` parent nav
-- Deleted `journal.sync_yaml_on_rename`
+**Last session:**
+- Sidebar two-mode navigation (overview + detail) with 50-entry history stack;
+  `<BS>` pops history, `<C-b>` jumps to overview, `/` launches scoped search
+- Sidebar header hints for `<BS>`, `<C-b>`, `/`, `r`, `q` added to both modes
+- `views.get_last_view()` — prefers sidebar detail view, falls back to `_last_view`
+- `telescope.browse_paths(title, paths)` / `ui.browse_paths()` — scoped pickers
+  over pre-computed path lists; used by sidebar `/` and views tree `<C-f>`
+- `export.export_direct(label, paths)` + `:PKMExportView [name]`
+- `:PKMBuffers` — persistent bottom buffer panel (`ui.toggle_bufpanel`)
+- Context-aware citation picker: scored by view membership (+2) and shared tags
+  (+1); `<C-v>` view-only toggle in Telescope via `picker:refresh()`
+- `rename_note` extended to journal/scratchpad (was consolidated-only)
+- Bug fixes: `manage_backlink` open-buffer refresh; `BufWritePre` for
+  `last_updated_on`; `noautocmd e` replaces `checktime`; rename_note E180
 
 **Active next steps:**
 1. Metadata commands: `:PKMSetTitle`, `:PKMAddTag`, `:PKMRemoveTag` (buffer-only)
-2. `:PKMViewNewSub` — create subprojects from a command
+2. Consolidate `:PKMViewNew` and `:PKMViewNewSub` into one command
 3. Performance benchmarks: `bench.views_suite()` for 50/100/300/1000 views
-4. Investigate potential bugs: sidebar + tab pages, stale sidebar on delete,
-   external file deletion in sidebar
+4. Potential bugs: sidebar + tab pages; stale sidebar after `:PKMDeleteNote`;
+   `<CR>` in sidebar on externally-deleted file (missing `filereadable` guard)
 
 ---
 
@@ -55,7 +56,7 @@ Active development is paused; next item is metadata commands.
 | `export.lua` | Filter + copy notes — read-only, no setup() |
 | `filter.lua` | Filter expression parser/evaluator — tag/title/text/filename fields |
 | `index.lua` | In-memory note index — {path, filename, title, tags, body, mtime} |
-| `views.lua` | Named views — sidecar, CRUD, subproject hierarchy, sidebar, PKMViewLast |
+| `views.lua` | Named views — sidecar, CRUD, Telescope/float pickers, two-mode sidebar with history, `get_last_view` |
 | `bench.lua` | Developer benchmarking suite — not user-facing, no commands |
 | `markdown.lua` | Markdown editing utilities — headers, emphasis, symbols, navigation |
 

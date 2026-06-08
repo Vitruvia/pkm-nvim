@@ -756,7 +756,7 @@ function M.rename_note()
       return
     end
     vim.fn.inputsave()
-    local input = vim.fn.input('Rename note: ', name_part:gsub('_', ' '))
+    local input = vim.fn.input('Rename note: ', (name_part:gsub('_', ' ')))
     vim.fn.inputrestore()
     if not input or input == '' then return end
     local safe_name = sanitize_title(input)

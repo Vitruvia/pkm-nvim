@@ -13,16 +13,6 @@
   the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
 
-- `init.lua` `BufWritePost`: `yaml.save_frontmatter` writes frontmatter to
-  disk and then calls `vim.cmd("checktime")`, forcing a buffer reload that
-  triggers Vim's modeline scanner. Notes whose body contains `ex:`-style
-  patterns can produce `E518`. 
-  Fix: 
-  - Option 1: replace the write+checktime approach with
-  `vim.api.nvim_buf_set_lines` to update the buffer in place, eliminating the
-  reload entirely.
-  - Option 2 (current): User-habit workoround: do not start or end text with
-  `ex:`. If doing so is necessary, wrap it in parentheses (`(ex: ...)`).
 
 - **`:PKMRenameNote` scope and citation propagation:** title decoupling removed
   automatic sync but `:PKMRenameNote` only operates on consolidated notes. There
@@ -31,11 +21,6 @@
   Planned fix: extend `:PKMRenameNote` to all PKM file types and document that
   manual renaming outside PKM commands is unsupported.
 
-- **Post-citation prompts:** Went back to getting prompts for loading file or
-  pressing ok after adding a citation. This used to be solved, with the buffer
-  self-updating after every citation. The cited note's buffer, if open, is also
-  not updating unless I save the note that cites it. Behavior if the note is
-  not open in a buffer is unknown, but this alone is an issue.
 
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
@@ -44,6 +29,8 @@
   - 100k projection (raw scan): ~14.2s; post-index: ~65ms
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
+
+## [1.4.0] - 2026-6-7
 
 ### Added
 
@@ -78,6 +65,78 @@
   highlighted view. Prompt titles updated to advertise the keymap.
 
 - Config: `keymaps.view_sidebar` default changed from `false` to `"<leader>nS"`.
+
+- **Sidebar header keymap hints** — `sidebar_build_overview` and
+  `sidebar_build_lines` now include a hint line in the buffer header advertising
+  `<BS>/<C-b> back/views`, `/ search`, `r refresh`, `q close`. Addresses the
+  discoverability gap: the navigation keymaps were implemented but not visible.
+
+- `export.export_direct(label, paths)` — skips the filter form and opens the
+  results picker (Telescope or float fallback) directly over a pre-computed path
+  list. Computes a timestamped default destination path. Used by `:PKMExportView`
+  and any future context-aware export.
+
+- `:PKMExportView [name]` — export all notes in a named view without the filter
+  form. Tab-completes view names. Without a name, presents a picker. Calls
+  `export.export_direct(name, views.match_all(name))`.
+
+- **`:PKMBuffers` persistent buffer panel** — `ui.toggle_bufpanel()` opens a
+  `botright split` at the bottom listing all listed regular-file buffers. PKM
+  notes display with `type_prefix` and title; non-PKM files show filename only.
+  Modified buffers show ` [+]`. Height capped at 8 rows (`winfixheight`).
+  Keymaps: `<CR>` open in main window, `d` close buffer, `D` force-close,
+  `w` write+close, `r` refresh, `q`/`<Esc>` close panel. Auto-refreshes on
+  `BufAdd`, `BufDelete`, `BufWipeout`, `BufModifiedSet`. State cleared by
+  `BufWipeout` autocmd. Config: `keymaps.view_buffers` (default `false`).
+
+- **Context-aware citation picker** — `telescope.insert_citation_picker()` and
+  `ui.insert_citation_ui()` now pre-score items before display. Score: `+2` if
+  the item's path is in the active view (`views.get_last_view()` +
+  `views.match_all()`); `+1` per tag shared with the current note (via
+  `index.get(cur_path).tags`). Items sorted descending by score then
+  alphabetically. Contextually relevant items prefixed with `~ `. When a view is
+  active and has matching items, Telescope picker exposes `<C-v>` to toggle
+  between full list and view-only mode via `picker:refresh()` without closing.
+  No toggle in the `ui` fallback (no interactivity after selection).
+
+- **`rename_note` extended to journal and scratchpad** — previously rejected
+  non-consolidated files with "not a consolidated note". Now detects the PKM
+  folder and branches: consolidated preserves number + type prefix and renames
+  the title part; journal/scratchpad prompts for a full stem replacement with the
+  current stem as the default. All paths propagate via
+  `update_references_on_rename`.
+
+
+### Fixed
+
+- **Post-citation prompts:** Went back to getting prompts for loading file or
+  pressing ok after adding a citation. This used to be solved, with the buffer
+  self-updating after every citation. The cited note's buffer, if open, is also
+  not updating unless I save the note that cites it. Behavior if the note is
+  not open in a buffer is unknown, but this alone is an issue.
+
+- `init.lua` `BufWritePost`: `yaml.save_frontmatter` writes frontmatter to
+  disk and then calls `vim.cmd("checktime")`, forcing a buffer reload that
+  triggers Vim's modeline scanner. Notes whose body contains `ex:`-style
+  patterns can produce `E518`. 
+  Fix:
+  - Added a `BufWritePre` autocmd that updates `last_updated_on` in the buffer
+    (Case A: `nvim_buf_set_lines`, no disk write) before Neovim's normal write
+    cycle writes the buffer to disk.
+  - Removed `yaml.save_frontmatter(frontmatter, content_start, filepath)` from
+    `BufWritePost`, eliminating the redundant second disk write.
+  - Replaced `vim.cmd("checktime")` with `noautocmd e` + `winsaveview`/
+    `winrestview`: silent buffer reload that preserves cursor position and
+    suppresses autocmds, avoiding the "file changed on disk" prompt.
+  - `manage_backlink`: after writing the cited note's `cited_by` frontmatter to
+    disk, iterates open buffers and silently refreshes any loaded, unmodified
+    buffer whose path matches the target, preventing the "file changed on disk"
+    prompt when the user switches to the cited note.
+
+- **`rename_note` E180 error** — `vim.fn.input('Rename note: ', name_part:gsub('_', ' '))`
+  passed two return values from `gsub` (string + substitution count); Vim treated
+  the integer as the completion type argument and errored. Fix: extra parentheses
+  `(name_part:gsub('_', ' '))` discard the second return value.
 
 ## [1.3.3] - 2026-6-7
 

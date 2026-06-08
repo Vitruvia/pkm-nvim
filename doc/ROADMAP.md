@@ -53,6 +53,15 @@ The note namespace is intentionally **flat and global** — all notes share a si
 - ✅ `:PKMBrowse [expr]` — unified note browser via index+filter; replaces PKMTags ripgrep path
 - ✅ Markdown utilities — header counter, level shift, emphasis wrapping, symbol abbreviations,
      heading navigation (`goto_heading`)
+- ✅ `:PKMViewSidebar` two-mode (overview + detail) with navigation history,
+     header hints, `<BS>`/`<C-b>` navigation, `/` scoped search
+- ✅ `views.get_last_view()` — active view context for consumer features
+- ✅ Scoped note search within sidebar (`/`) and from views tree (`<C-f>`)
+- ✅ `:PKMExportView [name]` — export named view's notes, skips filter form
+- ✅ `:PKMBuffers` — persistent bottom buffer-list panel with auto-refresh
+- ✅ Context-aware citation picker — scores by active view (+2) and shared tags
+     (+1); `<C-v>` view-only toggle
+- ✅ `:PKMRenameNote` extended to journal and scratchpad
 
 **Known limitations:**
 - ⚠️ No preview system
@@ -167,7 +176,7 @@ Telescope picker with exact-substring prompt and file preview; float fallback.
 `:PKMViews` opens a separate tree-structured picker (`list_views()`) showing
 the full hierarchy with note counts; uses `build_tree_entries()` for depth-first
 ordering. Internal helpers: `get_view_parent`, `get_view_children`,
-`build_tree_entries`.
+`build_tree_entries`. Sidebar features and `get_last_view`.
 Persistent sidebar (`open_sidebar`) with navigable tree header showing parent and
 children. Last-view tracking (`open_last`). Telescope picker with exact-substring prompt and file preview; float fallback.
 
@@ -282,8 +291,7 @@ require('pkm').setup({
 
 ### Active
 
-No items currently in active development. All planned features through the views
-sidebar tree header are complete.
+No items currently in active development. Navigation system complete through Step 3.
 
 ---
 
@@ -311,9 +319,9 @@ default `false`).
 
 ---
 
-**2. **Consolidate `:PKMViewNew` and `:PKMViewNewSub`** — replace both commands
+**2. Consolidate `:PKMViewNew` and `:PKMViewNewSub`** — replace both commands
 with a single `:PKMViewNew` that prompts for view type (simple / subproject)
-first. Reduces the command surface the user must memorize. `M.save()` and
+first, reducing the command surface the user must memorize. `M.save()` and
 `M.save_subproject()` remain as separate internal functions; only the command
 entry point changes.
 

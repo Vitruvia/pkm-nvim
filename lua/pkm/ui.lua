@@ -1,7 +1,8 @@
 -- =============================================================================
 -- pkm.ui — Fallback UI components (no Telescope dependency)
 -- =============================================================================
--- Dependencies : pkm.yaml, pkm.utils, pkm.citations (lazy)
+-- Dependencies : pkm.yaml, pkm.utils, pkm.citations (lazy), pkm.index (lazy),
+--                pkm.views (lazy)
 -- Consumed by  : pkm.commands, pkm.telescope (fallback)
 --
 -- Public API:
@@ -10,7 +11,8 @@
 --   browse_tags()            → Two-level tag → file picker
 --   browse_paths(title, paths)   → fallback scoped picker over a pre-computed path list
 --   browse(filter_expr?)     → Browse notes with optional filter expression
---   insert_citation_ui()     → Citation picker fallback (no Telescope)
+--   insert_citation_ui()     → Context-aware citation picker fallback (no Telescope);
+--                               sorted by view membership and shared tags
 --   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
 --   show_stats()             → Show note counts via vim.notify
 --   toggle_bufpanel()    → toggle the persistent bottom buffer-list panel
@@ -448,25 +450,63 @@ end
 -- =============================================================================
 -- SECTION: Citation insertion fallback
 -- =============================================================================
---- Fallback citation picker using vim.ui.select. Used by PKMInsertCitation
---- when Telescope is unavailable. Delegates insertion to complete_insertion()
---- so frontmatter sync fires on the same path as the Telescope picker.
+--- Context-aware fallback citation picker using vim.ui.select.
+--- Items are pre-scored by view membership and shared tags.
+--- '~ ' prefix marks contextually relevant items.
 function M.insert_citation_ui()
   local citations = require('pkm.citations')
-  local items = citations.get_citable_items_for_picker()
+  local index     = require('pkm.index')
+  local views     = require('pkm.views')
 
-  if #items == 0 then
-    vim.notify("PKM: No citable notes found.", vim.log.levels.INFO)
+  local raw_items = citations.get_citable_items_for_picker()
+  if #raw_items == 0 then
+    vim.notify('PKM: No citable notes found.', vim.log.levels.INFO)
     return
   end
 
-  vim.ui.select(items, {
-    prompt      = "Insert Citation:",
-    format_item = function(item) return item.display end,
-  }, function(selected)
-    if selected then
-      citations.complete_insertion(selected)
+  -- Build scoring context
+  local cur_path  = vim.fn.expand('%:p')
+  local cur_entry = index.get(cur_path)
+  local cur_tags  = {}
+  if cur_entry and cur_entry.tags then
+    for _, tag in ipairs(cur_entry.tags) do cur_tags[tag] = true end
+  end
+
+  local view_name  = views.get_last_view()
+  local view_paths = {}
+  if view_name then
+    for _, p in ipairs(views.match_all(view_name)) do
+      view_paths[utils.normalize(p)] = true
     end
+  end
+
+  -- Score and sort
+  for _, item in ipairs(raw_items) do
+    local score = view_paths[utils.normalize(item.path)] and 2 or 0
+    local entry = index.get(item.path)
+    if entry and entry.tags then
+      for _, tag in ipairs(entry.tags) do
+        if cur_tags[tag] then score = score + 1 end
+      end
+    end
+    item.score = score
+  end
+  table.sort(raw_items, function(a, b)
+    if a.score ~= b.score then return a.score > b.score end
+    return a.display < b.display
+  end)
+
+  local prompt = view_name
+    and ('Insert Citation  ~ = contextual  [' .. view_name .. ']')
+    or  'Insert Citation  ~ = contextual'
+
+  vim.ui.select(raw_items, {
+    prompt      = prompt,
+    format_item = function(item)
+      return (item.score > 0 and '~ ' or '  ') .. item.display
+    end,
+  }, function(selected)
+    if selected then citations.complete_insertion(selected) end
   end)
 end
 

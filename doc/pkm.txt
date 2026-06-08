@@ -274,7 +274,28 @@ VIEWS~
                           <BS>   navigate to parent view
                           r      refresh against current index
                           q / <Esc>   close sidebar
+:PKMExportView [name]   Export all notes in a named view, skipping the
+                        interactive filter form. Without a name, presents a
+                        picker. Tab-completes view names. Opens the results
+                        picker then prompts for a destination directory.
+                        
+==============================================================================
+BUFFER PANEL                                                *pkm-bufpanel*
 
+:PKMBuffers             Toggle the persistent bottom buffer-list panel.
+                        Lists all open regular-file buffers. PKM notes show
+                        their type prefix and title; non-PKM files show their
+                        filename. Modified buffers are marked [+].
+
+                        Keymaps inside the panel:
+                          <CR>   open buffer in the main editing window
+                          d      close buffer (:bdelete)
+                          D      force-close buffer (:bdelete!)
+                          w      write buffer then close it
+                          r      refresh the list
+                          q      close the panel
+
+==============================================================================
 MARKDOWN EDITING~
 
 :PKMNextHeader          Duplicate the header on the current line with its
@@ -502,6 +523,7 @@ Default keymaps (all overridable via the `keymaps` config table):
   <leader>nt   :PKMTags
   <leader>nr   :PKMRenameNote
   <leader>nV   :PKMViewLast
+  <leader>nS   :PKMViewSidebar   (default; set via keymaps.view_sidebar)
   <leader>mh   :PKMNextHeader
 
 ==============================================================================
