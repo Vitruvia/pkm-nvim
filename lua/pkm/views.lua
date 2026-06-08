@@ -986,8 +986,8 @@ end
 local function sidebar_build_overview()
   local tree       = build_tree_entries()
   local lines = {
-    '  PKM Views  ·  <CR> open  ·  b/<C-b> overview  ·  / browse  ·  r refresh
-    ·  q close', 
+    [['  PKM Views  ·  <CR> open  ·  b/<C-b> overview  ·  / browse  ·  r refresh
+    ·  q close']], 
     '  ' .. string.rep('─', 38), 
     ''
   }
