@@ -91,8 +91,8 @@ function M.register(config)
   local function map_emphasis(lhs, marker)
     if not lhs then return end
     vim.keymap.set('n', lhs,
-      function() require('pkm.markdown').wrap_with_marker(marker) end,
-      { desc = 'PKM: wrap ' .. marker .. ' (motion)', silent = true })
+      function() return require('pkm.markdown').wrap_with_marker(marker) end,
+      { expr = true, desc = 'PKM: wrap ' .. marker .. ' (motion)', silent = true })
     vim.keymap.set('v', lhs,
       function() require('pkm.markdown')._wrap_visual(marker) end,
       { desc = 'PKM: wrap ' .. marker .. ' (selection)', silent = true })

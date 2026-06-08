@@ -21,6 +21,8 @@
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
 
+
+
 ## [1.4.1] - 2026-6-8
 
 ### Added
@@ -38,6 +40,28 @@
   paragraph. Visual mode: uses selection (bare `:` mapping lets Neovim
   prepend `'<,'>` automatically).
 - Config key `keymaps.renumber_list` (default `false`).
+
+### Fixed
+
+- **`wrap_with_marker` operator-pending mode** — `nvim_feedkeys('g@', 'n', false)`
+  appended `g@` to the typeahead buffer as a side effect rather than returning it
+  as the keymap result. With multi-character leader sequences (e.g. `<leader>Mi`),
+  this caused `g@` to not reliably enter operator-pending mode; subsequent
+  keystrokes were then processed as ordinary normal-mode commands, moving the
+  cursor without applying any wrapping. Fix: `wrap_with_marker` now returns `'g@'`
+  instead of calling `nvim_feedkeys`. Normal-mode emphasis keymaps in `keymaps.lua`
+  use `{ expr = true }` so the returned string is processed as the mapping's RHS.
+
+- **`:PKMDeleteNote` with sidebar open** — deleted note remained visible in the
+  sidebar until `r` was pressed. `delete_note_safely()` now calls
+  `views.refresh_sidebar_if_open()` after a successful deletion and index
+  invalidation. New public function `M.refresh_sidebar_if_open()` added to
+  `views.lua`; also updates the module header.
+
+- **Stale sidebar on external file deletion** — pressing `<CR>` on a note whose
+  file had been deleted externally attempted `:edit` on a missing path and errored.
+  A `vim.fn.filereadable(path)` guard in the detail-mode `<CR>` handler now
+  detects the missing file and notifies the user instead of opening it.
 
 ### Changed
 - `:PKMViewNew` now prompts for view type (Simple view / Subproject) first,

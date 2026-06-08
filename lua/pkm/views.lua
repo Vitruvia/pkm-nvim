@@ -4,6 +4,7 @@
 -- Dependencies : pkm.filter, pkm.index (lazy), pkm.utils
 -- Consumed by  : pkm.commands (:PKMView, :PKMViews, :PKMViewNew,
 --                :PKMViewEdit, :PKMViewDelete)
+--                pkm.init (setup, delete_note_safely)
 --
 -- A view is a named filter expression. Views are stored in views.json at the
 -- PKM root and optionally in config.projects. The sidecar file takes
@@ -39,6 +40,7 @@
 --   open_last()         → reopen the last activated view (session-scoped)
 --   get_last_view()     → active view name for context-aware features (sidebar > last)
 --   open_sidebar(name?) → open or toggle the persistent sidebar for a view
+--   refresh_sidebar_if_open() → refresh sidebar content if currently open; no-op otherwise
 --   save(name, expr)    → write or update a view in views.json
 --   save_subproject(name, parent, filter_expr) → write a subproject entry to views.json
 --   delete(name)        → remove a view from views.json
@@ -1381,6 +1383,14 @@ function M.open_sidebar(name)
     if idx < 1 or idx > #_sidebar_paths then return end
     local path = _sidebar_paths[idx]
 
+    if vim.fn.filereadable(path) == 0 then
+      vim.notify(
+        '[pkm] file no longer exists: ' .. vim.fn.fnamemodify(path, ':t'),
+        vim.log.levels.WARN
+      )
+      return
+    end
+
     local target
     local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
     if alt_id ~= 0 and alt_id ~= _sidebar_win
@@ -1463,7 +1473,7 @@ function M.open_sidebar(name)
     end
   end, ko)
 
--- ?: show sidebar keymap help
+  -- ?: show sidebar keymap help
   vim.keymap.set('n', '?', sidebar_show_help, ko)
 
   -- r: refresh current mode in place
@@ -1493,6 +1503,22 @@ function M.open_sidebar(name)
   end
 
   vim.api.nvim_set_current_win(prev_win)
+end
+
+--- Refresh the sidebar content if it is currently open. No-op otherwise.
+--- Call after any operation that modifies the note list (deletion, rename, etc.).
+---@return nil
+function M.refresh_sidebar_if_open()
+  if not _sidebar_win then return end
+  if not vim.api.nvim_win_is_valid(_sidebar_win) then
+    _sidebar_win = nil
+    return
+  end
+  if _sidebar_mode == 'overview' then
+    sidebar_switch_to_overview()
+  else
+    sidebar_switch_to_detail(_sidebar_name)
+  end
 end
 
 return M

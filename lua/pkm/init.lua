@@ -177,6 +177,7 @@ function M.delete_note_safely()
   
   if vim.fn.delete(filepath) == 0 then
     require('pkm.index').invalidate(filepath)
+    require('pkm.views').refresh_sidebar_if_open()
     vim.notify("Note deleted.", vim.log.levels.INFO)
   else
     vim.notify("Failed to delete file.", vim.log.levels.ERROR)

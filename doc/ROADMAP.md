@@ -366,55 +366,47 @@ Should not be implemented before benchmarking confirms it is necessary.
    cited_by), no tags, and do not match any defined view. Useful for finding
    abandoned or unfiled notes.
 
-4. **`:PKMViewStats`** — show a table of all views with their note counts and
-   subproject depth. Provides an overview of how the knowledge base is organised.
-   Implementation: iterate `views.list()`, call `match_all()` for each, format
-   as a notification or float.
+4. **"PKM UI default"** - allows the user to set a default configuration for
+   the UI (sidebar and buffer bar on or off), a default toggle (decide if the
+   UI toggles on or off automatically when opening neovim, or when entering the
+   pkm folder, or when opening a note contained in the pkm folder, or a
+   combination, or manually only).
+
 
 5. **Potential bugs to investigate before next major version:**
    - **Sidebar + tab pages:** `_sidebar_win` tracks one window globally. If the
      user has multiple tab pages, opening a sidebar in a second tab would
      conflict with the first tab's state. Mitigation: track sidebar state per
      tab page (`vim.api.nvim_get_current_tabpage()`).
-   - **`:PKMDeleteNote` with sidebar open:** deleted note remains visible in the
-     sidebar until `r` is pressed. The index is correct; only the display is
-     stale. No crash, but user confusion is likely. Mitigation: hook into
-     `delete_note_safely()` to trigger a sidebar refresh if open.
-   - **Stale sidebar on external file deletion:** `<CR>` on a note whose file
-     has been deleted externally will attempt `:edit` on a missing path.
-     Mitigation: add `vim.fn.filereadable(path)` guard in the `<CR>` handler.
-   - **`checktime` and sidebar buffer:** the BufWritePost autocmd in `init.lua`
-     calls `vim.cmd("checktime")` after writing frontmatter. This triggers Vim's
-     modeline scanner on all open buffers, including the sidebar's `nofile`
-     buffer. The sidebar buffer has no content that would match modeline patterns,
-     but the call is still unnecessary overhead. This is the same `checktime`/E518
-     root cause logged elsewhere; the fix (replace with `nvim_buf_set_lines`) will
-     also resolve this concern.
 
 ---
 
 ### Potential Additions (mid-term to long-term)
 
-**`lua/pkm/preview.lua`**
-Browser-based live preview: Markdown + LaTeX (MathJax), WebSocket live updates
-on save, cross-platform browser opening, terminal fallback (glow/mdcat).
+- **`lua/pkm/preview.lua`** Browser-based live preview: Markdown + LaTeX
+  (MathJax), WebSocket live updates on save, cross-platform browser opening,
+  terminal fallback (glow/mdcat).
 
-**Persistent index**
-Serialize the in-memory index to disk (msgpack or JSON) with mtime-based
-incremental updates on startup. Needed only if startup scan time becomes
-unacceptable at very large corpus sizes (likely >50k notes). Evaluate other
-solutions for speed at >10k notes before committing to this. Run
-`bench.baseline()` on the real corpus first.
+- **Persistent index** Serialize the in-memory index to disk (msgpack or JSON)
+  with mtime-based incremental updates on startup. Needed only if startup scan
+  time becomes unacceptable at very large corpus sizes (likely >50k notes).
+  Evaluate other solutions for speed at >10k notes before committing to this.
+  Run `bench.baseline()` on the real corpus first.
 
-**Sidebar siblings via `<Tab>`**
-Cycle the sidebar between the active view and its sibling subprojects (views
-sharing the same parent). Deferred from the current sidebar implementation.
-Requires identifying siblings via `get_view_children(get_view_parent(name))`.
+- **Sidebar siblings via `<Tab>`** Cycle the sidebar between the active view
+  and its sibling subprojects (views sharing the same parent). Deferred from
+  the current sidebar implementation. Requires identifying siblings via
+  `get_view_children(get_view_parent(name))`.
 
-**`_match_cache` in views.lua**
-Cache the matched path arrays alongside the filter trees. Would make repeated
-`match_all` calls (e.g. sidebar tree header builds) O(1) until the next cache
-invalidation. Implement only after benchmarking shows it is necessary.
+- **`_match_cache` in views.lua** Cache the matched path arrays alongside the
+  filter trees. Would make repeated `match_all` calls (e.g. sidebar tree header
+  builds) O(1) until the next cache invalidation. Implement only after
+  benchmarking shows it is necessary.
+
+- **`:PKMViewStats`** — show a table of all views with their note counts and
+  subproject depth. Provides an overview of how the knowledge base is
+  organised. Implementation: iterate `views.list()`, call `match_all()` for
+  each, format as a notification or float.
 
 ---
 

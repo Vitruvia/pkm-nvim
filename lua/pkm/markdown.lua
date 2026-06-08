@@ -11,7 +11,7 @@
 -- Public API:
 --   append_next_header()                       → Duplicate current header with counter +1, append at EOF
 --   shift_header_level(direction, start, end)  → Shift header '#'-level up or down in line range
---   wrap_with_marker(marker)                   → Enter operator-pending mode; next motion defines target
+--   wrap_with_marker(marker)                   → Return 'g@' for expr keymap; sets operatorfunc first
 --   _wrap_operator(motion_type)                → Operatorfunc callback (do not call directly)
 --   _wrap_visual(marker)                       → Wrap/unwrap current visual selection
 --   setup_symbols(symbols)                     → Register buffer-local iabbrevs and insert-mode keymaps
@@ -165,11 +165,13 @@ function M._wrap_visual(marker)
 end
 
 --- Enter operator-pending mode; the next motion defines the target.
+--- Returns 'g@' for use as an `expr` keymap RHS; sets operatorfunc first.
 ---@param marker string
+---@return string
 function M.wrap_with_marker(marker)
   _pending_marker = marker
   vim.o.operatorfunc = "v:lua.require'pkm.markdown'._wrap_operator"
-  vim.api.nvim_feedkeys('g@', 'n', false)
+  return 'g@'
 end
 
 -- =============================================================================
