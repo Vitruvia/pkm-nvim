@@ -307,6 +307,22 @@ local function manage_backlink(citing_path, target_path, action)
     end
     yaml.save_frontmatter(fm, content_start, target_path)
     require('pkm.index').invalidate(target_path)
+
+    -- Silently refresh the target buffer if open, preventing "file changed on disk" prompts.
+    local norm_target = utils.normalize(target_path)
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_loaded(bufnr) and not vim.bo[bufnr].modified then
+        local bname = utils.normalize(vim.api.nvim_buf_get_name(bufnr))
+        if bname == norm_target then
+          local ok, new_lines = pcall(vim.fn.readfile, target_path)
+          if ok then
+            pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, new_lines)
+            pcall(vim.api.nvim_set_option_value, 'modified', false, { buf = bufnr })
+          end
+          break
+        end
+      end
+    end
   end
 end
 

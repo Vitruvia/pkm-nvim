@@ -724,8 +724,9 @@ end
 -- SECTION: Note renaming
 -- =============================================================================
 
---- Prompt for a new name and rename the current consolidated note file.
---- Derives the new filename from the existing number and type prefix.
+--- Prompt for a new name and rename the current PKM note file.
+--- For consolidated notes: preserves number and type prefix, renames the title part.
+--- For journal/scratchpad: allows renaming the full stem.
 --- Does not modify the title frontmatter field.
 --- Propagates the rename through citations via update_references_on_rename.
 ---@return nil
@@ -734,25 +735,46 @@ function M.rename_note()
   local old_stem = vim.fn.fnamemodify(filepath, ':t:r')
   local dir      = vim.fn.fnamemodify(filepath, ':h')
 
-  local number, note_type, name_part = old_stem:match('^(%d+)_([a-z]+)_(.+)$')
-  if not number then
-    vim.notify('[pkm] not a consolidated note', vim.log.levels.WARN)
+  local folder_type
+  if filepath:find(config.folders.consolidated, 1, true) then
+    folder_type = 'consolidated'
+  elseif filepath:find(config.folders.journal, 1, true) then
+    folder_type = 'journal'
+  elseif filepath:find(config.folders.scratchpad, 1, true) then
+    folder_type = 'scratchpad'
+  else
+    vim.notify('[pkm] file is not inside a PKM folder', vim.log.levels.WARN)
     return
   end
 
-  vim.fn.inputsave()
-  local input = vim.fn.input('Rename note: ', name_part:gsub('_', ' '))
-  vim.fn.inputrestore()
-  if not input or input == '' then return end
+  local new_stem
 
-  local safe_name    = sanitize_title(input)
-  local new_filename = string.format('%04d_%s_%s.md', tonumber(number), note_type, safe_name)
-  local new_filepath = utils.join(dir, new_filename)
+  if folder_type == 'consolidated' then
+    local number, note_type, name_part = old_stem:match('^(%d+)_([a-z]+)_(.+)$')
+    if not number then
+      vim.notify('[pkm] unrecognized consolidated note filename', vim.log.levels.WARN)
+      return
+    end
+    vim.fn.inputsave()
+    local input = vim.fn.input('Rename note: ', name_part:gsub('_', ' '))
+    vim.fn.inputrestore()
+    if not input or input == '' then return end
+    local safe_name = sanitize_title(input)
+    new_stem = string.format('%04d_%s_%s', tonumber(number), note_type, safe_name)
+  else
+    vim.fn.inputsave()
+    local input = vim.fn.input('Rename to (stem, no extension): ', old_stem)
+    vim.fn.inputrestore()
+    if not input or input:match('^%s*$') then return end
+    new_stem = sanitize_title(input)
+  end
+
+  local new_filepath = utils.join(dir, new_stem .. '.md')
 
   if new_filepath:gsub('\\', '/') == filepath:gsub('\\', '/') then return end
 
   if vim.fn.filereadable(new_filepath) == 1 then
-    vim.notify('[pkm] cannot rename: target already exists: ' .. new_filename, vim.log.levels.ERROR)
+    vim.notify('[pkm] cannot rename: target already exists: ' .. new_stem .. '.md', vim.log.levels.ERROR)
     return
   end
 
@@ -768,16 +790,14 @@ function M.rename_note()
   vim.cmd('keepalt file ' .. vim.fn.fnameescape(new_filepath))
   vim.bo.modified = false
 
-  -- Use frontmatter title as display title if set; otherwise derive from new stem.
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local fm, _ = yaml.parse_frontmatter(lines)
   local display_title = (fm and type(fm.title) == 'string' and fm.title ~= '')
                         and fm.title
-                        or safe_name:gsub('_', ' ')
+                        or new_stem:gsub('_', ' ')
 
-  local new_stem = vim.fn.fnamemodify(new_filepath, ':t:r')
   require('pkm.citations').update_references_on_rename(old_stem, new_stem, display_title)
-  vim.notify('[pkm] renamed to: ' .. new_filename, vim.log.levels.INFO)
+  vim.notify('[pkm] renamed to: ' .. new_stem .. '.md', vim.log.levels.INFO)
 end
 
 -- =============================================================================

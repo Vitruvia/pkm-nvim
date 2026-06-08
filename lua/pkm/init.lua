@@ -59,47 +59,76 @@ end
 --- Only fires for .md files within M.config.root_path.
 function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
-  
+
+  -- Update last_updated_on in the buffer before the write.
+  -- Neovim then writes the updated buffer to disk in the normal save cycle.
+  vim.api.nvim_create_autocmd("BufWritePre", {
+    group = augroup, pattern = "*.md",
+    callback = function()
+      local filepath = vim.fn.expand("%:p")
+      local norm_path = filepath:gsub("\\", "/")
+      local norm_root = M.config.root_path:gsub("\\", "/")
+      if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
+
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      if not lines or lines[1] ~= "---" then return end
+
+      local yaml_m      = require('pkm.yaml')
+      local timestamp_m = require('pkm.timestamp')
+      local frontmatter, content_start = yaml_m.parse_frontmatter(lines)
+      if not frontmatter then return end
+      if frontmatter.cites and type(frontmatter.cites) ~= "table" then return end
+
+      frontmatter.last_updated_on = timestamp_m.to_iso8601()
+      yaml_m.save_frontmatter(frontmatter, content_start)  -- Case A: buffer update, no disk write
+    end,
+  })
+
+  -- After write: sync journal filename, update citations, reload buffer silently.
   vim.api.nvim_create_autocmd("BufWritePost", {
     group = augroup, pattern = "*.md",
     callback = function()
       local filepath = vim.fn.expand("%:p")
       if not filepath:lower():find(".md") then return end
-      
+
       vim.schedule(function()
         local root = M.config.root_path
         local norm_path = filepath:gsub("\\", "/")
         local norm_root = root:gsub("\\", "/")
         if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
 
-        local yaml = require('pkm.yaml')
-        local timestamp = require('pkm.timestamp')
-        local journal = require('pkm.journal')
+        local yaml      = require('pkm.yaml')
+        local journal   = require('pkm.journal')
         local citations = require('pkm.citations')
 
-        local lines = vim.fn.readfile(filepath)
-        if lines[1] == "---" then
-            local frontmatter, content_start = yaml.parse_frontmatter(lines)
-            if not frontmatter or (frontmatter.cites and type(frontmatter.cites) ~= "table") then
-                vim.notify("PKM Error: Frontmatter corrupted. Sync aborted.", vim.log.levels.ERROR)
-                return 
-            end
-            frontmatter.last_updated_on = timestamp.to_iso8601()
-            yaml.save_frontmatter(frontmatter, content_start, filepath)
+        -- Validate frontmatter structure; abort sync if corrupted.
+        -- last_updated_on is already written by BufWritePre above.
+        local disk_lines = vim.fn.readfile(filepath)
+        if disk_lines[1] == "---" then
+          local frontmatter, _ = yaml.parse_frontmatter(disk_lines)
+          if not frontmatter or (frontmatter.cites and type(frontmatter.cites) ~= "table") then
+            vim.notify("PKM Error: Frontmatter corrupted. Sync aborted.", vim.log.levels.ERROR)
+            return
+          end
         end
 
         if filepath:find(M.config.folders.journal, 1, true) then
-            journal.sync_filename_on_save() end
-        
-        if M.config.sync.auto_sync_on_save then 
-            citations.update_references(filepath) 
+          journal.sync_filename_on_save()
         end
-        
-        vim.cmd("checktime")
+
+        if M.config.sync.auto_sync_on_save then
+          citations.update_references(filepath)
+        end
+
+        -- Silently reload buffer to reflect any changes made by update_references,
+        -- avoiding the "file changed on disk" prompt. Replaces previous checktime call.
+        local view = vim.fn.winsaveview()
+        vim.cmd('noautocmd e')
+        vim.fn.winrestview(view)
       end)
     end,
   })
-  
+
   vim.api.nvim_create_autocmd("BufReadPost", {
     group = augroup, pattern = "*.md",
     callback = function()
