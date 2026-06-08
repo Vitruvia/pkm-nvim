@@ -33,6 +33,7 @@
 --   setup()             → register BufWritePost autocmd for views.json
 --   list()              → string[]  sorted view names (sidecar + config)
 --   list_views()        → open tree picker over all views (Telescope or float)
+--   edit_view(name?)    → open edit UI for a named view; picker if nil
 --   match_all(name)     → string[]  paths matching the named view's filter
 --   open(name?)         → activate a view; prompts for name if nil
 --   open_last()         → reopen the last activated view (session-scoped)
@@ -975,6 +976,139 @@ function M.list_views()
   else
     float_views_tree_picker()
   end
+end
+
+-- =============================================================================
+-- SECTION: Edit UI
+-- =============================================================================
+
+--- Open a floating edit UI for a named view.
+--- Header shows name and (for subprojects) the parent, read-only for reference.
+--- The expression line is pre-filled with the current filter.
+--- <CR> validates and saves. <C-r> resets to the original. <Esc> cancels.
+--- On validation failure the float stays open in insert mode for correction.
+---@param name string
+local function edit_view_float(name)
+  local projects = get_projects()
+  local expr     = projects[name]
+  if not expr then
+    vim.notify(string.format("PKMView: no view named '%s'", name),
+      vim.log.levels.WARN)
+    return
+  end
+
+  local is_sub          = type(expr) == 'table'
+  local original_filter = is_sub and expr.filter or expr
+  local parent_name     = is_sub and expr.parent or nil
+
+  local header = { '  View: ' .. name }
+  if is_sub then
+    header[#header + 1] = '  Parent: ' .. parent_name
+  end
+  header[#header + 1] = '  ' .. string.rep('─', 50)
+
+  local expr_line_idx = #header + 1
+
+  local all_lines = {}
+  for _, l in ipairs(header) do all_lines[#all_lines + 1] = l end
+  all_lines[#all_lines + 1] = original_filter
+  all_lines[#all_lines + 1] = ''
+  all_lines[#all_lines + 1] = '  <CR> save   <C-r> reset   <Esc> cancel'
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, all_lines)
+  vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = buf })
+
+  local width = math.min(
+    math.max(60, #original_filter + 8),
+    vim.o.columns - 4)
+  local height = #all_lines + 2
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative  = 'editor',
+    width     = width,
+    height    = height,
+    col       = math.floor((vim.o.columns - width)  / 2),
+    row       = math.floor((vim.o.lines   - height) / 2),
+    style     = 'minimal',
+    border    = 'rounded',
+    title     = is_sub and ' Edit Subproject ' or ' Edit View ',
+    title_pos = 'center',
+  })
+
+  vim.api.nvim_win_set_cursor(win, { expr_line_idx, #original_filter })
+  vim.cmd('startinsert!')
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end
+
+  local function do_save()
+    vim.cmd('stopinsert')
+    local buf_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local new_expr  = (buf_lines[expr_line_idx] or ''):match('^%s*(.-)%s*$')
+
+    if new_expr == '' then
+      vim.notify('[pkm] filter expression cannot be empty', vim.log.levels.WARN)
+      vim.cmd('startinsert!')
+      return
+    end
+
+    local _, parse_err = require('pkm.filter').parse(new_expr)
+    if parse_err then
+      vim.notify('[pkm] invalid filter: ' .. parse_err, vim.log.levels.ERROR)
+      vim.cmd('startinsert!')
+      return
+    end
+
+    close()
+    vim.schedule(function()
+      if is_sub then
+        M.save_subproject(name, parent_name, new_expr)
+      else
+        M.save(name, new_expr)
+      end
+    end)
+  end
+
+  local function do_reset()
+    vim.api.nvim_buf_set_lines(buf, expr_line_idx - 1, expr_line_idx,
+      false, { original_filter })
+    vim.api.nvim_win_set_cursor(win, { expr_line_idx, #original_filter })
+    vim.cmd('startinsert!')
+    vim.notify('[pkm] expression reset to original', vim.log.levels.INFO)
+  end
+
+  local ko = { noremap = true, silent = true, buffer = buf }
+  vim.keymap.set({ 'n', 'i' }, '<CR>',  do_save,  ko)
+  vim.keymap.set({ 'n', 'i' }, '<C-r>', do_reset, ko)
+  vim.keymap.set({ 'n', 'i' }, '<Esc>', function()
+    vim.cmd('stopinsert')
+    close()
+  end, ko)
+end
+
+--- Open an edit UI for a named view.
+--- If name is nil, presents a picker of all defined views.
+---@param name string|nil
+function M.edit_view(name)
+  if not name or name == '' then
+    local names = M.list()
+    if #names == 0 then
+      vim.notify('[pkm] no views defined', vim.log.levels.WARN)
+      return
+    end
+    vim.ui.select(names, {
+      prompt      = 'Edit view:',
+      format_item = function(n) return n end,
+    }, function(sel)
+      if sel then edit_view_float(sel) end
+    end)
+    return
+  end
+  edit_view_float(name)
 end
 
 -- =============================================================================

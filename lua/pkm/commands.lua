@@ -190,28 +190,38 @@ function M.register()
     }, function(choice)
       if not choice then return end
 
-      if choice == 'Simple view' then
-        vim.ui.input({ prompt = 'View name: ' }, function(name)
-          if not name or name:match('^%s*$') then return end
-          name = name:match('^%s*(.-)%s*$')
-          vim.ui.input({ prompt = 'Filter expression: ' }, function(expr)
-            if not expr or expr:match('^%s*$') then return end
-            views.save(name, expr:match('^%s*(.-)%s*$'))
-          end)
-        end)
+      vim.ui.input({ prompt = 'View name: ' }, function(name)
+        if not name or name:match('^%s*$') then return end
+        name = name:match('^%s*(.-)%s*$')
 
-      else
-        local names = views.list()
-        if #names == 0 then
-          vim.notify(
-            '[pkm] no views defined. Create a simple view first.',
-            vim.log.levels.WARN)
+        -- Detect existing view and offer to edit it
+        if vim.tbl_contains(views.list(), name) then
+          vim.fn.inputsave()
+          local answer = vim.fn.input(
+            string.format("View '%s' already exists. Edit it? (y/n): ", name))
+          vim.fn.inputrestore()
+          if answer:lower() == 'y' then
+            vim.schedule(function() views.edit_view(name) end)
+          else
+            vim.notify('[pkm] cancelled', vim.log.levels.INFO)
+          end
           return
         end
 
-        vim.ui.input({ prompt = 'Subproject name: ' }, function(name)
-          if not name or name:match('^%s*$') then return end
-          name = name:match('^%s*(.-)%s*$')
+        if choice == 'Simple view' then
+          vim.ui.input({ prompt = 'Filter expression: ' }, function(expr)
+            if not expr or expr:match('^%s*$') then return end
+            views.save(name, (expr:match('^%s*(.-)%s*$')))
+          end)
+
+        else
+          local names = views.list()
+          if #names == 0 then
+            vim.notify(
+              '[pkm] no views defined. Create a simple view first.',
+              vim.log.levels.WARN)
+            return
+          end
 
           vim.ui.select(names, {
             prompt      = 'Select parent view:',
@@ -220,15 +230,16 @@ function M.register()
             if not parent then return end
 
             vim.ui.input({
-              prompt = string.format("Filter for '%s' (added to '%s'): ",
-                name, parent),
+              prompt = string.format(
+                "Filter for '%s' (added to '%s'): ", name, parent),
             }, function(expr)
               if not expr or expr:match('^%s*$') then return end
               expr = expr:match('^%s*(.-)%s*$')
 
               vim.fn.inputsave()
               local answer = vim.fn.input(string.format(
-                "Create subproject '%s' under '%s' with filter '%s'? (yes/no): ",
+                "Create subproject '%s' under '%s'"
+                  .. " with filter '%s'? (yes/no): ",
                 name, parent, expr))
               vim.fn.inputrestore()
 
@@ -241,10 +252,21 @@ function M.register()
               views.save_subproject(name, parent, expr)
             end)
           end)
-        end)
-      end
+        end
+      end)
     end)
-  end, { desc = 'Create or update a named view (simple or subproject)' })
+  end, {
+    desc = 'Create a new view; prompts to edit if the name already exists',
+  })
+
+  vim.api.nvim_create_user_command('PKMViewUpdate', function(opts)
+    local name = opts.args ~= '' and opts.args or nil
+    require('pkm.views').edit_view(name)
+  end, {
+    nargs    = '?',
+    complete = function() return require('pkm.views').list() end,
+    desc     = 'Edit an existing view (expression pre-filled; <C-r> to reset)',
+  })
 
   vim.api.nvim_create_user_command('PKMViewEdit', function()
     local path = require('pkm.utils').join(require('pkm').config.root_path, 'views.json')
