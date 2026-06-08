@@ -125,6 +125,11 @@ function M.setup_sync_autocmds()
         local view = vim.fn.winsaveview()
         vim.cmd('noautocmd e')
         vim.fn.winrestview(view)
+        -- noautocmd suppresses the Syntax/FileType autocmds that normally
+        -- restore highlighting after a buffer re-read. Re-fire Syntax only —
+        -- this reloads the syntax file without re-reading the buffer, so
+        -- modeline scanning cannot trigger.
+        vim.cmd('doautocmd Syntax')
       end)
     end,
   })

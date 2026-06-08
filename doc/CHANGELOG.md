@@ -63,6 +63,13 @@
   A `vim.fn.filereadable(path)` guard in the detail-mode `<CR>` handler now
   detects the missing file and notifies the user instead of opening it.
 
+- **Syntax highlighting lost after save** — `noautocmd e` suppressed all
+  autocmds on buffer reload, including the `Syntax`/`FileType` events that
+  restore per-buffer syntax definitions. `g:syntax_on` remained set but
+  highlighting was gone until the buffer was manually reloaded. Fix: fire
+  `doautocmd Syntax` after `winrestview`. This reloads the syntax file without
+  re-reading the buffer, preserving the E518/modeline protection.
+
 ### Changed
 - `:PKMViewNew` now prompts for view type (Simple view / Subproject) first,
   then follows the appropriate creation flow. Replaces the two-command surface
