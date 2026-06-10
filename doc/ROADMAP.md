@@ -478,6 +478,14 @@ bar, as well as other important options that we predict users may need.
  conflict with the first tab's state. Mitigation: track sidebar state per
  tab page (`vim.api.nvim_get_current_tabpage()`).
 
+**5. Alternative diagram and imaging methods to allow enhancement of notes
+without dependence on external image files:** e.g. ASCII (text-based) art.
+- Add support or consider already supported methods, with emphasis on human and
+  AI readability and general portability, and, as a secondary goal, easyness of
+  use.
+- Standardize methods for human and AI usage, in order to aid correct usage
+  of such graphics and their understanding by any user.
+
 ---
 
 ### Distant Additions (mid-term to long-term)
