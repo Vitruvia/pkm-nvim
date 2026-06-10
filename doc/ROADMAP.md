@@ -314,7 +314,108 @@ All call `index.invalidate(filepath)` after writing.
 default `false`).
 
 ---
-**2. Performance: views and sidebar at scale**
+
+**2. Filter coverage for all search types:** Make filters work seamlessly with
+`:PKMBrowse` (used in the sidebar and view panel search) and  `PKMSearch` (used
+in `<leader>nf`).
+
+---
+
+**3. Improved and new markdown features:**
+
+- Improved renumbering with `:PKMRenumberlist`:** so that it will renumber
+miss-ordered lists (not only those with broken sequences), lists containing
+nested elements, and numbered paragraphs. e.g.:
+
+  ```
+  1.
+  3.
+  2.
+  ```
+  
+  becomes
+  
+  ```
+  1.
+  2.
+  3.
+  ```
+  
+  ``` ((text aligned with the list indentation level))
+  1. <text>
+     
+     <more text>
+  
+  3. <text>
+     <more text>
+  ```
+  
+  Becomes
+  
+  ``` ((text aligned with the list indentation level))
+  1. <text>
+     
+     <more text>
+  
+  2. <text>
+     <more text>
+  ```
+  
+  ``` ((text aligned with margin, without following indent))
+  1. <text>
+     
+  <more text>
+  
+  3. <text>
+  <more text>
+  
+  ```
+  
+  becomes
+  
+  
+  ``` ((text aligned with the list indentation level))
+  1. <text>
+     
+     <more text>
+  
+  3. <text>
+     <more text>
+  ```
+
+- Improved recognition of indenting when list prefixes are surrounded by `*`
+  and other markers. Currently `1. <text>` autoindents as a first level list,
+  but not `**1. <text>**`.
+
+---
+
+**4. `:PKMOrphans`** — show notes that have no citations (neither cites nor
+cited_by), no tags, and do not match any defined view. Useful for finding
+abandoned or unfiled notes.
+
+---
+
+
+**5. Notes sidebar:** A sidebar to navigate in the main notes folder, to and
+from each note subfolder (e.g.: consolidated).
+
+---
+
+**6. PKM "note explorer"** - Integrates all bars into a main "UI" that can be
+toggled on or off. The user can set a default configuration for the UI (decide
+if the UI toggles on or off automatically when opening neovim, or when entering
+the pkm folder, or when opening a note contained in the pkm folder, or
+a combination, or manually only). 
+
+The UI should have a base configuration, e.g. a left sidebar which is divided
+horizontally between notes and views sidebars and a bottom bar for the buffers.
+Modifiability of this UI is set as a near term addition.
+
+With this, we effectively have a "note explorer submodule/subplugin" for our
+pkm system.
+
+---
+**7. Performance: views and sidebar at scale**
 
 *Motivation:* The sidebar tree header calls `M.match_all()` for the parent and
 every child to display note counts. Each `match_all` call does a full index scan
@@ -343,35 +444,28 @@ Should not be implemented before benchmarking confirms it is necessary.
 
 ### Near-term additions
 
-1. **Filter expression autocomplete** — when typing in `:PKMBrowse` or `:PKMView`,
-   autocomplete tag names (from the index) and view names (from `views.list()`)
-   as the user types. Requires a custom `complete` function in `commands.lua`.
+**1. Filter expression autocomplete** — when typing in `:PKMBrowse` or
+`:PKMView`, autocomplete tag names (from the index) and view names (from
+`views.list()`) as the user types. Requires a custom `complete` function in
+`commands.lua`.
 
-2. **`:PKMBrowseRecent [n]`** — show the `n` most recently modified notes, sorted
-   by `mtime` from the index. Quick access to recent work without needing a view.
-   Implementation: `index.get_all()` sorted by `mtime` descending, sliced to `n`,
-   passed to `telescope.browse()` or `ui.browse()`.
+**2. `:PKMBrowseRecent [n]`** — show the `n` most recently modified notes,
+sorted by `mtime` from the index. Quick access to recent work without needing a
+view. Implementation: `index.get_all()` sorted by `mtime` descending, sliced to
+`n`, passed to `telescope.browse()` or `ui.browse()`.
 
-3. **`:PKMOrphans`** — show notes that have no citations (neither cites nor
-   cited_by), no tags, and do not match any defined view. Useful for finding
-   abandoned or unfiled notes.
+**3. Customization of the "explorer" UI:**  positions, width and length of each
+bar, as well as other important options that we predict users may need.
 
-4. **"PKM UI default"** - allows the user to set a default configuration for
-   the UI (sidebar and buffer bar on or off), a default toggle (decide if the
-   UI toggles on or off automatically when opening neovim, or when entering the
-   pkm folder, or when opening a note contained in the pkm folder, or a
-   combination, or manually only).
-
-
-5. **Potential bugs to investigate before next major version:**
-   - **Sidebar + tab pages:** `_sidebar_win` tracks one window globally. If the
-     user has multiple tab pages, opening a sidebar in a second tab would
-     conflict with the first tab's state. Mitigation: track sidebar state per
-     tab page (`vim.api.nvim_get_current_tabpage()`).
+**4. Potential bugs to investigate before next major version:**
+- **Sidebar + tab pages:** `_sidebar_win` tracks one window globally. If the
+ user has multiple tab pages, opening a sidebar in a second tab would
+ conflict with the first tab's state. Mitigation: track sidebar state per
+ tab page (`vim.api.nvim_get_current_tabpage()`).
 
 ---
 
-### Potential Additions (mid-term to long-term)
+### Distant Additions (mid-term to long-term)
 
 - **`lua/pkm/preview.lua`** Browser-based live preview: Markdown + LaTeX
   (MathJax), WebSocket live updates on save, cross-platform browser opening,
@@ -383,15 +477,24 @@ Should not be implemented before benchmarking confirms it is necessary.
   Evaluate other solutions for speed at >10k notes before committing to this.
   Run `bench.baseline()` on the real corpus first.
 
-- **Sidebar siblings via `<Tab>`** Cycle the sidebar between the active view
-  and its sibling subprojects (views sharing the same parent). Deferred from
-  the current sidebar implementation. Requires identifying siblings via
-  `get_view_children(get_view_parent(name))`.
-
 - **`_match_cache` in views.lua** Cache the matched path arrays alongside the
   filter trees. Would make repeated `match_all` calls (e.g. sidebar tree header
   builds) O(1) until the next cache invalidation. Implement only after
   benchmarking shows it is necessary.
+
+- **Note review queue.** Enables the user to select and keep track of notes intended
+  for review. Might include organizers, separators, or interact with filters to
+  enable the user to categorize such notes according to priority, subject, etc.
+
+---
+
+### Potential but not guaranteed goals (do not design toward)
+
+- **Alternative PKM modes:** Obsidian-style backlink graph, pure Zettelkasten ID-based
+  linking, etc. Would be selectable configurations, not the default.
+
+- **Image and visualization support:** embed images with normalized paths, Mermaid
+  diagram support in preview, possibly inline rendering (kitty/iTerm2 protocols).
 
 - **`:PKMViewStats`** — show a table of all views with their note counts and
   subproject depth. Provides an overview of how the knowledge base is
@@ -400,19 +503,7 @@ Should not be implemented before benchmarking confirms it is necessary.
 
 ---
 
-### Distant Future (not a current goal — do not design toward)
-
-- **Alternative PKM modes:** Obsidian-style backlink graph, pure Zettelkasten ID-based
-  linking, etc. Would be selectable configurations, not the default.
-- **Image and visualization support:** embed images with normalized paths, Mermaid
-  diagram support in preview, possibly inline rendering (kitty/iTerm2 protocols).
-- **Review queue.** Enables the user to select and keep track of notes intended
-  for review. Might include organizers, separators, or interact with filters to
-  enable the user to categorize such notes according to priority, subject, etc.
-
----
-
-### Postponed or Out of Consideration
+### Unlikely goals, nongoals, or out of consideration (do not design toward)
 
 - **Multi-wiki:** multiple independent note namespaces with separate counters and citation
   permission rules. Superseded by the project-view system for all realistic use cases.
