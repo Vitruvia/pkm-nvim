@@ -440,6 +440,10 @@ cached path arrays per view name, invalidated alongside `_tree_cache` in
 tree header builds would read from it on repeat accesses without re-scanning.
 Should not be implemented before benchmarking confirms it is necessary.
 
+**8. Deleted note retriavability** deleted notes go either into the OS's trash
+or at a dedicated "notes trash" that conserves them temporarily for retrievability
+via a specific command or a general "undo" command in the "notes explorer".
+
 ---
 
 ### Near-term additions
