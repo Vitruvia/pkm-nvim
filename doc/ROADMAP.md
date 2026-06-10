@@ -387,6 +387,10 @@ nested elements, and numbered paragraphs. e.g.:
   and other markers. Currently `1. <text>` autoindents as a first level list,
   but not `**1. <text>**`.
 
+- PKM related context-aware syntax highlighting: current syntax highlighting
+  treats YAML metadata as typical markdown text. There is also no special
+  highlighting for in-text citations.
+
 ---
 
 **4. `:PKMOrphans`** — show notes that have no citations (neither cites nor
@@ -443,6 +447,13 @@ Should not be implemented before benchmarking confirms it is necessary.
 **8. Deleted note retriavability** deleted notes go either into the OS's trash
 or at a dedicated "notes trash" that conserves them temporarily for retrievability
 via a specific command or a general "undo" command in the "notes explorer".
+
+**9. Note-taking standardization:** definition of standards for header and
+body-text naming and organization, in-text citation formatting, author comment
+formatting, etc., possibly associated with additional syntax highlighting.
+These standards should simultaneosly reduce cognitive load (less decisions to
+make while taking notes), improve human readability, and AI understading of
+notes.
 
 ---
 
