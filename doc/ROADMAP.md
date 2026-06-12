@@ -318,78 +318,141 @@ default `false`).
 **2. Filter coverage for all search types:** Make filters work seamlessly with
 `:PKMBrowse` (used in the sidebar and view panel search) and  `PKMSearch` (used
 in `<leader>nf`).
+     - This modification may justify merging `:PKMTags` with `:PKMSearch`.
 
 ---
 
 **3. Improved and new markdown features:**
 
-- Improved renumbering with `:PKMRenumberlist`:** so that it will renumber
-miss-ordered lists (not only those with broken sequences), lists containing
-nested elements, and numbered paragraphs. e.g.:
+- Improved renumbering with `:PKMRenumberlist`:** 
+   - add support for other structures: lists containing nested elements,
+     numberings inside quotes, as well as numbered headers and bolder/italiscized
+     numbers.
 
-  ```
-  1.
-  3.
-  2.
-  ```
-  
-  becomes
-  
-  ```
-  1.
-  2.
-  3.
-  ```
-  
-  ``` ((text aligned with the list indentation level))
-  1. <text>
+     ```
+     1. a
+       2. c
+       1. x
+     3. a
+     2. 3
+     ```
      
-     <more text>
-  
-  3. <text>
-     <more text>
-  ```
-  
-  Becomes
-  
-  ``` ((text aligned with the list indentation level))
-  1. <text>
+     becomes
      
-     <more text>
-  
-  2. <text>
-     <more text>
-  ```
-  
-  ``` ((text aligned with margin, without following indent))
-  1. <text>
+     ```
+     1. a
+       1. c
+       2. x
+     2. a
+     3. 3
+     ```
+
+     ```
+     *1*. a
+       *2*. c
+       *1*. x
+     *3*. a
+     *2*. 3
+     ```
      
-  <more text>
-  
-  3. <text>
-  <more text>
-  
-  ```
-  
-  becomes
-  
-  
-  ``` ((text aligned with the list indentation level))
-  1. <text>
+     becomes
      
+     ```
+     *1*. a
+       *1*. c
+       *2*. x
+     *2*. a
+     *3*. 3
+     ```
+
+     ```Ordered list inside citation/quotation.
+     > 1. a
+     >   2. c
+     >   1. x
+     > 3. a
+     > 2. 3
+     ```
+     
+     becomes
+     
+     ```Ordered list inside citation/quotation.
+     > 1. a
+     >   1. c
+     >   2. x
+     > 2. a
+     > 3. 3
+     ```
+
+     ``` ((numbered header with text aligned with margin, without following
+     indent))
+     ## 1. <text>
+        
      <more text>
-  
-  3. <text>
+     
+     ## 3. <text>
      <more text>
-  ```
+     ```
+     
+     becomes
+     
+     
+     ``` ((numbered header with text aligned with the list indentation level))
+     ## 1. <text>
+        
+     <more text>
+     
+     ## 2. <text>
+     <more text>
+     ```
+
+     ``` ((numbered header with text aligned with text indented according to
+     the header))
+     ## 1. <text>
+        
+        <more text>
+     
+     ## 3. <text>
+        <more text>
+     ```
+     
+     becomes
+     
+     
+     ``` ((numbered header with text aligned with text indented according to
+     the header))
+     ## 1. <text>
+        
+        <more text>
+     
+     ## 2. <text>
+        <more text>
+     ```
 
 - Improved recognition of indenting when list prefixes are surrounded by `*`
   and other markers. Currently `1. <text>` autoindents as a first level list,
   but not `**1. <text>**`.
 
-- PKM related context-aware syntax highlighting: current syntax highlighting
-  treats YAML metadata as typical markdown text. There is also no special
-  highlighting for in-text citations.
+- Add PKM related context-aware syntax highlighting: 
+   - Currently missing or unsupported:
+     - YAML frontmatter: current syntax highlighting treats YAML metadata as
+       typical markdown text. 
+     - in-text citations: currently without any highlighting.
+     - Marker highlighting or "preview": there is no font change or highlight of
+     italics or bold as of yet.
+     - Stop four-space indented text from highlighting as code blocks (in
+       green). Only text marked as code with one or three \` should be
+       considered as code. Four-space indented text should follow highlighting
+       for standard text, including that for nested lists, if applicable.
+     - Consider highlighting text inside quotation marks as well, or maybe just
+       the quotation marks, and only when both surround some text. This point
+       is optional and should be added only if it doesn't cause the
+       highlighting to be excessive or distracting.
+   - Related bugs: 
+     - prefixes for lists from the 4th level and beyond (both ordered and
+      unordered) are not being highlighted, despite recent attempts in this
+      behalf.
+     - Text just before a separator `---` highlights differently from other
+      texts (in bold blue). Check if this is intended.
 
 ---
 
@@ -399,24 +462,58 @@ abandoned or unfiled notes.
 
 ---
 
+**5. PKM "note explorer:"** 
+- Notes sidebar: Add sidebar to navigate in the main notes folder, to and from
+  each note subfolder (e.g.: consolidated).
 
-**5. Notes sidebar:** A sidebar to navigate in the main notes folder, to and
-from each note subfolder (e.g.: consolidated).
+- Integrate all bars into a main "UI" that can be toggled on or off. The user
+  can set a default configuration for the UI (decide if the UI toggles on or
+  off automatically when opening neovim, or when entering the pkm folder, or
+  when opening a note contained in the pkm folder, or a combination, or
+  manually only). 
+ 
+  The UI should have a base configuration, e.g. a left sidebar which is divided
+  horizontally between notes and views sidebars and a bottom bar for the
+  buffers. Modifiability of this UI is set as a near term addition.
+ 
+  With this, we effectively have a "note explorer submodule/subplugin" for our
+  pkm system.
+
+- Sidebar navigability: there should be a quick way to go from any window to
+  the sidebar. This is especially important if the  user is working with
+  multiple vertical windows.
+
+- Fix:
+  - Saving and closing a buffer in the PKM buffer window (using `w`) works, but causes the following error messsage
+  to appear:
+
+    ``` 
+    Error executing vim.schedule lua callback: vim/_editor.lua:445:
+    nvim_exec2(), line 1: Vim(edit):E32: No file name stack traceback: [C]: in
+    function 'nvim_exec2' vim/_editor.lua:445: in function 'cmd'
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:126: in function
+    <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:94>
+    ```
+
+  - Closing a buffer in the PKM buffer window, when there is only one buffer
+    open, makes the buffer window move up (it becomes a horizontal bar above
+    the notes, instead of under). and creates a non-functioning space below it
+    (appreas as a neovim window, but can't be switched using window switching
+    commands. Making a new horizontally split window splits only the buffer
+    window into two, ignoring this space). 
 
 ---
 
-**6. PKM "note explorer"** - Integrates all bars into a main "UI" that can be
-toggled on or off. The user can set a default configuration for the UI (decide
-if the UI toggles on or off automatically when opening neovim, or when entering
-the pkm folder, or when opening a note contained in the pkm folder, or
-a combination, or manually only). 
-
-The UI should have a base configuration, e.g. a left sidebar which is divided
-horizontally between notes and views sidebars and a bottom bar for the buffers.
-Modifiability of this UI is set as a near term addition.
-
-With this, we effectively have a "note explorer submodule/subplugin" for our
-pkm system.
+**6. PKM view system** 
+- Create a way to add or remove a note from a view (notes can pertain to
+  multiple views).
+  - Adding to a view should add all tags pertaining to that view, but not if
+    the note already contains that tag.
+  - Removing from a view should ask if the user wants to remove all tags
+    pertaining to that view, if the user presses not, a panel should open so
+    that the user can chose which tags to remove.
+- Change `PKMViewUpdate` so that it allows renaming views and changing
+parents of subviews.
 
 ---
 **7. Performance: views and sidebar at scale**
@@ -444,9 +541,13 @@ cached path arrays per view name, invalidated alongside `_tree_cache` in
 tree header builds would read from it on repeat accesses without re-scanning.
 Should not be implemented before benchmarking confirms it is necessary.
 
+---
+
 **8. Deleted note retriavability** deleted notes go either into the OS's trash
 or at a dedicated "notes trash" that conserves them temporarily for retrievability
 via a specific command or a general "undo" command in the "notes explorer".
+
+---
 
 **9. Note-taking standardization:** definition of standards for header and
 body-text naming and organization, in-text citation formatting, author comment
@@ -454,6 +555,18 @@ formatting, etc., possibly associated with additional syntax highlighting.
 These standards should simultaneosly reduce cognitive load (less decisions to
 make while taking notes), improve human readability, and AI understading of
 notes.
+   Examples:
+   - Comments standardized as either `(text)` or `((text))`. E.g. `((Review
+     tomorrow))`, `((See the notes about Enderton's Logic, Chapter 2 [bib -
+     xxx]))`.
+   - Meta-comments standardized as `((text))` ((these should work both as
+     in-text comments for the own user or other readers and for AI. The main
+     difference from standard comments is that they can and tend to contain
+     comments outside the current note's scope)).
+   - Needed: a way to differentiate author comments from textual parenthesis,
+     without confusing them with metacomments ((consider if this is useful or
+     necessary before attempting to solve)).
+   - Citations standardized as `[text]`. E.g `[CF/88 [note[xxx]]]`
 
 ---
 
@@ -469,8 +582,12 @@ sorted by `mtime` from the index. Quick access to recent work without needing a
 view. Implementation: `index.get_all()` sorted by `mtime` descending, sliced to
 `n`, passed to `telescope.browse()` or `ui.browse()`.
 
-**3. Customization of the "explorer" UI:**  positions, width and length of each
-bar, as well as other important options that we predict users may need.
+**3. Customization of the "explorer" UI:**  
+- positions, width and length of each bar;
+- options for when the UI should automatically turn on or off (by terminal
+  folder, by neovim working folder, by buffer (the buffer pertains to a PKM
+  file)), or any combination of those, or none); as well as 
+- other important options that we predict users may need.
 
 **4. Potential bugs to investigate before next major version:**
 - **Sidebar + tab pages:** `_sidebar_win` tracks one window globally. If the
@@ -480,6 +597,9 @@ bar, as well as other important options that we predict users may need.
 
 **5. Alternative diagram and imaging methods to allow enhancement of notes
 without dependence on external image files:** e.g. ASCII (text-based) art.
+
+((All features under this item should be examined for readability (AI, machine,
+and human) and portability before further detailing and implementation)).
 - Add support or consider already supported methods, with emphasis on human and
   AI readability and general portability, and, as a secondary goal, easyness of
   use.

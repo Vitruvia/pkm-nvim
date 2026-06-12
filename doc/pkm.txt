@@ -524,7 +524,10 @@ Default keymaps (all overridable via the `keymaps` config table):
   <leader>nr   :PKMRenameNote
   <leader>nV   :PKMViewLast
   <leader>nS   :PKMViewSidebar   (default; set via keymaps.view_sidebar)
-  <leader>mh   :PKMNextHeader
+  <leader>Mh   :PKMNextHeader
+  <leader>M^   :PKMHeaderLevelUp
+  <leader>M_   :PKMHeaderLevelDown
+  <leader>Mr   :PKMRenumberList
 
 ==============================================================================
 11. FRONTMATTER                                               *pkm-frontmatter*
