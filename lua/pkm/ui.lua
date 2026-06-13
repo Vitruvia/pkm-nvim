@@ -7,10 +7,9 @@
 --
 -- Public API:
 --   setup(user_config)       → Initialize with resolved PKM config
---   search_notes(query?)     → Full-text search with vim.ui.select results
 --   browse_tags()            → Two-level tag → file picker
---   browse_paths(title, paths)   → fallback scoped picker over a pre-computed path list
---   browse(filter_expr?)     → Browse notes with optional filter expression
+--   browse(filter_expr?)     → Prompt for filter expression, eval, vim.ui.select results
+--   browse_paths(title, paths) → Show scoped path list via vim.ui.select (sorted)
 --   insert_citation_ui()     → Context-aware citation picker fallback (no Telescope);
 --                               sorted by view membership and shared tags
 --   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
@@ -283,112 +282,32 @@ function M.setup(user_config)
 end
 
 -- =============================================================================
--- SECTION: Search
--- =============================================================================
---- Full-text search across all three PKM folders.
---- Prompts for query if not provided. Opens result in editor and jumps to
---- first matching line. Uses vim.ui.select for result display.
----@param query string|nil Search string; prompts if nil or empty
-function M.search_notes(query)
-  -- Collect all markdown files
-  local search_paths = {
-    utils.join(config.root_path, config.folders.consolidated),
-    utils.join(config.root_path, config.folders.journal),
-    utils.join(config.root_path, config.folders.scratchpad),
-  }
-  
-  local results = {}
-  
-  -- If no query provided, prompt for it
-  if not query or query == "" then
-    vim.fn.inputsave()
-    query = vim.fn.input("Search: ")
-    vim.fn.inputrestore()
-    
-    if not query or query == "" then
-      vim.notify("Search cancelled", vim.log.levels.INFO)
-      return
-    end
-  end
-  
-  local query_lower = query:lower()
-  
-  for _, search_path in ipairs(search_paths) do
-    local files = vim.fn.glob(search_path .. utils.sep .. "*.md", false, true)
-    
-    for _, file in ipairs(files) do
-      local content = vim.fn.readfile(file)
-      local matches = {}
-      
-      for line_num, line in ipairs(content) do
-        if line:lower():find(query_lower, 1, true) then
-          table.insert(matches, {
-            line_num = line_num,
-            text = line:sub(1, 100), -- Truncate long lines
-          })
-        end
-      end
-      
-      if #matches > 0 then
-        table.insert(results, {
-          path = file,
-          filename = vim.fn.fnamemodify(file, ":t"),
-          matches = matches,
-          match_count = #matches,
-        })
-      end
-    end
-  end
-  
-  if #results == 0 then
-    vim.notify("No results found for: " .. query, vim.log.levels.INFO)
-    return
-  end
-  
-  -- Display results
-  local display_items = {}
-  for _, result in ipairs(results) do
-    local display = string.format("%s (%d matches)", result.filename, result.match_count)
-    table.insert(display_items, {
-      display = display,
-      result = result,
-    })
-  end
-  
-  vim.ui.select(display_items, {
-    prompt = string.format("Search results for '%s':", query),
-    format_item = function(item) return item.display end,
-  }, function(selected)
-    if selected then
-      vim.cmd("edit " .. vim.fn.fnameescape(selected.result.path))
-      
-      -- Jump to first match
-      if #selected.result.matches > 0 then
-        vim.api.nvim_win_set_cursor(0, {selected.result.matches[1].line_num, 0})
-      end
-    end
-  end)
-end
-
--- =============================================================================
 -- SECTION: Note browser
 -- =============================================================================
 
---- Browse PKM notes with optional filter expression. Fallback for PKMBrowse
---- when Telescope is unavailable. Uses vim.ui.select.
----@param filter_expr string|nil
+--- Browse PKM notes (Telescope fallback). Prompts once for a filter expression,
+--- evaluates it, and presents matching notes via vim.ui.select.
+--- Note: vim.ui.select does not support live-as-you-type input; expression is
+--- evaluated once. Bare text is treated as an any-field predicate.
+---@param filter_expr string|nil  Optional pre-seeded expression
 function M.browse(filter_expr)
   local filter = require('pkm.filter')
   local index  = require('pkm.index')
 
+  local expr = filter_expr
+  if not expr or expr == '' then
+    vim.fn.inputsave()
+    expr = vim.fn.input('Filter (blank = all): ')
+    vim.fn.inputrestore()
+  end
+
   local all_entries = index.get_all()
   local entries
 
-  if filter_expr and filter_expr ~= '' then
-    local tree, err = filter.parse(filter_expr)
+  if expr and expr ~= '' then
+    local tree, _ = filter.parse(expr)
     if not tree then
-      vim.notify('[pkm] invalid filter: ' .. err, vim.log.levels.ERROR)
-      return
+      tree = { type = 'PRED', field = 'any', value = expr }
     end
     entries = {}
     for _, e in ipairs(all_entries) do
@@ -411,7 +330,7 @@ function M.browse(filter_expr)
   end)
 
   vim.ui.select(entries, {
-    prompt = filter_expr and ('Browse: ' .. filter_expr) or 'Browse Notes',
+    prompt      = (expr and expr ~= '') and ('Browse: ' .. expr) or 'Browse Notes',
     format_item = function(e)
       return type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
     end,
@@ -420,8 +339,8 @@ function M.browse(filter_expr)
   end)
 end
 
---- Fallback scoped picker over a pre-supplied path list. Used when Telescope
---- is unavailable. Sorts by type then title internally.
+--- Scoped note browser over a pre-computed path list (Telescope fallback).
+--- Presents notes via vim.ui.select sorted by type then title.
 ---@param title string
 ---@param paths string[]
 function M.browse_paths(title, paths)
@@ -432,30 +351,29 @@ function M.browse_paths(title, paths)
     return
   end
 
-  local sorted = vim.list_extend({}, paths)
-  table.sort(sorted, function(a, b)
-    local ea = index.get(a)
-    local eb = index.get(b)
-    local ta = ea and (_TYPE_ORDER[ea.note_type] or 6) or 6
-    local tb = eb and (_TYPE_ORDER[eb.note_type] or 6) or 6
-    if ta ~= tb then return ta < tb end
-    return (ea and ea.title or ''):lower() < (eb and eb.title or ''):lower()
-  end)
-
-  local items = {}
-  for _, path in ipairs(sorted) do
-    local e         = index.get(path)
-    local note_type = e and e.note_type or 'other'
-    local ttl       = e and e.title or vim.fn.fnamemodify(path, ':t:r')
-    items[#items + 1] = {
-      path    = path,
-      display = type_prefix(note_type) .. ' ' .. ttl,
-    }
+  local entries = {}
+  for _, path in ipairs(paths) do
+    local e = index.get(path)
+    if e then entries[#entries + 1] = e end
   end
 
-  vim.ui.select(items, {
+  if #entries == 0 then
+    vim.notify('[pkm] no indexed notes in selection', vim.log.levels.INFO)
+    return
+  end
+
+  table.sort(entries, function(a, b)
+    local ta = _TYPE_ORDER[a.note_type] or 6
+    local tb = _TYPE_ORDER[b.note_type] or 6
+    if ta ~= tb then return ta < tb end
+    return (a.title or ''):lower() < (b.title or ''):lower()
+  end)
+
+  vim.ui.select(entries, {
     prompt      = title,
-    format_item = function(item) return item.display end,
+    format_item = function(e)
+      return type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
+    end,
   }, function(sel)
     if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
   end)

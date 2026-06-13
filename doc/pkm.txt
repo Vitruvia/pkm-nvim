@@ -40,7 +40,6 @@ and a single sequential counter — note numbers are globally unique.
 
   • Neovim ≥ 0.10
   • nvim-telescope/telescope.nvim   (optional but strongly recommended)
-  • ripgrep (rg)                    (required for :PKMSearch)
 
 ==============================================================================
 3. INSTALLATION                                             *pkm-installation*
@@ -75,7 +74,7 @@ With user info and custom keymaps: >
     keymaps = {
       new_note        = "<leader>nn",
       new_journal     = "<leader>nj",
-      search          = "<leader>nf",
+      browse          = "<leader>nf",
       insert_citation = "<leader>nc",
     },
   })
@@ -112,7 +111,7 @@ structured citation. The cited note automatically receives a backlink in its
 `cited_by` frontmatter field. This is maintained bidirectionally.
 
 SEARCH~
-Use |:PKMSearch| to search note contents (requires ripgrep), or
+Use |:PKMBrowse| to search note contents (requires ripgrep), or
 |:PKMTags| to browse by tag.
 
 ==============================================================================
@@ -172,19 +171,25 @@ NAVIGATION~
 
 SEARCH & BROWSE~
 
-:PKMSearch              Raw streaming text search via Telescope live_grep
-                        and ripgrep. Requires ripgrep. Scoped to note body
-                        content only; use :PKMBrowse for structured queries.
 
-:PKMBrowse [expr]       Browse PKM notes with an optional filter expression.
-                        Supports tag:, title:, text:, and filename: predicates
-                        combined with AND, OR, NOT, and parentheses. Examples:
-                          :PKMBrowse
-                          :PKMBrowse tag:math AND title:fourier
-                          :PKMBrowse filename:0042
-                        Uses the Telescope picker when available, vim.ui.select
-                        otherwise. The prompt applies exact substring narrowing
-                        over the pre-filtered set.
+:PKMBrowse [expr]       Live filter-as-you-type note browser.
+                        Opening it lists all notes. What you type in the
+                        prompt is evaluated by filter.lua on each keystroke:
+                          fourier               any field contains "fourier"
+                          tag:math              tag is exactly "math"
+                          title:ring            title contains "ring"
+                          text:laplace          body contains "laplace"
+                          filename:0042         stem contains "0042"
+                          tag:math AND title:fourier
+                          (tag:math OR tag:physics) AND NOT tag:draft
+                        Bare text matches across title, body, filename, and
+                        tags simultaneously (any predicate). Prefixed
+                        expressions apply structured filters. Unknown field
+                        prefixes (e.g. body:x) are treated as any-value
+                        searches. On incomplete input, falls back to any-
+                        field substring so the bar never errors mid-typing.
+                        Optional [expr] pre-seeds the prompt.
+                        Telescope: live. Fallback: prompt once, then select.
 
 :PKMTags                Browse notes by tag. Select a tag from the full tag
                         list, then :PKMBrowse opens pre-filtered to that tag.
@@ -485,10 +490,9 @@ PROGRAMMATIC API~
       link_note        = "<leader>nl",
       follow_link      = "gf",
       backlinks        = "<leader>nb",
-      search           = "<leader>nf",
+      browse           = "<leader>nf",
       browse_tags      = "<leader>nt",
       rename_note      = "<leader>nr",
-      browse           = false,       -- :PKMBrowse (direct)
       view_last        = "<leader>nV",
       view_sidebar     = false,
       next_header      = "<leader>mh",
@@ -519,7 +523,7 @@ Default keymaps (all overridable via the `keymaps` config table):
   <leader>nl   :PKMLinkNote
   gf           :PKMFollowLink  (overrides standard goto-file in .md buffers)
   <leader>nb   :PKMBacklinks
-  <leader>nf   :PKMSearch
+  <leader>nf   :PKMBrowse
   <leader>nt   :PKMTags
   <leader>nr   :PKMRenameNote
   <leader>nV   :PKMViewLast

@@ -3,34 +3,42 @@
 -- =============================================================================
 -- Dependencies : none
 -- Consumed by  : pkm.export (match_file, collect_files),
---                pkm.views, pkm.index
+--                pkm.views, pkm.telescope, pkm.ui
 --
 -- Implements a small boolean filter language over note fields.
--- All matching is case-insensitive. Tag matching is EXACT (case-insensitive):
--- tag:rpg matches only notes whose tags array contains "rpg", not notes whose
--- tags merely contain "rpg" as a substring. Title and text matching are
--- substring (case-insensitive, plain, never fuzzy).
+-- All matching is case-insensitive. Tag matching via the tag: field is EXACT
+-- (case-insensitive); title:, text:, filename:, and any: matching are plain
+-- substring (never fuzzy).
 --
 -- Grammar:
---   expr     = and_expr (OR and_expr)*
---   and_expr = not_expr (AND not_expr)*
---   not_expr = NOT? atom
---   atom     = "(" expr ")" | predicate
---   predicate= field ":" value
---   field    = "tag" | "title" | "text" | "filename"
---   value    = bare_word | "quoted string"
+--   expr      = and_expr (OR and_expr)*
+--   and_expr  = not_expr (AND not_expr)*
+--   not_expr  = NOT? atom
+--   atom      = "(" expr ")" | predicate
+--   predicate = (field ":")? value
+--   field     = "tag" | "title" | "text" | "filename" | "any"
+--   value     = bare_word | "quoted string"
 --
--- The parser is a hand-rolled recursive descent parser (~90 lines).
--- Quoted values may contain spaces; bare word values stop at whitespace.
--- Keywords (AND, OR, NOT) are case-insensitive.
+-- When no field prefix is present, or when the left side of a colon is not a
+-- known field, the token is treated as an `any` predicate. `any` evaluates as
+-- a case-insensitive plain substring test across title, body, filename, and
+-- tag values simultaneously. A standalone quoted string ("ring forge") is also
+-- an `any` predicate. Literal keywords or colons can be forced into `any` by
+-- quoting them ("and", "http://example.com").
+--
+-- Disambiguation rule:
+--   word:word  →  field predicate   ONLY when the left side is a known field
+--   word:word  →  any predicate     when the left side is unknown
+--   word       →  any predicate
+--   "..."      →  any predicate
 --
 -- Note data table consumed by eval():
 --   { path=string, filename=string, title=string, tags=string[], body=string }
---   path     — absolute file path (not used by eval, but carried for callers)
---   filename — file stem without extension (e.g. "0042_note_Fourier_Analysis")
+--   path     — absolute file path (not matched by eval; carried for callers)
+--   filename — file stem without extension
 --   title    — frontmatter title if set; filename stem with underscores replaced if not
---   tags     — frontmatter tags array (strings)
---   body     — full body text, lines joined with newline, from content_start onward
+--   tags     — frontmatter tags array (lowercase strings)
+--   body     — note body (lines after frontmatter joined with "\n")
 --
 -- Public API:
 --   parse(expr)        → tree, nil  |  nil, error_string
@@ -44,8 +52,20 @@ local M = {}
 -- SECTION: Lexer
 -- =============================================================================
 
+--- Known field names. Used by the tokenizer to distinguish field predicates
+--- from bare-word any-predicates. "any" is the explicit form.
+local KNOWN_FIELDS = { tag = true, title = true, text = true, filename = true, any = true }
+
 --- Tokenize a filter expression string into a flat array of token tables.
 --- Token types: AND, OR, NOT, LPAREN, RPAREN, PRED{field, value}, EOF.
+---
+--- A PRED token is produced for:
+---   known_field:value          →  PRED{field=known_field, value=value}
+---   known_field:"quoted value" →  PRED{field=known_field, value=quoted}
+---   unknown_field:value        →  PRED{field='any',       value='unknown_field:value'}
+---   bare_word                  →  PRED{field='any',       value=bare_word}
+---   "quoted string"            →  PRED{field='any',       value=quoted string}
+---
 --- Returns (tokens, nil) on success, (nil, error_string) on unrecognised input.
 ---@param expr string
 ---@return table|nil tokens
@@ -70,66 +90,65 @@ local function tokenize(expr)
       tokens[#tokens + 1] = { type = 'RPAREN' }
       i = i + 1
 
+    elseif c == '"' then
+      -- Standalone quoted string → any predicate.
+      local j = i + 1
+      while j <= n and expr:sub(j, j) ~= '"' do j = j + 1 end
+      if j > n then return nil, "unclosed quote in filter expression" end
+      tokens[#tokens + 1] = { type = 'PRED', field = 'any', value = expr:sub(i + 1, j - 1) }
+      i = j + 1
+
     else
-      -- Scan to end of bare token: stops at whitespace, parens, or end-of-string.
-      -- This scan intentionally stops mid-quoted-value at an embedded space;
-      -- the quoted-value branch below re-scans the original string for the
-      -- closing quote, so the short scan does not cause a correctness problem.
+      -- Read bare word until whitespace, paren, or end-of-string.
+      -- Stops before '"' so that field:"quoted value" can be handled below.
       local j = i
-      while j <= n and not expr:sub(j, j):match('[%s()]') do
+      while j <= n and not expr:sub(j, j):match('[%s%(%)"]') do
         j = j + 1
       end
-      local word = expr:sub(i, j - 1)
+      local raw = expr:sub(i, j - 1)
+      i = j
 
-      local colon = word:find(':', 1, true)
-      if colon then
-        local field = word:sub(1, colon - 1):lower()
-
-        -- Position of the character immediately after ':' in the original string.
-        -- Derivation: word starts at i (1-indexed); colon is its 1-indexed offset
-        -- within word; so ':' is at i+colon-1, and the char after ':' is i+colon.
-        local after_colon = i + colon
-
-        if after_colon <= n and expr:sub(after_colon, after_colon) == '"' then
-          -- Quoted value: scan forward in the original string for the closing '"'.
-          -- This correctly handles spaces inside the value.
-          local val_start = after_colon + 1
-          local k         = val_start
-          while k <= n and expr:sub(k, k) ~= '"' do
-            k = k + 1
-          end
-          if k > n then
-            return nil, "unterminated quoted string in filter expression"
-          end
-          tokens[#tokens + 1] = {
-            type  = 'PRED',
-            field = field,
-            value = expr:sub(val_start, k - 1),
-          }
-          i = k + 1  -- advance past closing '"'
-
-        else
-          -- Bare word value: already fully captured by the initial word scan.
-          tokens[#tokens + 1] = {
-            type  = 'PRED',
-            field = field,
-            value = word:sub(colon + 1),
-          }
-          i = j
-        end
-
+      -- Keywords (case-insensitive) take priority.
+      local upper = raw:upper()
+      if upper == 'AND' then
+        tokens[#tokens + 1] = { type = 'AND' }
+      elseif upper == 'OR' then
+        tokens[#tokens + 1] = { type = 'OR' }
+      elseif upper == 'NOT' then
+        tokens[#tokens + 1] = { type = 'NOT' }
       else
-        -- No colon → must be a keyword; anything else is an error.
-        local upper = word:upper()
-        if     upper == 'AND' then tokens[#tokens + 1] = { type = 'AND' }
-        elseif upper == 'OR'  then tokens[#tokens + 1] = { type = 'OR'  }
-        elseif upper == 'NOT' then tokens[#tokens + 1] = { type = 'NOT' }
+        local colon = raw:find(':', 1, true)
+        if colon and colon > 1 then
+          local field      = raw:sub(1, colon - 1)
+          local value_rest = raw:sub(colon + 1)
+
+          if KNOWN_FIELDS[field] then
+            local value
+            if value_rest == '' then
+              -- No inline value; check for a quoted value immediately following
+              -- (e.g. tag:"ring forge" — scan stopped before the '"').
+              if i <= n and expr:sub(i, i) == '"' then
+                local qj = i + 1
+                while qj <= n and expr:sub(qj, qj) ~= '"' do qj = qj + 1 end
+                if qj > n then return nil, "unclosed quote in filter expression" end
+                value = expr:sub(i + 1, qj - 1)
+                i = qj + 1
+              else
+                return nil, string.format("field '%s:' has no value", field)
+              end
+            else
+              value = value_rest
+            end
+            tokens[#tokens + 1] = { type = 'PRED', field = field, value = value }
+          else
+            -- Unknown field → treat the whole raw token as an any value.
+            -- e.g. "body:text" or "http://example.com"
+            tokens[#tokens + 1] = { type = 'PRED', field = 'any', value = raw }
+          end
         else
-          return nil, string.format(
-            "unexpected token '%s' at position %d — expected AND, OR, NOT, or field:value",
-            word, i)
+          -- No colon (and not a keyword) → bare any predicate.
+          tokens[#tokens + 1] = { type = 'PRED', field = 'any', value = raw }
         end
-        i = j
       end
     end
   end
@@ -142,46 +161,37 @@ end
 -- SECTION: Parser (recursive descent)
 -- =============================================================================
 
--- Forward declarations required for mutual recursion among the four functions.
-local parse_expr
-local parse_and_expr
-local parse_not_expr
-local parse_atom
+-- Forward declarations required by mutual recursion.
+local parse_expr, parse_and_expr, parse_not_expr, parse_atom
 
---- expr = and_expr (OR and_expr)*
----@param tokens table
----@param pos    integer  1-based index into tokens
----@return table|nil node,  integer|string  next_pos or error
 parse_expr = function(tokens, pos)
-  local node, new_pos = parse_and_expr(tokens, pos)
-  if not node then return nil, new_pos end
-
+  local left, new_pos = parse_and_expr(tokens, pos)
+  if not left then return nil, new_pos end
+  local args = { left }
   while tokens[new_pos] and tokens[new_pos].type == 'OR' do
-    local right, next_pos = parse_and_expr(tokens, new_pos + 1)
-    if not right then return nil, next_pos end
-    node    = { type = 'OR', args = { node, right } }
-    new_pos = next_pos
+    local right, rpos = parse_and_expr(tokens, new_pos + 1)
+    if not right then return nil, rpos end
+    args[#args + 1] = right
+    new_pos = rpos
   end
-
-  return node, new_pos
+  if #args == 1 then return args[1], new_pos end
+  return { type = 'OR', args = args }, new_pos
 end
 
---- and_expr = not_expr (AND not_expr)*
 parse_and_expr = function(tokens, pos)
-  local node, new_pos = parse_not_expr(tokens, pos)
-  if not node then return nil, new_pos end
-
+  local left, new_pos = parse_not_expr(tokens, pos)
+  if not left then return nil, new_pos end
+  local args = { left }
   while tokens[new_pos] and tokens[new_pos].type == 'AND' do
-    local right, next_pos = parse_not_expr(tokens, new_pos + 1)
-    if not right then return nil, next_pos end
-    node    = { type = 'AND', args = { node, right } }
-    new_pos = next_pos
+    local right, rpos = parse_not_expr(tokens, new_pos + 1)
+    if not right then return nil, rpos end
+    args[#args + 1] = right
+    new_pos = rpos
   end
-
-  return node, new_pos
+  if #args == 1 then return args[1], new_pos end
+  return { type = 'AND', args = args }, new_pos
 end
 
---- not_expr = NOT? atom
 parse_not_expr = function(tokens, pos)
   if tokens[pos] and tokens[pos].type == 'NOT' then
     local child, new_pos = parse_atom(tokens, pos + 1)
@@ -208,16 +218,11 @@ parse_atom = function(tokens, pos)
     return node, new_pos + 1
 
   elseif tok.type == 'PRED' then
-    if tok.field ~= 'tag'  and tok.field ~= 'title'
-    and tok.field ~= 'text' and tok.field ~= 'filename' then
-      return nil, string.format(
-        "unknown field '%s' — valid fields are: tag, title, text, filename", tok.field)
-    end
+    -- Field is guaranteed valid by the tokenizer (KNOWN_FIELDS); no re-check needed.
     return { type = 'PRED', field = tok.field, value = tok.value }, pos + 1
 
   else
-    return nil, string.format(
-      "expected predicate or '(' but got '%s'", tok.type)
+    return nil, string.format("expected predicate or '(' but got '%s'", tok.type)
   end
 end
 
@@ -229,15 +234,18 @@ end
 --- Returns (tree, nil) on success, (nil, error_string) on any parse failure.
 ---
 --- The returned tree is a nested table of nodes:
----   Predicate : { type="PRED", field="tag"|"title"|"text"|"filename",
+---   Predicate : { type="PRED", field="tag"|"title"|"text"|"filename"|"any",
 ---                 value=string }
 ---   Boolean   : { type="AND"|"OR", args={node, node, ...} }
 ---   Negation  : { type="NOT", args={node} }
 ---
 --- Examples:
+---   filter.parse('fourier')                           -- any:fourier
+---   filter.parse('"ring forge"')                      -- any:"ring forge"
 ---   filter.parse('tag:rpg AND title:ringforge')
 ---   filter.parse('(tag:mathematics OR tag:physics) AND NOT tag:draft')
 ---   filter.parse('text:"Fourier transform" AND tag:analysis')
+---   filter.parse('body:text')                         -- any:"body:text" (unknown field)
 ---
 ---@param expr string
 ---@return table|nil tree
@@ -257,7 +265,6 @@ function M.parse(expr)
     return nil, "parse error: " .. result
   end
 
-  -- Verify the whole token stream was consumed (no trailing garbage).
   if tokens[result] and tokens[result].type ~= 'EOF' then
     return nil, string.format(
       "unexpected '%s' after end of expression", tokens[result].type)
@@ -274,17 +281,12 @@ end
 --- Returns true if the note satisfies all constraints in the tree.
 ---
 --- Matching rules:
----   tag:value      — EXACT match (case-insensitive) against each entry in
----                    note.tags
+---   tag:value      — EXACT match (case-insensitive) against each entry in note.tags
 ---   title:value    — substring match (case-insensitive) in note.title
 ---   text:value     — substring match (case-insensitive) in note.body
 ---   filename:value — substring match (case-insensitive) in note.filename
----
---- The note table must contain:
----   note.tags   string[]  (may be nil or empty — treated as no tags)
----   note.title  string    (may be nil — treated as empty string)
----   note.body   string    (may be nil — treated as empty string)
----   note.filename string    (may be nil — treated as empty string)
+---   any:value      — substring match across title, body, filename, AND tag values
+---                    (tag values are also substring for `any:`, unlike exact for `tag:`)
 ---
 ---@param tree table   AST node produced by M.parse()
 ---@param note table   Note data table
@@ -308,9 +310,18 @@ function M.eval(tree, note)
     elseif tree.field == 'filename' then
       return tostring(note.filename or ''):lower():find(val, 1, true) ~= nil
 
+    elseif tree.field == 'any' then
+      -- Plain substring over all text fields; tag values are also substring here.
+      if tostring(note.title    or ''):lower():find(val, 1, true) then return true end
+      if tostring(note.body     or ''):lower():find(val, 1, true) then return true end
+      if tostring(note.filename or ''):lower():find(val, 1, true) then return true end
+      for _, t in ipairs(note.tags or {}) do
+        if tostring(t):lower():find(val, 1, true) then return true end
+      end
+      return false
     end
 
-    return false  -- unreachable after field validation in parse_atom, but safe
+    return false  -- unreachable; tokenizer guarantees field is in KNOWN_FIELDS
 
   elseif tree.type == 'AND' then
     for _, arg in ipairs(tree.args) do

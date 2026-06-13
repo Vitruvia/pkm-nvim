@@ -85,15 +85,6 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- Search and browse
   -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMSearch', function()
-    local has_tele = pcall(require, 'telescope')
-    if has_tele then
-      require('pkm.telescope').search_notes()
-    else
-      require('pkm.ui').search_notes()
-    end
-  end, { desc = 'Raw text search via ripgrep (Telescope live_grep)' })
-
   vim.api.nvim_create_user_command('PKMBrowse', function(opts)
     local expr = opts.args ~= '' and opts.args or nil
     local has_tele = pcall(require, 'telescope')

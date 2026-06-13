@@ -1,23 +1,20 @@
 -- =============================================================================
 -- pkm.telescope — Telescope pickers for notes, tags, citations, and export
 -- =============================================================================
--- Dependencies : pkm.citations, pkm.index (lazy), pkm.views (lazy),
---                telescope.nvim (optional, checked at call time)
+-- Dependencies : pkm.citations, pkm.filter (lazy), pkm.index (lazy),
+--                pkm.views (lazy), telescope.nvim (optional, checked at call time)
 --
 -- Telescope availability is checked at call time inside require_telescope(),
 -- consistent with the project-wide pattern. The module always loads cleanly;
 -- each function notifies and returns early when Telescope is unavailable.
 --
 -- Public API:
---   insert_citation_picker()  → context-aware citation picker; sorted by
---                                view membership (+2) and shared tags (+1);
---                                '~' marks contextual items; <C-v> view toggle
---   browse(filter_expr?)         → Browse notes with optional filter expression
---   browse_tags()                → Tag picker → browse pre-filtered to tag:<selected>
---   browse_paths(title, paths)   → scoped picker over a pre-computed path list
+--   insert_citation_picker()  → context-aware citation picker
+--   browse(filter_expr?)      → live filter-as-you-type note browser
+--   browse_tags()             → tag picker → browse pre-seeded to tag:<x>
+--   browse_paths(title, paths) → scoped live browser over a pre-computed path list
 --   find_notes()              → telescope find_files over PKM root
---   search_notes()            → telescope live_grep over PKM root (requires rg)
---   merge_tags_picker()       → 3-step: pick target, multi-select sources, confirm
+--   merge_tags_picker()       → 3-step tag merge picker
 -- =============================================================================
 local M = {}
 
@@ -65,6 +62,76 @@ local function check_ripgrep()
     return false
   end
   return true
+end
+
+--- Core live filter-as-you-type picker used by browse() and browse_paths().
+--- Items are sorted by type then title at open time; the fn re-evaluates the
+--- prompt as a filter.lua expression on every keystroke. Falls back to an
+--- any-predicate when the expression is incomplete (e.g. mid-typing "AND").
+---@param title   string    Picker prompt title
+---@param entries table[]   Index entry array; each entry has path, filename, title, tags, body, note_type
+---@param seed    string|nil  Optional expression to pre-populate the prompt
+local function live_picker(title, entries, seed)
+  local t = require_telescope()
+  if not t then return end
+  local filter = require('pkm.filter')
+
+  -- Sort once at open time; fn filters the pre-sorted list on each keystroke.
+  local sorted = {}
+  for _, e in ipairs(entries) do sorted[#sorted + 1] = e end
+  table.sort(sorted, function(a, b)
+    local ta = _TYPE_ORDER[a.note_type] or 6
+    local tb = _TYPE_ORDER[b.note_type] or 6
+    if ta ~= tb then return ta < tb end
+    return (a.title or ''):lower() < (b.title or ''):lower()
+  end)
+
+  local all_items = {}
+  for i, e in ipairs(sorted) do
+    all_items[i] = {
+      entry   = e,
+      path    = e.path,
+      display = type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')',
+      ordinal = string.format('%05d', i),
+    }
+  end
+
+  t.pickers.new({
+    default_text     = seed or '',
+    sorting_strategy = 'ascending',
+    layout_config    = { prompt_position = 'top' },
+  }, {
+    prompt_title = title,
+    finder = t.finders.new_dynamic {
+      fn = function(prompt)
+        if not prompt or prompt == '' then return all_items end
+        -- Parse the prompt; fall back to a bare any-predicate when incomplete
+        -- (e.g. mid-typing "AND" without a right operand).
+        local tree, _ = filter.parse(prompt)
+        if not tree then
+          tree = { type = 'PRED', field = 'any', value = prompt }
+        end
+        local out = {}
+        for _, item in ipairs(all_items) do
+          if filter.eval(tree, item.entry) then out[#out + 1] = item end
+        end
+        return out
+      end,
+      entry_maker = function(item)
+        return { value = item.path, display = item.display, ordinal = item.ordinal }
+      end,
+    },
+    sorter    = t.sorters.empty(),
+    previewer = t.conf.file_previewer({}),
+    attach_mappings = function(prompt_bufnr)
+      t.actions.select_default:replace(function()
+        t.actions.close(prompt_bufnr)
+        local sel = t.state.get_selected_entry()
+        if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.value)) end
+      end)
+      return true
+    end,
+  }):find()
 end
 
 -- =============================================================================
@@ -206,156 +273,37 @@ end
 -- SECTION: Note browser
 -- =============================================================================
 
---- Open a picker over all PKM notes, optionally pre-filtered by a filter
---- expression. Empty or nil expr shows all notes. The Telescope prompt applies
---- exact substring narrowing over the pre-filtered set; fzy is not used.
----@param filter_expr string|nil  Filter expression string or nil for all notes
+--- Open the live filter-as-you-type note browser.
+--- The prompt is evaluated by filter.lua on each keystroke. Bare text matches
+--- any field (title, body, filename, tags); prefixed expressions apply
+--- structured filters. filter_expr, when provided, pre-seeds the prompt.
+---@param filter_expr string|nil  Optional seed expression (e.g. from :PKMBrowse tag:x)
 function M.browse(filter_expr)
-  local t = require_telescope()
-  if not t then return end
-
-  local filter = require('pkm.filter')
-  local index  = require('pkm.index')
-
-  local all_entries = index.get_all()
-  local entries
-
-  if filter_expr and filter_expr ~= '' then
-    local tree, err = filter.parse(filter_expr)
-    if not tree then
-      vim.notify('[pkm] invalid filter: ' .. err, vim.log.levels.ERROR)
-      return
-    end
-    entries = {}
-    for _, e in ipairs(all_entries) do
-      if filter.eval(tree, e) then entries[#entries + 1] = e end
-    end
-  else
-    entries = all_entries
-  end
-
-  if #entries == 0 then
-    vim.notify('[pkm] no notes match', vim.log.levels.INFO)
-    return
-  end
-
-  -- Sort entries by type then title
-  table.sort(entries, function(a, b)
-    local ta = _TYPE_ORDER[a.note_type] or 6
-    local tb = _TYPE_ORDER[b.note_type] or 6
-    if ta ~= tb then return ta < tb end
-    return (a.title or ''):lower() < (b.title or ''):lower()
-  end)
-
-  local items = {}
-  for _, e in ipairs(entries) do
-    items[#items + 1] = {
-      path    = e.path,
-      display = type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')',
-      ordinal = string.format('%05d', #items + 1),
-    }
-  end
-
-  t.pickers.new({}, {
-    prompt_title = filter_expr and ('PKMBrowse: ' .. filter_expr) or 'PKMBrowse',
-    finder = t.finders.new_dynamic {
-      fn = function(prompt)
-        if not prompt or prompt == '' then return items end
-        local needle = prompt:lower()
-        local out = {}
-        for _, item in ipairs(items) do
-          if item.display:lower():find(needle, 1, true) then out[#out + 1] = item end
-        end
-        return out
-      end,
-      entry_maker = function(item)
-        return { value = item.path, display = item.display, ordinal = item.ordinal }
-      end,
-    },
-    sorter    = t.sorters.empty(),
-    previewer = t.conf.file_previewer({}),
-    attach_mappings = function(prompt_bufnr)
-      t.actions.select_default:replace(function()
-        t.actions.close(prompt_bufnr)
-        local sel = t.state.get_selected_entry()
-        if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.value)) end
-      end)
-      return true
-    end,
-  }):find()
+  local index = require('pkm.index')
+  live_picker('PKMBrowse', index.get_all(), filter_expr)
 end
 
---- Open a Telescope picker over a pre-supplied path list.
---- Paths are sorted by type then title internally. Used for scoped search
---- from the sidebar (current view) or the views tree picker (<C-f>).
----@param title string   Picker prompt title
----@param paths string[] Pre-computed path list
+--- Scoped live browser over a pre-computed path list.
+--- Uses the same live filter engine as M.browse, restricted to the given paths.
+--- Called by the sidebar '/' keymap and the views-tree <C-f> keymap.
+---@param title  string
+---@param paths  string[]
 function M.browse_paths(title, paths)
-  local t = require_telescope()
-  if not t then return end
-
   local index = require('pkm.index')
-
   if #paths == 0 then
     vim.notify('[pkm] no notes to search', vim.log.levels.INFO)
     return
   end
-
-  -- Sort by type then title
-  local sorted = vim.list_extend({}, paths)
-  table.sort(sorted, function(a, b)
-    local ea = index.get(a)
-    local eb = index.get(b)
-    local ta = ea and (_TYPE_ORDER[ea.note_type] or 6) or 6
-    local tb = eb and (_TYPE_ORDER[eb.note_type] or 6) or 6
-    if ta ~= tb then return ta < tb end
-    return (ea and ea.title or ''):lower() < (eb and eb.title or ''):lower()
-  end)
-
-  local items = {}
-  for _, path in ipairs(sorted) do
-    local e         = index.get(path)
-    local note_type = e and e.note_type or 'other'
-    local ttl       = e and e.title or vim.fn.fnamemodify(path, ':t:r')
-    items[#items + 1] = {
-      path    = path,
-      display = type_prefix(note_type) .. ' ' .. ttl,
-      ordinal = string.format('%05d', #items + 1),
-    }
+  local entries = {}
+  for _, path in ipairs(paths) do
+    local e = index.get(path)
+    if e then entries[#entries + 1] = e end
   end
-
-  t.pickers.new({
-    sorting_strategy = 'ascending',
-    layout_config    = { prompt_position = 'top' },
-  }, {
-    prompt_title = title,
-    finder = t.finders.new_dynamic {
-      fn = function(prompt)
-        if not prompt or prompt == '' then return items end
-        local needle = prompt:lower()
-        local out = {}
-        for _, item in ipairs(items) do
-          if item.display:lower():find(needle, 1, true) then
-            out[#out + 1] = item
-          end
-        end
-        return out
-      end,
-      entry_maker = function(item)
-        return { value = item.path, display = item.display, ordinal = item.ordinal }
-      end,
-    },
-    sorter    = t.sorters.empty(),
-    previewer = t.conf.file_previewer({}),
-    attach_mappings = function(prompt_bufnr)
-      t.actions.select_default:replace(function()
-        t.actions.close(prompt_bufnr)
-        local sel = t.state.get_selected_entry()
-        if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.value)) end
-      end)
-      return true
-    end,
-  }):find()
+  if #entries == 0 then
+    vim.notify('[pkm] no indexed notes in selection', vim.log.levels.INFO)
+    return
+  end
+  live_picker(title, entries, nil)
 end
 
 --- Tag picker. On selection, opens PKMBrowse pre-filtered to tag:<selected>.
@@ -401,29 +349,6 @@ function M.find_notes()
     cwd          = require('pkm').config.root_path,
     hidden       = true,
     no_ignore    = true,
-  })
-end
-
---- Open telescope live_grep over the PKM root. Searches note body content.
---- Requires ripgrep. Filters to *.md files only.
-function M.search_notes()
-  if not check_ripgrep() then return end
-
-  local t = require_telescope()
-  if not t then return end
-
-  local root = require('pkm').config.root_path
-
-  if vim.fn.isdirectory(root) == 0 then
-    vim.notify("PKM Error: Invalid root path for search: " .. tostring(root), vim.log.levels.ERROR)
-    return
-  end
-
-  t.builtin.live_grep({
-    prompt_title    = "Search Note Content",
-    cwd             = root,
-    glob_pattern    = "*.md",
-    additional_args = function() return { "--hidden", "--no-ignore" } end,
   })
 end
 

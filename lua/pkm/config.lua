@@ -121,9 +121,8 @@ local defaults = {
     view_sidebar = "<leader>nS",
     view_buffers = "<leader>vb",
     -- Search and browsing
-    search          = "<leader>nf",
+    browse          = "<leader>nf",
     browse_tags     = "<leader>nt",
-    browse = false,
     -- Markdown editing
     ---- Headers
     next_header        = "<leader>Mh",

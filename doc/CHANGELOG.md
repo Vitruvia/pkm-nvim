@@ -4,6 +4,45 @@
 
 ## [Unreleased]
 
+### Added
+- `filter.lua`: `any` predicate — bare word, standalone quoted string, or
+  unrecognised-field token. `eval` for `any`: case-insensitive plain substring
+  over title ∪ body ∪ filename ∪ tag values. Tag values are substring for
+  `any:` (unlike `tag:` which remains exact). Grammar: `predicate = (field
+  ":") ? value`; `field` gains `any`; tokenizer now disambiguates (unknown
+  field → any, bare word → any). `parse_atom` field validation removed; the
+  tokenizer guarantees only KNOWN_FIELDS reach the parser.
+
+### Changed
+- `:PKMBrowse` is now the primary note browser (`<leader>nf`). With Telescope,
+  the prompt is a live filter bar: each keystroke evaluates the expression
+  through `filter.lua` against the full index. Bare text (no prefix) triggers
+  the `any` predicate; structured expressions (`tag:x AND title:y`) work as
+  before. `:PKMBrowse <expr>` still pre-seeds the prompt. Falls back to a
+  single `vim.fn.input` prompt when Telescope is unavailable.
+- `telescope.browse_paths` and `ui.browse_paths` now resolve paths to index
+  entries and route through `live_picker`. The sidebar `/` and views-tree
+  `<C-f>` searches now evaluate the live prompt against the scoped entry set
+  (§2.4 shared engine), replacing the old display-string substring match.
+- `config.keymaps.search` removed; `config.keymaps.browse` defaults to
+  `"<leader>nf"`.
+
+### Removed
+- `:PKMSearch` and its backers `telescope.search_notes` / `ui.search_notes` —
+  raw Telescope `live_grep` over PKM files. Body search is absorbed by
+  `:PKMBrowse` (any predicate); frontmatter/citation noise eliminated because
+  matching now runs over structured index fields.
+- Dead emphasis-wrapping keymap defaults from `config.lua` (`wrap_italic`,
+  `wrap_bold`, `wrap_bold_italic`, `wrap_code`, `wrap_strike`) — removed in
+  1.4.1 but defaults were not cleaned up.
+
+### Test update required
+- `test/test_phase1.lua`: `ok("parse rejects unknown field", ...)` for
+  `body:something` must be updated — unknown fields now produce an `any`
+  predicate. Replace with: `t = filter.parse('body:something'); ok("unknown
+  field → any predicate", t ~= nil and t.field == 'any')`. Add tests for bare
+  word, standalone quote, and `any` eval.
+
 ### Fixed
 
 - **Cross-citation data loss (modified cited buffer)** — `manage_backlink` now
