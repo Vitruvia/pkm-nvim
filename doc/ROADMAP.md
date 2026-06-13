@@ -27,6 +27,7 @@ The note namespace is intentionally **flat and global** — all notes share a si
 ## Current State
 
 **Working features:**
+== General ==
 - ✅ Three folder types: Scratchpad, Journal, Consolidated
 - ✅ Note creation with automatic numbering (`0042_note_Title.md`)
 - ✅ Note types within Consolidated: `note`, `bib` (bibliography), `agg` (aggregate/collection)
@@ -46,11 +47,26 @@ The note namespace is intentionally **flat and global** — all notes share a si
 - ✅ Context-aware citation picker — scores by active view (+2) and shared tags
      (+1); `<C-v>` view-only toggle
 - ✅ `:PKMRenameNote` extended to journal and scratchpad
+== Editing and viewing ==
+- ✅ Markdown utilities — header counter, level shift, symbol abbreviations,
+     sequence renumbering (single-family, flat counter — superseded plan in
+     Next Steps §3, "Improved renumbering").
 == Search ==
-- ✅ Boolean filter system — full DSL over tag/title/text/filename (AND, OR, NOT, parentheses)
-- ✅ In-memory note index with incremental invalidation (~290× faster than per-query scan)
-- ✅ `:PKMBrowse [expr]` — unified note browser via index+filter; replaces PKMTags ripgrep path
-- ✅ Markdown utilities — header counter, level shift, symbol abbreviations, sequence renumbering
+- ✅ Boolean filter system — full DSL over tag/title/text/filename
+     (AND, OR, NOT, parentheses)
+- ✅ In-memory note index with incremental invalidation (~290× faster)
+- ✅ :PKMBrowse [expr] — index+filter browser. Pipeline (telescope.browse /
+     ui.browse) implemented and correct. ⚠ BUG: registered with nargs='?', so
+     multi-token expressions (`tag:x AND title:y`) are rejected by Neovim
+     (E488) before the handler runs; single-token filters work. Fix: nargs='*'
+     (CHANGELOG → Known Bugs). PLANNED: rework into a unified filter-as-you-type
+     search bar — bare text = full-text plain substring; field prefixes /
+     booleans = filters — see Next Steps §2.
+- ✅ :PKMTags — tag picker; on selection opens browse('tag:'..x). Index-backed.
+     Kept as a secondary shortcut.
+- ⚠ :PKMSearch — Telescope live_grep: ripgrep over RAW files, so it matches
+     frontmatter and citation-link noise (not body-only). SLATED FOR REMOVAL;
+     its free-text role is absorbed by the §2 search bar. See Next Steps §2.
 == Views ==
 - ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD commands
 - ✅ Subproject hierarchy — table-valued view entries with `parent`/`filter`; composes AND chain
@@ -269,9 +285,9 @@ require('pkm').setup({
     view_sidebar = "<leader>nS",
     view_buffers = "<leader>vb",
     -- Search and browsing
-    search          = "<leader>nf",
-    browse_tags     = "<leader>nt",
-    browse = false,
+    browse       = "<leader>nf",   -- :PKMBrowse — primary, unified search bar
+    browse_tags  = "<leader>nt",   -- :PKMTags  — secondary, quick tag entry
+    -- search (:PKMSearch) removed — see Next Steps §2
     -- Markdown editing
     ---- Headers
     next_header        = "<leader>Mh",
@@ -291,6 +307,61 @@ No items currently in active development. Navigation system complete through Ste
 
 ---
 
+### Implementation phases
+
+A sequencing layer over the Next-Steps and Near-term items. The lists record
+WHAT; this records IN WHAT ORDER and WHY. Rules: (1) bugs before features built
+on the same subsystem; (2) shared foundations before their consumers;
+(3) measure before optimising (the bench.lua rule). An item may be scheduled
+earlier than its heading suggests — the heading is its category, the phase is
+its turn.
+
+**Phase 0 — Bug triage (small, unblock everything).**
+- `:PKMBrowse` arg parsing: `nargs='?'` → `nargs='*'` (needed so the §2
+  command-line shortcut `:PKMBrowse <expr>` accepts multi-token expressions).
+- Cross-citation write-through to open buffers (Near-term §4) — DATA LOSS;
+  scheduled here despite its filing.
+- Buffer-panel `E32` on `w`, and the phantom-window-on-last-buffer bug
+  (Next Steps §5, "Fix").
+
+**Phase 1 — Core search + small self-contained features.**
+- §2 Unified filter-as-you-type search: extend `filter.lua` with the default
+  "any" predicate, rewrite the picker to evaluate the live prompt, delete
+  `:PKMSearch`, repoint `<leader>nf`. High-value; several items below browse
+  through it.
+- §1 Metadata commands (`:PKMSetTitle` / `:PKMAddTag` / `:PKMRemoveTag`).
+- §4 `:PKMOrphans`.
+- §6 `:PKMViewUpdate` rename / reparent.
+- Near-term §2 `:PKMBrowseRecent`.
+- Near-term §1 filter autocomplete (after the §2 grammar lands and the nargs
+  fix; complements the search bar).
+- §9 conventions SPEC only (implementation is Phase 4).
+
+**Phase 2 — Foundations for the explorer UI.**
+- Near-term §4 per-tab-page window state — prerequisite for the unified UI,
+  not a late polish item; promoted here.
+- §7 `bench.views_suite` — measure before any match_all-caching lands.
+- §5 notes-navigator sidebar.
+
+**Phase 3 — Larger features.**
+- §5 unified, toggleable explorer UI + auto-on/off policies.
+- §3 improved renumbering (nested / quoted / emphasis families).
+
+**Phase 4 — Markdown presentation (one workstream; decide mechanism first).**
+- §3 syntax mechanism decision (consolidate Vimscript `after/syntax` vs migrate
+  to bundled tree-sitter queries).
+- §3 frontmatter folding / conceal.
+- §3 context-aware highlighting + its two bugs.
+- §3 `**1.**`-style ordered-list indent recognition.
+- §9 conventions IMPLEMENTATION.
+
+**Phase 5 — Distant.**
+- §8 deleted-note trash (tombstone-manifest caveat).
+- Near-term §3 explorer UI customisation.
+- Near-term §5 ASCII / text diagrams.
+- preview.lua, persistent index, review queue, `_match_cache` (only if §7
+  proves it necessary).
+
 ### Next Steps
 
 **1. Metadata commands — edit frontmatter without opening YAML**
@@ -299,8 +370,14 @@ No items currently in active development. Navigation system complete through Ste
 and editing the YAML block. This is friction-heavy for common operations and
 incompatible with future interfaces that hide frontmatter entirely.
 
-**Design:** Buffer-only. All commands operate on the currently open note.
-All call `index.invalidate(filepath)` after writing.
+**Design:** Buffer-only — every command mutates the YAML in the open note's
+buffer via `nvim_buf_set_lines`, never the file on disk. The existing
+BufWritePre/BufWritePost cycle persists the change and re-indexes on the user's
+next save, so these commands must NOT call `index.invalidate`: with no disk
+write, invalidation would force the index to re-read stale on-disk content. (If
+a command must be visible to the index BEFORE the user saves — e.g. a future
+live-membership feature — convert that one command to write-through: write the
+file, then invalidate. None of the three below need that today.)
 
 - `:PKMSetTitle` — prompts for a new title string, writes it to the `title`
   frontmatter field. Does not rename the file.
@@ -315,16 +392,94 @@ default `false`).
 
 ---
 
-**2. Filter coverage for all search types:** Make filters work seamlessly with
-`:PKMBrowse` (used in the sidebar and view panel search) and  `PKMSearch` (used
-in `<leader>nf`).
-     - This modification may justify merging `:PKMTags` with `:PKMSearch`.
+**2. Unified filter-as-you-type search (the search bar), powered by `filter.lua`.**
+
+*Goal.* One interactive note finder that behaves like an advanced search bar
+(PubMed-style). Opening it lists all notes; whatever the user types in the
+prompt is interpreted LIVE by `filter.lua`. Bare text searches across all
+fields (title, body, filename, tags) by plain substring — never fuzzy. Prefixed
+or boolean input (`tag:math`, `title:fourier AND NOT tag:draft`,
+`(laplace OR fourier)`) applies structured filters. Passing an expression on the
+command line (`:PKMBrowse tag:math`) stays available as a shortcut that opens
+the panel pre-seeded, but is no longer required — the panel is the default.
+
+*Why the current behaviour is insufficient.* `telescope.browse` pre-filters once
+at open and then narrows only over the display string (title + filename); body
+text is unreachable from the prompt, and filters can only be supplied at
+invocation. The fix is to make the prompt itself the live filter input, and to
+lean on `filter.lua` — the module built precisely for boolean field
+combinations — extending it where needed.
+
+*2.1 Delete `:PKMSearch` (decided).* Remove the command and its
+`telescope.search_notes` / `ui.search_notes` backers; repoint `<leader>nf` →
+`:PKMBrowse`. No capability is lost: free-text body search is absorbed by 2.2–2.3
+(bare text matches body), and the old frontmatter/citation noise disappears
+because matching now runs over the index's structured fields rather than raw
+files.
+
+*2.2 Extend `filter.lua` with a default ("any") predicate.* Grammar change:
+    predicate = (field ":")? value
+    field     = "tag" | "title" | "text" | "filename" | "any"
+A value with no recognised `field:` prefix becomes an `any` predicate. `eval`
+for `any` is a case-insensitive PLAIN substring test against title ∪ body ∪
+filename ∪ tag-values. Existing predicates are unchanged (`tag:` stays EXACT;
+`title:`/`text:` stay substring), so every current view definition keeps
+working — and views may now also use bare text (e.g. `"fourier AND tag:math"`).
+Disambiguation rule: `word:word` is a field predicate ONLY when `word` is a
+known field; otherwise the whole token (colon included) is an `any` value.
+Literal keywords or colons are matched by quoting (`"and"`, `"http://x"`).
+Update the grammar comment and the `filter.lua` module doc when built.
+
+*2.3 Rewrite the picker to evaluate the prompt live.* Replace the static
+pre-filter + display-narrowing with: on each keystroke, `filter.parse(prompt)`;
+on success `filter.eval(tree, entry)` over `index.get_all()`; sort survivors by
+type then title; feed `new_dynamic` + `sorters.empty()` (preserving the no-fzy
+guarantee — matching is plain substring throughout). On an incomplete/invalid
+expression mid-typing, fall back to treating the raw prompt as one `any`
+substring so the bar never errors. Performance is adequate: `filter.eval` is
+~6.6 ms over 10k notes (bench.lua), within as-you-type budget at realistic
+sizes; revisit only if §7 shows otherwise.
+    -- dynamic finder fn (sketch)
+    fn = function(prompt)
+      local entries = index.get_all()
+      if not prompt or prompt == '' then return to_items(entries) end
+      local tree = filter.parse(prompt) or filter.parse_bare(prompt)  -- any-fallback
+      local out = {}
+      for _, e in ipairs(entries) do
+        if filter.eval(tree, e) then out[#out + 1] = e end
+      end
+      return to_items(sort_by_type_then_title(out))
+    end
+
+*2.4 Filters inside the scoped / browsing panels.* The sidebar `/` search and
+the views-tree `<C-f>` search currently do exact-substring over a view's paths.
+Route them through the SAME engine, evaluating the live prompt against the
+SCOPED entry set (the view's notes) instead of the whole index. Factor 2.3 into
+one shared helper that takes an entry list, so global and scoped search share
+behaviour.
+
+*2.5 Fallback (no Telescope).* `vim.ui.select` is not as-you-type, so `ui.browse`
+degrades to: prompt once for an expression via `vim.fn.input` (with the
+autocomplete from Near-term §1 when available), parse + eval, then
+`vim.ui.select` the results. Document the degradation.
+
+*2.6 Keep `:PKMTags` as a secondary shortcut* (`<leader>nt`): it pre-seeds
+`tag:<x>` into the bar. No merge needed; the earlier "merge PKMTags with
+PKMSearch" idea is withdrawn (different mechanisms).
+
+Affected files: `filter.lua` (any predicate + grammar/doc), `telescope.lua`
+(browse rewrite, shared scoped helper, remove `search_notes`), `ui.lua` (browse
+rewrite, remove `search_notes`), `commands.lua` (`:PKMBrowse` nargs='*'; remove
+`:PKMSearch`), `keymaps.lua` (`search` → `browse`), `config.lua` (keymaps
+defaults), `views.lua` (sidebar `/` and tree `<C-f>` to the shared helper),
+`index.lua` (confirm `body` is populated for `any`), `doc/pkm.txt` (rewrite
+Search & Browse; remove `:PKMSearch`; update keymap list).
 
 ---
 
 **3. Improved and new markdown features:**
 
-- Improved renumbering with `:PKMRenumberlist`:** 
+- Improved renumbering with `:PKMRenumberlist`: 
    - add support for other structures: lists containing nested elements,
      numberings inside quotes, as well as numbered headers and bolder/italiscized
      numbers.
@@ -339,7 +494,7 @@ in `<leader>nf`).
      
      becomes
      
-     ```
+     ``
      1. a
        1. c
        2. x
@@ -433,26 +588,58 @@ in `<leader>nf`).
   but not `**1. <text>**`.
 
 - Add PKM related context-aware syntax highlighting: 
-   - Currently missing or unsupported:
-     - YAML frontmatter: current syntax highlighting treats YAML metadata as
-       typical markdown text. 
-     - in-text citations: currently without any highlighting.
-     - Marker highlighting or "preview": there is no font change or highlight of
-     italics or bold as of yet.
-     - Stop four-space indented text from highlighting as code blocks (in
-       green). Only text marked as code with one or three \` should be
-       considered as code. Four-space indented text should follow highlighting
-       for standard text, including that for nested lists, if applicable.
-     - Consider highlighting text inside quotation marks as well, or maybe just
+    - **Ship the highlighting from inside the plugin, and choose its mechanism.**
+     The runtime syntax file is Vimscript, not Lua: Neovim sources
+     `after/syntax/markdown.vim` (and `syntax/markdown.vim`) from every
+     'runtimepath' entry, and lazy.nvim puts the plugin on 'runtimepath'. So
+     moving the existing syntax file into the repo at
+     `after/syntax/markdown.vim` is enough to consolidate it — there is no
+     `.lua` syntax-loader path to overwrite. For Lua-driven setup, use an
+     `ftplugin`/autocmd, not a `syntax/*.lua` file.
+     DECIDE FIRST, because the items below diverge sharply by mechanism:
+       (i) consolidate the current Vimscript `syntax` rules into the plugin, or
+       (ii) migrate Markdown highlighting to bundled tree-sitter queries
+            (`queries/markdown*/highlights.scm`, plus `injections.scm` to parse
+            the frontmatter AS YAML and optionally math as LaTeX).
+     Path (ii) turns most goals below (frontmatter-as-YAML, citation
+     highlighting, suppressing 4-space indented code, 4th-level list prefixes,
+     and conceal) from brittle regex into declarative queries. Record the choice
+     in CHANGELOG before coding.
+    - Currently missing or unsupported:
+      - YAML frontmatter: current syntax highlighting treats YAML metadata as
+        typical markdown text. 
+      - in-text citations: currently without any highlighting.
+      - Marker highlighting or "preview": there is no font change or highlight of
+      italics or bold as of yet.
+      - Stop four-space indented text from highlighting as code blocks (in
+        green). Only text marked as code with one or three \` should be
+        considered as code. Four-space indented text should follow highlighting
+        for standard text, including that for nested lists, if applicable.
+      - Consider highlighting text inside quotation marks as well, or maybe just
        the quotation marks, and only when both surround some text. This point
        is optional and should be added only if it doesn't cause the
        highlighting to be excessive or distracting.
-   - Related bugs: 
-     - prefixes for lists from the 4th level and beyond (both ordered and
+    - Related bugs: 
+      - prefixes for lists from the 4th level and beyond (both ordered and
       unordered) are not being highlighted, despite recent attempts in this
       behalf.
-     - Text just before a separator `---` highlights differently from other
+      - Text just before a separator `---` highlights differently from other
       texts (in bold blue). Check if this is intended.
+- **Frontmatter folding and conceal (in-file metadata readability).** The
+  primary in-file remedy for heavy YAML frontmatter and long citation lists —
+  no sidecar separation required (see "Metadata system review" under Potential
+  goals). Two complementary mechanisms:
+  - Folding: collapse the `---`…`---` block (and optionally long
+    `cites`/`cited_by` sub-lists) by default, via a buffer-local
+    `foldmethod=expr` + `foldexpr` set in a PKM-scoped ftplugin/autocmd, or via
+    fold markers. Keep folds opt-out so the raw block is one keystroke away.
+  - Conceal: hide noisy syntax (wiki-link brackets, citation link fields)
+    behind `conceallevel`/`concealcursor`, so the rendered note reads cleanly
+    while the underlying text is untouched. Conceal is implemented through the
+    mechanism chosen above (Vimscript `syntax conceal` or tree-sitter
+    `@conceal`), so build it together with the §3 syntax decision. This is the
+    deliverable the metadata-separation decision gate (Potential goals → D)
+    requires us to try before considering any sidecar redesign.
 
 ---
 
@@ -505,13 +692,6 @@ abandoned or unfiled notes.
 ---
 
 **6. PKM view system** 
-- Create a way to add or remove a note from a view (notes can pertain to
-  multiple views).
-  - Adding to a view should add all tags pertaining to that view, but not if
-    the note already contains that tag.
-  - Removing from a view should ask if the user wants to remove all tags
-    pertaining to that view, if the user presses not, a panel should open so
-    that the user can chose which tags to remove.
 - Change `PKMViewUpdate` so that it allows renaming views and changing
 parents of subviews.
 
@@ -549,13 +729,12 @@ via a specific command or a general "undo" command in the "notes explorer".
 
 ---
 
-**9. Note-taking standardization:** definition of standards for header and
-body-text naming and organization, in-text citation formatting, author comment
-formatting, etc., possibly associated with additional syntax highlighting.
-These standards should simultaneosly reduce cognitive load (less decisions to
-make while taking notes), improve human readability, and AI understading of
-notes.
-   Examples:
+**9. Note-taking format standardization:** definition of standards for header
+and body-text naming and organization, in-text citation formatting, author
+comment formatting, etc., possibly associated with additional syntax
+highlighting. These standards should simultaneosly reduce cognitive load (less
+decisions to make while taking notes), improve human readability, and AI
+understading of notes. Examples:
    - Comments standardized as either `(text)` or `((text))`. E.g. `((Review
      tomorrow))`, `((See the notes about Enderton's Logic, Chapter 2 [bib -
      xxx]))`.
@@ -594,6 +773,25 @@ view. Implementation: `index.get_all()` sorted by `mtime` descending, sliced to
  user has multiple tab pages, opening a sidebar in a second tab would
  conflict with the first tab's state. Mitigation: track sidebar state per
  tab page (`vim.api.nvim_get_current_tabpage()`).
+- **Cross-citation write-through to open buffers (DATA LOSS — fix, do not just
+  investigate).** Inserting a citation writes the CITED note's `cited_by` to
+  disk (`citations.manage_backlink` / `update_references`). If that note is open
+  in another buffer/window, Neovim sees the on-disk change and prompts (W11);
+  if the user keeps editing the now-stale buffer and saves, the backlink write
+  is overwritten and lost — confirmed instances of information loss. Root
+  cause: manage_backlink refreshes open buffers by disk-write + reload, a
+  strategy that already handles the unmodified case (1.4.0) but cannot be
+  applied to a MODIFIED buffer without discarding the user's unsaved edits — so
+  the modified buffer is skipped and left stale.Fix: before writing a note's frontmatter, check
+  `vim.fn.bufnr(path)`; if the buffer is loaded, apply the change with
+  `nvim_buf_set_lines` (let the user's own save persist it), or, *if the file
+  is unmodified*, write disk then silently reload THAT specific buffer with the
+  established `winsaveview` + `noautocmd e` + `vim.bo.modified=false` pattern
+  (*ATTENTION*: reload is for the unmodified case only — for a modified cited
+  buffer, write into the buffer, never reload). Today's
+  pattern only protects the active buffer; it must extend to any open buffer.
+  Same failure family as the buffer-panel `E32` bug (§5): a reload assuming the
+  wrong buffer is current. Logged in CHANGELOG → Known Bugs.
 
 **5. Alternative diagram and imaging methods to allow enhancement of notes
 without dependence on external image files:** e.g. ASCII (text-based) art.
@@ -643,6 +841,50 @@ and human) and portability before further detailing and implementation)).
   subproject depth. Provides an overview of how the knowledge base is
   organised. Implementation: iterate `views.list()`, call `match_all()` for
   each, format as a notification or float.
+
+- **Metadata system review (in-file vs separated metadata).** Recorded for
+  future reconsideration only — not designed toward. The decision gate (D)
+  requires the cheaper in-file mitigations to be exhausted first.
+
+  A. Current state — in-file metadata.
+     Positive: easy export; immediate coupling with content during AI/RAG
+       contextualisation; one-hop navigation to cited notes.
+     Negative: complex buffer management for cross-citation of open files (the
+       root cause of the Near-term §4 data-loss bug); long citation lists bloat
+       the frontmatter and hurt readability; metadata is hard to protect from
+       accidental edits.
+     Mixed: title lives in metadata — no first-level header required, but
+       readers must look to the frontmatter to find it.
+
+  B. Alternative — separated metadata (sidecar).
+     Positive: cross-citation only ever writes the sidecar, never a note body
+       the user may have open → removes the data-loss failure mode entirely;
+       long citation lists leave the note body, so they cannot hurt its
+       readability; metadata can be guarded independently (separate, optionally
+       read-only file).
+     Negative: export becomes two files per note and must associate them;
+       AI/RAG must recognise and attach the sidecar (true cost depends on the
+       consumer's RAG implementation); navigating to cited notes needs full
+       in-text links or extra indirection; cross-citation must open/edit a
+       separate file (cost depends on implementation/perf).
+     Mixed: requires a first-level header or accepting the filename as a
+       surrogate title; if title stays in metadata, a sync mechanism between the
+       user-set title and the sidecar is needed.
+
+  C. Other: a metadata FOOTER within the note, if viable.
+
+  D. Decision gate — do not design toward separation yet.
+     - The one concrete pain motivating B (in-file "complex buffer management")
+       is exactly the Near-term §4 bug, which has a LOCAL fix (write-through to
+       open buffers). Do not justify a cross-cutting redesign (yaml, citations,
+       index, notes, export, templates all change) by a bug with a local fix.
+     - The other real pain (long-metadata readability) is largely solved
+       in-file by frontmatter folding/conceal — now a Next Step (§3).
+     - Separation also trades against stated principles: "easy export" becomes
+       two files; "immediate AI/RAG coupling" becomes consumer-dependent.
+     - Criterion: revisit separation ONLY IF, after (1) the buffer
+       write-through fix and (2) frontmatter folding/conceal, the in-file
+       approach is still unacceptable in daily use.
 
 ---
 

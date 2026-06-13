@@ -13,6 +13,35 @@
   the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
 
+- **Cross-citation data loss (open, MODIFIED cited buffer).** (This bug
+  appeared to be fixed in version 1.4.0., but there are indications that it may
+  not have been completely so). Inserting a citation writes the cited note's
+  `cited_by` to disk (`citations.manage_backlink`). manage_backlink already
+  silently reloads the cited buffer when it is open and UNMODIFIED (added
+  1.4.0), but a buffer with unsaved edits is skipped — left stale — and the
+  user's next save overwrites the backlink → silent information loss. (The
+  1.4.0 "Post-citation prompts" note records this path as regressed.) Root
+  cause: the refresh strategy is disk-write + reload, which cannot be applied
+  to a modified buffer without discarding the user's edits. Fix: branch on
+  buffer state. If the cited note is open and MODIFIED, apply the `cited_by`
+  change directly to the buffer with `nvim_buf_set_lines` over the frontmatter
+  region (composing with the unsaved edits; the user's own save persists both)
+  — never reload and never set `modified=false`, either of which discards those
+  edits. Keep the existing disk-write + silent-reload path for the unmodified
+  case. Open sub-decision for build time: whether to ALSO write disk under a
+  modified buffer for durability — if so, the buffer's on-disk timestamp must
+  be reconciled to avoid reintroducing the W11 "changed on disk" prompt on the
+  next save. Severity: high (silent data loss). Scheduled: ROADMAP →
+  Implementation phases, Phase 0.
+
+- **`:PKMBrowse` rejects multi-token filters.** Registered with `nargs='?'`, so
+  Neovim raises E488 on any expression containing spaces (`tag:x AND title:y`)
+  before the handler runs; single-token filters work, masking the bug. The
+  filter pipeline (`telescope.browse` / `ui.browse`) is itself correct. Fix:
+  `nargs='*'` (keep reading `opts.args`, which then carries the full string with
+  quotes intact). Prerequisite for the §2 command-line shortcut. Scheduled:
+  ROADMAP → Implementation phases, Phase 0.
+
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
@@ -167,7 +196,8 @@
 
 ### Fixed
 
-- **Post-citation prompts:** Went back to getting prompts for loading file or
+- **Post-citation prompts:** (Fix attempt, but there have been new instances of
+  the bug reported later on). Went back to getting prompts for loading file or
   pressing ok after adding a citation. This used to be solved, with the buffer
   self-updating after every citation. The cited note's buffer, if open, is also
   not updating unless I save the note that cites it. Behavior if the note is
