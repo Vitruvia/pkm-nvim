@@ -247,80 +247,110 @@ local function ensure_grouped_cited_by(frontmatter)
   return true
 end
 
---- Adds or removes a backlink from a target file
+--- Adds or removes a backlink from a target file.
+--- If the target is open in a modified buffer, applies the change in-buffer
+--- only (no disk write) to avoid discarding the user's unsaved edits.
+--- If the target is unmodified or not open, writes disk and refreshes.
 local function manage_backlink(citing_path, target_path, action)
   local citing_type, citing_id = M.get_note_type_and_id(citing_path)
   if not citing_type or not citing_id then return end
-  
-  -- Protected read and redundant file-read elimination
-  local ok, content = pcall(vim.fn.readfile, target_path)
-  if not ok or not content then return end
-  
+
+  -- Locate any open buffer for the target.
+  local norm_target  = utils.normalize(target_path)
+  local target_bufnr = nil
+  local buf_modified = false
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(bufnr) then
+      local bname = utils.normalize(vim.api.nvim_buf_get_name(bufnr))
+      if bname == norm_target then
+        target_bufnr = bufnr
+        buf_modified = vim.bo[bufnr].modified
+        break
+      end
+    end
+  end
+
+  -- Read from the appropriate source.
+  -- A modified buffer may have frontmatter that differs from disk; reading
+  -- from the buffer lets us compose with (not overwrite) the user's edits.
+  local content
+  if target_bufnr and buf_modified then
+    content = vim.api.nvim_buf_get_lines(target_bufnr, 0, -1, false)
+  else
+    local ok
+    ok, content = pcall(vim.fn.readfile, target_path)
+    if not ok or not content then return end
+  end
+
   local fm, content_start = yaml.parse_frontmatter(content)
   if not fm or fm.type == "agg" then return end
-  
+
   local migrated = ensure_grouped_cited_by(fm)
-  
+
   local group
-  if citing_type == "bib" then
-    group = "bib"
-  elseif citing_type == "journal" then
-    group = "journal"
-  elseif citing_type == "scratch" then
-    group = "scratch"
-  else
-    group = "notes"  -- covers "note" and any other consolidated type
+  if     citing_type == "bib"     then group = "bib"
+  elseif citing_type == "journal" then group = "journal"
+  elseif citing_type == "scratch" then group = "scratch"
+  else                                  group = "notes"
   end
-  
+
   local found_index = nil
   if fm.cited_by and fm.cited_by[group] then
-      for i, backlink in ipairs(fm.cited_by[group]) do
-        if backlink.identifier == citing_id then
-          found_index = i
-          break
-        end
+    for i, backlink in ipairs(fm.cited_by[group]) do
+      if backlink.identifier == citing_id then
+        found_index = i
+        break
       end
+    end
   end
-  
+
   local modified = migrated
-  
+
   if action == "add" and not found_index then
     if not fm.cited_by[group] then fm.cited_by[group] = {} end
     table.insert(fm.cited_by[group], {
       identifier = citing_id,
-      title = M.get_note_title(citing_path),
-      link = "[[" .. vim.fn.fnamemodify(citing_path, ":t:r") .. "]]"
+      title      = M.get_note_title(citing_path),
+      link       = "[[" .. vim.fn.fnamemodify(citing_path, ":t:r") .. "]]",
     })
     modified = true
-    
   elseif action == "remove" and found_index then
     table.remove(fm.cited_by[group], found_index)
     modified = true
   end
-  
-  if modified then
-    local sort_fn = function(a, b) return (a.identifier or "") < (b.identifier or "") end
-    for _, g in ipairs({"notes", "bib", "journal", "scratch"}) do
-      if fm.cited_by[g] then
-        table.sort(fm.cited_by[g], sort_fn)
-      end
-    end
+
+  if not modified then return end
+
+  local sort_fn = function(a, b) return (a.identifier or "") < (b.identifier or "") end
+  for _, g in ipairs({ "notes", "bib", "journal", "scratch" }) do
+    if fm.cited_by[g] then table.sort(fm.cited_by[g], sort_fn) end
+  end
+
+  if target_bufnr and buf_modified then
+    -- Target is open with unsaved edits.
+    -- Apply the cited_by change directly into the buffer; never write disk,
+    -- never reload, never set modified=false — all three would discard edits.
+    -- The user's next :w persists both their edits and this change.
+    -- index.invalidate is intentionally skipped: no disk write occurred;
+    -- BufWritePost re-indexes on the user's save.
+    local fm_lines    = yaml.generate_yaml(fm)
+    local new_content = { "---" }
+    for _, line in ipairs(fm_lines)       do new_content[#new_content + 1] = line end
+    new_content[#new_content + 1] = "---"
+    for i = content_start, #content       do new_content[#new_content + 1] = content[i] end
+    pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_content)
+  else
+    -- Target not open, or open but unmodified: write to disk.
     yaml.save_frontmatter(fm, content_start, target_path)
     require('pkm.index').invalidate(target_path)
 
-    -- Silently refresh the target buffer if open, preventing "file changed on disk" prompts.
-    local norm_target = utils.normalize(target_path)
-    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.api.nvim_buf_is_loaded(bufnr) and not vim.bo[bufnr].modified then
-        local bname = utils.normalize(vim.api.nvim_buf_get_name(bufnr))
-        if bname == norm_target then
-          local ok, new_lines = pcall(vim.fn.readfile, target_path)
-          if ok then
-            pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, new_lines)
-            pcall(vim.api.nvim_set_option_value, 'modified', false, { buf = bufnr })
-          end
-          break
-        end
+    -- Reload the buffer in-place if it is loaded and unmodified, to
+    -- prevent "file changed on disk" prompts.
+    if target_bufnr then
+      local ok2, new_lines = pcall(vim.fn.readfile, target_path)
+      if ok2 then
+        pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_lines)
+        pcall(vim.api.nvim_set_option_value, 'modified', false, { buf = target_bufnr })
       end
     end
   end

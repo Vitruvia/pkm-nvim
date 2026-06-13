@@ -103,7 +103,7 @@ function M.register()
       require('pkm.ui').browse(expr)
     end
   end, {
-    nargs = '?',
+    nargs = '*',      
     desc  = 'Browse PKM notes with optional filter expression (tag:x AND title:y etc.)',
   })
 

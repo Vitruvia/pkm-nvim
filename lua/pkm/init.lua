@@ -85,14 +85,18 @@ function M.setup_sync_autocmds()
   })
 
   -- After write: sync journal filename, update citations, reload buffer silently.
-  vim.api.nvim_create_autocmd("BufWritePost", {
+  vim.api.nvim_create_autocmd('BufWritePost', {
     group = augroup, pattern = "*.md",
-    callback = function()
-      local filepath = vim.fn.expand("%:p")
-      if not filepath:lower():find(".md") then return end
-
+    callback = function(ev)
+      local written_buf = ev.buf   -- capture now; current buffer may change before schedule runs
       vim.schedule(function()
-        local root = M.config.root_path
+        -- Guard: buffer may have been deleted between the write and this
+        -- callback (e.g. bdelete immediately after w in the buffer panel).
+        if not vim.api.nvim_buf_is_valid(written_buf) then return end
+        local filepath = vim.api.nvim_buf_get_name(written_buf)
+        if filepath == '' then return end
+
+        local root      = M.config.root_path
         local norm_path = filepath:gsub("\\", "/")
         local norm_root = root:gsub("\\", "/")
         if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
@@ -101,7 +105,6 @@ function M.setup_sync_autocmds()
         local journal   = require('pkm.journal')
         local citations = require('pkm.citations')
 
-        -- Validate frontmatter structure; abort sync if corrupted.
         -- last_updated_on is already written by BufWritePre above.
         local disk_lines = vim.fn.readfile(filepath)
         if disk_lines[1] == "---" then
@@ -120,16 +123,20 @@ function M.setup_sync_autocmds()
           citations.update_references(filepath)
         end
 
-        -- Silently reload buffer to reflect any changes made by update_references,
-        -- avoiding the "file changed on disk" prompt. Replaces previous checktime call.
-        local view = vim.fn.winsaveview()
-        vim.cmd('noautocmd e')
-        vim.fn.winrestview(view)
-        -- noautocmd suppresses the Syntax/FileType autocmds that normally
-        -- restore highlighting after a buffer re-read. Re-fire Syntax only —
-        -- this reloads the syntax file without re-reading the buffer, so
-        -- modeline scanning cannot trigger.
-        vim.cmd('doautocmd Syntax')
+        -- Silently reload the WRITTEN buffer (not whichever buffer is
+        -- current now) to reflect changes made by update_references.
+        -- nvim_buf_call ensures noautocmd e targets the correct buffer even
+        -- when the current window changed since the write (e.g. after bdelete
+        -- in the panel). Second validity check covers bdelete during sync.
+        if not vim.api.nvim_buf_is_valid(written_buf) then return end
+        vim.api.nvim_buf_call(written_buf, function()
+          local view = vim.fn.winsaveview()
+          vim.cmd('noautocmd e')
+          vim.fn.winrestview(view)
+          -- noautocmd suppresses Syntax/FileType autocmds; re-fire Syntax only
+          -- so modeline scanning cannot trigger.
+          vim.cmd('doautocmd Syntax')
+        end)
       end)
     end,
   })

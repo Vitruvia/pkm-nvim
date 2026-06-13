@@ -4,6 +4,41 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cross-citation data loss (modified cited buffer)** — `manage_backlink` now
+  detects whether the target buffer is open and modified before reading. If
+  modified: reads from the buffer (not disk), applies the `cited_by` change via
+  `nvim_buf_set_lines` over the entire buffer, writes nothing to disk, and skips
+  `index.invalidate`; the user's next `:w` persists both their edits and the
+  backlink through the normal `BufWritePost` cycle. If unmodified or not open:
+  existing disk-write + index-invalidate + buffer-reload path is preserved.
+  Decision: writing disk for the modified case is skipped because reconciling
+  the on-disk mtime to suppress W11 has no clean API.
+
+- **`:PKMBrowse` E488 on multi-token filter expressions** — command was
+  registered with `nargs='?'`, causing Neovim to raise E488 on any expression
+  with spaces before the handler ran. Changed to `nargs='*'`; `opts.args`
+  delivers the full string unchanged.
+
+- **Buffer panel E32 on `w`** — `BufWritePost` callback used `vim.fn.expand
+  ("%:p")` inside `vim.schedule`, which reflects the current buffer at callback
+  time rather than the buffer just written. After `bdelete` in the `w` keymap,
+  the current buffer could be the panel's `nofile` scratch buffer (no name),
+  causing `noautocmd e` to raise E32. Fix: capture `ev.buf` at autocmd
+  registration time; derive `filepath` from `nvim_buf_get_name(written_buf)`;
+  add `nvim_buf_is_valid` guards; run the reload inside
+  `nvim_buf_call(written_buf, …)` so `noautocmd e` always targets the written
+  buffer regardless of which window is current.
+
+- **Buffer panel phantom window on last-buffer close** — closing the last
+  regular buffer via `d`, `D`, or `w` in the panel could leave the panel as
+  the only window, causing Neovim to reposition it and create a non-interactive
+  gap below it. New module-level local `ensure_main_window()` is called after
+  every `bdelete` from the panel: if no non-panel, non-float window remains, it
+  opens `noautocmd aboveleft new` relative to the panel, preserving the layout.
+  `D` keymap updated to report errors consistently with `d`.
+
 ### Known Bugs (queued)
 
 - `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
@@ -13,35 +48,6 @@
   the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
 
-- **Cross-citation data loss (open, MODIFIED cited buffer).** (This bug
-  appeared to be fixed in version 1.4.0., but there are indications that it may
-  not have been completely so). Inserting a citation writes the cited note's
-  `cited_by` to disk (`citations.manage_backlink`). manage_backlink already
-  silently reloads the cited buffer when it is open and UNMODIFIED (added
-  1.4.0), but a buffer with unsaved edits is skipped — left stale — and the
-  user's next save overwrites the backlink → silent information loss. (The
-  1.4.0 "Post-citation prompts" note records this path as regressed.) Root
-  cause: the refresh strategy is disk-write + reload, which cannot be applied
-  to a modified buffer without discarding the user's edits. Fix: branch on
-  buffer state. If the cited note is open and MODIFIED, apply the `cited_by`
-  change directly to the buffer with `nvim_buf_set_lines` over the frontmatter
-  region (composing with the unsaved edits; the user's own save persists both)
-  — never reload and never set `modified=false`, either of which discards those
-  edits. Keep the existing disk-write + silent-reload path for the unmodified
-  case. Open sub-decision for build time: whether to ALSO write disk under a
-  modified buffer for durability — if so, the buffer's on-disk timestamp must
-  be reconciled to avoid reintroducing the W11 "changed on disk" prompt on the
-  next save. Severity: high (silent data loss). Scheduled: ROADMAP →
-  Implementation phases, Phase 0.
-
-- **`:PKMBrowse` rejects multi-token filters.** Registered with `nargs='?'`, so
-  Neovim raises E488 on any expression containing spaces (`tag:x AND title:y`)
-  before the handler runs; single-token filters work, masking the bug. The
-  filter pipeline (`telescope.browse` / `ui.browse`) is itself correct. Fix:
-  `nargs='*'` (keep reading `opts.args`, which then carries the full string with
-  quotes intact). Prerequisite for the §2 command-line shortcut. Scheduled:
-  ROADMAP → Implementation phases, Phase 0.
-
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
@@ -49,8 +55,6 @@
   - 100k projection (raw scan): ~14.2s; post-index: ~65ms
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
-
-
 
 ## [1.4.1] - 2026-6-8
 

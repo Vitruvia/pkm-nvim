@@ -340,6 +340,7 @@ its turn.
 **Phase 2 — Foundations for the explorer UI.**
 - Near-term §4 per-tab-page window state — prerequisite for the unified UI,
   not a late polish item; promoted here.
+- §4 Sidebar readability improvements.
 - §7 `bench.views_suite` — measure before any match_all-caching lands.
 - §5 notes-navigator sidebar.
 
@@ -583,6 +584,10 @@ Search & Browse; remove `:PKMSearch`; update keymap list).
         <more text>
      ```
 
+- A command to convert unordered list to ordered and the other way around (
+if there are multiple levels, the user should be prompted about how deep to convert. Note that converting mixed lists should ignore the part that is already as intended, e.g. if converting unordered to ordered, any numbers in the selected
+range should be kept as they are. 
+
 - Improved recognition of indenting when list prefixes are surrounded by `*`
   and other markers. Currently `1. <text>` autoindents as a first level list,
   but not `**1. <text>**`.
@@ -665,6 +670,11 @@ abandoned or unfiled notes.
  
   With this, we effectively have a "note explorer submodule/subplugin" for our
   pkm system.
+
+- Sidebar readability: show the filename of files under the cursor in a
+  horizontal neovim "infobar", to allow readability of filenames that are too
+  long for the sidebar. If the text is too long for the "infobar", it can be
+  wrapped (carefully as to not obstruct text in other infobars or in open buffers.
 
 - Sidebar navigability: there should be a quick way to go from any window to
   the sidebar. This is especially important if the  user is working with

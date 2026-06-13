@@ -93,6 +93,27 @@ local function bufpanel_refresh()
   end
 end
 
+--- Ensure at least one main editing window exists alongside the buffer panel.
+--- Called after bdelete operations to prevent the panel from becoming the sole
+--- non-float window, which breaks Neovim's window layout.
+local function ensure_main_window()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= _bufpanel_win
+    and vim.api.nvim_win_get_config(win).relative == '' then
+      return  -- a real editing window already exists
+    end
+  end
+  -- Only the panel (or nothing) remains; open an editing window above it.
+  if _bufpanel_win and vim.api.nvim_win_is_valid(_bufpanel_win) then
+    local cur = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(_bufpanel_win)
+    vim.cmd('noautocmd aboveleft new')
+    if vim.api.nvim_win_is_valid(cur) then
+      vim.api.nvim_set_current_win(cur)
+    end
+  end
+end
+
 --- Toggle the persistent bottom buffer-list panel.
 --- Opens at the bottom of the screen; closes if already open.
 --- <CR> opens buffer in main window. d/D close it. w saves and closes.
@@ -192,13 +213,22 @@ function M.toggle_bufpanel()
       local ok, err = pcall(vim.cmd, 'bdelete ' .. bufnr)
       if not ok then
         vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
+      else
+        ensure_main_window()
       end
     end
   end, ko)
 
   vim.keymap.set('n', 'D', function()
     local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
-    if bufnr then pcall(vim.cmd, 'bdelete! ' .. bufnr) end
+    if bufnr then
+      local ok, err = pcall(vim.cmd, 'bdelete! ' .. bufnr)
+      if not ok then
+        vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
+      else
+        ensure_main_window()
+      end
+    end
   end, ko)
 
   vim.keymap.set('n', 'w', function()
@@ -221,6 +251,7 @@ function M.toggle_bufpanel()
     local ok, err = pcall(vim.cmd, 'write')
     if ok then
       pcall(vim.cmd, 'bdelete ' .. bufnr)
+      ensure_main_window()
     else
       vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
     end
