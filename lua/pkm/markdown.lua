@@ -92,7 +92,8 @@ function M.setup_symbols(symbols)
     if type(s.expansion) ~= 'string' or s.expansion == '' then goto continue end
 
     if type(s.trigger) == 'string' and s.trigger ~= '' then
-      vim.cmd(string.format('iabbrev <buffer> %s %s', s.trigger, s.expansion))
+      vim.keymap.set('i', s.trigger, s.expansion,
+        { buffer = true, silent = true, desc = 'PKM: insert ' .. s.expansion })
     end
 
     if type(s.key) == 'string' and s.key ~= '' then
@@ -126,45 +127,69 @@ local function paragraph_bounds()
 end
 
 --- Renumber all ordered-sequence items in the given line range sequentially
---- from 1. The sequence family (style and indentation) is determined by the
---- first matching line in the range; subsequent lines must share the same
---- family to be renumbered. Non-matching lines are preserved unchanged.
+--- from 1. Family is detected from the first matching line in the range.
+--- Non-matching lines are preserved unchanged.
 ---
---- Supported families:
----   Ordered list (dot)    INDENT N. text   any indentation level
----   Ordered list (paren)  INDENT N) text   any indentation level
----   Header inline count   ## N. text       any header level
----   Header inline count   ## N) text       any header level
----   Header suffix count   ## text-N        any header level;
----                                          trailing non-digit annotations preserved
+--- Supported families (detection order: list → hdr_prefix → hdr_suffix):
+---   list (plain)      BLOCKQUOTE? INDENT N[.)] text    — any indent depth
+---   list (emph)       BLOCKQUOTE? INDENT *N*[.)] text  — single or double *
+---   hdr_prefix        BLOCKQUOTE? ## N[.)] text        — any header level
+---   hdr_suffix        BLOCKQUOTE? ## text-N            — trailing annotation preserved
 ---
---- Family detection order: list → hdr_prefix → hdr_suffix. A line matching
---- hdr_prefix (## N. text) is never treated as hdr_suffix regardless of
---- whether its title text also contains dash+digit sequences.
+--- Nested list items use a per-level counter stack keyed by effective depth
+--- (each '>' in the blockquote prefix = 2; each space = 1; each tab = 4).
+--- Sub-lists restart from 1 under each new parent item. Header families use
+--- a single flat counter. Blockquote prefixes are stripped before matching
+--- and restored in output unchanged.
 ---@param start_line integer  1-indexed, inclusive
 ---@param end_line   integer  1-indexed, inclusive
 ---@return nil
 function M.renumber_sequence(start_line, end_line)
   local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
 
-  local kind   = nil  -- 'list' | 'hdr_prefix' | 'hdr_suffix'
-  local indent = nil  -- leading whitespace (list) or '##+ ' (header)
-  local sep    = nil  -- '.' or ')' for list/hdr_prefix
+  -- ── helpers ──────────────────────────────────────────────────────────────
+
+  local function strip_bq(line)
+    local bq, rest = line:match('^(>+%s*)(.*)')
+    return (bq or ''), (rest or line)
+  end
+
+  local function ind_depth(ind)
+    local d = 0
+    for c in ind:gmatch('.') do d = d + (c == '\t' and 4 or 1) end
+    return d
+  end
+
+  local function eff_depth(bq, ind)
+    local d = 0
+    for _ in bq:gmatch('>') do d = d + 2 end
+    return d + ind_depth(ind)
+  end
+
+  -- ── 1. detect family ─────────────────────────────────────────────────────
+  -- em_pat: Lua pattern fragment for emphasis markers in list_emph family.
+
+  local kind   = nil
+  local sep    = nil
+  local em_pat = nil
 
   for _, line in ipairs(lines) do
-    local ind, s = line:match('^(%s*)%d+([.)]) ')
-    if ind then
-      kind, indent, sep = 'list', ind, s
-      break
-    end
-    local hdr, s2 = line:match('^(#+%s+)%d+([.)]) ')
-    if hdr then
-      kind, indent, sep = 'hdr_prefix', hdr, s2
-      break
-    end
-    if line:match('^#+%s') and line:match('%-(%d+)%D*$') then
-      kind, indent = 'hdr_suffix', line:match('^(#+%s+)')
-      break
+    local _, rest = strip_bq(line)
+
+    local s = rest:match('^%s*%d+([.)]) ')
+    if s then kind, sep = 'list', s; break end
+
+    s = rest:match('^%s*%*%d+%*([.)]) ')
+    if s then kind, sep, em_pat = 'list_emph', s, '%*'; break end
+
+    s = rest:match('^%s*%*%*%d+%*%*([.)]) ')
+    if s then kind, sep, em_pat = 'list_emph', s, '%*%*'; break end
+
+    s = rest:match('^#+%s+%d+([.)]) ')
+    if s then kind, sep = 'hdr_prefix', s; break end
+
+    if rest:match('^#+%s') and rest:match('%-(%d+)%D*$') then
+      kind = 'hdr_suffix'; break
     end
   end
 
@@ -173,40 +198,65 @@ function M.renumber_sequence(start_line, end_line)
     return
   end
 
-  local counter   = 1
-  local changed   = 0
-  local new_lines = {}
+  -- ── 2. renumber ──────────────────────────────────────────────────────────
+
+  -- Per-level counter stack for list families.
+  -- Stepping to a shallower depth clears all deeper entries so sub-lists
+  -- restart from 1 under each new parent item.
+  local counters = {}
+
+  local function next_count(d)
+    for k in pairs(counters) do if k > d then counters[k] = nil end end
+    counters[d] = (counters[d] or 0) + 1
+    return counters[d]
+  end
+
+  local hdr_counter = 0
+  local em_str      = em_pat == '%*%*' and '**' or '*'
+  local changed     = 0
+  local new_lines   = {}
 
   for _, line in ipairs(lines) do
     local replaced = false
+    local bq, rest = strip_bq(line)
 
     if kind == 'list' then
-      local ind, _, s, rest = line:match('^(%s*)(%d+)([.)]) (.*)$')
-      if ind == indent and s == sep then
-        new_lines[#new_lines + 1] = indent .. counter .. sep .. ' ' .. rest
-        counter, changed, replaced = counter + 1, changed + 1, true
+      local ind, _, s, body = rest:match('^(%s*)(%d+)([.)]) (.*)$')
+      if ind and s == sep then
+        local n = next_count(eff_depth(bq, ind))
+        new_lines[#new_lines + 1] = bq .. ind .. n .. sep .. ' ' .. body
+        changed, replaced = changed + 1, true
+      end
+
+    elseif kind == 'list_emph' then
+      local pat = '^(%s*)' .. em_pat .. '(%d+)' .. em_pat .. '([.)]) (.*)$'
+      local ind, _, s, body = rest:match(pat)
+      if ind and s == sep then
+        local n = next_count(eff_depth(bq, ind))
+        new_lines[#new_lines + 1] = bq .. ind .. em_str .. n .. em_str .. sep .. ' ' .. body
+        changed, replaced = changed + 1, true
       end
 
     elseif kind == 'hdr_prefix' then
-      local hdr, _, s, rest = line:match('^(#+%s+)(%d+)([.)]) (.*)$')
-      if hdr == indent and s == sep then
-        new_lines[#new_lines + 1] = indent .. counter .. sep .. ' ' .. rest
-        counter, changed, replaced = counter + 1, changed + 1, true
+      local hdr, _, s, body = rest:match('^(#+%s+)(%d+)([.)]) (.*)$')
+      if hdr and s == sep then
+        hdr_counter = hdr_counter + 1
+        new_lines[#new_lines + 1] = bq .. hdr .. hdr_counter .. sep .. ' ' .. body
+        changed, replaced = changed + 1, true
       end
 
     elseif kind == 'hdr_suffix' then
-      if line:match('^#+%s') and line:match('^(#+%s+)') == indent then
-        local pre, _, suf = line:match('^(.+)%-(%d+)(%D*)$')
+      if rest:match('^#+%s') then
+        local pre, _, suf = rest:match('^(.+)%-(%d+)(%D*)$')
         if pre then
-          new_lines[#new_lines + 1] = pre .. '-' .. counter .. suf
-          counter, changed, replaced = counter + 1, changed + 1, true
+          hdr_counter = hdr_counter + 1
+          new_lines[#new_lines + 1] = bq .. pre .. '-' .. hdr_counter .. suf
+          changed, replaced = changed + 1, true
         end
       end
     end
 
-    if not replaced then
-      new_lines[#new_lines + 1] = line
-    end
+    if not replaced then new_lines[#new_lines + 1] = line end
   end
 
   vim.api.nvim_buf_set_lines(0, start_line - 1, end_line, false, new_lines)

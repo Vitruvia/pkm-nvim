@@ -341,7 +341,10 @@ its turn.
   not a late polish item; promoted here.
 - §4 Sidebar readability improvements.
 - §7 `bench.views_suite` — measure before any match_all-caching lands.
-- §5 notes-navigator sidebar.
+- ~~**Item 4 — Notes-navigator sidebar**~~ — **CUT.** Neovim's built-in
+  `:Ex` (netrw) covers filesystem navigation without added plugin surface.
+  The per-tabpage window state from Item 1 remains the correct foundation
+  if a navigator is ever reconsidered.
 
 **Phase 3 — Larger features.**
 - §5 unified, toggleable explorer UI + auto-on/off policies.
@@ -552,9 +555,9 @@ range should be kept as they are.
 
 ---
 
-**5. PKM "note explorer:"** 
-- Notes sidebar: Add sidebar to navigate in the main notes folder, to and from
-  each note subfolder (e.g.: consolidated).
+**5. PKM "explorer:"** 
+- Notes sidebar: - **CUT.** Neovim's built-in
+  `:Ex` (netrw) covers filesystem navigation without added plugin surface.
 
 - Integrate all bars into a main "UI" that can be toggled on or off. The user
   can set a default configuration for the UI (decide if the UI toggles on or
@@ -562,17 +565,12 @@ range should be kept as they are.
   when opening a note contained in the pkm folder, or a combination, or
   manually only). 
  
-  The UI should have a base configuration, e.g. a left sidebar which is divided
-  horizontally between notes and views sidebars and a bottom bar for the
-  buffers. Modifiability of this UI is set as a near term addition.
+  The UI should have a base configuration, e.g. a left views sidebar and a
+  bottom bar for the buffers. Modifiability of this UI is set as a near term
+  addition.
  
   With this, we effectively have a "note explorer submodule/subplugin" for our
   pkm system.
-
-- Sidebar readability: show the filename of files under the cursor in a
-  horizontal neovim "infobar", to allow readability of filenames that are too
-  long for the sidebar. If the text is too long for the "infobar", it can be
-  wrapped (carefully as to not obstruct text in other infobars or in open buffers.
 
 - Sidebar navigability: there should be a quick way to go from any window to
   the sidebar. This is especially important if the  user is working with
@@ -588,16 +586,25 @@ every child to display note counts. Each `match_all` call does a full index scan
 but it has not been measured at realistic scale.
 
 **Benchmark plan:**
-
-Add `bench.views_suite(n_views, branching_factor, opts?)` to `bench.lua`:
-- Generate `n_views` synthetic views with the given branching factor
-  (e.g. branching_factor=3 → each root has 3 children, each child has 3 grandchildren)
-- Time `views.list()`, `views.match_all(name)`, and `views.open_sidebar(name)`
-  across 50 / 100 / 300 / 1000 views
+Complete.
 
 Expected bottleneck: `sidebar_build_lines` calls `match_all` for parent + all
 direct children. At 20 children × 10k notes, this is ~200k filter evals per
 sidebar open.
+
+Results:
+
+```
+- Scaling is perfectly linear: ms/view is constant across all view counts.
+- 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
+→ 3087ms  (~3.1ms/view)
+- 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
+→  130ms  (~0.13ms/view)
+- JIT accounts for ~2–3× speedup between cold and warm runs at same note
+count.
+- Caching decision: not warranted at current scale. Revisit at ~5k notes or
+~200+ views.
+```
 
 **Potential optimisation:** Add `_match_cache = {}` to `views.lua` module state —
 cached path arrays per view name, invalidated alongside `_tree_cache` in

@@ -73,28 +73,52 @@
   overview mode, and shows the filename when on a note line.
 
 ### Changed
+- **`renumber_sequence` upgrade** (`markdown.lua`) — rewritten with a
+  per-level counter stack and two new families:
+  - **Nested lists**: effective depth is computed as blockquote depth (2 per
+    `>`) + indent depth (1 per space, 4 per tab). `counters[depth]` tracks
+    the counter at each level; stepping to a shallower depth clears all
+    deeper entries so sub-lists restart from 1 under each new parent item.
+  - **Blockquote-prefixed lists**: `>` and `>>` prefixes are stripped before
+    pattern matching and restored in output unchanged. Blockquote depth is
+    included in the effective depth so `>` and `>>` items at the same text
+    indent maintain independent counters.
+  - **Emphasis-wrapped ordinals** (`list_emph` family): detects `*N*[.)]`
+    and `**N**[.)]` as list markers (single and double emphasis). Uses the
+    same per-level counter stack as plain lists. Detected after plain list,
+    before header families, preserving detection order discipline.
+  - **Header families** (`hdr_prefix`, `hdr_suffix`): behaviour unchanged;
+    use a flat counter; now also handle blockquote-prefixed headers.
+  - All families now accept leading `>` blockquote markers on every line.
+  - Detection order preserved: `list` → `list_emph` → `hdr_prefix` →
+    `hdr_suffix`.
+
 - `:PKMBrowse` is now the primary note browser (`<leader>nf`). With Telescope,
   the prompt is a live filter bar: each keystroke evaluates the expression
   through `filter.lua` against the full index. Bare text (no prefix) triggers
   the `any` predicate; structured expressions (`tag:x AND title:y`) work as
   before. `:PKMBrowse <expr>` still pre-seeds the prompt. Falls back to a
   single `vim.fn.input` prompt when Telescope is unavailable.
+
 - `telescope.browse_paths` and `ui.browse_paths` now resolve paths to index
   entries and route through `live_picker`. The sidebar `/` and views-tree
   `<C-f>` searches now evaluate the live prompt against the scoped entry set
   (§2.4 shared engine), replacing the old display-string substring match.
+
 - `config.keymaps.search` removed; `config.keymaps.browse` defaults to
   `"<leader>nf"`.
+
 - `:PKMViewUpdate` (`M.edit_view`) — extended beyond filter-expression editing.
   Now presents an action picker: "Edit filter expression" (existing behaviour),
   "Rename" (renames the sidecar key; propagates to any child subprojects whose
-  `parent` field referenced the old name; "updates `_last_view` and the current
-  tabpage's name field if they match and "Change parent" (subprojects only;
+  `parent` field referenced the old name; updates `_last_view` and the current
+  tabpage's `name` field if they match), and "Change parent" (subprojects only;
   validates against ancestor-descendant cycles via a recursive descendant
   check before writing). Rename and Change parent are shown only when the view
   exists in views.json (config-only views show only "Edit filter expression"
   with a note to edit the Neovim config for structural changes). New local
   helpers: `rename_view_prompt`, `reparent_view_prompt`.
+
 - **Per-tabpage sidebar state (`views.lua`)** — the nine flat `_sidebar_*`
   module-level variables replaced by a `_tabs` table keyed by
   `nvim_get_current_tabpage()`, accessed via a `get_tab()` local helper.
@@ -121,11 +145,20 @@
   raw Telescope `live_grep` over PKM files. Body search is absorbed by
   `:PKMBrowse` (any predicate); frontmatter/citation noise eliminated because
   matching now runs over structured index fields.
+
 - Dead emphasis-wrapping keymap defaults from `config.lua` (`wrap_italic`,
   `wrap_bold`, `wrap_bold_italic`, `wrap_code`, `wrap_strike`) — removed in
   1.4.1 but defaults were not cleaned up.
 
 ### Fixed
+- **Symbol abbreviations leave trailing space** — `setup_symbols` used
+  `iabbrev` for `trigger` entries; Vim's abbreviation mechanism requires a
+  non-keyword character (typically Space) to fire and inserts it alongside
+  the expansion. Changed to `vim.keymap.set('i', ...)`, matching the
+  existing `key` implementation. Expansions fire on the exact key sequence
+  with no trailing space and no Space required to activate. `trigger` and
+  `key` remain distinct fields for semantic clarity but now share the same
+  implementation.
 
 - **Cross-citation data loss (modified cited buffer)** — `manage_backlink` now
   detects whether the target buffer is open and modified before reading. If
@@ -190,19 +223,37 @@
   mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
   the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
-- `:PKMOrphans` is O(V × N) at call time (calls views.match_all() once per
-  defined view to build the viewed-path set). Negligible at small scale;
-  include it in the bench.views_suite timing plan (§7).
+
+- `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
+  defined view to build the viewed-path set). `bench.views_suite` was run at
+  10k notes: overview costs V × 3.1ms (50 views → 158ms, 300 views → 935ms).
+  At current real corpus scale (hundreds of notes, tens of views) the cost is
+  negligible. `_match_cache` is deferred: revisit if corpus reaches ~5k notes
+  or view count exceeds ~200 with observed latency.
 
 
 
-### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
+### Benchmarks 
+
+#### Post-index integration (bench_dir on NTFS/WSL, P: drive)
 
   - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
   - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
   - 100k projection (raw scan): ~14.2s; post-index: ~65ms
   - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
     filesystem speed, not a regression.
+
+### Views_suite (NTFS/WSL, P: drive, synthetic notes)
+
+  - Scaling is perfectly linear: ms/view is constant across all view counts.
+  - 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
+    → 3087ms  (~3.1ms/view)
+  - 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
+    →  130ms  (~0.13ms/view)
+  - JIT accounts for ~2–3× speedup between cold and warm runs at same note
+    count.
+  - Caching decision: not warranted at current scale. Revisit at ~5k notes or
+    ~200+ views.
 
 ## [1.4.1] - 2026-6-8
 
