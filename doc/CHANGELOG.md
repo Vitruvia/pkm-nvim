@@ -51,12 +51,11 @@
 - §9 Conventions SPEC added to `doc/CONVENTIONS.md` (documentation only;
   implementation in Phase 4).
 
-- **Sidebar filename infobar** — when the cursor rests on a note line in the
-  sidebar's detail mode, the sidebar window's `statusline` updates to show the
-  full filename of the note under the cursor. Implemented as a buffer-local
-  `CursorMoved` autocmd registered at sidebar-open time. No extra window
-  consumed; autocmd is cleaned up automatically on `BufWipeout`. In overview
-  mode the statusline is cleared.
+- **Sidebar filename infobar** — … Implemented as a buffer-local `CursorMoved`
+  autocmd using the `winbar` window option (not `statusline`) so it coexists
+  with lualine and other plugins that refresh the statusline on their own
+  events. The winbar is hidden (`''`) when the cursor is on a header line or in
+  overview mode, and shows the filename when on a note line.
 
 ### Changed
 - `:PKMBrowse` is now the primary note browser (`<leader>nf`). With Telescope,
@@ -156,6 +155,17 @@
   `write` in the context of the panel-selected buffer without touching any
   window — the same pattern used in `init.lua`'s BufWritePost reload. `bdelete`
   already names the buffer by number and was unaffected.
+
+- **Buffer panel `d`/`D`/`w` close the editing window instead of the buffer**
+  — `bdelete n` closes every window displaying buffer `n` before unloading it;
+  when the main editing window was the only non-panel window, it closed rather
+  than switching away. New module-level local `detach_buf_from_wins(bufnr)`
+  iterates all non-panel non-float windows in the current tabpage that show the
+  target buffer, switching each to its alternate buffer, another listed buffer,
+  or a new empty buffer (`noautocmd enew`) in that priority order. Called by
+  `d`, `D`, and `w` before any `bdelete` call. `d` and `D` gain an explicit
+  `nvim_buf_is_valid` guard (previously only `if bufnr then`). This also
+  consolidates the three keymaps to share the detach helper.
 
 ### Known Bugs (queued)
 

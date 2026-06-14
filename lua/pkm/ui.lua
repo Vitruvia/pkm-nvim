@@ -121,6 +121,40 @@ local function ensure_main_window()
   end
 end
 
+--- Switch all non-panel, non-float windows in the current tabpage that
+--- are showing bufnr away from it before a bdelete call.
+--- Prefers the window's alternate buffer; falls back to any other listed
+--- buffer; last resort is a new empty buffer. Prevents bdelete from
+--- closing windows unintentionally.
+local function detach_buf_from_wins(bufnr)
+  local ct = get_tab()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= ct.win
+    and vim.api.nvim_win_get_config(win).relative == ''
+    and vim.api.nvim_win_get_buf(win) == bufnr then
+      vim.api.nvim_win_call(win, function()
+        local alt = vim.fn.bufnr('#')
+        if alt > 0 and alt ~= bufnr
+        and vim.api.nvim_buf_is_valid(alt)
+        and vim.bo[alt].buflisted then
+          vim.cmd('noautocmd buffer ' .. alt)
+          return
+        end
+        for _, b in ipairs(vim.api.nvim_list_bufs()) do
+          if b ~= bufnr
+          and vim.api.nvim_buf_is_valid(b)
+          and vim.bo[b].buflisted
+          and vim.api.nvim_buf_get_name(b) ~= '' then
+            vim.cmd('noautocmd buffer ' .. b)
+            return
+          end
+        end
+        vim.cmd('noautocmd enew')
+      end)
+    end
+  end
+end
+
 --- Toggle the persistent bottom buffer-list panel.
 --- Opens at the bottom of the screen; closes if already open.
 --- <CR> opens buffer in main window. d/D close it. w saves and closes.
@@ -220,43 +254,43 @@ function M.toggle_bufpanel()
   vim.keymap.set('n', 'd', function()
     local ct    = get_tab()
     local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
-    if bufnr then
-      local ok, err = pcall(vim.cmd, 'bdelete ' .. bufnr)
-      if not ok then
-        vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
-      else
-        ensure_main_window()
-      end
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+    detach_buf_from_wins(bufnr)
+    local ok, err = pcall(vim.cmd, 'bdelete ' .. bufnr)
+    if not ok then
+      vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
+    else
+      ensure_main_window()
     end
   end, ko)
 
   vim.keymap.set('n', 'D', function()
     local ct    = get_tab()
     local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
-    if bufnr then
-      local ok, err = pcall(vim.cmd, 'bdelete! ' .. bufnr)
-      if not ok then
-        vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
-      else
-        ensure_main_window()
-      end
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+    detach_buf_from_wins(bufnr)
+    local ok, err = pcall(vim.cmd, 'bdelete! ' .. bufnr)
+    if not ok then
+      vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
+    else
+      ensure_main_window()
     end
   end, ko)
 
   vim.keymap.set('n', 'w', function()
     local ct    = get_tab()
     local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
-    if not bufnr then return end
-    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
     local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function()
       vim.cmd('write')
     end)
-    if ok then
-      pcall(vim.cmd, 'bdelete ' .. bufnr)
-      ensure_main_window()
-    else
+    if not ok then
       vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
+      return
     end
+    detach_buf_from_wins(bufnr)
+    pcall(vim.cmd, 'bdelete ' .. bufnr)
+    ensure_main_window()
   end, ko)
 
   vim.keymap.set('n', 'r', function()

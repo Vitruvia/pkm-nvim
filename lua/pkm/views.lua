@@ -1715,8 +1715,8 @@ function M.open_sidebar(name)
         end
       end
       vim.api.nvim_set_option_value(
-        'statusline',
-        filename ~= '' and (' ' .. filename) or ' ',
+        'winbar',
+        filename ~= '' and (' ' .. filename) or '',
         { win = ct.win })
     end,
   })
