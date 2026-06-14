@@ -356,6 +356,7 @@ its turn.
 - §9 conventions IMPLEMENTATION.
 
 **Phase 5 — Last changes, fi feasible.**
+- §5 PKM mode
 - §8 deleted-note trash (tombstone-manifest caveat). (if too complex or
   performance intensive, defer. Otherwise, implement).
 - preview.lua, persistent index, review queue, `_match_cache` (only if §7
@@ -635,6 +636,13 @@ Remaining implementation work (Phase 4):
  user has multiple tab pages, opening a sidebar in a second tab would
  conflict with the first tab's state. Mitigation: track sidebar state per
  tab page (`vim.api.nvim_get_current_tabpage()`).
+
+**5. PKM mode**
+- A toggled mode when opening a note, entering into the PKM folder, or sending
+  a command (directly or via key sequence). This mode should open the default
+  UI, activate specific highlighting (if any exist), and check the health of
+  the permanent index (if implemented) or generate the index (if still using a
+  temporary index).
 
 ---
 

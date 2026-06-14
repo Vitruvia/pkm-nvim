@@ -5,6 +5,20 @@
 ## [Unreleased]
 
 ### Added
+- `bench.views_suite(opts?)` — view-scaling benchmark for the overview
+  scenario. Generates `note_count` (default 10 000) synthetic notes and
+  builds an in-memory entry table, then at view counts 50 / 100 / 300 / 1 000
+  times: (a) a single `filter.eval` pass over all notes (sidebar detail-mode
+  cost) and (b) V sequential passes, one per synthetic view, counting matches
+  only (mirrors `sidebar_build_overview` and `:PKMOrphans` — both O(V × N)).
+  Uses synthetic state only; live PKM index, views.json, and real notes are
+  not modified. Required measurement gate before any `_match_cache`
+  optimisation of the O(V × N) path; do not add caching without running this
+  first and recording the numbers in CHANGELOG.
+  Usage: `:lua require('pkm.bench').views_suite()`.
+  Options: `note_count` (integer, default 10000), `bench_dir` (string, default
+  temp), `keep` (boolean, default false).
+
 - `filter.lua`: `any` predicate — bare word, standalone quoted string, or
   unrecognised-field token. `eval` for `any`: case-insensitive plain substring
   over title ∪ body ∪ filename ∪ tag values. Tag values are substring for
@@ -12,6 +26,7 @@
   ":") ? value`; `field` gains `any`; tokenizer now disambiguates (unknown
   field → any, bare word → any). `parse_atom` field validation removed; the
   tokenizer guarantees only KNOWN_FIELDS reach the parser.
+
 - `:PKMBrowseRecent [n]` — show the n most recently modified notes (default 20),
   sorted by `mtime` descending. Opens in the live filter picker (Telescope) or
   `vim.ui.select` (fallback); `n` can be overridden per invocation.

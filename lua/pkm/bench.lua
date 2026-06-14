@@ -33,6 +33,8 @@
 --   :lua require('pkm.bench').run_suite(nil, { keep = true })
 --   :lua require('pkm.bench').run_suite(nil, { extended = true })
 --   :lua require('pkm.bench').cleanup('/some/dir')
+--   :lua require('pkm.bench').views_suite()
+--   :lua require('pkm.bench').views_suite({ note_count = 1000 })
 --
 -- Public API:
 --   time(fn)                       → elapsed_ms (float)
@@ -40,6 +42,7 @@
 --   cleanup(bench_dir)             → delete bench_dir and all contents
 --   baseline()                     → timed raw scan on real corpus (read-only)
 --   run_suite(bench_dir?, opts?)   → four-phase suite; cleans up afterward
+--   views_suite(opts?)             → view × note scaling bench (overview scenario)
 -- =============================================================================
 
 local M = {}
@@ -392,6 +395,127 @@ function M.run_suite(bench_dir, opts)
   end
 
   vim.notify('PKMBench: suite complete.', vim.log.levels.INFO)
+end
+
+--- Run a timed benchmark for view-hierarchy scaling.
+--- Measures how overview-build time (O(V × N)) scales with view count.
+--- Uses synthetic notes and filter trees; does not modify live PKM state,
+--- views.json, or the live index.
+---
+--- This is the required measurement gate before introducing any caching of
+--- match_all results in sidebar_build_overview or :PKMOrphans. Both call
+--- match_all once per defined view (O(V × N) at query time); caching is
+--- only justified if this suite shows meaningful latency at realistic V.
+---
+--- What is measured:
+---   single  : one filter evaluated against all N notes
+---             (sidebar detail-mode cost: one match_all call per open)
+---   overview: V filters evaluated against all N notes, counting only
+---             (sidebar_build_overview + :PKMOrphans: one match_all per view)
+---
+--- Options (opts table):
+---   note_count (integer) synthetic notes to generate; default 10000
+---   bench_dir  (string)  directory for synthetic files; default temp dir
+---   keep       (boolean) retain synthetic files after run; default false
+---
+---@param opts table|nil
+function M.views_suite(opts)
+  opts       = opts or {}
+  local keep       = opts.keep       or false
+  local note_count = opts.note_count or 10000
+  local bench_dir  = opts.bench_dir
+    or (vim.fn.tempname() .. '_pkmbench_views')
+
+  local filter = require('pkm.filter')
+
+  -- 1. Generate synthetic notes and build an in-memory entry table.
+  local notes_dir = utils.join(bench_dir, 'notes')
+  vim.notify(
+    string.format('PKMBench views: generating %d synthetic notes…', note_count),
+    vim.log.levels.INFO)
+  M.gen_notes(note_count, notes_dir)
+
+  local tbl, ms_build = phase_index_build(notes_dir)
+  local entries = {}
+  for _, e in pairs(tbl) do entries[#entries + 1] = e end
+
+  if #entries == 0 then
+    vim.notify('PKMBench views: no entries indexed — aborting', vim.log.levels.ERROR)
+    if not keep then M.cleanup(bench_dir) end
+    return
+  end
+
+  vim.notify(string.format(
+    'PKMBench views: %d entries indexed in %.1fms',
+    #entries, ms_build),
+    vim.log.levels.INFO)
+
+  -- 2. Build synthetic filter trees.
+  -- Cycles through TAGS to produce distinct single-predicate views, which
+  -- approximate typical real-world filter complexity. Subproject AND-chains
+  -- at depth D cost ~D× per view; depth-2 chains roughly double the overview
+  -- time. Not modelled here: single-predicate filters isolate the eval-loop
+  -- cost cleanly as the baseline measurement.
+  local function make_trees(n)
+    local trees = {}
+    for i = 1, n do
+      local tag       = TAGS[((i - 1) % #TAGS) + 1]
+      local tree, err = filter.parse('tag:' .. tag)
+      if tree then
+        trees[#trees + 1] = tree
+      else
+        vim.notify(
+          'PKMBench views: parse error: ' .. (err or '?'),
+          vim.log.levels.WARN)
+      end
+    end
+    return trees
+  end
+
+  -- 3. Warm-up: JIT-compiles the hot eval loop before recording.
+  local warm = make_trees(50)
+  for _, tree in ipairs(warm) do
+    for _, entry in ipairs(entries) do filter.eval(tree, entry) end
+  end
+
+  -- 4. Timed runs across view-count tiers.
+  local view_counts = { 50, 100, 300, 1000 }
+
+  for _, n_views in ipairs(view_counts) do
+    local trees = make_trees(n_views)
+
+    -- Single view: one filter over all entries (sidebar detail-mode cost).
+    local ms_single = M.time(function()
+      local c = 0
+      for _, entry in ipairs(entries) do
+        if filter.eval(trees[1], entry) then c = c + 1 end
+      end
+    end)
+
+    -- Overview: V filters over all entries, counting only.
+    -- Mirrors sidebar_build_overview() and :PKMOrphans (both O(V × N)).
+    local ms_overview = M.time(function()
+      for _, tree in ipairs(trees) do
+        local c = 0
+        for _, entry in ipairs(entries) do
+          if filter.eval(tree, entry) then c = c + 1 end
+        end
+      end
+    end)
+
+    vim.notify(string.format(
+      'PKMBench views  %4d views × %5d notes | single %6.2fms  overview %7.1fms  %.2fms/view',
+      n_views, #entries, ms_single, ms_overview, ms_overview / n_views),
+      vim.log.levels.INFO)
+  end
+
+  if keep then
+    vim.notify('PKMBench views: files kept at ' .. bench_dir, vim.log.levels.INFO)
+  else
+    M.cleanup(bench_dir)
+  end
+
+  vim.notify('PKMBench views: suite complete.', vim.log.levels.INFO)
 end
 
 return M
