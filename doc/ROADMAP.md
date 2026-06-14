@@ -56,17 +56,9 @@ The note namespace is intentionally **flat and global** — all notes share a si
      (AND, OR, NOT, parentheses)
 - ✅ In-memory note index with incremental invalidation (~290× faster)
 - ✅ :PKMBrowse [expr] — index+filter browser. Pipeline (telescope.browse /
-     ui.browse) implemented and correct. ⚠ BUG: registered with nargs='?', so
-     multi-token expressions (`tag:x AND title:y`) are rejected by Neovim
-     (E488) before the handler runs; single-token filters work. Fix: nargs='*'
-     (CHANGELOG → Known Bugs). PLANNED: rework into a unified filter-as-you-type
-     search bar — bare text = full-text plain substring; field prefixes /
-     booleans = filters — see Next Steps §2.
+     ui.browse) implemented and correct. 
 - ✅ :PKMTags — tag picker; on selection opens browse('tag:'..x). Index-backed.
      Kept as a secondary shortcut.
-- ⚠ :PKMSearch — Telescope live_grep: ripgrep over RAW files, so it matches
-     frontmatter and citation-link noise (not body-only). SLATED FOR REMOVAL;
-     its free-text role is absorbed by the §2 search bar. See Next Steps §2.
 == Views ==
 - ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD commands
 - ✅ Subproject hierarchy — table-valued view entries with `parent`/`filter`; composes AND chain
@@ -337,7 +329,7 @@ its turn.
   fix; complements the search bar).
 - §9 conventions SPEC only (implementation is Phase 4).
 
-**Phase 2 — Foundations for the explorer UI.**
+**(Currently here) Phase 2 — Foundations for the explorer UI.**
 - Near-term §4 per-tab-page window state — prerequisite for the unified UI,
   not a late polish item; promoted here.
 - §4 Sidebar readability improvements.
@@ -356,127 +348,29 @@ its turn.
 - §3 `**1.**`-style ordered-list indent recognition.
 - §9 conventions IMPLEMENTATION.
 
-**Phase 5 — Distant.**
-- §8 deleted-note trash (tombstone-manifest caveat).
-- Near-term §3 explorer UI customisation.
-- Near-term §5 ASCII / text diagrams.
+**Phase 5 — Last changes, fi feasible.**
+- §8 deleted-note trash (tombstone-manifest caveat). (if too complex or
+  performance intensive, defer. Otherwise, implement).
 - preview.lua, persistent index, review queue, `_match_cache` (only if §7
-  proves it necessary).
+  proves it necessary, otherwise defer).
+
+-- Current update plan finishes here --
+
+After finishing phases and reaching this point, and only then, do:
+1. Review ROADMAP and check if all steps were successfully completed. 
+2. Reincorporate deferred (see below, and also if you defer any items from
+   Phase 5) items into their designed stops (e.g. Distant additions, potential
+   additions, near-term, etc.).
+3. Rewrite the plan from Next Steps up to distant and potential additions. 
+4. Update other relevant ROADMAP sections.
+5. Update pkm.txt, README.md, and any other pertinent docs (e.g.
+   LLM_Context.md, if necessary).
+
+**Deferred:**
+- Explorer UI customisation: moved from near-term to distant.
+- ASCII / text diagrams: moved from near-term to distant
 
 ### Next Steps
-
-**1. Metadata commands — edit frontmatter without opening YAML**
-
-*Motivation:* Tags and title are currently modified by manually navigating to
-and editing the YAML block. This is friction-heavy for common operations and
-incompatible with future interfaces that hide frontmatter entirely.
-
-**Design:** Buffer-only — every command mutates the YAML in the open note's
-buffer via `nvim_buf_set_lines`, never the file on disk. The existing
-BufWritePre/BufWritePost cycle persists the change and re-indexes on the user's
-next save, so these commands must NOT call `index.invalidate`: with no disk
-write, invalidation would force the index to re-read stale on-disk content. (If
-a command must be visible to the index BEFORE the user saves — e.g. a future
-live-membership feature — convert that one command to write-through: write the
-file, then invalidate. None of the three below need that today.)
-
-- `:PKMSetTitle` — prompts for a new title string, writes it to the `title`
-  frontmatter field. Does not rename the file.
-- `:PKMAddTag [tag]` — appends a tag to the `tags` list. Prompts if no argument.
-  Silently skips if already present.
-- `:PKMRemoveTag [tag]` — removes a tag. Prompts/picker if no argument.
-
-**Implementation:** `notes.lua` gets `M.set_title()`; `citations.lua` gets
-`M.add_tag()` and `M.remove_tag()`. New commands in `commands.lua`. Keymaps
-`set_title`, `add_tag`, `remove_tag` in `config.lua` and `keymaps.lua` (all
-default `false`).
-
----
-
-**2. Unified filter-as-you-type search (the search bar), powered by `filter.lua`.**
-
-*Goal.* One interactive note finder that behaves like an advanced search bar
-(PubMed-style). Opening it lists all notes; whatever the user types in the
-prompt is interpreted LIVE by `filter.lua`. Bare text searches across all
-fields (title, body, filename, tags) by plain substring — never fuzzy. Prefixed
-or boolean input (`tag:math`, `title:fourier AND NOT tag:draft`,
-`(laplace OR fourier)`) applies structured filters. Passing an expression on the
-command line (`:PKMBrowse tag:math`) stays available as a shortcut that opens
-the panel pre-seeded, but is no longer required — the panel is the default.
-
-*Why the current behaviour is insufficient.* `telescope.browse` pre-filters once
-at open and then narrows only over the display string (title + filename); body
-text is unreachable from the prompt, and filters can only be supplied at
-invocation. The fix is to make the prompt itself the live filter input, and to
-lean on `filter.lua` — the module built precisely for boolean field
-combinations — extending it where needed.
-
-*2.1 Delete `:PKMSearch` (decided).* Remove the command and its
-`telescope.search_notes` / `ui.search_notes` backers; repoint `<leader>nf` →
-`:PKMBrowse`. No capability is lost: free-text body search is absorbed by 2.2–2.3
-(bare text matches body), and the old frontmatter/citation noise disappears
-because matching now runs over the index's structured fields rather than raw
-files.
-
-*2.2 Extend `filter.lua` with a default ("any") predicate.* Grammar change:
-    predicate = (field ":")? value
-    field     = "tag" | "title" | "text" | "filename" | "any"
-A value with no recognised `field:` prefix becomes an `any` predicate. `eval`
-for `any` is a case-insensitive PLAIN substring test against title ∪ body ∪
-filename ∪ tag-values. Existing predicates are unchanged (`tag:` stays EXACT;
-`title:`/`text:` stay substring), so every current view definition keeps
-working — and views may now also use bare text (e.g. `"fourier AND tag:math"`).
-Disambiguation rule: `word:word` is a field predicate ONLY when `word` is a
-known field; otherwise the whole token (colon included) is an `any` value.
-Literal keywords or colons are matched by quoting (`"and"`, `"http://x"`).
-Update the grammar comment and the `filter.lua` module doc when built.
-
-*2.3 Rewrite the picker to evaluate the prompt live.* Replace the static
-pre-filter + display-narrowing with: on each keystroke, `filter.parse(prompt)`;
-on success `filter.eval(tree, entry)` over `index.get_all()`; sort survivors by
-type then title; feed `new_dynamic` + `sorters.empty()` (preserving the no-fzy
-guarantee — matching is plain substring throughout). On an incomplete/invalid
-expression mid-typing, fall back to treating the raw prompt as one `any`
-substring so the bar never errors. Performance is adequate: `filter.eval` is
-~6.6 ms over 10k notes (bench.lua), within as-you-type budget at realistic
-sizes; revisit only if §7 shows otherwise.
-    -- dynamic finder fn (sketch)
-    fn = function(prompt)
-      local entries = index.get_all()
-      if not prompt or prompt == '' then return to_items(entries) end
-      local tree = filter.parse(prompt) or filter.parse_bare(prompt)  -- any-fallback
-      local out = {}
-      for _, e in ipairs(entries) do
-        if filter.eval(tree, e) then out[#out + 1] = e end
-      end
-      return to_items(sort_by_type_then_title(out))
-    end
-
-*2.4 Filters inside the scoped / browsing panels.* The sidebar `/` search and
-the views-tree `<C-f>` search currently do exact-substring over a view's paths.
-Route them through the SAME engine, evaluating the live prompt against the
-SCOPED entry set (the view's notes) instead of the whole index. Factor 2.3 into
-one shared helper that takes an entry list, so global and scoped search share
-behaviour.
-
-*2.5 Fallback (no Telescope).* `vim.ui.select` is not as-you-type, so `ui.browse`
-degrades to: prompt once for an expression via `vim.fn.input` (with the
-autocomplete from Near-term §1 when available), parse + eval, then
-`vim.ui.select` the results. Document the degradation.
-
-*2.6 Keep `:PKMTags` as a secondary shortcut* (`<leader>nt`): it pre-seeds
-`tag:<x>` into the bar. No merge needed; the earlier "merge PKMTags with
-PKMSearch" idea is withdrawn (different mechanisms).
-
-Affected files: `filter.lua` (any predicate + grammar/doc), `telescope.lua`
-(browse rewrite, shared scoped helper, remove `search_notes`), `ui.lua` (browse
-rewrite, remove `search_notes`), `commands.lua` (`:PKMBrowse` nargs='*'; remove
-`:PKMSearch`), `keymaps.lua` (`search` → `browse`), `config.lua` (keymaps
-defaults), `views.lua` (sidebar `/` and tree `<C-f>` to the shared helper),
-`index.lua` (confirm `body` is populated for `any`), `doc/pkm.txt` (rewrite
-Search & Browse; remove `:PKMSearch`; update keymap list).
-
----
 
 **3. Improved and new markdown features:**
 
@@ -630,6 +524,8 @@ range should be kept as they are.
       behalf.
       - Text just before a separator `---` highlights differently from other
       texts (in bold blue). Check if this is intended.
+      - Underscores between letters highlight in red (e.g `a_a`). Check if this
+      is intended, otherwise fix.
 - **Frontmatter folding and conceal (in-file metadata readability).** The
   primary in-file remedy for heavy YAML frontmatter and long citation lists —
   no sidecar separation required (see "Metadata system review" under Potential
@@ -645,12 +541,6 @@ range should be kept as they are.
     `@conceal`), so build it together with the §3 syntax decision. This is the
     deliverable the metadata-separation decision gate (Potential goals → D)
     requires us to try before considering any sidecar redesign.
-
----
-
-**4. `:PKMOrphans`** — show notes that have no citations (neither cites nor
-cited_by), no tags, and do not match any defined view. Useful for finding
-abandoned or unfiled notes.
 
 ---
 
@@ -680,32 +570,8 @@ abandoned or unfiled notes.
   the sidebar. This is especially important if the  user is working with
   multiple vertical windows.
 
-- Fix:
-  - Saving and closing a buffer in the PKM buffer window (using `w`) works, but causes the following error messsage
-  to appear:
-
-    ``` 
-    Error executing vim.schedule lua callback: vim/_editor.lua:445:
-    nvim_exec2(), line 1: Vim(edit):E32: No file name stack traceback: [C]: in
-    function 'nvim_exec2' vim/_editor.lua:445: in function 'cmd'
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:126: in function
-    <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:94>
-    ```
-
-  - Closing a buffer in the PKM buffer window, when there is only one buffer
-    open, makes the buffer window move up (it becomes a horizontal bar above
-    the notes, instead of under). and creates a non-functioning space below it
-    (appreas as a neovim window, but can't be switched using window switching
-    commands. Making a new horizontally split window splits only the buffer
-    window into two, ignoring this space). 
-
 ---
 
-**6. PKM view system** 
-- Change `PKMViewUpdate` so that it allows renaming views and changing
-parents of subviews.
-
----
 **7. Performance: views and sidebar at scale**
 
 *Motivation:* The sidebar tree header calls `M.match_all()` for the parent and
@@ -756,62 +622,23 @@ Remaining implementation work (Phase 4):
 
 ### Near-term additions
 
-**1. Filter expression autocomplete** — when typing in `:PKMBrowse` or
-`:PKMView`, autocomplete tag names (from the index) and view names (from
-`views.list()`) as the user types. Requires a custom `complete` function in
-`commands.lua`.
-
-**2. `:PKMBrowseRecent [n]`** — show the `n` most recently modified notes,
-sorted by `mtime` from the index. Quick access to recent work without needing a
-view. Implementation: `index.get_all()` sorted by `mtime` descending, sliced to
-`n`, passed to `telescope.browse()` or `ui.browse()`.
-
-**3. Customization of the "explorer" UI:**  
-- positions, width and length of each bar;
-- options for when the UI should automatically turn on or off (by terminal
-  folder, by neovim working folder, by buffer (the buffer pertains to a PKM
-  file)), or any combination of those, or none); as well as 
-- other important options that we predict users may need.
 
 **4. Potential bugs to investigate before next major version:**
 - **Sidebar + tab pages:** `_sidebar_win` tracks one window globally. If the
  user has multiple tab pages, opening a sidebar in a second tab would
  conflict with the first tab's state. Mitigation: track sidebar state per
  tab page (`vim.api.nvim_get_current_tabpage()`).
-- **Cross-citation write-through to open buffers (DATA LOSS — fix, do not just
-  investigate).** Inserting a citation writes the CITED note's `cited_by` to
-  disk (`citations.manage_backlink` / `update_references`). If that note is open
-  in another buffer/window, Neovim sees the on-disk change and prompts (W11);
-  if the user keeps editing the now-stale buffer and saves, the backlink write
-  is overwritten and lost — confirmed instances of information loss. Root
-  cause: manage_backlink refreshes open buffers by disk-write + reload, a
-  strategy that already handles the unmodified case (1.4.0) but cannot be
-  applied to a MODIFIED buffer without discarding the user's unsaved edits — so
-  the modified buffer is skipped and left stale.Fix: before writing a note's frontmatter, check
-  `vim.fn.bufnr(path)`; if the buffer is loaded, apply the change with
-  `nvim_buf_set_lines` (let the user's own save persist it), or, *if the file
-  is unmodified*, write disk then silently reload THAT specific buffer with the
-  established `winsaveview` + `noautocmd e` + `vim.bo.modified=false` pattern
-  (*ATTENTION*: reload is for the unmodified case only — for a modified cited
-  buffer, write into the buffer, never reload). Today's
-  pattern only protects the active buffer; it must extend to any open buffer.
-  Same failure family as the buffer-panel `E32` bug (§5): a reload assuming the
-  wrong buffer is current. Logged in CHANGELOG → Known Bugs.
-
-**5. Alternative diagram and imaging methods to allow enhancement of notes
-without dependence on external image files:** e.g. ASCII (text-based) art.
-
-((All features under this item should be examined for readability (AI, machine,
-and human) and portability before further detailing and implementation)).
-- Add support or consider already supported methods, with emphasis on human and
-  AI readability and general portability, and, as a secondary goal, easyness of
-  use.
-- Standardize methods for human and AI usage, in order to aid correct usage
-  of such graphics and their understanding by any user.
 
 ---
 
 ### Distant Additions (mid-term to long-term)
+
+- Customization of the "explorer" UI:  
+  - positions, width and length of each bar;
+  - options for when the UI should automatically turn on or off (by terminal
+    folder, by neovim working folder, by buffer (the buffer pertains to a PKM
+    file)), or any combination of those, or none); as well as 
+  - other important options that we predict users may need.
 
 - **`lua/pkm/preview.lua`** Browser-based live preview: Markdown + LaTeX
   (MathJax), WebSocket live updates on save, cross-platform browser opening,
@@ -831,6 +658,17 @@ and human) and portability before further detailing and implementation)).
 - **Note review queue.** Enables the user to select and keep track of notes intended
   for review. Might include organizers, separators, or interact with filters to
   enable the user to categorize such notes according to priority, subject, etc.
+
+-*5. Alternative diagram and imaging methods to allow enhancement of notes
+without dependence on external image files: e.g. ASCII (text-based) art.
+
+((All features under this item should be examined for readability (AI, machine,
+and human) and portability before further detailing and implementation)).
+- Add support or consider already supported methods, with emphasis on human and
+  AI readability and general portability, and, as a secondary goal, easyness of
+  use.
+- Standardize methods for human and AI usage, in order to aid correct usage
+  of such graphics and their understanding by any user.
 
 ---
 

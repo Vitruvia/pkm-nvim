@@ -34,7 +34,7 @@
 --   setup()             → register BufWritePost autocmd for views.json
 --   list()              → string[]  sorted view names (sidecar + config)
 --   list_views()        → open tree picker over all views (Telescope or float)
---   edit_view(name?)    → open edit UI for a named view; picker if nil
+--   edit_view(name?)    → action picker: edit filter / rename / reparent; picker if nil
 --   match_all(name)     → string[]  paths matching the named view's filter
 --   open(name?)         → activate a view; prompts for name if nil
 --   open_last()         → reopen the last activated view (session-scoped)
@@ -1092,8 +1092,156 @@ local function edit_view_float(name)
   end, ko)
 end
 
+--- Prompt for a new name and rename a view in views.json.
+--- Also updates any child subproject entries whose parent field matches the
+--- old name. Config-only views (not present in views.json) cannot be renamed
+--- this way; the user receives an explanatory message.
+---@param old_name string
+local function rename_view_prompt(old_name)
+  local data = load_sidecar()
+  if not data[old_name] then
+    if (get_config().projects or {})[old_name] then
+      vim.notify(
+        string.format(
+          "[pkm] '%s' is defined in your Neovim config — edit it there to rename",
+          old_name),
+        vim.log.levels.WARN)
+    else
+      vim.notify(string.format("[pkm] '%s' is not in views.json", old_name),
+        vim.log.levels.WARN)
+    end
+    return
+  end
+
+  vim.fn.inputsave()
+  local new_name = vim.fn.input('Rename view to: ', old_name)
+  vim.fn.inputrestore()
+
+  if not new_name or new_name:match('^%s*$') then
+    vim.notify('[pkm] rename cancelled', vim.log.levels.INFO)
+    return
+  end
+  new_name = new_name:match('^%s*(.-)%s*$')
+
+  if new_name == old_name then
+    vim.notify('[pkm] name unchanged', vim.log.levels.INFO)
+    return
+  end
+
+  -- Block if new_name already exists in the merged set (config OR sidecar).
+  if get_projects()[new_name] then
+    vim.notify(
+      string.format("[pkm] a view named '%s' already exists", new_name),
+      vim.log.levels.ERROR)
+    return
+  end
+
+  -- Move the sidecar entry and propagate to child subprojects.
+  data[new_name] = data[old_name]
+  data[old_name] = nil
+  for k, v in pairs(data) do
+    if type(v) == 'table' and v.parent == old_name then
+      data[k] = { parent = new_name, filter = v.filter }
+    end
+  end
+
+  if save_sidecar(data) then
+    -- Keep session state consistent.
+    if _last_view    == old_name then _last_view    = new_name end
+    if _sidebar_name == old_name then _sidebar_name = new_name end
+    vim.notify(
+      string.format("[pkm] view renamed: '%s' → '%s'", old_name, new_name),
+      vim.log.levels.INFO)
+    M.refresh_sidebar_if_open()
+  end
+end
+
+--- Prompt for a new parent and reparent a subproject view.
+--- Validates that the chosen parent is not the view itself or any of its
+--- descendants (which would create a cycle). Config-only subprojects cannot
+--- be reparented via this mechanism.
+---@param name string  Name of the subproject view to reparent
+local function reparent_view_prompt(name)
+  local projects = get_projects()
+  local expr     = projects[name]
+  if type(expr) ~= 'table' then
+    vim.notify(
+      string.format("[pkm] '%s' is not a subproject (has no parent field)", name),
+      vim.log.levels.WARN)
+    return
+  end
+  local current_parent = expr.parent
+
+  -- All views except the view itself are candidate parents; cycle check below.
+  local candidates = {}
+  for k in pairs(projects) do
+    if k ~= name then candidates[#candidates + 1] = k end
+  end
+  table.sort(candidates)
+
+  if #candidates == 0 then
+    vim.notify('[pkm] no other views available as parent', vim.log.levels.WARN)
+    return
+  end
+
+  vim.ui.select(candidates, {
+    prompt      = string.format(
+      "New parent for '%s'  (current: '%s'):", name, current_parent),
+    format_item = function(n) return n end,
+  }, function(new_parent)
+    if not new_parent then
+      vim.notify('[pkm] reparent cancelled', vim.log.levels.INFO)
+      return
+    end
+    if new_parent == current_parent then
+      vim.notify('[pkm] parent unchanged', vim.log.levels.INFO)
+      return
+    end
+
+    -- Cycle guard: walk descendants of `name` to confirm `new_parent`
+    -- does not appear in the subtree rooted at `name`.
+    local function is_descendant(ancestor, target)
+      for _, child in ipairs(get_view_children(ancestor)) do
+        if child == target or is_descendant(child, target) then return true end
+      end
+      return false
+    end
+
+    if is_descendant(name, new_parent) then
+      vim.notify(
+        string.format(
+          "[pkm] cannot reparent '%s' under '%s' — would create a hierarchy cycle",
+          name, new_parent),
+        vim.log.levels.ERROR)
+      return
+    end
+
+    local data = load_sidecar()
+    if not data[name] then
+      vim.notify(
+        string.format(
+          "[pkm] '%s' is only in Neovim config — edit it there to change the parent",
+          name),
+        vim.log.levels.WARN)
+      return
+    end
+
+    data[name] = { parent = new_parent, filter = expr.filter }
+    if save_sidecar(data) then
+      vim.notify(
+        string.format("[pkm] '%s' reparented: '%s' → '%s'",
+          name, current_parent, new_parent),
+        vim.log.levels.INFO)
+      M.refresh_sidebar_if_open()
+    end
+  end)
+end
+
 --- Open an edit UI for a named view.
---- If name is nil, presents a picker of all defined views.
+--- Presents an action picker: "Edit filter expression" is always available;
+--- "Rename" and "Change parent" (subprojects only) are offered when the view
+--- is stored in views.json (not config-only).
+--- If name is nil, a picker of all defined views opens first.
 ---@param name string|nil
 function M.edit_view(name)
   if not name or name == '' then
@@ -1106,11 +1254,44 @@ function M.edit_view(name)
       prompt      = 'Edit view:',
       format_item = function(n) return n end,
     }, function(sel)
-      if sel then edit_view_float(sel) end
+      if sel then M.edit_view(sel) end
     end)
     return
   end
-  edit_view_float(name)
+
+  local projects = get_projects()
+  if not projects[name] then
+    vim.notify(string.format("[pkm] no view named '%s'", name), vim.log.levels.WARN)
+    return
+  end
+
+  local is_sub     = type(projects[name]) == 'table'
+  local in_sidecar = load_sidecar()[name] ~= nil
+
+  local options = { 'Edit filter expression' }
+  if in_sidecar then
+    options[#options + 1] = 'Rename'
+    if is_sub then
+      options[#options + 1] = 'Change parent'
+    end
+  end
+
+  vim.ui.select(options, {
+    prompt      = string.format(
+      "PKMViewUpdate — '%s'  (%s):",
+      name,
+      is_sub and 'subproject' or 'simple view'),
+    format_item = function(o) return o end,
+  }, function(choice)
+    if not choice then return end
+    if choice == 'Edit filter expression' then
+      edit_view_float(name)
+    elseif choice == 'Rename' then
+      rename_view_prompt(name)
+    elseif choice == 'Change parent' then
+      reparent_view_prompt(name)
+    end
+  end)
 end
 
 -- =============================================================================

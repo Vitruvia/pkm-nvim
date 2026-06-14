@@ -64,6 +64,16 @@
   (§2.4 shared engine), replacing the old display-string substring match.
 - `config.keymaps.search` removed; `config.keymaps.browse` defaults to
   `"<leader>nf"`.
+- `:PKMViewUpdate` (`M.edit_view`) — extended beyond filter-expression editing.
+  Now presents an action picker: "Edit filter expression" (existing behaviour),
+  "Rename" (renames the sidecar key; propagates to any child subprojects whose
+  `parent` field referenced the old name; updates `_last_view` and
+  `_sidebar_name` if they match), and "Change parent" (subprojects only;
+  validates against ancestor-descendant cycles via a recursive descendant
+  check before writing). Rename and Change parent are shown only when the view
+  exists in views.json (config-only views show only "Edit filter expression"
+  with a note to edit the Neovim config for structural changes). New local
+  helpers: `rename_view_prompt`, `reparent_view_prompt`.
 
 ### Removed
 - `:PKMSearch` and its backers `telescope.search_notes` / `ui.search_notes` —
@@ -73,13 +83,6 @@
 - Dead emphasis-wrapping keymap defaults from `config.lua` (`wrap_italic`,
   `wrap_bold`, `wrap_bold_italic`, `wrap_code`, `wrap_strike`) — removed in
   1.4.1 but defaults were not cleaned up.
-
-### Test update required
-- `test/test_phase1.lua`: `ok("parse rejects unknown field", ...)` for
-  `body:something` must be updated — unknown fields now produce an `any`
-  predicate. Replace with: `t = filter.parse('body:something'); ok("unknown
-  field → any predicate", t ~= nil and t.field == 'any')`. Add tests for bare
-  word, standalone quote, and `any` eval.
 
 ### Fixed
 
