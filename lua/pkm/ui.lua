@@ -10,6 +10,7 @@
 --   browse_tags()            → Two-level tag → file picker
 --   browse(filter_expr?)     → Prompt for filter expression, eval, vim.ui.select results
 --   browse_paths(title, paths) → Show scoped path list via vim.ui.select (sorted)
+--   browse_recent(n?)         → n most-recently-modified notes via vim.ui.select
 --   insert_citation_ui()     → Context-aware citation picker fallback (no Telescope);
 --                               sorted by view membership and shared tags
 --   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
@@ -373,6 +374,34 @@ function M.browse_paths(title, paths)
     prompt      = title,
     format_item = function(e)
       return type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
+    end,
+  }, function(sel)
+    if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
+  end)
+end
+
+--- Show the n most recently modified notes (Telescope fallback).
+---@param n integer|nil  Max results; defaults to 20
+function M.browse_recent(n)
+  n = tonumber(n) or 20
+  local index = require('pkm.index')
+  local entries = index.get_all()
+  table.sort(entries, function(a, b) return (a.mtime or 0) > (b.mtime or 0) end)
+  if n > 0 and #entries > n then
+    local sliced = {}
+    for i = 1, n do sliced[i] = entries[i] end
+    entries = sliced
+  end
+  if #entries == 0 then
+    vim.notify('[pkm] no notes in index', vim.log.levels.INFO)
+    return
+  end
+  vim.ui.select(entries, {
+    prompt      = string.format('Recent (%d)', #entries),
+    format_item = function(e)
+      local dt = e.mtime and os.date('%Y-%m-%d', e.mtime) or '?'
+      return type_prefix(e.note_type) .. ' ' .. e.title
+           .. '  (' .. e.filename .. ')  ' .. dt
     end,
   }, function(sel)
     if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end

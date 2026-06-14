@@ -15,6 +15,48 @@
 local M = {}
 
 -- =============================================================================
+-- SECTION: Helpers
+-- =============================================================================
+
+--- Command-line completion for :PKMBrowse filter expressions.
+--- Suggests field prefixes, boolean operators, and 'tag:<value>' completions
+--- sourced from the index (if already built).
+---@param arg_lead string   Current word being completed
+---@return string[]
+local function browse_complete(arg_lead, _cmd_line, _cursor_pos)
+  local keywords = { 'AND', 'OR', 'NOT', 'tag:', 'title:', 'text:', 'filename:', 'any:' }
+
+  -- After 'tag:' prefix: suggest 'tag:<known-tag>' candidates.
+  local tag_stub = arg_lead:match('^tag:(.*)$')
+  if tag_stub ~= nil then
+    local index = require('pkm.index')
+    if not index.is_built() then return {} end
+    local seen, out = {}, {}
+    local stub_lower = tag_stub:lower()
+    for _, e in ipairs(index.get_all()) do
+      for _, t in ipairs(e.tags or {}) do
+        if not seen[t] and t:find(stub_lower, 1, true) then
+          seen[t] = true
+          out[#out + 1] = 'tag:' .. t
+        end
+      end
+    end
+    table.sort(out)
+    return out
+  end
+
+  -- General: filter all static tokens by the current arg_lead.
+  local lead_lower = arg_lead:lower()
+  local out = {}
+  for _, tok in ipairs(keywords) do
+    if tok:lower():find(lead_lower, 1, true) then
+      out[#out + 1] = tok
+    end
+  end
+  return out
+end
+
+-- =============================================================================
 -- SECTION: Registration
 -- =============================================================================
 --- Register all :PKM* user commands. Called once by init.lua during setup.
@@ -94,8 +136,9 @@ function M.register()
       require('pkm.ui').browse(expr)
     end
   end, {
-    nargs = '*',      
-    desc  = 'Browse PKM notes with optional filter expression (tag:x AND title:y etc.)',
+    nargs    = '*',
+    complete = browse_complete,
+    desc     = 'Browse PKM notes with optional filter expression (tag:x AND title:y etc.)',
   })
 
   vim.api.nvim_create_user_command('PKMTags', function()
@@ -116,6 +159,56 @@ function M.register()
     end
   end, { desc = 'Merge tags across all notes' })
 
+  vim.api.nvim_create_user_command('PKMBrowseRecent', function(opts)
+    local n = tonumber(opts.args) or 20
+    local has_tele = pcall(require, 'telescope')
+    if has_tele then
+      require('pkm.telescope').browse_recent(n)
+    else
+      require('pkm.ui').browse_recent(n)
+    end
+  end, {
+    nargs = '?',
+    desc  = 'Show the n most recently modified notes (default 20)',
+  })
+
+  vim.api.nvim_create_user_command('PKMOrphans', function()
+    local index = require('pkm.index')
+    local views = require('pkm.views')
+    local utils = require('pkm.utils')
+
+    -- Build a set of paths that appear in at least one defined view.
+    local viewed = {}
+    for _, vname in ipairs(views.list()) do
+      for _, path in ipairs(views.match_all(vname)) do
+        viewed[utils.normalize(path)] = true
+      end
+    end
+
+    -- An orphan has no tags, no citations, and belongs to no view.
+    local orphan_paths = {}
+    for _, e in ipairs(index.get_all()) do
+      if (not e.has_citations)
+      and (#(e.tags or {}) == 0)
+      and (not viewed[utils.normalize(e.path)]) then
+        orphan_paths[#orphan_paths + 1] = e.path
+      end
+    end
+
+    if #orphan_paths == 0 then
+      vim.notify('[pkm] no orphaned notes', vim.log.levels.INFO)
+      return
+    end
+
+    local label    = string.format('Orphans (%d)', #orphan_paths)
+    local has_tele = pcall(require, 'telescope')
+    if has_tele then
+      require('pkm.telescope').browse_paths(label, orphan_paths)
+    else
+      require('pkm.ui').browse_paths(label, orphan_paths)
+    end
+  end, { desc = 'Show notes with no tags, no citations, and no matching view' })
+
   -- ---------------------------------------------------------------------------
   -- Citations
   -- ---------------------------------------------------------------------------
@@ -135,6 +228,21 @@ function M.register()
   vim.api.nvim_create_user_command('PKMUpdateReferences', function()
     require('pkm.citations').update_references()
   end, {})
+
+  -- ---------------------------------------------------------------------------
+  -- Frontmatter editing (buffer-only; no disk write; no index.invalidate)
+  -- ---------------------------------------------------------------------------
+  vim.api.nvim_create_user_command('PKMSetTitle', function()
+    require('pkm.notes').set_title()
+  end, { desc = 'Set title frontmatter field in current buffer (no disk write)' })
+
+  vim.api.nvim_create_user_command('PKMAddTag', function(opts)
+    require('pkm.citations').add_tag(opts.args ~= '' and opts.args or nil)
+  end, { nargs = '?', desc = 'Append a tag to current buffer frontmatter (no disk write)' })
+
+  vim.api.nvim_create_user_command('PKMRemoveTag', function(opts)
+    require('pkm.citations').remove_tag(opts.args ~= '' and opts.args or nil)
+  end, { nargs = '?', desc = 'Remove a tag from current buffer frontmatter (no disk write)' })
 
   -- ---------------------------------------------------------------------------
   -- Navigation and linking

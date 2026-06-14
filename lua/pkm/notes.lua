@@ -17,6 +17,7 @@
 --   link_to_note()                            → Insert [[wiki-link]] at cursor
 --   follow_link()                             → Open note linked under cursor
 --   show_backlinks()                          → Show all notes linking to current note
+--   set_title()  → prompt for title, write to current buffer frontmatter (buffer-only)
 --   import_note()                             → Import external file into PKM structure
 -- =============================================================================
 local M = {}
@@ -77,6 +78,42 @@ local function sanitize_title(title)
   end
   
   return safe
+end
+
+-- =============================================================================
+-- SECTION: Frontmatter editing (buffer-only)
+-- =============================================================================
+
+--- Prompt for a new title and write it to the current buffer's frontmatter.
+--- Buffer-only — no disk write. BufWritePre/BufWritePost handle persistence.
+--- Must NOT call index.invalidate: no disk write occurred; the index re-reads
+--- correctly when the user saves.
+function M.set_title()
+  local filepath  = vim.fn.expand('%:p')
+  local norm_path = filepath:gsub('\\', '/')
+  local norm_root = config.root_path:gsub('\\', '/')
+  if filepath == '' or not norm_path:lower():find(norm_root:lower(), 1, true) then
+    vim.notify('[pkm] not a PKM note', vim.log.levels.WARN)
+    return
+  end
+
+  local yaml_m = require('pkm.yaml')
+  local lines   = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local fm, content_start = yaml_m.parse_frontmatter(lines)
+  if not fm then
+    vim.notify('[pkm] no frontmatter found', vim.log.levels.WARN)
+    return
+  end
+
+  local current = type(fm.title) == 'string' and fm.title or ''
+  vim.fn.inputsave()
+  local new_title = vim.fn.input('Title: ', current)
+  vim.fn.inputrestore()
+  if new_title == nil then return end   -- Esc / cancelled
+
+  fm.title = new_title
+  yaml_m.save_frontmatter(fm, content_start)   -- Case A: buffer-only, no disk write
+  vim.notify('[pkm] title updated — save to persist', vim.log.levels.INFO)
 end
 
 -- =============================================================================

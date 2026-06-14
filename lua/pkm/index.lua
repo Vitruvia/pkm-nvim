@@ -10,13 +10,14 @@
 --
 -- Index entry shape:
 --   index[path] = {
---     path      : string    absolute path (duplicated for convenience)
---     filename  : string    file stem without extension
---     note_type : string    'note' | 'agg' | 'bib' | 'journal' | 'scratch' | 'other'
---     title     : string    frontmatter title if non-empty; filename stem with underscores replaced
---     tags      : string[]  frontmatter tags array, or {}
---     body      : string    note body (lines after frontmatter joined with "\n")
---     mtime     : number    vim.fn.getftime() at last index time
+--     path          : string   absolute path (duplicated for convenience)
+--     filename      : string   file stem without extension
+--     note_type     : string   'note' | 'agg' | 'bib' | 'journal' | 'scratch' | 'other'
+--     title         : string   frontmatter title if non-empty; filename stem with _ → space
+--     tags          : string[] frontmatter tags, lowercased, or {}
+--     body          : string   note body (lines after frontmatter joined with "\n")
+--     mtime         : number   vim.fn.getftime() at last index time
+--     has_citations : boolean  true when cites or cited_by has ≥1 entry in any group
 --   }
 --
 -- Thread-safety: Neovim Lua is single-threaded; no locking needed.
@@ -127,6 +128,19 @@ local function read_entry(path)
     end
   end
 
+  -- Detect whether the note has any frontmatter citations (cites or cited_by).
+  local has_cites = false
+  local function any_in_groups(tbl)
+    if type(tbl) ~= 'table' then return false end
+    for _, grp in ipairs({ 'notes', 'bib', 'journal', 'scratch' }) do
+      if type(tbl[grp]) == 'table' and #tbl[grp] > 0 then return true end
+    end
+    return false
+  end
+  if any_in_groups(fm.cites) or any_in_groups(fm.cited_by) then
+    has_cites = true
+  end
+
   -- Body: lines from content_start onward joined with newline.
   -- content_start is 1-based; lines is 1-based.
   local body_parts = {}
@@ -144,6 +158,7 @@ local function read_entry(path)
     tags     = tags,
     body     = table.concat(body_parts, '\n'),
     mtime    = vim.fn.getftime(path),
+    has_citations = has_cites,
   }
 end
 

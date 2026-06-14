@@ -12,6 +12,7 @@
 --   insert_citation_picker()  → context-aware citation picker
 --   browse(filter_expr?)      → live filter-as-you-type note browser
 --   browse_tags()             → tag picker → browse pre-seeded to tag:<x>
+--   browse_recent(n?)         → n most-recently-modified notes (mtime order; live-filterable)
 --   browse_paths(title, paths) → scoped live browser over a pre-computed path list
 --   find_notes()              → telescope find_files over PKM root
 --   merge_tags_picker()       → 3-step tag merge picker
@@ -56,14 +57,6 @@ local function require_telescope()
   }
 end
 
-local function check_ripgrep()
-  if vim.fn.executable("rg") == 0 then
-    vim.notify("PKM Error: 'rg' (Ripgrep) not found. Please install it.", vim.log.levels.ERROR)
-    return false
-  end
-  return true
-end
-
 --- Core live filter-as-you-type picker used by browse() and browse_paths().
 --- Items are sorted by type then title at open time; the fn re-evaluates the
 --- prompt as a filter.lua expression on every keystroke. Falls back to an
@@ -71,20 +64,22 @@ end
 ---@param title   string    Picker prompt title
 ---@param entries table[]   Index entry array; each entry has path, filename, title, tags, body, note_type
 ---@param seed    string|nil  Optional expression to pre-populate the prompt
-local function live_picker(title, entries, seed)
+---@param presorted boolean|nil  When true, skip the internal type/title sort
+local function live_picker(title, entries, seed, presorted)
   local t = require_telescope()
   if not t then return end
   local filter = require('pkm.filter')
 
-  -- Sort once at open time; fn filters the pre-sorted list on each keystroke.
   local sorted = {}
   for _, e in ipairs(entries) do sorted[#sorted + 1] = e end
-  table.sort(sorted, function(a, b)
-    local ta = _TYPE_ORDER[a.note_type] or 6
-    local tb = _TYPE_ORDER[b.note_type] or 6
-    if ta ~= tb then return ta < tb end
-    return (a.title or ''):lower() < (b.title or ''):lower()
-  end)
+  if not presorted then
+    table.sort(sorted, function(a, b)
+      local ta = _TYPE_ORDER[a.note_type] or 6
+      local tb = _TYPE_ORDER[b.note_type] or 6
+      if ta ~= tb then return ta < tb end
+      return (a.title or ''):lower() < (b.title or ''):lower()
+    end)
+  end
 
   local all_items = {}
   for i, e in ipairs(sorted) do
@@ -304,6 +299,23 @@ function M.browse_paths(title, paths)
     return
   end
   live_picker(title, entries, nil)
+end
+
+--- Show the n most recently modified notes, newest first.
+--- The live filter bar is still available for narrowing.
+--- presorted=true preserves mtime order; no type/title re-sort.
+---@param n integer|nil  Max results; defaults to 20
+function M.browse_recent(n)
+  n = tonumber(n) or 20
+  local index = require('pkm.index')
+  local entries = index.get_all()
+  table.sort(entries, function(a, b) return (a.mtime or 0) > (b.mtime or 0) end)
+  if n > 0 and #entries > n then
+    local sliced = {}
+    for i = 1, n do sliced[i] = entries[i] end
+    entries = sliced
+  end
+  live_picker(string.format('Recent (%d)', #entries), entries, nil, true)
 end
 
 --- Tag picker. On selection, opens PKMBrowse pre-filtered to tag:<selected>.

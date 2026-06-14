@@ -50,7 +50,9 @@ function M.register(config)
   map(k.transpose_note, "<cmd>PKMTranspose<cr>", "Transpose Note")
   map(k.change_note_type, "<cmd>PKMChangeType<cr>", "Change Note Type")
   map(k.rename_note, "<cmd>PKMRenameNote<cr>", "Rename Note")
-  map(k.browse, "<cmd>PKMBrowse<cr>", "Browse Notes")
+  map(k.set_title,  "<cmd>PKMSetTitle<cr>",  "Set Title")
+  map(k.add_tag,    "<cmd>PKMAddTag<cr>",    "Add Tag")
+  map(k.remove_tag, "<cmd>PKMRemoveTag<cr>", "Remove Tag")
 
   -- --------------------------------------------------------------------------
   -- KEYMAPS: views

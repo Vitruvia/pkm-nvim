@@ -316,7 +316,7 @@ on the same subsystem; (2) shared foundations before their consumers;
 earlier than its heading suggests — the heading is its category, the phase is
 its turn.
 
-**Phase 0 — Bug triage (small, unblock everything).**
+**(Complete) Phase 0 — Bug triage (small, unblock everything).**
 - `:PKMBrowse` arg parsing: `nargs='?'` → `nargs='*'` (needed so the §2
   command-line shortcut `:PKMBrowse <expr>` accepts multi-token expressions).
 - Cross-citation write-through to open buffers (Near-term §4) — DATA LOSS;
@@ -324,7 +324,7 @@ its turn.
 - Buffer-panel `E32` on `w`, and the phantom-window-on-last-buffer bug
   (Next Steps §5, "Fix").
 
-**Phase 1 — Core search + small self-contained features.**
+**(Complete) Phase 1 — Core search + small self-contained features.**
 - §2 Unified filter-as-you-type search: extend `filter.lua` with the default
   "any" predicate, rewrite the picker to evaluate the live prompt, delete
   `:PKMSearch`, repoint `<leader>nf`. High-value; several items below browse
@@ -739,23 +739,18 @@ via a specific command or a general "undo" command in the "notes explorer".
 
 ---
 
-**9. Note-taking format standardization:** definition of standards for header
-and body-text naming and organization, in-text citation formatting, author
-comment formatting, etc., possibly associated with additional syntax
-highlighting. These standards should simultaneosly reduce cognitive load (less
-decisions to make while taking notes), improve human readability, and AI
-understading of notes. Examples:
-   - Comments standardized as either `(text)` or `((text))`. E.g. `((Review
-     tomorrow))`, `((See the notes about Enderton's Logic, Chapter 2 [bib -
-     xxx]))`.
-   - Meta-comments standardized as `((text))` ((these should work both as
-     in-text comments for the own user or other readers and for AI. The main
-     difference from standard comments is that they can and tend to contain
-     comments outside the current note's scope)).
-   - Needed: a way to differentiate author comments from textual parenthesis,
-     without confusing them with metacomments ((consider if this is useful or
-     necessary before attempting to solve)).
-   - Citations standardized as `[text]`. E.g `[CF/88 [note[xxx]]]`
+**9. Note-taking format standardization**
+
+The note-taking conventions are defined in `doc/CONVENTIONS.md`.
+That document is the authoritative reference; update it directly when
+conventions change.
+
+Remaining implementation work (Phase 4):
+- Syntax highlighting for `((...))` meta-comments and `[text]` citation
+  markers.
+- `formatlistpat`/ftplugin recognition for emphasis-wrapped ordinals like
+  `**1.**`.
+- Template hints or snippets for the citation formats.
 
 ---
 

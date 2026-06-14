@@ -12,6 +12,44 @@
   ":") ? value`; `field` gains `any`; tokenizer now disambiguates (unknown
   field → any, bare word → any). `parse_atom` field validation removed; the
   tokenizer guarantees only KNOWN_FIELDS reach the parser.
+- `:PKMBrowseRecent [n]` — show the n most recently modified notes (default 20),
+  sorted by `mtime` descending. Opens in the live filter picker (Telescope) or
+  `vim.ui.select` (fallback); `n` can be overridden per invocation.
+  `telescope.browse_recent` and `ui.browse_recent` added. `live_picker` gains
+  a `presorted` parameter (4th arg, boolean) that skips the internal type/title
+  sort; callers that pre-sort by another criterion (mtime) pass `true`.
+
+- `:PKMOrphans` — list notes that have no tags, no citations (in any
+  `cites`/`cited_by` group), and do not match any defined view. Useful for
+  locating abandoned or unfiled notes. `index.lua` entry shape extended with
+  `has_citations` (boolean) computed at build time from frontmatter — no
+  per-query file reads needed.
+
+- `:PKMSetTitle` — prompt for a new title and write it to the current buffer's
+  `title` frontmatter field. Buffer-only; never writes disk. `notes.lua` gets
+  `M.set_title()`.
+
+- `:PKMAddTag [tag]` — append a tag to the current buffer's frontmatter `tags`
+  list; prompts if no argument; skips silently if already present. Buffer-only.
+
+- `:PKMRemoveTag [tag]` — remove a tag from the current buffer's frontmatter
+  `tags` list; presents a picker if no argument. Buffer-only.
+
+  All three metadata commands use `yaml.save_frontmatter(fm, content_start)`
+  (Case A: buffer-only write). None calls `index.invalidate`; the index
+  re-reads from disk on the user's next `:w` via `BufWritePost`. `citations.lua`
+  gets `M.add_tag()` and `M.remove_tag()`.
+
+  Config defaults: `set_title = false`, `add_tag = false`, `remove_tag = false`.
+
+- Filter autocomplete for `:PKMBrowse` — a `complete` function on the command
+  suggests field prefixes (`tag:`, `title:`, `text:`, `filename:`, `any:`),
+  boolean operators (`AND`, `OR`, `NOT`), and `tag:<value>` candidates from the
+  index (when already built). Implemented as a module-level local
+  `browse_complete` in `commands.lua`.
+
+- §9 Conventions SPEC added to `doc/ROADMAP.md` (documentation only;
+  implementation in Phase 4).
 
 ### Changed
 - `:PKMBrowse` is now the primary note browser (`<leader>nf`). With Telescope,

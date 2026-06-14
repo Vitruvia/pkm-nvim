@@ -5,6 +5,8 @@
 -- Consumed by  : pkm.notes, pkm.journal, pkm.telescope, pkm.ui, pkm.commands
 --
 -- Public API:
+--   add_tag(tag?)    → append tag to current buffer frontmatter (buffer-only)
+--   remove_tag(tag?) → remove tag from current buffer frontmatter (buffer-only; picker if no arg)
 --   setup(config)                    → Initialize with resolved PKM config
 --   parse_citation(text)             → (type, short_id) from citation string
 --   get_note_type_and_id(filepath)   → (item_type, identifier) from file path
@@ -132,6 +134,92 @@ function M.get_all_tags()
   local sorted_tags = vim.tbl_keys(all_tags)
   table.sort(sorted_tags)
   return sorted_tags
+end
+
+-- =============================================================================
+-- SECTION: Tag editing (buffer-only)
+-- =============================================================================
+
+--- Append a tag to the current buffer's frontmatter tags list.
+--- Buffer-only — no disk write. Silently skips if the tag is already present.
+--- Must NOT call index.invalidate: no disk write; re-indexed on user save.
+---@param tag string|nil  Tag to add; prompts if nil or empty
+function M.add_tag(tag)
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local fm, content_start = yaml.parse_frontmatter(lines)
+  if not fm then
+    vim.notify('[pkm] no frontmatter found', vim.log.levels.WARN)
+    return
+  end
+
+  if not tag or tag:match('^%s*$') then
+    vim.fn.inputsave()
+    tag = vim.fn.input('Add tag: ')
+    vim.fn.inputrestore()
+    if not tag or tag:match('^%s*$') then return end
+  end
+
+  tag = tag:lower():match('^%s*(.-)%s*$')
+
+  if type(fm.tags) ~= 'table' then fm.tags = {} end
+  for _, t in ipairs(fm.tags) do
+    if tostring(t):lower() == tag then
+      vim.notify('[pkm] tag already present: ' .. tag, vim.log.levels.INFO)
+      return
+    end
+  end
+
+  fm.tags[#fm.tags + 1] = tag
+  yaml.save_frontmatter(fm, content_start)   -- Case A: buffer-only
+  vim.notify('[pkm] tag added: ' .. tag .. ' — save to persist', vim.log.levels.INFO)
+end
+
+--- Remove a tag from the current buffer's frontmatter tags list.
+--- Buffer-only — no disk write. Presents a picker when no tag argument is given.
+--- Must NOT call index.invalidate: no disk write; re-indexed on user save.
+---@param tag string|nil  Tag to remove; picker if nil or empty
+function M.remove_tag(tag)
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local fm, content_start = yaml.parse_frontmatter(lines)
+  if not fm then
+    vim.notify('[pkm] no frontmatter found', vim.log.levels.WARN)
+    return
+  end
+
+  if type(fm.tags) ~= 'table' or #fm.tags == 0 then
+    vim.notify('[pkm] no tags to remove', vim.log.levels.INFO)
+    return
+  end
+
+  local function do_remove(t)
+    t = tostring(t):lower()
+    local new_tags, found = {}, false
+    for _, existing in ipairs(fm.tags) do
+      if tostring(existing):lower() == t then
+        found = true
+      else
+        new_tags[#new_tags + 1] = existing
+      end
+    end
+    if not found then
+      vim.notify('[pkm] tag not found: ' .. t, vim.log.levels.WARN)
+      return
+    end
+    fm.tags = new_tags
+    yaml.save_frontmatter(fm, content_start)  -- Case A: buffer-only
+    vim.notify('[pkm] tag removed: ' .. t .. ' — save to persist', vim.log.levels.INFO)
+  end
+
+  if tag and not tag:match('^%s*$') then
+    do_remove(tag:match('^%s*(.-)%s*$'))
+  else
+    vim.ui.select(fm.tags, {
+      prompt      = 'Remove tag:',
+      format_item = function(t) return tostring(t) end,
+    }, function(sel)
+      if sel then do_remove(sel) end
+    end)
+  end
 end
 
 -- =============================================================================
