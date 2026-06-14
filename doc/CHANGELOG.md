@@ -21,6 +21,41 @@
   injection, and context-aware highlighting work.
 
 ### Added
+- **Phase 4 syntax implementation** — `lua/pkm/syntax.lua` stubs replaced
+  with full implementation. `M.enable(bufnr)` and `M.disable(bufnr)` now:
+  - Start/stop `vim.treesitter` for the `markdown` parser
+  - Load custom captures from `queries/markdown/highlights.scm` (bundled in
+    plugin, loaded automatically via runtimepath) and
+    `queries/markdown/injections.scm`
+  - Register per-window `matchadd` highlights: `PKMCitation` for
+    `type[identifier]` patterns; `PKMMetaComment` for `((text))` double-paren
+    meta-comments (§9 convention); `Conceal` on `[[`/`]]` wiki-link brackets
+  - Apply per-window options: `foldmethod=expr` with `M.foldexpr()` for
+    frontmatter folding; `conceallevel=2` + `concealcursor=''` for wiki-link
+    conceal
+  - `M.foldexpr(lnum)` — fold expression called by Neovim; returns `'>1'` on
+    the opening `---`, `'1'` for frontmatter body, `'0'` elsewhere; caches
+    frontmatter end line in `vim.b._pkm_fm_end`, invalidated on BufWritePost
+  - Highlight groups: `@pkm.indented.markdown → Normal` (suppresses indented
+    code colour); `PKMCitation → Special`; `PKMMetaComment → Comment`
+  - Re-applies groups on `ColorScheme`; cleans up per-window matches on
+    `WinClosed`; idempotent enable/disable with `_active_bufs` tracking
+
+- `queries/markdown/highlights.scm` (new) — extends built-in markdown queries:
+  suppresses `indented_code_block` highlight via `@pkm.indented` capture (Phase
+  4 fix: 4-space text no longer rendered as code); captures all list marker node
+  types explicitly to ensure visibility at 4th-level and deeper nesting.
+
+- `queries/markdown/injections.scm` (new) — extends built-in injections: injects
+  the `yaml` parser into `minus_metadata` nodes (the `---`…`---` frontmatter
+  block). Requires the `yaml` tree-sitter parser to be installed separately
+  (not bundled with Neovim); silently ignored if unavailable.
+
+- §9 conventions implementation — `((text))` double-paren meta-comment pattern
+  highlighted as `PKMMetaComment` (links to `Comment`). Citation pattern
+  `type[identifier]` highlighted as `PKMCitation` (links to `Special`). Both
+  applied via `matchadd` in `syntax.lua`; no tree-sitter changes needed for
+  these inline patterns.
 - **`:PKMMode [on|off]`** — session-level PKM context toggle. Activates the
   explorer UI (views sidebar + buffer panel), pre-builds the index if not yet
   built (`index.prebuild = true`), and enables PKM-specific syntax highlighting
@@ -207,6 +242,15 @@
   1.4.1 but defaults were not cleaned up.
 
 ### Fixed
+- **4-space indented text highlighted as code** — `indented_code_block` nodes
+  (tree-sitter) were mapping to `@markup.raw` (green code colour). New capture
+  `@pkm.indented` in `queries/markdown/highlights.scm` re-assigns these nodes;
+  `syntax.lua` links the group to `Normal` so indented text renders as prose.
+
+- **List markers missing at 4th+ nesting level** — built-in markdown highlights
+  may not define `@markup.list` for deeply nested list marker node types.
+  `queries/markdown/highlights.scm` now explicitly captures all five marker
+  node types (`dot`, `parenthesis`, `minus`, `star`, `plus`) at every depth.
 - **`:PKMMode` trigger fires on every note open** — `M.activate()` was calling
   `vim.notify` unconditionally; if the `if not _active` guard in the
   `BufReadPost` callback was missing or bypassed, mode re-activated (with
