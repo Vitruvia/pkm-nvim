@@ -98,18 +98,18 @@ local function setup_win_matches(win_id)
 
   -- Citations: note[id], bib[id], journal[id], scratch[id]
   add('PKMCitation',
-    [[\v<(note|bib|journal|scratch)\[[\w\-_]+\>]],
+    [=[\v<(note|bib|journal|scratch)\[[\w\-_]+\>]=],
     10, { window = win_id })
 
   -- §9 meta-comments: ((any text)) — double parentheses
   add('PKMMetaComment',
-    [[\v\(\(.{-}\)\)]],
+    [=[\v\(\(.{-}\)\)]=],
     10, { window = win_id })
 
   -- Wiki-link bracket conceal: hide [[ and ]] delimiters.
   -- conceallevel must be >= 1 (set in setup_win_opts) for conceal to render.
-  add('Conceal', [[\[\[]], 10, { window = win_id, conceal = '' })
-  add('Conceal', [[\]\]]], 10, { window = win_id, conceal = '' })
+  add('Conceal', [=[\[\[]=], 10, { window = win_id, conceal = '' })
+  add('Conceal', [=[\]\]]=], 10, { window = win_id, conceal = '' })
 
   _win_matches[win_id] = ids
 end

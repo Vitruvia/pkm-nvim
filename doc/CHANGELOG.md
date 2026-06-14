@@ -242,6 +242,14 @@
   1.4.1 but defaults were not cleaned up.
 
 ### Fixed
+- **`syntax.lua` parse error on load** — the Lua long string `[[\]\]]]`
+  (pattern for wiki-link closing `]]`) was parsed incorrectly: the level-0
+  long string scanner found `]]` inside the content (`\]` + first `]` of the
+  intended closing), truncating the content and leaving a stray `]` that
+  caused `E5108: ')' expected near ']'` on every PKM note open. Fix: all four
+  `matchadd` patterns in `setup_win_matches` switched to level-1 long strings
+  (`[=[...]=]`), which close on `]=]` and are immune to `]]` in content.
+
 - **4-space indented text highlighted as code** — `indented_code_block` nodes
   (tree-sitter) were mapping to `@markup.raw` (green code colour). New capture
   `@pkm.indented` in `queries/markdown/highlights.scm` re-assigns these nodes;
