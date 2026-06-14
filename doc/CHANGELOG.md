@@ -4,7 +4,63 @@
 
 ## [Unreleased]
 
+### Decisions
+
+- **Phase 4 syntax mechanism: tree-sitter queries** — PKM-specific syntax,
+  conceal, and frontmatter folding/injection will be implemented as bundled
+  tree-sitter queries (`queries/markdown/highlights.scm`,
+  `queries/markdown/injections.scm`) loaded by Neovim's built-in query
+  resolver. No `nvim-treesitter` plugin dependency: the `markdown`,
+  `markdown_inline`, and `yaml` parsers are bundled in Neovim 0.10+.
+  Activation: `vim.treesitter.start(bufnr, 'markdown')` per PKM buffer when
+  `:PKMMode` is active. Deactivation: `vim.treesitter.stop(bufnr)` + `syntax
+  on` restores Vimscript highlighting including `after/syntax/markdown.vim`.
+  The existing Vimscript file is retained as the non-PKMMode fallback; it will
+  be deleted when its two rules are superseded by tree-sitter captures in the
+  Phase 4 highlights.scm. This decision gates all frontmatter folding, conceal,
+  injection, and context-aware highlighting work.
+
 ### Added
+- **`:PKMMode [on|off]`** — session-level PKM context toggle. Activates the
+  explorer UI (views sidebar + buffer panel), pre-builds the index if not yet
+  built (`index.prebuild = true`), and enables PKM-specific syntax highlighting
+  on all open PKM buffers. Deactivation closes both panels and reverts syntax.
+  Both directions are idempotent: re-activating when already active re-opens
+  any manually closed panels without error; deactivating when already inactive
+  is a no-op. Manual panel closure does not change mode state.
+  Optional argument: `on` / `off`; bare `:PKMMode` toggles.
+  New module `lua/pkm/mode.lua`; called from `pkm.init.setup()`.
+
+- **`:PKMExplorer`** — toggle sidebar + buffer panel as a unit, independent of
+  `:PKMMode` state. If both panels are open, closes both. If either is closed,
+  opens the closed one(s). Does not affect index or syntax state.
+
+- **`config.pkm_mode`** — new nested config block with four sub-tables:
+  `triggers` (`open_note = true`, `enter_dir = false`),
+  `layout` (`sidebar = true`, `bufpanel = true`),
+  `index` (`prebuild = true`),
+  `syntax` (`enabled = true`).
+  Trigger `open_note`: activates mode on `BufReadPost` for any file under
+  `root_path`. If mode is already active, only enables syntax on the new buffer.
+  Trigger `enter_dir`: activates on `DirChanged` + startup check when Neovim
+  opens inside `root_path`. Default off.
+
+- **`config.keymaps.focus_sidebar`** (default `false`) — jump directly to the
+  sidebar window via `nvim_set_current_win`; notifies if sidebar is not open.
+  Works regardless of split count.
+
+- **`config.keymaps.toggle_mode`** (default `false`) — keymap for `:PKMMode`.
+
+- **`lua/pkm/syntax.lua`** — new stub module. `M.enable(bufnr)` and
+  `M.disable(bufnr)` are no-ops until Phase 4 writes the tree-sitter query
+  files. Signatures are fixed; bodies filled in Phase 4.
+
+- **`views.is_sidebar_open()`** — returns true if sidebar is open in the
+  current tabpage. **`views.get_sidebar_win()`** — returns the sidebar window
+  handle or nil. Both added to support `mode.lua` and `focus_sidebar`.
+
+- **`ui.is_bufpanel_open()`** — returns true if buffer panel is open in the
+  current tabpage. Added to support `mode.lua`.
 - `bench.views_suite(opts?)` — view-scaling benchmark for the overview
   scenario. Generates `note_count` (default 10 000) synthetic notes and
   builds an in-memory entry table, then at view counts 50 / 100 / 300 / 1 000

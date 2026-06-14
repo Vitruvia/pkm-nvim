@@ -98,6 +98,23 @@ local defaults = {
     { trigger = '^o',   key = '<M-o>', expansion = 'º' },
   },
 
+  pkm_mode = {
+    triggers = {
+      open_note = true,   -- activate when any PKM note is opened (BufReadPost)
+      enter_dir = false,  -- activate when CWD is/becomes PKM root (DirChanged)
+    },
+    layout = {
+      sidebar  = true,    -- open views sidebar on activation
+      bufpanel = true,    -- open buffer panel on activation
+    },
+    index = {
+      prebuild = true,    -- eagerly rebuild index on activation if not yet built
+    },
+    syntax = {
+      enabled = true,     -- enable PKM syntax highlighting on activation
+    },
+  },
+
   keymaps = {
     -- Note operations
     new_note         = "<leader>nn",
@@ -123,6 +140,9 @@ local defaults = {
     view_list    = "<leader>nv",
     view_sidebar = "<leader>nS",
     view_buffers = "<leader>vb",
+    focus_sidebar = false,   -- jump focus directly to sidebar window
+    -- PKMMode
+    toggle_mode   = false,   -- :PKMMode toggle
     -- Search and browsing
     browse          = "<leader>nf",
     browse_tags     = "<leader>nt",

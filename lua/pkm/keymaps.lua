@@ -62,6 +62,22 @@ function M.register(config)
   map(k.view_list, "<cmd>PKMViews<cr>", "List Views")
   map(k.view_buffers, "<cmd>PKMBuffers<cr>", "Buffer Panel")
 
+  if k.focus_sidebar then
+    vim.keymap.set('n', k.focus_sidebar, function()
+      local win = require('pkm.views').get_sidebar_win()
+      if win then
+        vim.api.nvim_set_current_win(win)
+      else
+        vim.notify('[pkm] sidebar is not open', vim.log.levels.INFO)
+      end
+    end, { desc = 'PKM: focus sidebar', silent = true })
+  end
+
+  if k.toggle_mode then
+    vim.keymap.set('n', k.toggle_mode, '<cmd>PKMMode<cr>',
+      { desc = 'PKM: toggle PKM mode', silent = true })
+  end
+
   -- --------------------------------------------------------------------------
   -- KEYMAPS: markdown editing
   -- -------------------------------------------------------------------------- 

@@ -16,6 +16,7 @@
 --   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
 --   show_stats()             → Show note counts via vim.notify
 --   toggle_bufpanel()  → toggle the persistent bottom buffer-list panel (per-tabpage)
+--   is_bufpanel_open()   → boolean, whether buffer panel is open in current tabpage
 -- =============================================================================
 local M = {}
 
@@ -308,6 +309,13 @@ function M.toggle_bufpanel()
   vim.keymap.set('n', '<Esc>', close_panel, ko)
 
   vim.api.nvim_set_current_win(prev_win)
+end
+
+--- Return true if the buffer panel is currently open in the current tabpage.
+---@return boolean
+function M.is_bufpanel_open()
+  local t = get_tab()
+  return t.win ~= nil and vim.api.nvim_win_is_valid(t.win)
 end
 
 -- =============================================================================

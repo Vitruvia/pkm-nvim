@@ -40,6 +40,8 @@
 --   open_last()         → reopen the last activated view (session-scoped)
 --   get_last_view()     → active view name for context-aware features (sidebar > last)
 --   open_sidebar(name?) → open/toggle persistent sidebar (per-tabpage; no cross-tab conflict)
+--   is_sidebar_open()   → boolean, whether sidebar is open in current tabpage
+--   get_sidebar_win()   → integer|nil, sidebar window handle or nil
 --   refresh_sidebar_if_open() → refresh sidebar in all open tabpages
 --   save(name, expr)    → write or update a view in views.json
 --   save_subproject(name, parent, filter_expr) → write a subproject entry to views.json
@@ -451,6 +453,21 @@ function M.get_last_view()
     return t.name
   end
   return _last_view
+end
+
+--- Return true if the sidebar is currently open in the current tabpage.
+---@return boolean
+function M.is_sidebar_open()
+  local t = get_tab()
+  return t.win ~= nil and vim.api.nvim_win_is_valid(t.win)
+end
+
+--- Return the sidebar window handle for the current tabpage, or nil if closed.
+---@return integer|nil
+function M.get_sidebar_win()
+  local t = get_tab()
+  if t.win and vim.api.nvim_win_is_valid(t.win) then return t.win end
+  return nil
 end
 
 -- =============================================================================
