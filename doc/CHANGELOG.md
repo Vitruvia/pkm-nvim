@@ -48,8 +48,15 @@
   index (when already built). Implemented as a module-level local
   `browse_complete` in `commands.lua`.
 
-- §9 Conventions SPEC added to `doc/ROADMAP.md` (documentation only;
+- §9 Conventions SPEC added to `doc/CONVENTIONS.md` (documentation only;
   implementation in Phase 4).
+
+- **Sidebar filename infobar** — when the cursor rests on a note line in the
+  sidebar's detail mode, the sidebar window's `statusline` updates to show the
+  full filename of the note under the cursor. Implemented as a buffer-local
+  `CursorMoved` autocmd registered at sidebar-open time. No extra window
+  consumed; autocmd is cleaned up automatically on `BufWipeout`. In overview
+  mode the statusline is cleared.
 
 ### Changed
 - `:PKMBrowse` is now the primary note browser (`<leader>nf`). With Telescope,
@@ -67,13 +74,33 @@
 - `:PKMViewUpdate` (`M.edit_view`) — extended beyond filter-expression editing.
   Now presents an action picker: "Edit filter expression" (existing behaviour),
   "Rename" (renames the sidecar key; propagates to any child subprojects whose
-  `parent` field referenced the old name; updates `_last_view` and
-  `_sidebar_name` if they match), and "Change parent" (subprojects only;
+  `parent` field referenced the old name; "updates `_last_view` and the current
+  tabpage's name field if they match and "Change parent" (subprojects only;
   validates against ancestor-descendant cycles via a recursive descendant
   check before writing). Rename and Change parent are shown only when the view
   exists in views.json (config-only views show only "Edit filter expression"
   with a note to edit the Neovim config for structural changes). New local
   helpers: `rename_view_prompt`, `reparent_view_prompt`.
+- **Per-tabpage sidebar state (`views.lua`)** — the nine flat `_sidebar_*`
+  module-level variables replaced by a `_tabs` table keyed by
+  `nvim_get_current_tabpage()`, accessed via a `get_tab()` local helper.
+  A `TabClosed` autocmd in `M.setup()` prunes dead tab entries.
+  `refresh_sidebar_if_open()` now iterates all tabpages so note deletions and
+  renames refresh sidebars in every tab, not only the caller's.
+  `BufWipeout` autocmd in `open_sidebar` clears only its own tab's entry.
+  `rename_view_prompt` updated to patch `t.name` on the current tab rather
+  than a flat `_sidebar_name` global. This is the prerequisite for Phase 3's
+  unified explorer UI; `ui.lua` bufpanel state receives the same treatment
+  (see next entry).
+
+- **Per-tabpage bufpanel state (`ui.lua`)** — `_bufpanel_win`, `_bufpanel_buf`,
+  `_bufpanel_augroup`, and `_bufpanel_map` replaced by a `_tabs` table keyed by
+  `nvim_get_current_tabpage()`, accessed via `get_tab()`. A `TabClosed` autocmd
+  added to `M.setup()` prunes dead tab entries. Bufpanel augroup is now
+  tab-scoped (`PKMBufPanel_<id>`) to prevent cross-tab autocmd collisions.
+  `BufWipeout` clears only the relevant tab's entry and deletes its augroup.
+  Phase 2 Item 1 complete: both sidebar (`views.lua`) and bufpanel (`ui.lua`)
+  state are now per-tabpage.
 
 ### Removed
 - `:PKMSearch` and its backers `telescope.search_notes` / `ui.search_notes` —
@@ -119,6 +146,17 @@
   opens `noautocmd aboveleft new` relative to the panel, preserving the layout.
   `D` keymap updated to report errors consistently with `d`.
 
+- **Buffer panel `w` saves wrong buffer** — pressing `w` (save and close) was
+  writing the buffer currently shown in the main editing window instead of the
+  buffer selected in the panel. Root cause: the implementation switched to the
+  main window via `nvim_set_current_win` then called `nvim_set_current_buf` to
+  redirect it to the panel-selected buffer; autocmds triggered by the window
+  switch could drift the current buffer before `write` executed. Fix: replace
+  the window-switching sequence with `nvim_buf_call(bufnr, fn)`, which executes
+  `write` in the context of the panel-selected buffer without touching any
+  window — the same pattern used in `init.lua`'s BufWritePost reload. `bdelete`
+  already names the buffer by number and was unaffected.
+
 ### Known Bugs (queued)
 
 - `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
@@ -127,6 +165,11 @@
   mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
   the correct separator for the path type, or document that `bench_dir` must use
   the native separator.
+- `:PKMOrphans` is O(V × N) at call time (calls views.match_all() once per
+  defined view to build the viewed-path set). Negligible at small scale;
+  include it in the bench.views_suite timing plan (§7).
+
+
 
 ### Benchmarks — post-index integration (bench_dir on NTFS/WSL, P: drive)
 

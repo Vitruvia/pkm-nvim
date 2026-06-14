@@ -39,8 +39,8 @@
 --   open(name?)         → activate a view; prompts for name if nil
 --   open_last()         → reopen the last activated view (session-scoped)
 --   get_last_view()     → active view name for context-aware features (sidebar > last)
---   open_sidebar(name?) → open or toggle the persistent sidebar for a view
---   refresh_sidebar_if_open() → refresh sidebar content if currently open; no-op otherwise
+--   open_sidebar(name?) → open/toggle persistent sidebar (per-tabpage; no cross-tab conflict)
+--   refresh_sidebar_if_open() → refresh sidebar in all open tabpages
 --   save(name, expr)    → write or update a view in views.json
 --   save_subproject(name, parent, filter_expr) → write a subproject entry to views.json
 --   delete(name)        → remove a view from views.json
@@ -58,15 +58,29 @@ local _sidecar_cache = nil   -- table loaded from views.json; nil when stale
 local _tree_cache    = {}    -- name → parsed filter tree
 local _last_view = nil          -- name of last successfully activated view
 
-local _sidebar_win   = nil      -- window handle of open sidebar, or nil
-local _sidebar_buf   = nil      -- buffer handle of open sidebar, or nil
-local _sidebar_name  = nil      -- view name currently shown
-local _sidebar_paths = {}       -- path list currently shown
-local _sidebar_tree         = {}   -- array of {name, is_current} per tree header line
-local _sidebar_header_count = 0    -- total non-note lines (tree header + sep + blank)
-local _sidebar_mode       = nil    -- 'overview' | 'detail'
-local _sidebar_view_lines = {}     -- overview: 1-based line number → view name
-local _sidebar_history    = {}     -- navigation stack: {mode, name} entries
+-- Per-tabpage sidebar state. Keyed by nvim_get_current_tabpage().
+-- Each tab carries its own win, buf, mode, name, paths, tree,
+-- header_count, view_lines, and history, eliminating cross-tab conflicts.
+local _tabs = {}
+
+--- Return the current tabpage's sidebar state table, creating it if absent.
+local function get_tab()
+  local id = vim.api.nvim_get_current_tabpage()
+  if not _tabs[id] then
+    _tabs[id] = {
+      win          = nil,
+      buf          = nil,
+      name         = nil,
+      paths        = {},
+      tree         = {},
+      header_count = 0,
+      mode         = nil,
+      view_lines   = {},
+      history      = {},
+    }
+  end
+  return _tabs[id]
+end
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5,
 other = 6 }
@@ -217,22 +231,19 @@ end
 --- Push current sidebar state onto the navigation history stack.
 --- Capped at 50 entries; oldest entry dropped when full.
 local function sidebar_push_history()
-  if not _sidebar_mode then return end
-  if #_sidebar_history >= 50 then
-    table.remove(_sidebar_history, 1)
-  end
-  _sidebar_history[#_sidebar_history + 1] = {
-    mode = _sidebar_mode,
-    name = _sidebar_name,
-  }
+  local t = get_tab()
+  if not t.mode then return end
+  if #t.history >= 50 then table.remove(t.history, 1) end
+  t.history[#t.history + 1] = { mode = t.mode, name = t.name }
 end
 
 --- Pop the most recent sidebar state from the history stack.
 ---@return table|nil  {mode=string, name=string|nil} or nil if empty
 local function sidebar_pop_history()
-  if #_sidebar_history == 0 then return nil end
-  local state = _sidebar_history[#_sidebar_history]
-  _sidebar_history[#_sidebar_history] = nil
+  local t = get_tab()
+  if #t.history == 0 then return nil end
+  local state = t.history[#t.history]
+  t.history[#t.history] = nil
   return state
 end
 
@@ -377,6 +388,17 @@ function M.setup()
       end
     end,
   })
+
+  vim.api.nvim_create_autocmd('TabClosed', {
+    group    = augroup,
+    callback = function()
+      local live = {}
+      for _, tp in ipairs(vim.api.nvim_list_tabpages()) do live[tp] = true end
+      for id in pairs(_tabs) do
+        if not live[id] then _tabs[id] = nil end
+      end
+    end,
+  })
 end
 
 -- =============================================================================
@@ -423,9 +445,10 @@ end
 --- Prefers the sidebar's open detail view; falls back to the last activated view.
 ---@return string|nil
 function M.get_last_view()
-  if _sidebar_win and vim.api.nvim_win_is_valid(_sidebar_win)
-  and _sidebar_mode == 'detail' and _sidebar_name then
-    return _sidebar_name
+  local t = get_tab()
+  if t.win and vim.api.nvim_win_is_valid(t.win)
+  and t.mode == 'detail' and t.name then
+    return t.name
   end
   return _last_view
 end
@@ -1147,8 +1170,9 @@ local function rename_view_prompt(old_name)
 
   if save_sidecar(data) then
     -- Keep session state consistent.
-    if _last_view    == old_name then _last_view    = new_name end
-    if _sidebar_name == old_name then _sidebar_name = new_name end
+    if _last_view == old_name then _last_view = new_name end
+    local ct = get_tab()
+    if ct.name == old_name then ct.name = new_name end
     vim.notify(
       string.format("[pkm] view renamed: '%s' → '%s'", old_name, new_name),
       vim.log.levels.INFO)
@@ -1381,41 +1405,45 @@ end
 
 --- Write lines to the sidebar buffer.
 local function sidebar_set_content(lines)
-  vim.api.nvim_set_option_value('modifiable', true,  { buf = _sidebar_buf })
-  vim.api.nvim_buf_set_lines(_sidebar_buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = _sidebar_buf })
+  local t = get_tab()
+  vim.api.nvim_set_option_value('modifiable', true,  { buf = t.buf })
+  vim.api.nvim_buf_set_lines(t.buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = t.buf })
 end
 
 --- Switch the open sidebar to overview mode.
 local function sidebar_switch_to_overview()
+  local t = get_tab()
   local lines, view_lines = sidebar_build_overview()
-  _sidebar_mode         = 'overview'
-  _sidebar_name         = nil
-  _sidebar_paths        = {}
-  _sidebar_tree         = {}
-  _sidebar_header_count = 0
-  _sidebar_view_lines   = view_lines
+  t.mode         = 'overview'
+  t.name         = nil
+  t.paths        = {}
+  t.tree         = {}
+  t.header_count = 0
+  t.view_lines   = view_lines
   sidebar_set_content(lines)
-  if vim.api.nvim_win_is_valid(_sidebar_win) then
-    vim.api.nvim_win_set_cursor(_sidebar_win, { math.min(4, vim.api.nvim_buf_line_count(_sidebar_buf)), 0 })
+  if vim.api.nvim_win_is_valid(t.win) then
+    vim.api.nvim_win_set_cursor(
+      t.win, { math.min(4, vim.api.nvim_buf_line_count(t.buf)), 0 })
   end
 end
 
 --- Switch the open sidebar to detail mode for a named view.
 ---@param name string
 local function sidebar_switch_to_detail(name)
+  local t = get_tab()
   local paths = M.match_all(name)
   local lines, tree_entries, header_count, sorted =
     sidebar_build_lines(name, paths)
-  _sidebar_mode         = 'detail'
-  _sidebar_name         = name
-  _sidebar_paths        = sorted
-  _sidebar_tree         = tree_entries
-  _sidebar_header_count = header_count
-  _sidebar_view_lines   = {}
+  t.mode         = 'detail'
+  t.name         = name
+  t.paths        = sorted
+  t.tree         = tree_entries
+  t.header_count = header_count
+  t.view_lines   = {}
   sidebar_set_content(lines)
-  if vim.api.nvim_win_is_valid(_sidebar_win) and #sorted > 0 then
-    vim.api.nvim_win_set_cursor(_sidebar_win, { header_count + 1, 0 })
+  if vim.api.nvim_win_is_valid(t.win) and #sorted > 0 then
+    vim.api.nvim_win_set_cursor(t.win, { header_count + 1, 0 })
   end
 end
 
@@ -1471,25 +1499,24 @@ end
 ---@param name string|nil
 ---@return nil
 function M.open_sidebar(name)
-  -- Clear stale state if the window was destroyed externally
-  if _sidebar_win and not vim.api.nvim_win_is_valid(_sidebar_win) then
-    _sidebar_win = nil; _sidebar_buf = nil
-    _sidebar_mode = nil; _sidebar_name = nil; _sidebar_paths = {}
-    _sidebar_tree = {}; _sidebar_header_count = 0
-    _sidebar_view_lines = {}; _sidebar_history = {}
+  local t = get_tab()
+  local my_tab_id = vim.api.nvim_get_current_tabpage()
+
+  -- Clear stale state if the window was destroyed externally.
+  if t.win and not vim.api.nvim_win_is_valid(t.win) then
+    _tabs[my_tab_id] = nil
+    t = get_tab()
   end
 
   if not name or name == '' then
-    -- No name: close if open, else open in overview
-    if _sidebar_win then
-      vim.api.nvim_win_close(_sidebar_win, true)
+    if t.win then
+      vim.api.nvim_win_close(t.win, true)
       return
     end
   else
-    -- Named: operate on existing sidebar
-    if _sidebar_win then
-      if _sidebar_mode == 'detail' and _sidebar_name == name then
-        vim.api.nvim_win_close(_sidebar_win, true)
+    if t.win then
+      if t.mode == 'detail' and t.name == name then
+        vim.api.nvim_win_close(t.win, true)
         return
       end
       sidebar_push_history()
@@ -1498,23 +1525,23 @@ function M.open_sidebar(name)
     end
   end
 
-  -- Open new sidebar window
+  -- Open new sidebar window.
   local prev_win = vim.api.nvim_get_current_win()
   local width    = (require('pkm').config.sidebar_width or 40)
 
   vim.cmd('noautocmd topleft vsplit')
-  _sidebar_win = vim.api.nvim_get_current_win()
+  t.win = vim.api.nvim_get_current_win()
 
   local buf = vim.api.nvim_create_buf(false, true)
-  _sidebar_buf = buf
-  vim.api.nvim_win_set_buf(_sidebar_win, buf)
-  vim.api.nvim_win_set_width(_sidebar_win, width)
+  t.buf = buf
+  vim.api.nvim_win_set_buf(t.win, buf)
+  vim.api.nvim_win_set_width(t.win, width)
 
   for opt, val in pairs({
     winfixwidth = true, wrap = false,
     number = false, cursorline = true, signcolumn = 'no',
   }) do
-    vim.api.nvim_set_option_value(opt, val, { win = _sidebar_win })
+    vim.api.nvim_set_option_value(opt, val, { win = t.win })
   end
 
   for opt, val in pairs({
@@ -1526,22 +1553,18 @@ function M.open_sidebar(name)
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer   = buf,
     once     = true,
-    callback = function()
-      _sidebar_win = nil; _sidebar_buf = nil
-      _sidebar_mode = nil; _sidebar_name = nil; _sidebar_paths = {}
-      _sidebar_tree = {}; _sidebar_header_count = 0
-      _sidebar_view_lines = {}; _sidebar_history = {}
-    end,
+    callback = function() _tabs[my_tab_id] = nil end,
   })
 
   local ko = { noremap = true, silent = true, buffer = buf }
 
   -- <CR>: mode-aware action
   vim.keymap.set('n', '<CR>', function()
-    local row = vim.api.nvim_win_get_cursor(_sidebar_win)[1]
+    local ct  = get_tab()
+    local row = vim.api.nvim_win_get_cursor(ct.win)[1]
 
-    if _sidebar_mode == 'overview' then
-      local vname = _sidebar_view_lines[row]
+    if ct.mode == 'overview' then
+      local vname = ct.view_lines[row]
       if vname then
         sidebar_push_history()
         sidebar_switch_to_detail(vname)
@@ -1550,7 +1573,7 @@ function M.open_sidebar(name)
     end
 
     -- detail: tree header line → navigate to that view
-    local te = _sidebar_tree[row]
+    local te = ct.tree[row]
     if te then
       if not te.is_current then
         sidebar_push_history()
@@ -1560,28 +1583,27 @@ function M.open_sidebar(name)
     end
 
     -- detail: note line → open in main window
-    local idx = row - _sidebar_header_count
-    if idx < 1 or idx > #_sidebar_paths then return end
-    local path = _sidebar_paths[idx]
+    local idx = row - ct.header_count
+    if idx < 1 or idx > #ct.paths then return end
+    local path = ct.paths[idx]
 
     if vim.fn.filereadable(path) == 0 then
       vim.notify(
         '[pkm] file no longer exists: ' .. vim.fn.fnamemodify(path, ':t'),
-        vim.log.levels.WARN
-      )
+        vim.log.levels.WARN)
       return
     end
 
     local target
     local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
-    if alt_id ~= 0 and alt_id ~= _sidebar_win
+    if alt_id ~= 0 and alt_id ~= ct.win
     and vim.api.nvim_win_is_valid(alt_id)
     and vim.api.nvim_win_get_config(alt_id).relative == '' then
       target = alt_id
     end
     if not target then
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if win ~= _sidebar_win
+        if win ~= ct.win
         and vim.api.nvim_win_get_config(win).relative == '' then
           target = win; break
         end
@@ -1604,7 +1626,7 @@ function M.open_sidebar(name)
       else
         sidebar_switch_to_detail(state.name)
       end
-    elseif _sidebar_mode == 'overview' then
+    elseif get_tab().mode == 'overview' then
       vim.notify('[pkm] already at views overview', vim.log.levels.INFO)
     else
       sidebar_switch_to_overview()
@@ -1613,13 +1635,13 @@ function M.open_sidebar(name)
 
   -- <C-b>: jump directly to overview, push current to history
   vim.keymap.set('n', '<C-b>', function()
-    if _sidebar_mode ~= 'overview' then
+    if get_tab().mode ~= 'overview' then
       sidebar_push_history()
       sidebar_switch_to_overview()
     end
   end, ko)
 
-  -- b: explicit back key — reliable alternative to <BS> on all terminals
+  -- b: reliable alternative to <BS> on all terminals
   vim.keymap.set('n', 'b', function()
     local state = sidebar_pop_history()
     if state then
@@ -1628,29 +1650,27 @@ function M.open_sidebar(name)
       else
         sidebar_switch_to_detail(state.name)
       end
-    elseif _sidebar_mode == 'overview' then
+    elseif get_tab().mode == 'overview' then
       vim.notify('[pkm] already at views overview', vim.log.levels.INFO)
     else
       sidebar_switch_to_overview()
     end
   end, ko)
 
-  -- /: scoped search — detail searches current view paths; overview does full browse
+  -- /: scoped search
   vim.keymap.set('n', '/', function()
+    local ct       = get_tab()
     local has_tele = pcall(require, 'telescope')
-    if _sidebar_mode == 'detail' then
-      local title = string.format('Search: %s', _sidebar_name)
+    if ct.mode == 'detail' then
+      local title = string.format('Search: %s', ct.name)
       if has_tele then
-        require('pkm.telescope').browse_paths(title, _sidebar_paths)
+        require('pkm.telescope').browse_paths(title, ct.paths)
       else
-        require('pkm.ui').browse_paths(title, _sidebar_paths)
+        require('pkm.ui').browse_paths(title, ct.paths)
       end
     else
-      if has_tele then
-        require('pkm.telescope').browse()
-      else
-        require('pkm.ui').browse()
-      end
+      if has_tele then require('pkm.telescope').browse()
+      else             require('pkm.ui').browse() end
     end
   end, ko)
 
@@ -1659,22 +1679,47 @@ function M.open_sidebar(name)
 
   -- r: refresh current mode in place
   vim.keymap.set('n', 'r', function()
-    if _sidebar_mode == 'overview' then
+    local ct = get_tab()
+    if ct.mode == 'overview' then
       sidebar_switch_to_overview()
     else
-      sidebar_switch_to_detail(_sidebar_name)
+      sidebar_switch_to_detail(ct.name)
     end
     vim.notify('[pkm] sidebar refreshed', vim.log.levels.INFO)
   end, ko)
 
   -- q / <Esc>: close
   local function close_sidebar()
-    if _sidebar_win and vim.api.nvim_win_is_valid(_sidebar_win) then
-      vim.api.nvim_win_close(_sidebar_win, true)
+    local ct = get_tab()
+    if ct.win and vim.api.nvim_win_is_valid(ct.win) then
+      vim.api.nvim_win_close(ct.win, true)
     end
   end
   vim.keymap.set('n', 'q',     close_sidebar, ko)
   vim.keymap.set('n', '<Esc>', close_sidebar, ko)
+
+  -- Statusline infobar: show the full filename of the note under the cursor.
+  -- In overview mode the statusline is cleared. Fires on every cursor move
+  -- within the sidebar buffer; no extra window consumed.
+  vim.api.nvim_create_autocmd('CursorMoved', {
+    buffer   = buf,
+    callback = function()
+      local ct = get_tab()
+      if not (ct.win and vim.api.nvim_win_is_valid(ct.win)) then return end
+      local filename = ''
+      if ct.mode == 'detail' then
+        local row = vim.api.nvim_win_get_cursor(ct.win)[1]
+        local idx = row - ct.header_count
+        if idx >= 1 and idx <= #ct.paths then
+          filename = vim.fn.fnamemodify(ct.paths[idx], ':t')
+        end
+      end
+      vim.api.nvim_set_option_value(
+        'statusline',
+        filename ~= '' and (' ' .. filename) or ' ',
+        { win = ct.win })
+    end,
+  })
 
   -- Populate initial content
   if name and name ~= '' then
@@ -1690,15 +1735,29 @@ end
 --- Call after any operation that modifies the note list (deletion, rename, etc.).
 ---@return nil
 function M.refresh_sidebar_if_open()
-  if not _sidebar_win then return end
-  if not vim.api.nvim_win_is_valid(_sidebar_win) then
-    _sidebar_win = nil
-    return
-  end
-  if _sidebar_mode == 'overview' then
-    sidebar_switch_to_overview()
-  else
-    sidebar_switch_to_detail(_sidebar_name)
+  for _, id in ipairs(vim.api.nvim_list_tabpages()) do
+    local t = _tabs[id]
+    if t and t.win then
+      if not vim.api.nvim_win_is_valid(t.win) then
+        _tabs[id] = nil
+      else
+        local lines, view_lines, tree_entries, header_count, sorted
+        if t.mode == 'overview' then
+          lines, view_lines = sidebar_build_overview()
+          t.view_lines = view_lines
+        else
+          local paths = M.match_all(t.name)
+          lines, tree_entries, header_count, sorted =
+            sidebar_build_lines(t.name, paths)
+          t.paths        = sorted
+          t.tree         = tree_entries
+          t.header_count = header_count
+        end
+        vim.api.nvim_set_option_value('modifiable', true,  { buf = t.buf })
+        vim.api.nvim_buf_set_lines(t.buf, 0, -1, false, lines)
+        vim.api.nvim_set_option_value('modifiable', false, { buf = t.buf })
+      end
+    end
   end
 end
 

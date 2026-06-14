@@ -148,13 +148,16 @@ handling nested empty structures. **Do not modify without strong justification.*
 
 **timestamp.lua** — timestamps in multiple formats; creates filenames; parses existing timestamps.
 
-**citations.lua** — bidirectional citation sync; `get_all_tags()`, `get_file_tags(path)`,
-`get_citable_items_map()`, `merge_tags(sources, target)`.
+**citations.lua** — bidirectional citation sync; `get_all_tags()`,
+`get_file_tags(path)`, `get_citable_items_map()`, `merge_tags(sources,
+target)`, `add_tag(tag?)`, `remove_tag(tag?)` — append/remove tag from current
+buffer frontmatter (buffer-only).
 
-**notes.lua** — all note file operations: create, convert, promote, import, link,
-follow link, backlinks. Title field is free-form; filename changes are explicit
-via M.rename_note(), which prompts, sanitizes, renames on disk, and propagates
-to citations.
+**notes.lua** — all note file operations: create, convert, promote, import,
+link, follow link, backlinks. Title field is free-form; filename changes are
+explicit via `M.rename_note()`, which prompts, sanitizes, renames on disk, and
+propagates to citations. `set_title()` — prompt for title, write to current
+buffer frontmatter (buffer-only).
 
 **journal.lua** — journal creation (auto-timestamped by default); journal-specific filename-YAML sync.
 
@@ -172,7 +175,9 @@ evaluates them against note data tables. Grammar: AND/OR/NOT over tag/title/text
 predicates with parentheses and quoted values. `from_legacy()` converts old
 `{tags_any, tags_all, title, text}` tables for backward compatibility.
 
-**index.lua** — in-memory note index. Entry shape: `{path, filename, title, tags, body, mtime}`.
+**index.lua** — in-memory note index. Entry shape: `{path, filename, title,
+tags, body, mtime, has_citations : boolean  true when cites or cited_by has ≥1
+entry in any group`}.
 Lazy build on first `get_all()` call. Incremental invalidation via `BufWritePost` autocmd
 and explicit `invalidate(path)` calls after every programmatic file write or delete.
 Title: free-form YAML `title` if non-empty, otherwise filename stem with underscores
@@ -189,7 +194,10 @@ the full hierarchy with note counts; uses `build_tree_entries()` for depth-first
 ordering. Internal helpers: `get_view_parent`, `get_view_children`,
 `build_tree_entries`. Sidebar features and `get_last_view`.
 Persistent sidebar (`open_sidebar`) with navigable tree header showing parent and
-children. Last-view tracking (`open_last`). Telescope picker with exact-substring prompt and file preview; float fallback.
+children. Last-view tracking (`open_last`). Telescope picker with
+exact-substring prompt and file preview; float fallback. `edit_view(name?)` →
+action picker: edit filter expression / rename / reparent (rename/reparent
+available for sidecar views only); picker over all views if nil
 
 **bench.lua** — developer benchmarking and load-testing. Not user-facing, no commands.
 Four-phase suite: raw scan, index build, index query, filter eval. Self-cleaning
@@ -279,7 +287,6 @@ require('pkm').setup({
     -- Search and browsing
     browse       = "<leader>nf",   -- :PKMBrowse — primary, unified search bar
     browse_tags  = "<leader>nt",   -- :PKMTags  — secondary, quick tag entry
-    -- search (:PKMSearch) removed — see Next Steps §2
     -- Markdown editing
     ---- Headers
     next_header        = "<leader>Mh",
@@ -659,7 +666,7 @@ Remaining implementation work (Phase 4):
   for review. Might include organizers, separators, or interact with filters to
   enable the user to categorize such notes according to priority, subject, etc.
 
--*5. Alternative diagram and imaging methods to allow enhancement of notes
+- **Alternative diagram and imaging methods** to allow enhancement of notes
 without dependence on external image files: e.g. ASCII (text-based) art.
 
 ((All features under this item should be examined for readability (AI, machine,

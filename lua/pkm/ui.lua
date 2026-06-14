@@ -15,17 +15,23 @@
 --                               sorted by view membership and shared tags
 --   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
 --   show_stats()             → Show note counts via vim.notify
---   toggle_bufpanel()    → toggle the persistent bottom buffer-list panel
+--   toggle_bufpanel()  → toggle the persistent bottom buffer-list panel (per-tabpage)
 -- =============================================================================
 local M = {}
 
 local utils = require('pkm.utils')
 local config = {}
 
-local _bufpanel_win     = nil
-local _bufpanel_buf     = nil
-local _bufpanel_augroup = nil
-local _bufpanel_map     = {}
+-- Per-tabpage bufpanel state. Keyed by nvim_get_current_tabpage().
+local _tabs = {}
+
+local function get_tab()
+  local id = vim.api.nvim_get_current_tabpage()
+  if not _tabs[id] then
+    _tabs[id] = { win = nil, buf = nil, augroup = nil, map = {} }
+  end
+  return _tabs[id]
+end
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 local function type_prefix(note_type)
@@ -48,7 +54,7 @@ local function bufpanel_build_lines()
   local listed = {}
 
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if bufnr ~= _bufpanel_buf
+    if bufnr ~= get_tab().buf
     and vim.api.nvim_buf_is_valid(bufnr)
     and vim.bo[bufnr].buflisted
     and vim.bo[bufnr].buftype == '' then
@@ -82,14 +88,15 @@ end
 
 --- Refresh buffer panel content in place.
 local function bufpanel_refresh()
-  if not _bufpanel_buf or not vim.api.nvim_buf_is_valid(_bufpanel_buf) then return end
+  local t = get_tab()
+  if not t.buf or not vim.api.nvim_buf_is_valid(t.buf) then return end
   local lines, buf_map = bufpanel_build_lines()
-  _bufpanel_map = buf_map
-  vim.api.nvim_set_option_value('modifiable', true,  { buf = _bufpanel_buf })
-  vim.api.nvim_buf_set_lines(_bufpanel_buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = _bufpanel_buf })
-  if _bufpanel_win and vim.api.nvim_win_is_valid(_bufpanel_win) then
-    vim.api.nvim_win_set_height(_bufpanel_win, math.min(#lines + 1, 8))
+  t.map = buf_map
+  vim.api.nvim_set_option_value('modifiable', true,  { buf = t.buf })
+  vim.api.nvim_buf_set_lines(t.buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = t.buf })
+  if t.win and vim.api.nvim_win_is_valid(t.win) then
+    vim.api.nvim_win_set_height(t.win, math.min(#lines + 1, 8))
   end
 end
 
@@ -97,16 +104,16 @@ end
 --- Called after bdelete operations to prevent the panel from becoming the sole
 --- non-float window, which breaks Neovim's window layout.
 local function ensure_main_window()
+  local t = get_tab()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if win ~= _bufpanel_win
+    if win ~= t.win
     and vim.api.nvim_win_get_config(win).relative == '' then
-      return  -- a real editing window already exists
+      return
     end
   end
-  -- Only the panel (or nothing) remains; open an editing window above it.
-  if _bufpanel_win and vim.api.nvim_win_is_valid(_bufpanel_win) then
+  if t.win and vim.api.nvim_win_is_valid(t.win) then
     local cur = vim.api.nvim_get_current_win()
-    vim.api.nvim_set_current_win(_bufpanel_win)
+    vim.api.nvim_set_current_win(t.win)
     vim.cmd('noautocmd aboveleft new')
     if vim.api.nvim_win_is_valid(cur) then
       vim.api.nvim_set_current_win(cur)
@@ -119,33 +126,34 @@ end
 --- <CR> opens buffer in main window. d/D close it. w saves and closes.
 --- r refreshes. q/<Esc> closes the panel.
 function M.toggle_bufpanel()
-  if _bufpanel_win and not vim.api.nvim_win_is_valid(_bufpanel_win) then
-    _bufpanel_win = nil; _bufpanel_buf = nil; _bufpanel_map = {}
-    if _bufpanel_augroup then
-      vim.api.nvim_del_augroup_by_id(_bufpanel_augroup)
-      _bufpanel_augroup = nil
-    end
+  local t = get_tab()
+  local my_tab_id = vim.api.nvim_get_current_tabpage()
+
+  if t.win and not vim.api.nvim_win_is_valid(t.win) then
+    if t.augroup then pcall(vim.api.nvim_del_augroup_by_id, t.augroup) end
+    _tabs[my_tab_id] = nil
+    t = get_tab()
   end
 
-  if _bufpanel_win then
-    vim.api.nvim_win_close(_bufpanel_win, true)
+  if t.win then
+    vim.api.nvim_win_close(t.win, true)
     return
   end
 
   local prev_win = vim.api.nvim_get_current_win()
 
   vim.cmd('noautocmd botright split')
-  _bufpanel_win = vim.api.nvim_get_current_win()
+  t.win = vim.api.nvim_get_current_win()
 
   local buf = vim.api.nvim_create_buf(false, true)
-  _bufpanel_buf = buf
-  vim.api.nvim_win_set_buf(_bufpanel_win, buf)
+  t.buf = buf
+  vim.api.nvim_win_set_buf(t.win, buf)
 
   for opt, val in pairs({
     winfixheight = true, wrap = false,
     number = false, cursorline = true, signcolumn = 'no',
   }) do
-    vim.api.nvim_set_option_value(opt, val, { win = _bufpanel_win })
+    vim.api.nvim_set_option_value(opt, val, { win = t.win })
   end
 
   for opt, val in pairs({
@@ -155,16 +163,17 @@ function M.toggle_bufpanel()
   end
 
   local lines, buf_map = bufpanel_build_lines()
-  _bufpanel_map = buf_map
+  t.map = buf_map
   vim.api.nvim_set_option_value('modifiable', true,  { buf = buf })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-  vim.api.nvim_win_set_height(_bufpanel_win, math.min(#lines + 1, 8))
+  vim.api.nvim_win_set_height(t.win, math.min(#lines + 1, 8))
 
-  _bufpanel_augroup = vim.api.nvim_create_augroup('PKMBufPanel', { clear = true })
+  t.augroup = vim.api.nvim_create_augroup(
+    'PKMBufPanel_' .. my_tab_id, { clear = true })
   for _, event in ipairs({ 'BufAdd', 'BufDelete', 'BufWipeout', 'BufModifiedSet' }) do
     vim.api.nvim_create_autocmd(event, {
-      group    = _bufpanel_augroup,
+      group    = t.augroup,
       callback = function() vim.schedule(bufpanel_refresh) end,
     })
   end
@@ -173,29 +182,30 @@ function M.toggle_bufpanel()
     buffer   = buf,
     once     = true,
     callback = function()
-      _bufpanel_win = nil; _bufpanel_buf = nil; _bufpanel_map = {}
-      if _bufpanel_augroup then
-        vim.api.nvim_del_augroup_by_id(_bufpanel_augroup)
-        _bufpanel_augroup = nil
+      local old_t = _tabs[my_tab_id]
+      if old_t and old_t.augroup then
+        pcall(vim.api.nvim_del_augroup_by_id, old_t.augroup)
       end
+      _tabs[my_tab_id] = nil
     end,
   })
 
   local ko = { noremap = true, silent = true, buffer = buf }
 
   vim.keymap.set('n', '<CR>', function()
-    local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
+    local ct    = get_tab()
+    local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
     local target
     local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
-    if alt_id ~= 0 and alt_id ~= _bufpanel_win
+    if alt_id ~= 0 and alt_id ~= ct.win
     and vim.api.nvim_win_is_valid(alt_id)
     and vim.api.nvim_win_get_config(alt_id).relative == '' then
       target = alt_id
     end
     if not target then
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if win ~= _bufpanel_win
+        if win ~= ct.win
         and vim.api.nvim_win_get_config(win).relative == '' then
           target = win; break
         end
@@ -208,7 +218,8 @@ function M.toggle_bufpanel()
   end, ko)
 
   vim.keymap.set('n', 'd', function()
-    local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
+    local ct    = get_tab()
+    local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
     if bufnr then
       local ok, err = pcall(vim.cmd, 'bdelete ' .. bufnr)
       if not ok then
@@ -220,7 +231,8 @@ function M.toggle_bufpanel()
   end, ko)
 
   vim.keymap.set('n', 'D', function()
-    local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
+    local ct    = get_tab()
+    local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
     if bufnr then
       local ok, err = pcall(vim.cmd, 'bdelete! ' .. bufnr)
       if not ok then
@@ -232,30 +244,19 @@ function M.toggle_bufpanel()
   end, ko)
 
   vim.keymap.set('n', 'w', function()
-    local bufnr = _bufpanel_map[vim.api.nvim_win_get_cursor(_bufpanel_win)[1]]
+    local ct    = get_tab()
+    local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
     if not bufnr then return end
-    local target
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-      if win ~= _bufpanel_win
-      and vim.api.nvim_win_get_config(win).relative == '' then
-        target = win; break
-      end
-    end
-    if not target then
-      vim.notify('[pkm] no window to write buffer in', vim.log.levels.WARN)
-      return
-    end
-    local prev = vim.api.nvim_get_current_win()
-    vim.api.nvim_set_current_win(target)
-    vim.api.nvim_set_current_buf(bufnr)
-    local ok, err = pcall(vim.cmd, 'write')
+    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function()
+      vim.cmd('write')
+    end)
     if ok then
       pcall(vim.cmd, 'bdelete ' .. bufnr)
       ensure_main_window()
     else
       vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
     end
-    vim.api.nvim_set_current_win(prev)
   end, ko)
 
   vim.keymap.set('n', 'r', function()
@@ -264,8 +265,9 @@ function M.toggle_bufpanel()
   end, ko)
 
   local function close_panel()
-    if _bufpanel_win and vim.api.nvim_win_is_valid(_bufpanel_win) then
-      vim.api.nvim_win_close(_bufpanel_win, true)
+    local ct = get_tab()
+    if ct.win and vim.api.nvim_win_is_valid(ct.win) then
+      vim.api.nvim_win_close(ct.win, true)
     end
   end
   vim.keymap.set('n', 'q',     close_panel, ko)
@@ -280,6 +282,17 @@ end
 ---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config
+  local augroup = vim.api.nvim_create_augroup('PKMUITabs', { clear = true })
+  vim.api.nvim_create_autocmd('TabClosed', {
+    group    = augroup,
+    callback = function()
+      local live = {}
+      for _, tp in ipairs(vim.api.nvim_list_tabpages()) do live[tp] = true end
+      for id in pairs(_tabs) do
+        if not live[id] then _tabs[id] = nil end
+      end
+    end,
+  })
 end
 
 -- =============================================================================
