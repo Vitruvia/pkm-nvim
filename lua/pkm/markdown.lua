@@ -11,7 +11,7 @@
 -- Public API:
 --   append_next_header()                       → Duplicate current header with counter +1, append at EOF
 --   shift_header_level(direction, start, end)  → Shift header '#'-level up or down in line range
---   setup_symbols(symbols)                     → Register buffer-local iabbrevs and insert-mode keymaps
+--   setup_symbols(symbols)                     → Register buffer-local insert-mode keymaps (trigger and key)
 --   renumber_sequence(start_line, end_line)    → Renumber ordered sequence items in line range
 --   renumber_at_cursor()                       → Renumber sequence in paragraph around cursor
 -- =============================================================================
@@ -80,9 +80,10 @@ end
 -- SECTION: Symbol abbreviations
 -- =============================================================================
 
---- Register buffer-local insert-mode abbreviations and keymaps for user-defined
---- symbol expansions. Each entry may have: trigger (iabbrev), key (insert-mode
---- keymap), expansion (the symbol string). Silently skips malformed entries.
+--- Register buffer-local insert-mode keymaps for user-defined symbol expansions.
+--- Each entry may have: trigger (exact-sequence keymap fired immediately, no
+--- trailing character), key (key-combination keymap), expansion (the symbol
+--- string). Both use vim.keymap.set('i', ...). Silently skips malformed entries.
 --- Call from a BufReadPost autocmd to scope registrations per buffer.
 ---@param symbols table  List of {trigger?, key?, expansion=string} entries
 ---@return nil

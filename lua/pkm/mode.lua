@@ -2,7 +2,7 @@
 -- pkm.mode — PKMMode session context manager
 -- =============================================================================
 -- Dependencies : pkm.views (lazy), pkm.ui (lazy), pkm.index (lazy),
---                pkm.syntax (lazy), pkm.utils
+--                pkm.syntax (lazy)
 -- Consumed by  : pkm.init (setup), pkm.commands (:PKMMode, :PKMExplorer)
 --
 -- Manages the PKM editing context: explorer UI (sidebar + bufpanel), eager
@@ -32,8 +32,6 @@
 -- =============================================================================
 
 local M = {}
-
-local utils = require('pkm.utils')
 
 -- =============================================================================
 -- SECTION: State
@@ -114,14 +112,13 @@ function M.setup(cfg)
       if not _config.triggers.open_note then return end
       local path = vim.fn.expand('<afile>:p')
       if not is_pkm_file(path) then return end
-      if not _active then
-        M.activate()
-      else
-        -- Mode already active; enable syntax on the newly opened buffer.
+      if _active then
         if _config.syntax.enabled then
           require('pkm.syntax').enable(vim.api.nvim_get_current_buf())
         end
+        return
       end
+      M.activate()
     end,
   })
 
@@ -149,6 +146,7 @@ end
 --- and enables PKM syntax on all open PKM buffers.
 ---@return nil
 function M.activate()
+  local was_active = _active
   _active = true
 
   local views = require('pkm.views')
@@ -168,7 +166,9 @@ function M.activate()
 
   if _config.syntax.enabled then syntax_enable_all() end
 
-  vim.notify('[pkm] PKM mode on', vim.log.levels.INFO)
+  if not was_active then
+    vim.notify('[pkm] PKM mode on', vim.log.levels.INFO)
+  end
 end
 
 --- Deactivate PKM mode. Idempotent: safe to call when already inactive.

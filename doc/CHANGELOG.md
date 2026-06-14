@@ -207,6 +207,15 @@
   1.4.1 but defaults were not cleaned up.
 
 ### Fixed
+- **`:PKMMode` trigger fires on every note open** — `M.activate()` was calling
+  `vim.notify` unconditionally; if the `if not _active` guard in the
+  `BufReadPost` callback was missing or bypassed, mode re-activated (with
+  notification, panel re-checks, and index rebuild scheduling) on every PKM
+  note open. Fix: (1) `M.activate()` now captures `was_active` before setting
+  `_active = true` and only notifies when `not was_active`; (2) the
+  `BufReadPost` callback restructured to early-return when `_active` is true,
+  making the guard harder to accidentally drop. Both panels remain idempotently
+  re-openable by `:PKMMode on` when already active.
 - **Symbol abbreviations leave trailing space** — `setup_symbols` used
   `iabbrev` for `trigger` entries; Vim's abbreviation mechanism requires a
   non-keyword character (typically Space) to fire and inserts it alongside
