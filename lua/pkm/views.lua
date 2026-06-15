@@ -1844,18 +1844,22 @@ function M.open_sidebar(name)
     callback = function()
       local ct = get_tab()
       if not (ct.win and vim.api.nvim_win_is_valid(ct.win)) then return end
-      local filename = ''
+
+      local winbar
       if ct.mode == 'detail' then
         local row = vim.api.nvim_win_get_cursor(ct.win)[1]
         local idx = row - ct.header_count
         if idx >= 1 and idx <= #ct.paths then
-          filename = vim.fn.fnamemodify(ct.paths[idx], ':t')
+          winbar = ' ' .. vim.fn.fnamemodify(ct.paths[idx], ':t')
+        else
+          local filter_label = ct.type_filter and ('  [' .. ct.type_filter .. ']') or ''
+          winbar = ' ≡ ' .. (ct.name or '') .. filter_label
         end
+      else
+        winbar = ''
       end
-      vim.api.nvim_set_option_value(
-        'winbar',
-        filename ~= '' and (' ' .. filename) or '',
-        { win = ct.win })
+
+      vim.api.nvim_set_option_value('winbar', winbar, { win = ct.win })
     end,
   })
 
