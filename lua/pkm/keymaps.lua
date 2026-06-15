@@ -112,11 +112,12 @@ function M.register(config)
 
   -- Netrw quality-of-life: winbar shows current directory; window
   -- navigation keymaps override netrw's <C-l> capture.
-  local netrw_aug = vim.api.nvim_create_augroup('PKMNetrwFixes', { clear = true })
-    vim.api.nvim_create_autocmd('FileType', {
-      group   = netrw_aug,
-      pattern = 'netrw',
-      callback = function(ev) .      local function update_winbar()
+  vim.api.nvim_create_augroup('PKMNetrwFixes', { clear = true })
+  vim.api.nvim_create_autocmd('FileType', {
+    group   = vim.api.nvim_get_augroup('PKMNetrwFixes', {}),
+    pattern = 'netrw',
+    callback = function(ev)
+      local function update_winbar()
         local dir = vim.b[ev.buf].netrw_curdir
                  or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(ev.buf), ':p:h')
         -- Display path relative to home (~) to reduce width.
