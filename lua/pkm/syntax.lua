@@ -284,19 +284,6 @@ function M.enable(bufnr)
     buffer   = bufnr,
     callback = function() vim.b[bufnr]._pkm_fm_end = nil end,
   })
-
-  -- Re-sync tree-sitter after undo to prevent 'end_row out of range' errors.
-  vim.api.nvim_create_autocmd('UndoPost', {
-    group    = ag,
-    buffer   = bufnr,
-    callback = function()
-      vim.schedule(function()
-        if _active_bufs[bufnr] and vim.api.nvim_buf_is_valid(bufnr) then
-          pcall(vim.treesitter.start, bufnr, 'markdown')
-        end
-      end)
-    end,
-  })
 end
 
 --- Deactivate PKM-specific highlighting and restore default Vimscript syntax.
