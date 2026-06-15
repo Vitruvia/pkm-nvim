@@ -24,7 +24,10 @@ local M = {}
 ---@param arg_lead string   Current word being completed
 ---@return string[]
 local function browse_complete(arg_lead, _cmd_line, _cursor_pos)
-  local keywords = { 'AND', 'OR', 'NOT', 'tag:', 'title:', 'text:', 'filename:', 'any:' }
+  local keywords = {
+  'AND', 'OR', 'NOT',
+  'tag:', 'title:', 'text:', 'filename:', 'any:', 'type:',
+  }
 
   -- After 'tag:' prefix: suggest 'tag:<known-tag>' candidates.
   local tag_stub = arg_lead:match('^tag:(.*)$')
@@ -42,6 +45,16 @@ local function browse_complete(arg_lead, _cmd_line, _cursor_pos)
       end
     end
     table.sort(out)
+    return out
+  end
+
+  local type_stub = arg_lead:match('^type:(.*)$')
+  if type_stub ~= nil then
+    local types = { 'note', 'agg', 'bib', 'journal', 'scratch', 'other' }
+    local out = {}
+    for _, t in ipairs(types) do
+      if t:find(type_stub, 1, true) then out[#out + 1] = 'type:' .. t end
+    end
     return out
   end
 
@@ -419,6 +432,73 @@ function M.register()
     nargs    = '?',
     complete = function() return require('pkm.views').list() end,
     desc     = 'Open or toggle the persistent view sidebar',
+  })
+
+  -- :PKMRestoreNote — pick a note from trash to restore.
+  vim.api.nvim_create_user_command('PKMRestoreNote', function()
+    local trash = require('pkm.trash')
+    local entries = trash.list()
+    if #entries == 0 then
+      vim.notify('[pkm] trash is empty', vim.log.levels.INFO)
+      return
+    end
+    vim.ui.select(entries, {
+      prompt = 'Restore note from trash:',
+      format_item = function(e)
+        return string.format('[%s] %s  (%s)',
+          e.deleted_at:sub(1, 10), e.title,
+          vim.fn.fnamemodify(e.original_path, ':~'))
+      end,
+    }, function(sel)
+      if not sel then return end
+      if trash.restore_note(sel) then
+        vim.notify(string.format("[pkm] restored '%s'", sel.title), vim.log.levels.INFO)
+        require('pkm.views').refresh_sidebar_if_open()
+      end
+    end)
+  end, { desc = 'Restore a note from the PKM trash' })
+
+  -- :PKMEmptyTrash — permanently delete all trashed notes and strip backlinks.
+  vim.api.nvim_create_user_command('PKMEmptyTrash', function()
+    local trash = require('pkm.trash')
+    local entries = trash.list()
+    if #entries == 0 then
+      vim.notify('[pkm] trash is already empty', vim.log.levels.INFO)
+      return
+    end
+    vim.fn.inputsave()
+    local confirm = vim.fn.input(string.format(
+      'Permanently delete %d trashed note%s and strip backlinks? (yes/no): ',
+      #entries, #entries == 1 and '' or 's'))
+    vim.fn.inputrestore()
+    if confirm:lower() ~= 'yes' then
+      vim.notify('[pkm] cancelled', vim.log.levels.INFO)
+      return
+    end
+    local count = trash.empty()
+    vim.notify(string.format('[pkm] permanently deleted %d note%s from trash',
+      count, count == 1 and '' or 's'), vim.log.levels.INFO)
+  end, { desc = 'Permanently delete all PKM trash and strip backlinks' })
+
+  -- :PKMConvertList [to_ordered|to_unordered] — ordered ↔ unordered conversion.
+  vim.api.nvim_create_user_command('PKMConvertList', function(opts)
+    local md  = require('pkm.markdown')
+    local dir = opts.args ~= '' and opts.args or nil
+    if dir and dir ~= 'to_ordered' and dir ~= 'to_unordered' then
+      vim.notify('[pkm] invalid direction: use to_ordered or to_unordered',
+        vim.log.levels.WARN)
+      return
+    end
+    if opts.range > 0 then
+      md.convert_list(opts.line1, opts.line2, dir)
+    else
+      md.convert_list_at_cursor(dir)
+    end
+  end, {
+    range    = true,
+    nargs    = '?',
+    complete = function() return { 'to_ordered', 'to_unordered' } end,
+    desc     = 'Convert list between ordered/unordered; optional direction arg',
   })
 
   -- ---------------------------------------------------------------------------

@@ -349,8 +349,9 @@ its turn.
 **(Complete) Phase 3 — Larger features.**
 - §5 unified, toggleable explorer UI + auto-on/off policies.
 - §3 improved renumbering (nested / quoted / emphasis families).
+- §5 PKM mode
 
-**Phase 4 — Markdown presentation (one workstream; decide mechanism first).**
+**(Complete) Phase 4 — Markdown presentation (one workstream; decide mechanism first).**
 - §3 syntax mechanism decision (consolidate Vimscript `after/syntax` vs migrate
   to bundled tree-sitter queries).
 - §3 frontmatter folding / conceal.
@@ -359,7 +360,6 @@ its turn.
 - §9 conventions IMPLEMENTATION.
 
 **Phase 5 — Last changes, fi feasible.**
-- §5 PKM mode
 - §8 deleted-note trash (tombstone-manifest caveat). (if too complex or
   performance intensive, defer. Otherwise, implement).
 - preview.lua, persistent index, review queue, `_match_cache` (only if §7

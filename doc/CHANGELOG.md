@@ -5,6 +5,18 @@
 ## [Unreleased]
 
 ### Decisions
+- **Trash isolation over OS integration** — PKM trash is a self-contained
+  `.pkm-trash/` folder inside the root rather than the OS recycling bin.
+  Rationale: no portable Lua/Neovim API exists for Windows RecycleBin, macOS
+  .Trash, and Linux `gio trash` simultaneously; the manifest stores PKM-specific
+  metadata (original path, title, deletion timestamp) needed for clean
+  restoration and autoclear; the trash folder moves with the PKM root and
+  remains version-controllable.
+
+- **Note numbering skips trashed numbers** — `get_next_note_number()` checks
+  both the consolidated folder and the trash manifest. If note 0042 is in
+  trash, the next new note is 0043. Gaps in numbering are intentional and
+  cause no problems; numbers are permanent identifiers, not sequential labels.
 
 - **Phase 4 syntax mechanism: tree-sitter queries** — PKM-specific syntax,
   conceal, and frontmatter folding/injection will be implemented as bundled
@@ -21,6 +33,69 @@
   injection, and context-aware highlighting work.
 
 ### Added
+- **Trash autoclear** — `config.trash.max_age_days` (default 60; 0 = disabled).
+  `trash.M.purge_old()` is called via `vim.defer_fn` (5 s after startup),
+  permanently deletes manifest entries older than the threshold, and strips
+  their backlinks. Manifest entries now include `deleted_timestamp` (Unix
+  epoch) for accurate comparison; legacy entries without this field fall back
+  to parsing `deleted_at` date string.
+- **Phase 5: Trash system** — `:PKMDeleteNote` with `trash.enabled = true`
+  (default) now moves notes to `{root}/.pkm-trash/` instead of permanently
+  deleting them. Backlinks in other notes are NOT stripped on trash — they are
+  preserved so restoration is fully reversible. New commands:
+  - `:PKMRestoreNote` — picker over trash manifest; moves note back to its
+    original path, re-indexes, no citation reconstruction needed (backlinks
+    intact).
+  - `:PKMEmptyTrash` — permanently deletes all trashed notes and strips their
+    backlinks from other notes via `citations.cleanup_deleted_note`. Requires
+    `yes` confirmation.
+  New module `lua/pkm/trash.lua`. Config: `trash = { enabled = true }`.
+  Set `enabled = false` to revert to permanent delete (old behaviour).
+
+- **`type:` filter predicate** — `filter.lua` gains a `type` field.
+  `type:note`, `type:agg`, `type:bib`, `type:journal`, `type:scratch`,
+  `type:other` match `entry.note_type` exactly (case-insensitive). Works in
+  `:PKMBrowse`, view filter expressions, `:PKMOrphans`, and any other
+  filter-DSL consumer. Tab completion for `:PKMBrowse` suggests `type:` and
+  its six values.
+
+- **Sidebar `<C-t>` type filter** — in detail mode, `<C-t>` cycles through
+  `all → note → agg → bib → journal → scratch → all`. The note list is
+  re-filtered on each cycle; the count header shows `N of M` when a filter
+  is active. The filter resets to `all` when navigating to overview. The
+  `type_filter` field is added to per-tabpage sidebar state.
+
+- **`:PKMConvertList [to_ordered|to_unordered]`** — converts ordered ↔
+  unordered list items in range or paragraph at cursor. Direction is
+  auto-detected (all ordered → to_unordered; all unordered → to_ordered;
+  mixed → prompts). If multiple indent depths are present, prompts for max
+  conversion depth. Items already in the target format are preserved (ordered
+  items are renumbered to maintain sequence). Delegates to new
+  `markdown.M.convert_list(start, end, direction?)` and
+  `markdown.M.convert_list_at_cursor(direction?)`. Config:
+  `keymaps.convert_list` (default `false`). Visual mode uses selection;
+  normal mode uses paragraph bounds.
+
+### Fixed
+- **`filter.lua` `type:` predicate never matched** — `elseif field == 'type'`
+  used an undefined variable (`field`; should be `tree.field`). Predicate
+  silently evaluated false for all notes.
+- **`sidebar_show_help` width 38 instead of 44** — duplicate `local width`
+  declaration; second shadowed first, clipping the `<C-t>` line. Fixed to 44.
+- **`refresh_sidebar_if_open` nil error when window destroyed externally** —
+  extra `end` placed the three buffer-write API calls outside the valid-window
+  `else` block; with `lines` out of scope (nil), `nvim_buf_set_lines` errored.
+  Removed the extra `end`; write operations are now correctly inside `else`.
+- **Note numbers reused after deletion** — `get_next_note_number()` only
+  scanned the consolidated folder; if the highest-numbered note was trashed,
+  the number would be reused by the next new note, conflicting with a later
+  restore. Now also checks the trash manifest.
+
+- **Sidebar `<C-s>` splits the sidebar window** — global split keymaps
+  (e.g. user-bound `<C-s>`) activated when focus was in the sidebar, splitting
+  it instead of the intended main editing window. Added a buffer-local no-op
+  for `<C-s>` in the sidebar buffer; buffer-local keymaps take precedence over
+  globals, so the split command is suppressed while the sidebar has focus.
 - **`renumber_sequence`: `list_bold_line` family** — detects `**N. body**`
   (double asterisks wrapping the whole ordered list item) as a distinct family.
   Detection comes before `list_emph` in the detection order. Renumbering

@@ -16,7 +16,7 @@
 --   not_expr  = NOT? atom
 --   atom      = "(" expr ")" | predicate
 --   predicate = (field ":")? value
---   field     = "tag" | "title" | "text" | "filename" | "any"
+--   field    = "tag" | "title" | "text" | "filename" | "type" | "any"
 --   value     = bare_word | "quoted string"
 --
 -- When no field prefix is present, or when the left side of a colon is not a
@@ -39,6 +39,7 @@
 --   title    — frontmatter title if set; filename stem with underscores replaced if not
 --   tags     — frontmatter tags array (lowercase strings)
 --   body     — note body (lines after frontmatter joined with "\n")
+--   note_type — index-computed type: 'note'|'agg'|'bib'|'journal'|'scratch'|'other'
 --
 -- Public API:
 --   parse(expr)        → tree, nil  |  nil, error_string
@@ -54,7 +55,10 @@ local M = {}
 
 --- Known field names. Used by the tokenizer to distinguish field predicates
 --- from bare-word any-predicates. "any" is the explicit form.
-local KNOWN_FIELDS = { tag = true, title = true, text = true, filename = true, any = true }
+local KNOWN_FIELDS = {
+  tag = true, title = true, text = true,
+  filename = true, any = true, type = true,
+}
 
 --- Tokenize a filter expression string into a flat array of token tables.
 --- Token types: AND, OR, NOT, LPAREN, RPAREN, PRED{field, value}, EOF.
@@ -309,6 +313,9 @@ function M.eval(tree, note)
 
     elseif tree.field == 'filename' then
       return tostring(note.filename or ''):lower():find(val, 1, true) ~= nil
+
+    elseif tree.field == 'type' then
+      return (note.note_type or 'other'):lower() == val
 
     elseif tree.field == 'any' then
       -- Plain substring over all text fields; tag values are also substring here.

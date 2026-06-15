@@ -40,11 +40,13 @@ end
 -- =============================================================================
 -- SECTION: File naming helpers
 -- =============================================================================
---- Get next available note number
+--- Get next available note number, skipping any numbers used by trashed notes.
+--- Gaps in numbering are intentional: a trashed note retains its number so
+--- that restoration never conflicts with a newer note.
 local function get_next_note_number()
   local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
   local files = vim.fn.glob(consolidated_path .. utils.sep .. "*.md", false, true)
-  
+
   local max_num = 0
   for _, file in ipairs(files) do
     local basename = vim.fn.fnamemodify(file, ":t:r")
@@ -53,7 +55,20 @@ local function get_next_note_number()
       max_num = math.max(max_num, tonumber(num))
     end
   end
-  
+
+  -- Also check the trash manifest so a restored note never shares a number
+  -- with a note created after it was trashed.
+  local ok, trash = pcall(require, 'pkm.trash')
+  if ok then
+    for _, entry in ipairs(trash.list()) do
+      local basename = vim.fn.fnamemodify(entry.original_path, ':t:r')
+      local num = basename:match('^(%d+)_')
+      if num then
+        max_num = math.max(max_num, tonumber(num))
+      end
+    end
+  end
+
   return max_num + 1
 end
 

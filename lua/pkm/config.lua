@@ -92,12 +92,14 @@ local defaults = {
     email = "",
   },
 
+  -- Markdown Symbols
   symbols = {
     { trigger = '^-', key = '<M-->', expansion = '—' },
     { trigger = '^$',   key = '<M-s>', expansion = '§' },
     { trigger = '^o',   key = '<M-o>', expansion = 'º' },
   },
 
+  -- PKM Mode
   pkm_mode = {
     triggers = {
       open_note = true,   -- activate when any PKM note is opened (BufReadPost)
@@ -113,6 +115,12 @@ local defaults = {
     syntax = {
       enabled = true,     -- enable PKM syntax highlighting on activation
     },
+  },
+
+  -- Trash
+  trash = {
+    enabled      = true,   -- soft-delete via .pkm-trash/
+    max_age_days = 60,     -- auto-purge entries older than N days; 0 to disable
   },
 
   keymaps = {
@@ -152,6 +160,7 @@ local defaults = {
     header_level_up    = "<leader>M^",
     header_level_down  = "<leader>M_",
     renumber_list      = "<leader>Mr",
+    convert_list = false,   -- :PKMConvertList (range or paragraph at cursor)
   },
 }
 

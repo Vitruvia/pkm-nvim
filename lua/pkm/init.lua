@@ -38,6 +38,7 @@ function M.setup(user_config)
   require('pkm.journal').setup(M.config)
   require('pkm.notes').setup(M.config)
   require('pkm.ui').setup(M.config)
+  require('pkm.trash').setup(M.config)
 
   -- Wire commands and keymaps
   require('pkm.commands').register()
@@ -162,42 +163,60 @@ end
 -- =============================================================================
 -- SECTION: Note deletion
 -- =============================================================================
---- Delete the current note safely: confirms with the user, removes all citation
---- references across the wiki via cleanup_deleted_note(), deletes the buffer,
---- then deletes the file from disk.
---- Only works on files inside M.config.root_path.
-function M.delete_note_safely()
-  local filepath = vim.fn.expand("%:p")
-  local root = M.config.root_path
-  
-  -- Normalization for comparison
-  local norm_path = filepath:gsub("\\", "/")
-  local norm_root = root:gsub("\\", "/")
 
-  if filepath == "" or not norm_path:lower():find(norm_root:lower(), 1, true) then
-    vim.notify("Not a valid PKM note.", vim.log.levels.ERROR)
+--- Delete or trash the current note.
+--- With trash.enabled = true (default): moves to .pkm-trash/ and preserves
+--- backlinks; use :PKMRestoreNote to undo or :PKMEmptyTrash to permanently
+--- delete. With trash.enabled = false: permanent delete (strips backlinks).
+function M.delete_note_safely()
+  local filepath = vim.fn.expand('%:p')
+  local root     = M.config.root_path
+
+  local norm_path = filepath:gsub('\\', '/')
+  local norm_root = root:gsub('\\', '/')
+  if filepath == '' or not norm_path:lower():find(norm_root:lower(), 1, true) then
+    vim.notify('Not a valid PKM note.', vim.log.levels.ERROR)
     return
   end
-  
-  local filename = vim.fn.fnamemodify(filepath, ":t")
+
+  local trash_enabled = M.config.trash and M.config.trash.enabled
+  local filename      = vim.fn.fnamemodify(filepath, ':t')
+  local action_note   = trash_enabled
+    and '(moves to trash · :PKMRestoreNote to undo)'
+    or  '(permanent · cannot be undone)'
+
   vim.fn.inputsave()
-  local confirm = vim.fn.input(string.format("Delete '%s' and all references? (yes/no): ", filename))
+  local confirm = vim.fn.input(
+    string.format("Delete '%s'? %s\n(yes/no): ", filename, action_note))
   vim.fn.inputrestore()
-  
-  if confirm:lower() ~= "yes" then 
-    vim.notify("Deletion cancelled.", vim.log.levels.INFO)
-    return 
+
+  if confirm:lower() ~= 'yes' then
+    vim.notify('Deletion cancelled.', vim.log.levels.INFO)
+    return
   end
-  
-  require('pkm.citations').cleanup_deleted_note(filepath)
-  vim.cmd("bdelete!")
-  
-  if vim.fn.delete(filepath) == 0 then
-    require('pkm.index').invalidate(filepath)
-    require('pkm.views').refresh_sidebar_if_open()
-    vim.notify("Note deleted.", vim.log.levels.INFO)
+
+  if trash_enabled then
+    vim.cmd('bdelete!')
+    local trash = require('pkm.trash')
+    if trash.trash_note(filepath) then
+      require('pkm.index').invalidate(filepath)
+      require('pkm.views').refresh_sidebar_if_open()
+      vim.notify(
+        string.format("'%s' moved to trash. Use :PKMRestoreNote to undo.", filename),
+        vim.log.levels.INFO)
+    else
+      vim.notify('Failed to move note to trash.', vim.log.levels.ERROR)
+    end
   else
-    vim.notify("Failed to delete file.", vim.log.levels.ERROR)
+    require('pkm.citations').cleanup_deleted_note(filepath)
+    vim.cmd('bdelete!')
+    if vim.fn.delete(filepath) == 0 then
+      require('pkm.index').invalidate(filepath)
+      require('pkm.views').refresh_sidebar_if_open()
+      vim.notify('Note permanently deleted.', vim.log.levels.INFO)
+    else
+      vim.notify('Failed to delete file.', vim.log.levels.ERROR)
+    end
   end
 end
 

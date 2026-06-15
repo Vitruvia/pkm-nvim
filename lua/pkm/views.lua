@@ -79,6 +79,7 @@ local function get_tab()
       mode         = nil,
       view_lines   = {},
       history      = {},
+      type_filter  = nil,   -- string|nil; filters displayed notes by note_type
     }
   end
   return _tabs[id]
@@ -1372,7 +1373,7 @@ end
 ---@param name  string
 ---@param paths string[]
 ---@return string[], table, integer, string[]
-local function sidebar_build_lines(name, paths)
+local function sidebar_build_lines(name, paths, total_count)
   local index    = require('pkm.index')
   local parent   = get_view_parent(name)
   local children = get_view_children(name)
@@ -1401,8 +1402,14 @@ local function sidebar_build_lines(name, paths)
 
   else
     local count = #paths
+    local count_label
+    if total_count and total_count ~= count then
+      count_label = string.format('%d of %d', count, total_count)
+    else
+      count_label = tostring(count)
+    end
     lines[#lines + 1] = '  PKMView: ' .. name
-      .. '  (' .. count .. ' note' .. (count == 1 and '' or 's') .. ')'
+      .. '  (' .. count_label .. ' note' .. (count == 1 and '' or 's') .. ')'
     lines[#lines + 1] = '  ' .. string.rep('─', 38)
     lines[#lines + 1] = ''
   end
@@ -1434,6 +1441,7 @@ end
 --- Switch the open sidebar to overview mode.
 local function sidebar_switch_to_overview()
   local t = get_tab()
+  t.type_filter = nil
   local lines, view_lines = sidebar_build_overview()
   t.mode         = 'overview'
   t.name         = nil
@@ -1452,9 +1460,21 @@ end
 ---@param name string
 local function sidebar_switch_to_detail(name)
   local t = get_tab()
-  local paths = M.match_all(name)
+  local all_paths = M.match_all(name)
+
+  local display_paths = all_paths
+  if t.type_filter then
+    local idx_m = require('pkm.index')
+    local filtered = {}
+    for _, p in ipairs(all_paths) do
+      local e = idx_m.get(p)
+      if e and e.note_type == t.type_filter then filtered[#filtered + 1] = p end
+    end
+    display_paths = filtered
+  end
+
   local lines, tree_entries, header_count, sorted =
-    sidebar_build_lines(name, paths)
+    sidebar_build_lines(name, display_paths, #all_paths)
   t.mode         = 'detail'
   t.name         = name
   t.paths        = sorted
@@ -1468,10 +1488,11 @@ local function sidebar_switch_to_detail(name)
 end
 
 --- Open a compact help float listing all sidebar keymaps.
-local function sidebar_show_help()   -- ← this line is missing
+local function sidebar_show_help()
   local lines = {
     '  <CR>    open note / enter view',
     '  <C-v>   open note in vertical split',
+    '  <C-t>   cycle type filter  (all/n/a/b/j/s)',
     '  b       back (pop history)',
     '  <BS>    same as b',
     '  <C-b>   jump to overview',
@@ -1480,13 +1501,14 @@ local function sidebar_show_help()   -- ← this line is missing
     '  q       close sidebar',
     '  ?       this help',
   }
+  -- ...
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
   vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
 
-  local width  = 38
+  local width  = 44
   local height = #lines + 2
   local win    = vim.api.nvim_open_win(buf, true, {
     relative  = 'editor',
@@ -1757,6 +1779,29 @@ function M.open_sidebar(name)
     end
   end, ko)
 
+  -- <C-s>: no-op — prevents global split keymaps from acting on the sidebar.
+  vim.keymap.set('n', '<C-s>', function() end, ko)
+
+  -- <C-t>: cycle type filter (detail mode only).
+  local TYPE_CYCLE = { false, 'note', 'agg', 'bib', 'journal', 'scratch' }
+  vim.keymap.set('n', '<C-t>', function()
+    local ct = get_tab()
+    if ct.mode ~= 'detail' then
+      vim.notify('[pkm] type filter only available in detail mode', vim.log.levels.INFO)
+      return
+    end
+    -- Find current position (false = nil sentinel to avoid ipairs stopping early).
+    local cur_idx = 1
+    for i, v in ipairs(TYPE_CYCLE) do
+      if v == (ct.type_filter or false) then cur_idx = i; break end
+    end
+    local next_idx = (cur_idx % #TYPE_CYCLE) + 1
+    local next_val = TYPE_CYCLE[next_idx]
+    ct.type_filter = (next_val == false) and nil or next_val
+    sidebar_switch_to_detail(ct.name)
+    vim.notify('[pkm] type filter: ' .. (ct.type_filter or 'all'), vim.log.levels.INFO)
+  end, ko)
+
   -- ?: show sidebar keymap help
   vim.keymap.set('n', '?', sidebar_show_help, ko)
 
@@ -1828,10 +1873,22 @@ function M.refresh_sidebar_if_open()
         if t.mode == 'overview' then
           lines, view_lines = sidebar_build_overview()
           t.view_lines = view_lines
-        else
-          local paths = M.match_all(t.name)
+      else
+          local all_paths = M.match_all(t.name)
+          local display_paths = all_paths
+          if t.type_filter then
+            local idx_m = require('pkm.index')
+            local filtered = {}
+            for _, p in ipairs(all_paths) do
+              local e = idx_m.get(p)
+              if e and e.note_type == t.type_filter then
+                filtered[#filtered + 1] = p
+              end
+            end
+            display_paths = filtered
+          end
           lines, tree_entries, header_count, sorted =
-            sidebar_build_lines(t.name, paths)
+            sidebar_build_lines(t.name, display_paths, #all_paths)
           t.paths        = sorted
           t.tree         = tree_entries
           t.header_count = header_count

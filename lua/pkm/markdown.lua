@@ -14,6 +14,8 @@
 --   setup_symbols(symbols)                     → Register buffer-local insert-mode keymaps (trigger and key)
 --   renumber_sequence(start_line, end_line)    → Renumber ordered sequence items in line range
 --   renumber_at_cursor()                       → Renumber sequence in paragraph around cursor
+--   convert_list(start_line, end_line, direction?) → Convert list ordered ↔ unordered
+--   convert_list_at_cursor(direction?)             → Same, paragraph around cursor
 -- =============================================================================
 
 local M = {}
@@ -321,6 +323,180 @@ end
 function M.renumber_at_cursor()
   local s, e = paragraph_bounds()
   M.renumber_sequence(s, e)
+end
+
+-- =============================================================================
+-- SECTION: List conversion
+-- =============================================================================
+
+--- Convert list items between ordered and unordered in the given range.
+--- Direction is auto-detected: all ordered → to_unordered; all unordered →
+--- to_ordered; mixed → prompts. If multiple indent depths exist, prompts for
+--- maximum depth to convert. Items already in the target format are preserved
+--- (ordered items are renumbered to maintain sequence; unordered items are
+--- left as-is). Blockquote prefixes are handled the same as renumber_sequence.
+---@param start_line integer   1-indexed, inclusive
+---@param end_line   integer   1-indexed, inclusive
+---@param direction  string|nil  'to_ordered'|'to_unordered'; nil = auto-detect
+---@return nil
+function M.convert_list(start_line, end_line, direction)
+  local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+
+  local function strip_bq(line)
+    local bq, rest = line:match('^(>+%s*)(.*)')
+    return (bq or ''), (rest or line)
+  end
+
+  local function ind_depth(ind)
+    local d = 0
+    for c in ind:gmatch('.') do d = d + (c == '\t' and 4 or 1) end
+    return d
+  end
+
+  -- Collect list items.
+  local items = {}
+  for i, line in ipairs(lines) do
+    local bq, rest = strip_bq(line)
+    local ind, _, sep, body = rest:match('^(%s*)(%d+)([.)]) (.*)$')
+    if ind then
+      items[#items + 1] = {
+        idx = i, type = 'ordered', bq = bq, ind = ind,
+        depth = ind_depth(ind), sep = sep, body = body,
+      }
+    else
+      local ind2, marker, body2 = rest:match('^(%s*)([-*+]) (.*)$')
+      if ind2 then
+        items[#items + 1] = {
+          idx = i, type = 'unordered', bq = bq, ind = ind2,
+          depth = ind_depth(ind2), marker = marker, body = body2,
+        }
+      end
+    end
+  end
+
+  if #items == 0 then
+    vim.notify('[pkm] no list items found in range', vim.log.levels.WARN)
+    return
+  end
+
+  local has_ordered, has_unordered = false, false
+  local depth_set = {}
+  for _, it in ipairs(items) do
+    if it.type == 'ordered'   then has_ordered   = true end
+    if it.type == 'unordered' then has_unordered = true end
+    depth_set[it.depth] = true
+  end
+
+  local depth_list = {}
+  for d in pairs(depth_set) do depth_list[#depth_list + 1] = d end
+  table.sort(depth_list)
+  local has_multiple_depths = #depth_list > 1
+
+  -- Core conversion logic.
+  local function do_convert(dir, max_depth)
+    local counters = {}
+    local function next_ordered(depth)
+      for k in pairs(counters) do if k > depth then counters[k] = nil end end
+      counters[depth] = (counters[depth] or 0) + 1
+      return counters[depth]
+    end
+
+    local new_lines = {}
+    local changed = 0
+
+    for i, line in ipairs(lines) do
+      local replaced = false
+      for _, it in ipairs(items) do
+        if it.idx == i then
+          if it.depth <= max_depth then
+            if dir == 'to_ordered' and it.type == 'unordered' then
+              local n = next_ordered(it.depth)
+              new_lines[#new_lines + 1] = it.bq .. it.ind .. n .. '. ' .. it.body
+              changed, replaced = changed + 1, true
+            elseif dir == 'to_unordered' and it.type == 'ordered' then
+              new_lines[#new_lines + 1] = it.bq .. it.ind .. '- ' .. it.body
+              changed, replaced = changed + 1, true
+            else
+              -- Already correct type; still advance ordered counter to keep sequence.
+              if dir == 'to_ordered' and it.type == 'ordered' then
+                next_ordered(it.depth)
+              end
+            end
+          end
+          break
+        end
+      end
+      if not replaced then new_lines[#new_lines + 1] = line end
+    end
+
+    vim.api.nvim_buf_set_lines(0, start_line - 1, end_line, false, new_lines)
+
+    if changed > 0 then
+      vim.notify(string.format('[pkm] converted %d list item%s',
+        changed, changed == 1 and '' or 's'), vim.log.levels.INFO)
+    else
+      vim.notify('[pkm] no items converted (already in target format)',
+        vim.log.levels.INFO)
+    end
+
+    vim.schedule(function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        local ok, mode = pcall(require, 'pkm.mode')
+        if ok and mode.is_active() then
+          pcall(vim.treesitter.start, bufnr, 'markdown')
+        end
+      end
+    end)
+  end
+
+  -- Prompt for depth if multiple levels, then convert.
+  local function ask_depth_then_convert(dir)
+    if not has_multiple_depths then
+      do_convert(dir, math.huge)
+      return
+    end
+    local opts = {}
+    for _, d in ipairs(depth_list) do
+      opts[#opts + 1] = string.format('Up to level %d (depth ≤ %d)', d, d)
+    end
+    opts[#opts + 1] = 'All levels'
+    vim.ui.select(opts, {
+      prompt = string.format('Convert list — %d depth levels found:', #depth_list),
+    }, function(choice)
+      if not choice then return end
+      if choice == 'All levels' then
+        do_convert(dir, math.huge)
+      else
+        do_convert(dir, tonumber(choice:match('%d+')) or math.huge)
+      end
+    end)
+  end
+
+  -- Determine direction, then proceed.
+  if direction then
+    ask_depth_then_convert(direction)
+  elseif has_ordered and not has_unordered then
+    ask_depth_then_convert('to_unordered')
+  elseif has_unordered and not has_ordered then
+    ask_depth_then_convert('to_ordered')
+  else
+    vim.ui.select({ 'Convert to ordered', 'Convert to unordered' }, {
+      prompt = 'Mixed list — convert to:',
+    }, function(choice)
+      if not choice then return end
+      ask_depth_then_convert(
+        choice == 'Convert to ordered' and 'to_ordered' or 'to_unordered')
+    end)
+  end
+end
+
+--- Convert the list around the cursor (paragraph-bounded).
+---@param direction string|nil  'to_ordered'|'to_unordered'; nil = auto-detect
+---@return nil
+function M.convert_list_at_cursor(direction)
+  local s, e = paragraph_bounds()
+  M.convert_list(s, e, direction)
 end
 
 return M

@@ -105,6 +105,13 @@ function M.register(config)
     vim.keymap.set('v', k.renumber_list, ':PKMRenumberList<cr>',
       { desc = 'PKM: Renumber sequence (selection)', silent = true })
   end
+
+  if k.convert_list then
+    vim.keymap.set('n', k.convert_list, '<cmd>PKMConvertList<cr>',
+      { desc = 'PKM: Convert list ordered/unordered (paragraph)', silent = true })
+    vim.keymap.set('v', k.convert_list, ':PKMConvertList<cr>',
+      { desc = 'PKM: Convert list ordered/unordered (selection)', silent = true })
+  end
 end
 
 return M
