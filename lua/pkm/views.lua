@@ -1465,7 +1465,8 @@ local function sidebar_switch_to_detail(name)
 end
 
 --- Open a compact help float listing all sidebar keymaps.
-local lines = {
+local function sidebar_show_help()   -- ← this line is missing
+  local lines = {
     '  <CR>    open note / enter view',
     '  <C-v>   open note in vertical split',
     '  b       back (pop history)',
