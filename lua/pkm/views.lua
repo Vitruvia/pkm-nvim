@@ -1819,7 +1819,17 @@ function M.open_sidebar(name)
   -- q / <Esc>: close
   local function close_sidebar()
     local ct = get_tab()
-    if ct.win and vim.api.nvim_win_is_valid(ct.win) then
+    if not (ct.win and vim.api.nvim_win_is_valid(ct.win)) then return end
+    -- Count non-float windows; if sidebar is the only one, quit gracefully.
+    local non_float = 0
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.api.nvim_win_get_config(win).relative == '' then
+        non_float = non_float + 1
+      end
+    end
+    if non_float <= 1 then
+      vim.cmd('quit')
+    else
       vim.api.nvim_win_close(ct.win, true)
     end
   end

@@ -44,6 +44,48 @@
 
 ---
 
+## [1.5.1] - 2026-6-15
+
+### Fixed
+
+- **`close_sidebar` E444 when sidebar is last window** — `nvim_win_close` raised
+  E444 when `q` or `<Esc>` was pressed in the sidebar with no other non-float
+  window open. `close_sidebar()` now counts non-float windows; if the sidebar is
+  the only one, it calls `vim.cmd('quit')` (respects tabpage and Neovim quit
+  logic) instead of `nvim_win_close`.
+
+- **Unnamed `[No Name]` buffer left in buffer list** — `_detach_buf_from_wins`
+  in `init.lua` and `ensure_main_window` in `ui.lua` both call `noautocmd enew`/
+  `noautocmd aboveleft new` as a last resort to keep a window open. These created
+  persistent `[No Name]` buffers that appeared in `:ls` and blocked `:wa`. Fix:
+  `vim.bo.bufhidden = 'wipe'` immediately after each creation call, so the buffer
+  self-destructs when the window next displays any other buffer.
+
+### Added
+
+- **netrw winbar** — when the PKM file explorer (netrw) opens via
+  `toggle_file_explorer`, a `FileType netrw` autocmd (registered via
+  `PKMNetrwFixes` augroup in `keymaps.lua`) sets the window's `winbar` to the
+  current directory (home-relative via `fnamemodify(:~)`). Updates on `BufEnter`
+  to track subdirectory navigation.
+
+- **netrw window navigation keymaps** — the same `FileType netrw` autocmd adds
+  buffer-local `<C-h/j/k/l>` → `<C-w>h/j/k/l` keymaps, overriding netrw's
+  `<C-l>` refresh binding. Restores standard Vim window navigation while in the
+  file explorer. Scoped to the netrw buffer; global keymaps are unaffected.
+
+- **netrw excluded from buffer panel** — `bufpanel_build_lines` now skips buffers
+  with `filetype = 'netrw'`. The file explorer no longer appears as `[f]` in the
+  `:PKMBuffers` panel.
+
+- **Sidebar winbar shows view name** — when in detail mode with the cursor on a
+  header, tree, or separator line (i.e. when the buffer's own header has scrolled
+  off screen), the winbar now shows `≡ viewname` (plus `[type]` if a type filter
+  is active). On a note line, the existing filename display is preserved. The view
+  name remains visible regardless of scroll position.
+
+---
+
 ## [1.5.0] - 2026-6-15
 
 ### Decisions

@@ -63,7 +63,8 @@ local function bufpanel_build_lines()
     if bufnr ~= get_tab().buf
     and vim.api.nvim_buf_is_valid(bufnr)
     and vim.bo[bufnr].buflisted
-    and vim.bo[bufnr].buftype == '' then
+    and vim.bo[bufnr].buftype == ''
+    and vim.bo[bufnr].filetype ~= 'netrw' then
       local name = vim.api.nvim_buf_get_name(bufnr)
       if name ~= '' then listed[#listed + 1] = bufnr end
     end
@@ -121,6 +122,7 @@ local function ensure_main_window()
     local cur = vim.api.nvim_get_current_win()
     vim.api.nvim_set_current_win(t.win)
     vim.cmd('noautocmd aboveleft new')
+    vim.bo.bufhidden = 'wipe'
     if vim.api.nvim_win_is_valid(cur) then
       vim.api.nvim_set_current_win(cur)
     end

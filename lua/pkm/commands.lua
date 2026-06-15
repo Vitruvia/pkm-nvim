@@ -69,43 +69,43 @@ local function browse_complete(arg_lead, _cmd_line, _cursor_pos)
   return out
 end
 
-  --- If the current window is a PKM panel (sidebar, bufpanel) or netrw,
-  --- switch focus to the nearest non-panel, non-float main editing window.
-  --- Falls back to opening a new split. Ensures creation commands never
-  --- open note buffers inside the sidebar, buffer panel, or file explorer.
-  local function focus_main_win()
-    local ft = vim.bo.filetype
-    if ft ~= 'pkm-sidebar' and ft ~= 'pkm-bufpanel' and ft ~= 'netrw' then return end
+--- If the current window is a PKM panel (sidebar, bufpanel) or netrw,
+--- switch focus to the nearest non-panel, non-float main editing window.
+--- Falls back to opening a new split. Ensures creation commands never
+--- open note buffers inside the sidebar, buffer panel, or file explorer.
+local function focus_main_win()
+  local ft = vim.bo.filetype
+  if ft ~= 'pkm-sidebar' and ft ~= 'pkm-bufpanel' and ft ~= 'netrw' then return end
 
-    local cur = vim.api.nvim_get_current_win()
-    local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
+  local cur = vim.api.nvim_get_current_win()
+  local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
 
-    -- Prefer the alternate window if it is a main editing window.
-    local alt = vim.fn.win_getid(vim.fn.winnr('#'))
-    if alt ~= 0 and alt ~= cur
-    and vim.api.nvim_win_is_valid(alt)
-    and vim.api.nvim_win_get_config(alt).relative == '' then
-      local alt_ft = vim.bo[vim.api.nvim_win_get_buf(alt)].filetype
-      if not _PANELS[alt_ft] then
-        vim.api.nvim_set_current_win(alt)
+  -- Prefer the alternate window if it is a main editing window.
+  local alt = vim.fn.win_getid(vim.fn.winnr('#'))
+  if alt ~= 0 and alt ~= cur
+  and vim.api.nvim_win_is_valid(alt)
+  and vim.api.nvim_win_get_config(alt).relative == '' then
+    local alt_ft = vim.bo[vim.api.nvim_win_get_buf(alt)].filetype
+    if not _PANELS[alt_ft] then
+      vim.api.nvim_set_current_win(alt)
+      return
+    end
+  end
+
+  -- Fall back to the first non-panel, non-float window.
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= cur and vim.api.nvim_win_get_config(win).relative == '' then
+      local win_ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
+      if not _PANELS[win_ft] then
+        vim.api.nvim_set_current_win(win)
         return
       end
     end
-
-    -- Fall back to the first non-panel, non-float window.
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-      if win ~= cur and vim.api.nvim_win_get_config(win).relative == '' then
-        local win_ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
-        if not _PANELS[win_ft] then
-          vim.api.nvim_set_current_win(win)
-          return
-        end
-      end
-    end
-
-    -- No suitable window exists; create one.
-    vim.cmd('noautocmd rightbelow vsplit')
   end
+
+  -- No suitable window exists; create one.
+  vim.cmd('noautocmd rightbelow vsplit')
+end
 
 -- =============================================================================
 -- SECTION: Registration

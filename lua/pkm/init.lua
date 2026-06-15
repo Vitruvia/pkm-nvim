@@ -190,6 +190,7 @@ local function _detach_buf_from_wins(bufnr)
           end
         end
         vim.cmd('noautocmd enew')
+        vim.bo.bufhidden = 'wipe'
       end)
     end
   end

@@ -332,6 +332,7 @@ require('pkm').setup({
     max_age_days = 60,     -- auto-purge after N days on startup; 0 = disable
   },
 
+  
   keymaps = {
     -- Note operations
     new_note         = "<leader>nn",
@@ -349,27 +350,28 @@ require('pkm').setup({
     promote_note     = "<leader>np",
     transpose_note   = "<leader>nT",
     change_note_type = "<leader>nC",
-    -- Metadata (buffer-only)
     set_title        = false,
     add_tag          = false,
     remove_tag       = false,
-    -- Views
-    view_last        = "<leader>nV",
-    view_list        = "<leader>nv",
-    view_sidebar     = "<leader>nS",
-    view_buffers     = "<leader>vb",
-    focus_sidebar    = false,   -- jump focus to sidebar window
-    -- Mode
-    toggle_mode      = false,   -- :PKMMode toggle
-    -- Search
-    browse           = "<leader>nf",
-    browse_tags      = "<leader>nt",
+    -- Navigation
+    view_last    = "<leader>vl",
+    view_list    = "<leader>va", -- va = view all
+    view_sidebar = "<leader>vs",
+    view_buffers = "<leader>vb",
+    toggle_file_explorer = "<leader>ts",   -- ts = toggle sidebar
+    focus_sidebar = false,   -- jump focus directly to sidebar window
+    -- PKMMode
+    toggle_mode   = false,   -- :PKMMode toggle
+    -- Search and browsing
+    browse          = "<leader>nf",
+    browse_tags     = "<leader>nt",
     -- Markdown editing
-    next_header      = "<leader>Mh",
-    header_level_up  = "<leader>M^",
-    header_level_down = "<leader>M_",
-    renumber_list    = "<leader>Mr",
-    convert_list     = false,   -- :PKMConvertList (range or paragraph)
+    ---- Headers ----
+    next_header        = "<leader>Mh",
+    header_level_up    = "<leader>M^",
+    header_level_down  = "<leader>M_",
+    renumber_list      = "<leader>Mr",
+    convert_list = false,   -- :PKMConvertList (range or paragraph at cursor)
   },
 })
 ```

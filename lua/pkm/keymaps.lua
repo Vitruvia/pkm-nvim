@@ -110,6 +110,39 @@ function M.register(config)
     end, { desc = 'PKM: toggle netrw file explorer / views sidebar', silent = true })
   end
 
+  -- Netrw quality-of-life: winbar shows current directory; window
+  -- navigation keymaps override netrw's <C-l> capture.
+  local netrw_aug = vim.api.nvim_create_augroup('PKMNetrwFixes', { clear = true })
+    vim.api.nvim_create_autocmd('FileType', {
+      group   = netrw_aug,
+      pattern = 'netrw',
+      callback = function(ev) .      local function update_winbar()
+        local dir = vim.b[ev.buf].netrw_curdir
+                 or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(ev.buf), ':p:h')
+        -- Display path relative to home (~) to reduce width.
+        dir = vim.fn.fnamemodify(dir, ':~'):gsub('\\', '/')
+        local win = vim.fn.bufwinid(ev.buf)
+        if win ~= -1 then
+          vim.api.nvim_set_option_value('winbar', ' ' .. dir, { win = win })
+        end
+      end
+
+      vim.schedule(update_winbar)  -- defer so b:netrw_curdir is populated
+
+      vim.api.nvim_create_autocmd('BufEnter', {
+        buffer   = ev.buf,
+        callback = update_winbar,
+      })
+
+      -- Window navigation (see Item 2).
+      local ko = { noremap = true, silent = true, buffer = ev.buf }
+      vim.keymap.set('n', '<C-h>', '<C-w>h', ko)
+      vim.keymap.set('n', '<C-j>', '<C-w>j', ko)
+      vim.keymap.set('n', '<C-k>', '<C-w>k', ko)
+      vim.keymap.set('n', '<C-l>', '<C-w>l', ko)
+    end,
+  })
+
   -- --------------------------------------------------------------------------
   -- KEYMAPS: markdown editing
   -- -------------------------------------------------------------------------- 
