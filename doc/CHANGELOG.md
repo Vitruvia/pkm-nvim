@@ -21,6 +21,12 @@
   injection, and context-aware highlighting work.
 
 ### Added
+- **`renumber_sequence`: `list_bold_line` family** — detects `**N. body**`
+  (double asterisks wrapping the whole ordered list item) as a distinct family.
+  Detection comes before `list_emph` in the detection order. Renumbering
+  preserves the surrounding `**...**` markers. Example: `**1. a**`, `**3. b**`
+  → `**1. a**`, `**2. b**`.
+
 - **Phase 4 syntax implementation** — `lua/pkm/syntax.lua` stubs replaced
   with full implementation. `M.enable(bufnr)` and `M.disable(bufnr)` now:
   - Start/stop `vim.treesitter` for the `markdown` parser
@@ -164,6 +170,14 @@
   overview mode, and shows the filename when on a note line.
 
 ### Changed
+- **`type_prefix` compact format** — note type prefix in all note-listing
+  displays changed from `[  note   ]` (11 chars) to `[n]` (3 chars). Mapping:
+  `note → n`, `agg → a`, `bib → b`, `journal → j`, `scratch → s`,
+  `other → o`, `file → f` (bufpanel non-PKM files), `subview → v` (view
+  picker subview entries). Implemented via new `_TYPE_ABBREV` table in both
+  `views.lua` and `ui.lua`; `type_prefix` function replaced. Display columns
+  throughout sidebar, bufpanel, and all pickers reduced by 8 characters per
+  entry.
 - **`renumber_sequence` upgrade** (`markdown.lua`) — rewritten with a
   per-level counter stack and two new families:
   - **Nested lists**: effective depth is computed as blockquote depth (2 per
@@ -242,6 +256,41 @@
   1.4.1 but defaults were not cleaned up.
 
 ### Fixed
+- **`syntax.lua` `M.enable()` missing closing `end`** — `M.disable()` was
+  being defined as a local function inside `M.enable()`, causing the module to
+  error on load. Added missing `end` after the `UndoPost` autocmd registration.
+
+- **`renumber_sequence` missing `if not kind` guard** — the early-return with
+  user notification was dropped during the detection loop rewrite. Without it,
+  unrecognized ranges silently wrote back unchanged content with no feedback.
+  Guard restored between detection loop and renumber section.
+
+- **Help float clips `<C-v>` line** — `sidebar_show_help` had `local width =
+  30`, clipping the 38-char `<C-v>` line. Corrected to `40`.
+- **Frontmatter fold not closed on buffer open** — tree-sitter's async initial
+  parse reset window options set in the same tick. Fix: `enable()` now wraps
+  the initial `setup_win_matches`/`setup_win_opts` calls in `vim.schedule` so
+  they run after the first parse completes. `setup_win_opts` now also calls
+  `silent! normal! zM` to force-close the frontmatter fold immediately.
+
+- **Tree-sitter `end_row out of range` on delete and undo** — `nvim_buf_set_lines`
+  (from `renumber_sequence`) and undo operations left tree-sitter's extmark
+  positions stale, causing the highlighter decoration provider to error when
+  the buffer shrank. Fix: (1) `UndoPost` autocmd in `syntax.enable()` restarts
+  the tree-sitter parser after every undo; (2) `renumber_sequence` schedules
+  `vim.treesitter.start` after its `nvim_buf_set_lines` call when PKM mode is
+  active.
+
+- **`renumber_sequence` skips items with no body text** — patterns required a
+  space after the separator, so `> 1.` (no text) was never matched; only items
+  with text (`> 4. a`) were renumbered. Fix: all detection and renumbering
+  patterns for `list` and `list_emph` families now use a two-pass approach —
+  match with body first, fall back to a no-body/end-of-line pattern.
+
+- **Sidebar help float included note-level fold keymaps** — `za`, `zM`, `zR`
+  are native Vim commands applicable to the current buffer (notes), not sidebar
+  navigation. Removed from `sidebar_show_help()`; `foldtext` already advertises
+  `za`. Width adjusted to fit shorter content.
 - **Unwanted conceal (backticks, link brackets, citation brackets)** — setting
   `conceallevel = 2` in `setup_win_opts` activated ALL built-in tree-sitter
   markdown conceal rules, including code span delimiters and link brackets,

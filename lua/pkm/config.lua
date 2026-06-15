@@ -85,7 +85,7 @@ local defaults = {
   --   }
   projects = {},
 
-  sidebar_width = 40,
+  sidebar_width = 30,
 
   user = {
     name  = "",

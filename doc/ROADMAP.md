@@ -383,198 +383,15 @@ After finishing phases and reaching this point, and only then, do:
 
 ### Next Steps
 
-**3. Improved and new markdown features:**
-
-- Improved renumbering with `:PKMRenumberlist`: 
-   - add support for other structures: lists containing nested elements,
-     numberings inside quotes, as well as numbered headers and bolder/italiscized
-     numbers.
-
-     ```
-     1. a
-       2. c
-       1. x
-     3. a
-     2. 3
-     ```
-     
-     becomes
-     
-     ``
-     1. a
-       1. c
-       2. x
-     2. a
-     3. 3
-     ```
-
-     ```
-     *1*. a
-       *2*. c
-       *1*. x
-     *3*. a
-     *2*. 3
-     ```
-     
-     becomes
-     
-     ```
-     *1*. a
-       *1*. c
-       *2*. x
-     *2*. a
-     *3*. 3
-     ```
-
-     ```Ordered list inside citation/quotation.
-     > 1. a
-     >   2. c
-     >   1. x
-     > 3. a
-     > 2. 3
-     ```
-     
-     becomes
-     
-     ```Ordered list inside citation/quotation.
-     > 1. a
-     >   1. c
-     >   2. x
-     > 2. a
-     > 3. 3
-     ```
-
-     ``` ((numbered header with text aligned with margin, without following
-     indent))
-     ## 1. <text>
-        
-     <more text>
-     
-     ## 3. <text>
-     <more text>
-     ```
-     
-     becomes
-     
-     
-     ``` ((numbered header with text aligned with the list indentation level))
-     ## 1. <text>
-        
-     <more text>
-     
-     ## 2. <text>
-     <more text>
-     ```
-
-     ``` ((numbered header with text aligned with text indented according to
-     the header))
-     ## 1. <text>
-        
-        <more text>
-     
-     ## 3. <text>
-        <more text>
-     ```
-     
-     becomes
-     
-     
-     ``` ((numbered header with text aligned with text indented according to
-     the header))
-     ## 1. <text>
-        
-        <more text>
-     
-     ## 2. <text>
-        <more text>
-     ```
-
 - A command to convert unordered list to ordered and the other way around (
 if there are multiple levels, the user should be prompted about how deep to convert. Note that converting mixed lists should ignore the part that is already as intended, e.g. if converting unordered to ordered, any numbers in the selected
 range should be kept as they are. 
-
-- Improved recognition of indenting when list prefixes are surrounded by `*`
-  and other markers. Currently `1. <text>` autoindents as a first level list,
-  but not `**1. <text>**`.
-
-- Add PKM related context-aware syntax highlighting: 
-    - **Ship the highlighting from inside the plugin, and choose its mechanism.**
-     The runtime syntax file is Vimscript, not Lua: Neovim sources
-     `after/syntax/markdown.vim` (and `syntax/markdown.vim`) from every
-     'runtimepath' entry, and lazy.nvim puts the plugin on 'runtimepath'. So
-     moving the existing syntax file into the repo at
-     `after/syntax/markdown.vim` is enough to consolidate it — there is no
-     `.lua` syntax-loader path to overwrite. For Lua-driven setup, use an
-     `ftplugin`/autocmd, not a `syntax/*.lua` file.
-     DECIDE FIRST, because the items below diverge sharply by mechanism:
-       (i) consolidate the current Vimscript `syntax` rules into the plugin, or
-       (ii) migrate Markdown highlighting to bundled tree-sitter queries
-            (`queries/markdown*/highlights.scm`, plus `injections.scm` to parse
-            the frontmatter AS YAML and optionally math as LaTeX).
-     Path (ii) turns most goals below (frontmatter-as-YAML, citation
-     highlighting, suppressing 4-space indented code, 4th-level list prefixes,
-     and conceal) from brittle regex into declarative queries. Record the choice
-     in CHANGELOG before coding.
-    - Currently missing or unsupported:
-      - YAML frontmatter: current syntax highlighting treats YAML metadata as
-        typical markdown text. 
-      - in-text citations: currently without any highlighting.
-      - Marker highlighting or "preview": there is no font change or highlight of
-      italics or bold as of yet.
-      - Stop four-space indented text from highlighting as code blocks (in
-        green). Only text marked as code with one or three \` should be
-        considered as code. Four-space indented text should follow highlighting
-        for standard text, including that for nested lists, if applicable.
-      - Consider highlighting text inside quotation marks as well, or maybe just
-       the quotation marks, and only when both surround some text. This point
-       is optional and should be added only if it doesn't cause the
-       highlighting to be excessive or distracting.
-    - Related bugs: 
-      - prefixes for lists from the 4th level and beyond (both ordered and
-      unordered) are not being highlighted, despite recent attempts in this
-      behalf.
-      - Text just before a separator `---` highlights differently from other
-      texts (in bold blue). Check if this is intended.
-      - Underscores between letters highlight in red (e.g `a_a`). Check if this
-      is intended, otherwise fix.
-- **Frontmatter folding and conceal (in-file metadata readability).** The
-  primary in-file remedy for heavy YAML frontmatter and long citation lists —
-  no sidecar separation required (see "Metadata system review" under Potential
-  goals). Two complementary mechanisms:
-  - Folding: collapse the `---`…`---` block (and optionally long
-    `cites`/`cited_by` sub-lists) by default, via a buffer-local
-    `foldmethod=expr` + `foldexpr` set in a PKM-scoped ftplugin/autocmd, or via
-    fold markers. Keep folds opt-out so the raw block is one keystroke away.
-  - Conceal: hide noisy syntax (wiki-link brackets, citation link fields)
-    behind `conceallevel`/`concealcursor`, so the rendered note reads cleanly
-    while the underlying text is untouched. Conceal is implemented through the
-    mechanism chosen above (Vimscript `syntax conceal` or tree-sitter
-    `@conceal`), so build it together with the §3 syntax decision. This is the
-    deliverable the metadata-separation decision gate (Potential goals → D)
-    requires us to try before considering any sidecar redesign.
 
 ---
 
 **5. PKM "explorer:"** 
 - Notes sidebar: - **CUT.** Neovim's built-in
   `:Ex` (netrw) covers filesystem navigation without added plugin surface.
-
-- Integrate all bars into a main "UI" that can be toggled on or off. The user
-  can set a default configuration for the UI (decide if the UI toggles on or
-  off automatically when opening neovim, or when entering the pkm folder, or
-  when opening a note contained in the pkm folder, or a combination, or
-  manually only). 
- 
-  The UI should have a base configuration, e.g. a left views sidebar and a
-  bottom bar for the buffers. Modifiability of this UI is set as a near term
-  addition.
- 
-  With this, we effectively have a "note explorer submodule/subplugin" for our
-  pkm system.
-
-- Sidebar navigability: there should be a quick way to go from any window to
-  the sidebar. This is especially important if the  user is working with
-  multiple vertical windows.
 
 ---
 
@@ -620,21 +437,6 @@ via a specific command or a general "undo" command in the "notes explorer".
 
 ---
 
-**9. Note-taking format standardization**
-
-The note-taking conventions are defined in `doc/CONVENTIONS.md`.
-That document is the authoritative reference; update it directly when
-conventions change.
-
-Remaining implementation work (Phase 4):
-- Syntax highlighting for `((...))` meta-comments and `[text]` citation
-  markers.
-- `formatlistpat`/ftplugin recognition for emphasis-wrapped ordinals like
-  `**1.**`.
-- Template hints or snippets for the citation formats.
-
----
-
 ### Near-term additions
 
 
@@ -643,13 +445,6 @@ Remaining implementation work (Phase 4):
  user has multiple tab pages, opening a sidebar in a second tab would
  conflict with the first tab's state. Mitigation: track sidebar state per
  tab page (`vim.api.nvim_get_current_tabpage()`).
-
-**5. PKM mode**
-- A toggled mode when opening a note, entering into the PKM folder, or sending
-  a command (directly or via key sequence). This mode should open the default
-  UI, activate specific highlighting (if any exist), and check the health of
-  the permanent index (if implemented) or generate the index (if still using a
-  temporary index).
 
 ---
 

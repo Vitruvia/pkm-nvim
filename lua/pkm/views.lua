@@ -87,6 +87,15 @@ end
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5,
 other = 6 }
 
+local _TYPE_ABBREV = {
+  note    = 'n',
+  agg     = 'a',
+  bib     = 'b',
+  journal = 'j',
+  scratch = 's',
+  other   = 'o',
+}
+
 -- =============================================================================
 -- SECTION: Internal helpers — config and sidecar
 -- =============================================================================
@@ -253,12 +262,7 @@ end
 ---@param note_type string
 ---@return string  e.g. "[note   ]" or "[journal]"
 local function type_prefix(note_type)
-  local label = note_type or 'other'
-  local width = 7  -- length of 'journal' / 'scratch', the longest types
-  local pad   = width - #label
-  local lpad  = math.floor(pad / 2) + 1  -- +1 for inner margin
-  local rpad  = math.ceil(pad  / 2) + 1
-  return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
+  return '[' .. (_TYPE_ABBREV[note_type or 'other'] or 'o') .. ']'
 end
 
 --- Parse and cache the filter tree for a named view.
@@ -580,7 +584,7 @@ local function telescope_view_picker(name, paths)
     local c_count = #M.match_all(child)
     entries[#entries + 1] = {
       value      = child,
-      display    = string.format('[ %-7s ] %s  (%d notes)', 'subview', child, c_count),
+      display    = string.format('[v] %s  (%d notes)', child, c_count),
       ordinal    = string.format('%05d', #entries + 1),
       is_subview = true,
     }
@@ -697,8 +701,7 @@ local function float_view_picker(name, paths)
   -- Subviews first
   for _, child in ipairs(children) do
     local c_count = #M.match_all(child)
-    lines[#lines + 1] = string.format(
-      '  [ %-7s ] %s  (%d notes)', 'subview', child, c_count)
+    lines[#lines + 1] = string.format('  [v] %s  (%d notes)', child, c_count)
     line_subs[#lines] = child
   end
 
@@ -1476,10 +1479,6 @@ local function sidebar_show_help()   -- ← this line is missing
     '  r       refresh',
     '  q       close sidebar',
     '  ?       this help',
-    '',
-    '  za      toggle frontmatter fold',
-    '  zM      close all folds',
-    '  zR      open all folds',
   }
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -1487,7 +1486,7 @@ local function sidebar_show_help()   -- ← this line is missing
   vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
   vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
 
-  local width  = 36
+  local width  = 38
   local height = #lines + 2
   local win    = vim.api.nvim_open_win(buf, true, {
     relative  = 'editor',

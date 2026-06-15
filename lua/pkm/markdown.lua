@@ -168,7 +168,6 @@ function M.renumber_sequence(start_line, end_line)
   end
 
   -- ── 1. detect family ─────────────────────────────────────────────────────
-  -- em_pat: Lua pattern fragment for emphasis markers in list_emph family.
 
   local kind   = nil
   local sep    = nil
@@ -177,13 +176,23 @@ function M.renumber_sequence(start_line, end_line)
   for _, line in ipairs(lines) do
     local _, rest = strip_bq(line)
 
+    -- Plain ordered list: N[.)] with optional space+body or end of line.
     local s = rest:match('^%s*%d+([.)]) ')
+           or rest:match('^%s*%d+([.)])%s*$')
     if s then kind, sep = 'list', s; break end
 
+    -- Bold-line list: **N. body** — whole item wrapped in double asterisks.
+    s = rest:match('^%s*%*%*%d+([.)]) .-%*%*$')
+    if s then kind, sep = 'list_bold_line', s; break end
+
+    -- Emph single: *N*[.)] body
     s = rest:match('^%s*%*%d+%*([.)]) ')
+     or rest:match('^%s*%*%d+%*([.)])%s*$')
     if s then kind, sep, em_pat = 'list_emph', s, '%*'; break end
 
+    -- Emph double: **N**[.)] body
     s = rest:match('^%s*%*%*%d+%*%*([.)]) ')
+     or rest:match('^%s*%*%*%d+%*%*([.)])%s*$')
     if s then kind, sep, em_pat = 'list_emph', s, '%*%*'; break end
 
     s = rest:match('^#+%s+%d+([.)]) ')
@@ -198,6 +207,8 @@ function M.renumber_sequence(start_line, end_line)
     vim.notify('[pkm] no renumberable sequence found in range', vim.log.levels.WARN)
     return
   end
+
+  -- ── 2. renumber ──────────────────────────────────────────────────────────
 
   -- ── 2. renumber ──────────────────────────────────────────────────────────
 
@@ -222,19 +233,42 @@ function M.renumber_sequence(start_line, end_line)
     local bq, rest = strip_bq(line)
 
     if kind == 'list' then
+      -- Two-pass: try with body text, fall back to empty item (no space after sep).
       local ind, _, s, body = rest:match('^(%s*)(%d+)([.)]) (.*)$')
-      if ind and s == sep then
+      if not (ind and s == sep) then
+        local ind2, _, s2 = rest:match('^(%s*)(%d+)([.)])%s*$')
+        if ind2 and s2 == sep then ind, s, body = ind2, s2, nil end
+      end
+      if ind then
         local n = next_count(eff_depth(bq, ind))
-        new_lines[#new_lines + 1] = bq .. ind .. n .. sep .. ' ' .. body
+        new_lines[#new_lines + 1] = body ~= nil
+          and bq .. ind .. n .. sep .. ' ' .. body
+          or  bq .. ind .. n .. sep
         changed, replaced = changed + 1, true
       end
 
     elseif kind == 'list_emph' then
-      local pat = '^(%s*)' .. em_pat .. '(%d+)' .. em_pat .. '([.)]) (.*)$'
+      local pat   = '^(%s*)' .. em_pat .. '(%d+)' .. em_pat .. '([.)]) (.*)$'
+      local pat_e = '^(%s*)' .. em_pat .. '(%d+)' .. em_pat .. '([.)])%s*$'
       local ind, _, s, body = rest:match(pat)
+      if not (ind and s == sep) then
+        local ind2, _, s2 = rest:match(pat_e)
+        if ind2 and s2 == sep then ind, s, body = ind2, s2, nil end
+      end
+      if ind then
+        local n = next_count(eff_depth(bq, ind))
+        new_lines[#new_lines + 1] = body ~= nil
+          and bq .. ind .. em_str .. n .. em_str .. sep .. ' ' .. body
+          or  bq .. ind .. em_str .. n .. em_str .. sep
+        changed, replaced = changed + 1, true
+      end
+
+    elseif kind == 'list_bold_line' then
+      -- **N. body** — double asterisks wrap the whole item.
+      local ind, _, s, body = rest:match('^(%s*)%*%*(%d+)([.)]) (.-)%*%*$')
       if ind and s == sep then
         local n = next_count(eff_depth(bq, ind))
-        new_lines[#new_lines + 1] = bq .. ind .. em_str .. n .. em_str .. sep .. ' ' .. body
+        new_lines[#new_lines + 1] = bq .. ind .. '**' .. n .. sep .. ' ' .. body .. '**'
         changed, replaced = changed + 1, true
       end
 
@@ -267,6 +301,18 @@ function M.renumber_sequence(start_line, end_line)
       vim.log.levels.INFO
     )
   end
+
+  -- Re-sync tree-sitter after buffer modification to prevent
+  -- 'end_row out of range' in the decoration provider.
+  vim.schedule(function()
+    local bufnr = vim.api.nvim_get_current_buf()
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      local ok, mode = pcall(require, 'pkm.mode')
+      if ok and mode.is_active() then
+        pcall(vim.treesitter.start, bufnr, 'markdown')
+      end
+    end
+  end)
 end
 
 --- Renumber the ordered sequence in the paragraph surrounding the cursor.

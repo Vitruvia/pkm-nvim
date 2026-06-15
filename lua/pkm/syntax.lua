@@ -138,16 +138,13 @@ end
 local function setup_win_opts(win_id)
   if not vim.api.nvim_win_is_valid(win_id) then return end
   vim.api.nvim_win_call(win_id, function()
-    -- Frontmatter folding.
-    -- foldlevel=0: all level-1 folds closed; frontmatter (level 1) starts folded.
-    -- zR opens all, zM closes all; za toggles the frontmatter fold.
     vim.wo.foldmethod  = 'expr'
     vim.wo.foldexpr    = "v:lua.require('pkm.syntax').foldexpr(v:lnum)"
     vim.wo.foldenable  = true
     vim.wo.foldlevel   = 0
-    vim.wo.foldcolumn = '0'
-    vim.wo.foldtext   = "v:lua.require('pkm.syntax').foldtext()"
-
+    vim.wo.foldcolumn  = '0'
+    vim.wo.foldtext    = "v:lua.require('pkm.syntax').foldtext()"
+    vim.cmd('silent! normal! zM')  -- force-close frontmatter fold immediately
   end)
 end
 
@@ -260,10 +257,15 @@ function M.enable(bufnr)
   setup_hl_groups()
   ensure_global_autocmds()
 
-  for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
-    setup_win_matches(win_id)
-    setup_win_opts(win_id)
-  end
+  -- Defer so window options are applied after tree-sitter's initial parse
+  -- completes; applying them in the same tick gets reset by TS.
+  vim.schedule(function()
+    if not (_active_bufs[bufnr] and vim.api.nvim_buf_is_valid(bufnr)) then return end
+    for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
+      setup_win_matches(win_id)
+      setup_win_opts(win_id)
+    end
+  end)
 
   local ag = get_augroup()
 
@@ -280,8 +282,19 @@ function M.enable(bufnr)
   vim.api.nvim_create_autocmd('BufWritePost', {
     group    = ag,
     buffer   = bufnr,
+    callback = function() vim.b[bufnr]._pkm_fm_end = nil end,
+  })
+
+  -- Re-sync tree-sitter after undo to prevent 'end_row out of range' errors.
+  vim.api.nvim_create_autocmd('UndoPost', {
+    group    = ag,
+    buffer   = bufnr,
     callback = function()
-      vim.b[bufnr]._pkm_fm_end = nil  -- invalidate fold cache
+      vim.schedule(function()
+        if _active_bufs[bufnr] and vim.api.nvim_buf_is_valid(bufnr) then
+          pcall(vim.treesitter.start, bufnr, 'markdown')
+        end
+      end)
     end,
   })
 end

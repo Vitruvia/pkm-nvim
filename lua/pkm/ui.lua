@@ -35,13 +35,18 @@ local function get_tab()
 end
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
+local _TYPE_ABBREV = {
+  note    = 'n',
+  agg     = 'a',
+  bib     = 'b',
+  journal = 'j',
+  scratch = 's',
+  other   = 'o',
+  file    = 'f',
+}
+
 local function type_prefix(note_type)
-  local label = note_type or 'other'
-  local width = 7
-  local pad   = width - #label
-  local lpad  = math.floor(pad / 2) + 1
-  local rpad  = math.ceil(pad  / 2) + 1
-  return '[' .. string.rep(' ', lpad) .. label .. string.rep(' ', rpad) .. ']'
+  return '[' .. (_TYPE_ABBREV[note_type or 'other'] or 'o') .. ']'
 end
 
 -- =============================================================================
