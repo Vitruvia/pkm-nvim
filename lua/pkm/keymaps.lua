@@ -114,7 +114,9 @@ function M.register(config)
   -- navigation keymaps override netrw's <C-l> capture.
   vim.api.nvim_create_augroup('PKMNetrwFixes', { clear = true })
   vim.api.nvim_create_autocmd('FileType', {
-    group   = vim.api.nvim_get_augroup('PKMNetrwFixes', {}),
+  local netrw_aug = vim.api.nvim_create_augroup('PKMNetrwFixes', { clear = true })
+  vim.api.nvim_create_autocmd('FileType', {
+    group   = netrw_aug,
     pattern = 'netrw',
     callback = function(ev)
       local function update_winbar()
