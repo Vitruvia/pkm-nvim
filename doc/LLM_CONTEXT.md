@@ -1,64 +1,61 @@
 # PKM.nvim — LLM Session Context
 
 Read this first. It is the fast-read brief. Read PKM_ROADMAP.md for architecture detail.
-
-Read `doc/PHILOSOPHY.md` before proposing features or design changes. Its
-principles are non-negotiable constraints on all architectural decisions.
-
----
-
-## Current State (as of 2026-06-07)
-
-Stable. Navigation system complete through Step 3. Context-aware citation picker
-complete. Bug fixes applied.
-
-**Last session:**
-- Sidebar two-mode navigation (overview + detail) with 50-entry history stack;
-  `<BS>` pops history, `<C-b>` jumps to overview, `/` launches scoped search
-- Sidebar header hints for `<BS>`, `<C-b>`, `/`, `r`, `q` added to both modes
-- `views.get_last_view()` — prefers sidebar detail view, falls back to `_last_view`
-- `telescope.browse_paths(title, paths)` / `ui.browse_paths()` — scoped pickers
-  over pre-computed path lists; used by sidebar `/` and views tree `<C-f>`
-- `export.export_direct(label, paths)` + `:PKMExportView [name]`
-- `:PKMBuffers` — persistent bottom buffer panel (`ui.toggle_bufpanel`)
-- Context-aware citation picker: scored by view membership (+2) and shared tags
-  (+1); `<C-v>` view-only toggle in Telescope via `picker:refresh()`
-- `rename_note` extended to journal/scratchpad (was consolidated-only)
-- Bug fixes: `manage_backlink` open-buffer refresh; `BufWritePre` for
-  `last_updated_on`; `noautocmd e` replaces `checktime`; rename_note E180
-
-**Active next steps:**
-1. Metadata commands: `:PKMSetTitle`, `:PKMAddTag`, `:PKMRemoveTag` (buffer-only)
-2. Consolidate `:PKMViewNew` and `:PKMViewNewSub` into one command
-3. Performance benchmarks: `bench.views_suite()` for 50/100/300/1000 views
-4. Potential bugs: sidebar + tab pages; stale sidebar after `:PKMDeleteNote`;
-   `<CR>` in sidebar on externally-deleted file (missing `filereadable` guard)
+Read `doc/PHILOSOPHY.md` before proposing features or design changes. Its principles
+are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Module Map (one line each)
+## Current State (v1.5.0, as of 2026-06-15)
+
+All implementation phases (0–5) are complete. No items are in active development.
+
+**What was completed across all phases:**
+- Phases 0–2: bug triage; live filter browser (`:PKMBrowse`); metadata commands;
+  `:PKMOrphans`, `:PKMBrowseRecent`; per-tabpage sidebar and bufpanel state;
+  performance benchmarking; view rename/reparent
+- Phase 3: unified explorer UI (`:PKMMode`, `:PKMExplorer`); improved renumber_sequence
+  (nested lists, blockquotes, emphasis families, `list_bold_line`)
+- Phase 4: tree-sitter syntax (frontmatter folding, citation/meta-comment highlights,
+  suppressed 4-space code, list marker depth fix); §9 conventions implementation
+- Phase 5: soft-delete trash system; `:PKMConvertList`; `type:` filter predicate;
+  sidebar `<C-t>` type filter; `<C-s>` no-op in sidebar; note numbering skips trash
+
+**Established decisions:**
+- Trash is isolated to `.pkm-trash/` inside PKM root (not OS trash)
+- Note numbers skip trashed entries permanently (gaps are intentional)
+- `UndoPost` event does NOT exist in Neovim ≤ 0.11.x — never register it
+- Persistent index: deferred (not warranted at current scale; ~125 ms at 500 notes)
+- `_match_cache`: deferred (bench shows 3.1 ms/view at 10k notes; not warranted)
+
+---
+
+## Module Map
 
 | File | Role |
 |---|---|
-| `init.lua` | Orchestration only — calls setup, wires everything |
-| `config.lua` | Pure data — defaults, path resolution, validation |
-| `utils.lua` | Shared utilities — path join, OS flags, ensure_dir |
-| `commands.lua` | All `:PKM*` commands — handlers lazy-require their modules |
+| `init.lua` | Orchestration — setup, delete_note_safely (trash-aware), sync autocmds |
+| `config.lua` | Pure data — defaults (incl. pkm_mode, trash), path resolution |
+| `utils.lua` | Path join, OS flags, ensure_dir |
+| `commands.lua` | All `:PKM*` commands — handlers lazy-require; browse_complete for filter DSL |
 | `keymaps.lua` | All keymaps — receives `config` as parameter to `register(config)` |
-| `yaml.lua` | YAML parse/generate — complex, do not touch lightly |
+| `yaml.lua` | YAML parse/generate — complex; do not touch without strong justification |
 | `timestamp.lua` | Timestamp formats, filename generation |
-| `citations.lua` | Bidirectional citation sync, tag index, citable item map |
-| `notes.lua` | Note CRUD, conversion, promotion, transposition, linking; free-form title |
-| `journal.lua` | Journal creation; timestamp-based filename sync |
-| `ui.lua` | Fallback UI (no Telescope): stats, search, tags, browse, merge |
-| `telescope.lua` | All Telescope pickers — checked at call time, never load time |
+| `citations.lua` | Bidirectional citation sync, tag index, add_tag/remove_tag (buffer-only) |
+| `notes.lua` | Note CRUD, conversion, promotion, linking; set_title (buffer-only); get_next_note_number (checks trash manifest) |
+| `journal.lua` | Journal creation; sync_filename_on_save |
+| `ui.lua` | Fallback UI (no Telescope): browse, tags, recent, orphans, bufpanel |
+| `telescope.lua` | All Telescope pickers — checked at call time via pcall, never load time |
 | `templates.lua` | Template application |
-| `export.lua` | Filter + copy notes — read-only, no setup() |
-| `filter.lua` | Filter expression parser/evaluator — tag/title/text/filename fields |
-| `index.lua` | In-memory note index — {path, filename, title, tags, body, mtime} |
-| `views.lua` | Named views — sidecar, CRUD, Telescope/float pickers, two-mode sidebar with history, `get_last_view` |
-| `bench.lua` | Developer benchmarking suite — not user-facing, no commands |
-| `markdown.lua` | Markdown editing utilities — headers, emphasis, symbols, navigation |
+| `export.lua` | Filter + copy notes — read-only, no setup(), export_direct for views |
+| `filter.lua` | Filter DSL: tag/title/text/filename/type/any fields; any=bare-word/unknown-field |
+| `index.lua` | In-memory index: {path, filename, note_type, title, tags, body, mtime, has_citations} |
+| `views.lua` | Named views; two-mode sidebar with per-tabpage _tabs, type_filter; sidebar_build_lines(name, paths, total_count) |
+| `mode.lua` | PKMMode: activate/deactivate/toggle/is_active; BufReadPost + DirChanged triggers |
+| `syntax.lua` | Tree-sitter syntax: enable/disable per buffer; foldexpr/foldtext; matchadd highlights |
+| `trash.lua` | Soft-delete: manifest.json, trash_note/restore_note/empty/purge_old; setup schedules purge_old via defer_fn |
+| `markdown.lua` | Headers, renumber_sequence (nested/blockquote/emphasis), convert_list, symbols |
+| `bench.lua` | Developer benchmarking suite — not user-facing |
 
 ---
 
@@ -67,60 +64,126 @@ complete. Bug fixes applied.
 | Rule | Reason |
 |---|---|
 | Never modify `yaml.lua` without strong justification | Complex fixed bugs; regression corrupts note files |
-| Check Telescope at call time, not load time | Lazy.nvim defers loading; `package.loaded` is wrong at module load |
-| Never use `generic_sorter` for exact-match contexts | It applies fzy matching; use `finders.new_dynamic` with `string.find(..., 1, true)` |
+| Check Telescope at call time, not load time | Lazy.nvim defers loading; `pcall(require, 'telescope')` at call site |
+| Never use `generic_sorter` for exact-match contexts | Applies fzy; use `finders.new_dynamic` + `sorters.empty()` with `string.find(..., 1, true)` |
 | Never reintroduce `status` field | Intentionally removed |
 | Never use deprecated Neovim APIs | Use `nvim_set_option_value`, `vim.keymap.set` |
 | Never reference `M` from another module | Each file's `M` is its own table; cross-module calls use `require` |
 | Commands calling `init.lua` must use `require('pkm')` | `M` in `commands.lua` is not `init.lua`'s `M` |
 | Never physically separate notes for project organisation | Projects are views, not folders; all notes share one namespace |
-| Never optimize `collect_files` without benchmarking first | Baseline measurements required before any performance work |
+| Never optimize without benchmarking first | Baseline measurements required; `bench.lua` is the gate |
+| Never register `UndoPost` autocmd | Event does not exist in Neovim ≤ 0.11.x; tree-sitter tracks buffer changes via on_bytes |
+| Never call `index.invalidate` from buffer-only metadata commands | No disk write occurred; re-index happens on user's next `:w` |
+| Never strip backlinks in `trash_note()` | Backlinks preserved for restoration; `cleanup_deleted_note` only in `empty()` / `purge_old()` |
+| Never run `git gc` on this repo | Google Drive sync causes object-directory deletion conflicts |
 
 ---
 
-## Patterns to Use
+## Key Patterns
 
 Cross-platform paths:
-
-    local utils = require('pkm.utils')
-    local path  = utils.join(dir, file)
-    local files = vim.fn.glob(dir .. utils.sep .. "*.md", false, true)
+```lua
+local utils = require('pkm.utils')
+local path  = utils.join(dir, file)
+local files = vim.fn.glob(dir .. utils.sep .. "*.md", false, true)
+```
 
 Telescope availability (at call time only):
-
-    local ok = pcall(require, 'telescope')
-    if ok then ... else ... fallback ... end
+```lua
+local ok = pcall(require, 'telescope')
+if ok then ... else ... fallback ... end
+```
 
 Calling init.lua functions from commands.lua:
-
-    require('pkm').delete_note_safely()
+```lua
+require('pkm').delete_note_safely()
+```
 
 Neovim API (0.10+):
+```lua
+vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+vim.keymap.set('n', 'q', fn, { noremap = true, silent = true, buffer = buf })
+```
 
-    vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-    vim.keymap.set('n', 'q', fn, { noremap = true, silent = true, buffer = buf })
+Per-tabpage state (used in views.lua and ui.lua):
+```lua
+local _tabs = {}
+local function get_tab()
+  local id = vim.api.nvim_get_current_tabpage()
+  if not _tabs[id] then _tabs[id] = { win=nil, buf=nil, ... } end
+  return _tabs[id]
+end
+-- setup(): register TabClosed autocmd to prune _tabs entries for closed tabs.
+```
+
+Buffer-only frontmatter mutation (no disk write, no index.invalidate):
+```lua
+local yaml_m = require('pkm.yaml')
+local lines, content_start = yaml_m.parse_frontmatter(vim.api.nvim_buf_get_lines(0, 0, -1, false))
+-- modify frontmatter table
+yaml_m.save_frontmatter(frontmatter, content_start)   -- Case A: buffer only
+-- BufWritePost handles re-indexing on next :w
+```
+
+---
+
+## Index Entry Shape
+
+```lua
+{
+  path          : string    -- absolute path (normalized / separator)
+  filename      : string    -- stem without extension
+  note_type     : string    -- 'note'|'agg'|'bib'|'journal'|'scratch'|'other'
+  title         : string    -- fm.title if set; else filename with _ → space
+  tags          : string[]  -- lowercased frontmatter tags, or {}
+  body          : string    -- note body joined with "\n"
+  mtime         : number    -- vim.fn.getftime() at index time
+  has_citations : boolean   -- true when any cites/cited_by group is non-empty
+}
+```
 
 ---
 
 ## YAML Citation Structure — Do Not Change
 
-    cites:
-      notes:
-        - identifier: note-0042
-          title: "Note Title"
-          link: "[[0042_note_Note_Title]]"
-      bib: []
-    cited_by:
-      notes: []
-      bib: []
+```yaml
+cites:
+  notes:
+    - identifier: note-0042
+      title: "Note Title"
+      link: "[[0042_note_Note_Title]]"
+  bib: []
+cited_by:
+  notes: []
+  bib: []
+```
+
+---
+
+## Trash Manifest Entry Shape
+
+```lua
+{
+  filename          : string  -- file name in .pkm-trash/ (may differ from original on collision)
+  original_path     : string  -- absolute path before deletion; used for restore + numbering
+  title             : string  -- frontmatter title at deletion time; picker display
+  deleted_at        : string  -- ISO 8601 UTC string; display only
+  deleted_timestamp : number  -- os.time(); used for autoclear comparison
+}
+```
 
 ---
 
 ## Debugging
 
-    :lua print(vim.inspect(require('pkm').config))
-    :messages
-    :PKMStats
+```vim
+:lua print(vim.inspect(require('pkm').config))
+:lua print(vim.inspect(require('pkm.trash').list()))
+:messages
+:PKMStats
+:PKMMode on
+:lua require('pkm.yaml').validate_frontmatter()
+```
 
 ---
 
@@ -139,12 +202,15 @@ Neovim API (0.10+):
 
 ## Git Conventions
 
-    <type>: <summary>
+```
+<type>: <summary>
 
-    - detail
+- detail
+```
 
 Types: `feat` `fix` `docs` `refactor` `test` `chore`
 Branches: `feat/<name>`, `fix/<name>`
+**Do not run `git gc`** — Google Drive sync conflict. `pkm-merge` alias handles `dev→main`.
 
 ---
 

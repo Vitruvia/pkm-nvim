@@ -27,16 +27,18 @@ The note namespace is intentionally **flat and global** — all notes share a si
 ## Current State
 
 **Working features:**
+
 == General ==
 - ✅ Three folder types: Scratchpad, Journal, Consolidated
-- ✅ Note creation with automatic numbering (`0042_note_Title.md`)
+- ✅ Note creation with automatic numbering (`0042_note_Title.md`); numbering skips
+     trashed note numbers to prevent conflicts on restore
 - ✅ Note types within Consolidated: `note`, `bib` (bibliography), `agg` (aggregate/collection)
 - ✅ YAML frontmatter management with templates per note type
 - ✅ Bidirectional citation system — inserting a citation in A automatically adds a backlink in B
 - ✅ Flexible timestamp system (`full`, `date_time`, `date_only`)
 - ✅ Free-form `title` field — decoupled from filename; file renamed only via `:PKMRenameNote`
 - ✅ Note promotion: scratchpad → consolidated or journal
-- ✅ Note conversion between types
+- ✅ Note conversion between types and folders (transpose)
 - ✅ Import existing files into PKM structure
 - ✅ Citation cleanup (removes stale references when notes are deleted)
 - ✅ Tag merging across all notes
@@ -44,35 +46,58 @@ The note namespace is intentionally **flat and global** — all notes share a si
 - ✅ Export utility: filter notes by tag/title/body/filename, copy to folder (`:PKMExport`)
 - ✅ Statistics window (`:PKMStats`)
 - ✅ Cross-platform: Windows, WSL, Linux, macOS
-- ✅ Context-aware citation picker — scores by active view (+2) and shared tags
-     (+1); `<C-v>` view-only toggle
+- ✅ Context-aware citation picker — scores by active view (+2) and shared tags (+1)
 - ✅ `:PKMRenameNote` extended to journal and scratchpad
-== Editing and viewing ==
-- ✅ Markdown utilities — header counter, level shift, symbol abbreviations,
-     sequence renumbering (single-family, flat counter — superseded plan in
-     Next Steps §3, "Improved renumbering").
+
+== Editing and Viewing ==
+- ✅ Markdown utilities: header counter, level shift, symbol abbreviations
+- ✅ Sequence renumbering: nested lists, blockquote-prefixed lists, emphasis-wrapped
+     ordinals (`*N*`, `**N**`), `**N. body**` bold-line items, header families
+- ✅ `:PKMConvertList` — ordered ↔ unordered list conversion with depth prompting
+- ✅ `:PKMMode [on|off]` — session context toggle; activates explorer UI, pre-builds
+     index, enables tree-sitter syntax highlighting on PKM notes
+- ✅ `:PKMExplorer` — toggle sidebar + buffer panel as a unit
+- ✅ Tree-sitter syntax highlighting (PKMMode): frontmatter folding/foldtext,
+     citation highlighting (`PKMCitation`), meta-comment highlighting (`PKMMetaComment`)
+- ✅ `after/syntax/markdown.vim` — Vimscript fallback active when PKMMode is off
+- ✅ Metadata commands (buffer-only, no disk write): `:PKMSetTitle`, `:PKMAddTag`,
+     `:PKMRemoveTag`
+
 == Search ==
-- ✅ Boolean filter system — full DSL over tag/title/text/filename
-     (AND, OR, NOT, parentheses)
-- ✅ In-memory note index with incremental invalidation (~290× faster)
-- ✅ :PKMBrowse [expr] — index+filter browser. Pipeline (telescope.browse /
-     ui.browse) implemented and correct. 
-- ✅ :PKMTags — tag picker; on selection opens browse('tag:'..x). Index-backed.
-     Kept as a secondary shortcut.
+- ✅ Boolean filter DSL over `tag`/`title`/`text`/`filename`/`type`/`any` fields
+     (AND, OR, NOT, parentheses, quoted values)
+- ✅ In-memory note index with incremental invalidation (~290× faster than raw scan)
+- ✅ `:PKMBrowse [expr]` — live filter-as-you-type; bare text triggers `any` predicate
+- ✅ `:PKMBrowseRecent [n]` — n most recently modified notes (default 20)
+- ✅ `:PKMTags` — tag picker; on selection opens browse(`tag:<x>`)
+- ✅ `:PKMOrphans` — notes with no tags, no citations, and no matching view
+- ✅ Filter autocomplete for `:PKMBrowse`: field prefixes, operators, `tag:<value>`,
+     `type:<value>` completions
+
 == Views ==
-- ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD commands
-- ✅ Subproject hierarchy — table-valued view entries with `parent`/`filter`; composes AND chain
-- ✅ `:PKMViewNew` — Create a new view
-- ✅ `:PKMViewUpdate` — Update an existing view
-- ✅ `:PKMViewLast` — reopen the last activated view (session-scoped)
-- ✅ `:PKMViewSidebar` — persistent split buffer listing view notes; navigable tree header
-- ✅ `:PKMViews` — tree-structured picker showing all views in parent-child hierarchy with note counts
-- ✅ `:PKMViewSidebar` two-mode (overview + detail) with navigation history,
-     header hints, `<BS>`/`<C-b>` navigation, `/` scoped search
-- ✅ Scoped note search within sidebar (`/`) and from views tree (`<C-f>`)
-- ✅ `views.get_last_view()` — active view context for consumer features
+- ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD
+- ✅ Subproject hierarchy — `{parent, filter}` entries composing AND chains
+- ✅ `:PKMViewNew` — unified creation (simple view or subproject)
+- ✅ `:PKMViewUpdate` — action picker: edit filter / rename / reparent
+- ✅ `:PKMViewLast` — reopen last activated view (session-scoped)
+- ✅ `:PKMViewSidebar` — two-mode persistent sidebar (overview + detail) with
+     50-entry navigation history, `<C-t>` type filter, `<C-s>` no-op,
+     `<C-v>` vertical split, `/` scoped search, `?` help float
+- ✅ `:PKMViews` — tree-structured picker over all views (parent-child hierarchy)
+- ✅ Scoped note search within sidebar (`/`) and views tree (`<C-f>`)
+- ✅ `views.get_last_view()` — active view context for consumers
 - ✅ `:PKMExportView [name]` — export named view's notes, skips filter form
 - ✅ `:PKMBuffers` — persistent bottom buffer-list panel with auto-refresh
+- ✅ Per-tabpage state for both sidebar (`views.lua`) and buffer panel (`ui.lua`)
+
+== Trash ==
+- ✅ `:PKMDeleteNote` — soft-delete to `.pkm-trash/` (when `trash.enabled = true`);
+     backlinks preserved for clean restoration
+- ✅ `:PKMRestoreNote` — picker over trash manifest; moves note back, re-indexes
+- ✅ `:PKMEmptyTrash` — permanently deletes all trash and strips backlinks
+- ✅ Auto-purge via `trash.max_age_days` (default 60; 0 = disable)
+- ✅ Trash manifest records `filename`, `original_path`, `title`, `deleted_at`,
+     `deleted_timestamp`
 
 **Known limitations:**
 - ⚠️ No preview system
@@ -80,11 +105,10 @@ The note namespace is intentionally **flat and global** — all notes share a si
 
 **Metadata notes:**
 - The `status` field has been **removed** from frontmatter. Do not reintroduce it.
-- Citation structure is grouped: `cites: {notes: [], bib: []}` and `cited_by: {notes: [], bib: []}`.
-  Whether non-flat (hierarchical) citations will be added is undecided; do not change this
-  structure without discussion.
+- Citation structure: `cites: {notes: [], bib: []}` and `cited_by: {notes: [], bib: []}`.
 - The `title` field is free-form and never overwritten by the system after creation.
-  Filename changes are explicit only, via `:PKMRenameNote`.
+- Trash is isolated to `.pkm-trash/` inside the PKM root (not OS trash).
+- Note numbers skip trashed entries; gaps are intentional (numbers are identifiers, not labels).
 
 ---
 
@@ -93,30 +117,40 @@ The note namespace is intentionally **flat and global** — all notes share a si
 ```
 pkm.nvim/
 ├── lua/pkm/
-│   ├── init.lua        # Orchestration only: calls setup on all modules, wires commands/keymaps/autocmds
-│   ├── config.lua      # Default config table and resolution logic (pure data, no side effects)
-│   ├── utils.lua       # Shared cross-platform utilities: path joining, OS flags, notify
-│   ├── commands.lua    # All :PKM* command registration (handlers require modules lazily)
-│   ├── keymaps.lua     # All keymap wiring (receives resolved config as parameter)
-│   ├── yaml.lua        # YAML frontmatter parsing and generation — complex, handle carefully
+│   ├── init.lua        # Orchestration: setup, delete_note_safely, sync autocmds
+│   ├── config.lua      # Default config table and resolution logic (pure data)
+│   ├── utils.lua       # Shared cross-platform utilities: path join, OS flags
+│   ├── commands.lua    # All :PKM* command registration (handlers lazy-require)
+│   ├── keymaps.lua     # All keymap wiring (receives resolved config)
+│   ├── yaml.lua        # YAML frontmatter parsing and generation — handle carefully
 │   ├── timestamp.lua   # Timestamp creation, parsing, formatting
-│   ├── citations.lua   # Bidirectional citation engine, tag indexing, citable item map
-│   ├── notes.lua       # Note creation, conversion, promotion, linking, filename-YAML sync
-│   ├── journal.lua     # Journal entry creation, journal-specific filename-YAML sync
-│   ├── ui.lua          # Fallback UI: stats window, tag browser, search (no Telescope)
-│   ├── telescope.lua   # Telescope pickers: search, tags, citations, tag merge
+│   ├── citations.lua   # Bidirectional citation engine, tag indexing, add/remove tag
+│   ├── notes.lua       # Note CRUD, conversion, promotion, linking; set_title
+│   ├── journal.lua     # Journal entry creation, filename sync
+│   ├── ui.lua          # Fallback UI (no Telescope): browse, tags, bufpanel
+│   ├── telescope.lua   # Telescope pickers: browse, tags, citations, tag merge
 │   ├── templates.lua   # Template application to notes
-│   ├── export.lua      # Note filtering and copy utility (read-only, no setup() needed)
-│   ├── filter.lua      # Filter expression parser and evaluator (pure logic, no I/O)
+│   ├── export.lua      # Note filtering and copy utility (read-only, no setup)
+│   ├── filter.lua      # Filter DSL parser and evaluator (pure logic, no I/O)
 │   ├── index.lua       # In-memory note index with incremental invalidation
-│   ├── views.lua       # Named project views: sidecar file, CRUD, activate, list
-│   └── bench.lua       # Benchmarking and load-testing utilities (infrastructure)
+│   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
+│   ├── mode.lua        # PKMMode: session context toggle, syntax enable/disable
+│   ├── syntax.lua      # Tree-sitter syntax management: highlights, folding, matches
+│   ├── trash.lua       # Soft-delete: manifest, trash/restore/empty/purge_old
+│   ├── markdown.lua    # Markdown editing: headers, renumber, convert_list, symbols
+│   └── bench.lua       # Benchmarking utilities (developer, not user-facing)
+├── queries/markdown/
+│   ├── highlights.scm  # PKM tree-sitter captures: indented code, list markers
+│   └── injections.scm  # YAML injection into frontmatter (minus_metadata nodes)
+├── after/syntax/
+│   └── markdown.vim    # Vimscript fallback syntax (non-PKMMode); two rules retained
 ├── plugin/pkm.lua      # Auto-load marker
 ├── doc/
 │   ├── pkm.txt         # Vim help documentation
 │   ├── PKM_ROADMAP.md  # This file
 │   ├── LLM_CONTEXT.md  # Fast-read session brief for LLMs
-│   └── CHANGELOG.md    # Session history
+│   ├── PHILOSOPHY.md   # Design principles (non-negotiable constraints)
+│   └── CHANGELOG.md    # Version history
 ├── test/               # Test files
 └── README.md
 ```
@@ -125,89 +159,105 @@ pkm.nvim/
 
 ## Module Responsibilities
 
-**init.lua** — pure orchestration. Calls `setup()` on every module, then calls
-`commands.register()`, `keymaps.register(config)`, and `setup_sync_autocmds()`.
-Also holds `delete_note_safely()` and `setup_sync_autocmds()` as these need
-direct access to `M.config`.
+**init.lua** — pure orchestration. Calls `setup()` on every module, registers commands
+and keymaps, sets up sync autocmds. Holds `delete_note_safely()` (uses trash if enabled,
+permanent delete otherwise) and `setup_sync_autocmds()` (BufWritePre for `last_updated_on`,
+BufWritePost for citation sync + silent reload + TS restart).
 
-**config.lua** — pure data. Holds the default config table and `resolve(user_config)`,
-which merges defaults with user input, resolves paths, validates, and injects author
-into templates. No side effects. Contains a `projects` table for named view definitions.
+**config.lua** — pure data. Default config table and `resolve(user_config)`. Contains
+`projects`, `pkm_mode`, `trash`, all keymap defaults. No side effects.
 
-**utils.lua** — shared utilities. `utils.join(...)`, `utils.sep`, `utils.normalize(path)`,
-`utils.ensure_dir(path)`, `utils.is_windows`, `utils.is_wsl`. No setup() needed.
+**utils.lua** — `utils.join(...)`, `utils.sep`, `utils.normalize(path)`,
+`utils.ensure_dir(path)`, `utils.is_windows`, `utils.is_wsl`.
 
-**commands.lua** — registers all `:PKM*` user commands. Handlers use lazy `require`
-inside each callback. References to `init.lua` functions go through `require('pkm')`.
+**commands.lua** — registers all `:PKM*` commands. Handlers use lazy `require`.
+Contains `browse_complete` (filter DSL autocomplete for `:PKMBrowse`).
 
-**keymaps.lua** — registers all `<leader>` keymaps. Receives `config` as a parameter
-to `register(config)` because it needs keymap strings at registration time.
+**keymaps.lua** — `register(config)`. Receives resolved config; keymap strings
+needed at registration time. Registers both normal and visual mode bindings for
+range commands (`renumber_list`, `convert_list`, header level shift).
 
-**yaml.lua** — parse and generate YAML frontmatter. Contains a non-trivial parser
-handling nested empty structures. **Do not modify without strong justification.**
+**yaml.lua** — YAML frontmatter parse and generation. **Do not modify without
+strong justification.** Contains the non-trivial nested-empty-structure parser.
 
-**timestamp.lua** — timestamps in multiple formats; creates filenames; parses existing timestamps.
+**timestamp.lua** — timestamps in multiple formats; creates filenames; parses timestamps.
 
-**citations.lua** — bidirectional citation sync; `get_all_tags()`,
-`get_file_tags(path)`, `get_citable_items_map()`, `merge_tags(sources,
-target)`, `add_tag(tag?)`, `remove_tag(tag?)` — append/remove tag from current
-buffer frontmatter (buffer-only).
+**citations.lua** — bidirectional citation sync (`manage_backlink`, `update_references`,
+`update_references_on_rename`, `cleanup_deleted_note`); `get_all_tags()`,
+`get_citable_items_map()`; `merge_tags(sources, target)`;
+`add_tag(tag?)` / `remove_tag(tag?)` — buffer-only frontmatter mutation.
 
-**notes.lua** — all note file operations: create, convert, promote, import,
-link, follow link, backlinks. Title field is free-form; filename changes are
-explicit via `M.rename_note()`, which prompts, sanitizes, renames on disk, and
-propagates to citations. `set_title()` — prompt for title, write to current
-buffer frontmatter (buffer-only).
+**notes.lua** — note CRUD: `create_new_note`, `create_scratchpad`, `promote_note`,
+`do_convert`, `convert_note`, `change_note_type`, `transpose_note`, `rename_note`,
+`link_to_note`, `follow_link`, `show_backlinks`, `import_note`.
+`set_title()` — buffer-only title mutation (no `index.invalidate`).
+`get_next_note_number()` — checks both consolidated folder AND trash manifest.
 
-**journal.lua** — journal creation (auto-timestamped by default); journal-specific filename-YAML sync.
+**journal.lua** — journal creation (auto-timestamped); `sync_filename_on_save`.
 
-**ui.lua** — fallback UI for stats, search, and tag browsing when Telescope is absent.
+**ui.lua** — fallback UI (no Telescope): `browse`, `browse_paths`, `browse_recent`,
+`browse_tags`, `insert_citation_ui`, `merge_tags_ui`, `show_stats`.
+`toggle_bufpanel()` — per-tabpage bottom buffer-list panel.
+`is_bufpanel_open()`.
 
-**telescope.lua** — all Telescope pickers. Checks availability at call time (not load
-time — critical for Lazy.nvim).
+**telescope.lua** — all Telescope pickers. Checked at call time via `pcall`.
+`browse`, `browse_paths`, `browse_recent`, `browse_tags`, `insert_citation_picker`,
+`merge_tags_picker`.
 
-**export.lua** — filter notes by frontmatter fields and body text; copy matches to a
-destination folder. No `setup()`. Never modifies note files. Delegates filter
-evaluation to `filter.lua` and file collection to `index.lua`.
+**export.lua** — filter + copy notes. No setup. Read-only. Delegates to filter.lua
+and index.lua. `export_direct(label, paths)` skips the filter form.
 
-**filter.lua** — pure logic, no I/O. Parses filter expression strings into ASTs and
-evaluates them against note data tables. Grammar: AND/OR/NOT over tag/title/text/filename
-predicates with parentheses and quoted values. `from_legacy()` converts old
-`{tags_any, tags_all, title, text}` tables for backward compatibility.
+**filter.lua** — pure logic, no I/O. Grammar:
+`field = tag | title | text | filename | type | any`.
+`any`: bare words and unknown-field tokens; case-insensitive substring over all fields.
+`type`: exact match against `entry.note_type`. `tag`: exact (case-insensitive).
+`from_legacy(tbl)` converts `{tags_any, tags_all, title, text}`.
 
-**index.lua** — in-memory note index. Entry shape: `{path, filename, title,
-tags, body, mtime, has_citations : boolean  true when cites or cited_by has ≥1
-entry in any group`}.
-Lazy build on first `get_all()` call. Incremental invalidation via `BufWritePost` autocmd
-and explicit `invalidate(path)` calls after every programmatic file write or delete.
-Title: free-form YAML `title` if non-empty, otherwise filename stem with underscores
-replaced by spaces. `filename`: stem without extension, used by the `filename:` predicate.
+**index.lua** — in-memory note index. Entry shape:
+`{path, filename, note_type, title, tags, body, mtime, has_citations}`.
+`note_type`: `note|agg|bib|journal|scratch|other`. `has_citations`: true when
+any cites/cited_by group is non-empty.
+Lazy build on first `get_all()`. Incremental invalidation via BufWritePost autocmd
+and explicit `invalidate(path)` after every programmatic write or delete.
+**Must NOT be called from buffer-only metadata commands** — no disk write occurred.
 
-**views.lua** — named project views. Reads from `views.json` (sidecar at PKM root)
-and `config.projects`; sidecar wins on collision. Supports both string values
-(simple views) and table values `{parent, filter}` (subprojects — effective filter
-composes parent chain via AND, with cycle detection and depth limit of 8).
-`setup()` registers BufWritePost autocmd to reload on sidecar save. Full CRUD.
-Telescope picker with exact-substring prompt and file preview; float fallback.
-`:PKMViews` opens a separate tree-structured picker (`list_views()`) showing
-the full hierarchy with note counts; uses `build_tree_entries()` for depth-first
-ordering. Internal helpers: `get_view_parent`, `get_view_children`,
-`build_tree_entries`. Sidebar features and `get_last_view`.
-Persistent sidebar (`open_sidebar`) with navigable tree header showing parent and
-children. Last-view tracking (`open_last`). Telescope picker with
-exact-substring prompt and file preview; float fallback. `edit_view(name?)` →
-action picker: edit filter expression / rename / reparent (rename/reparent
-available for sidecar views only); picker over all views if nil
+**views.lua** — named project views. Sidecar `views.json` + `config.projects`.
+Two-mode sidebar (overview + detail); per-tabpage `_tabs` state including `type_filter`.
+`sidebar_build_lines(name, paths, total_count)` — builds detail lines; callers
+pre-filter by type and pass `#all_paths` as total for "N of M" display.
+`refresh_sidebar_if_open()` — iterates all tabpages, applies per-tab type filter.
+`edit_view(name?)` — action picker: edit filter / rename / reparent.
 
-**bench.lua** — developer benchmarking and load-testing. Not user-facing, no commands.
-Four-phase suite: raw scan, index build, index query, filter eval. Self-cleaning
-(synthetic files deleted after run). `baseline()` times real corpus read-only.
+**mode.lua** — `M.activate()`, `M.deactivate()`, `M.toggle()`, `M.set(arg)`,
+`M.is_active()`. Manages PKMMode session state: triggers index prebuild, opens
+sidebar + bufpanel, enables syntax on all PKM buffers. `setup(config)` registers
+BufReadPost (open_note trigger) and DirChanged (enter_dir trigger) autocmds.
+Idempotent in both directions.
 
-**markdown.lua** — general markdown editing utilities. No setup() needed.
-`append_next_header`: duplicate current header with trailing counter +1, append at EOF.
-`shift_header_level(direction, start, end)`: shift `#`-level in range.
-`renumber_sequence(start, end)`: renumber ordered-sequence items in line range.
-`renumber_at_cursor()`: renumber sequence in paragraph around cursor.
+**syntax.lua** — per-buffer tree-sitter activation. `M.enable(bufnr)`: starts
+markdown TS parser, defines HL groups, registers per-window matchadd highlights
+(PKMCitation, PKMMetaComment) and window opts (foldmethod=expr, foldtext).
+`M.disable(bufnr)`: stops TS, clears matches, restores opts, runs `syntax on`.
+`M.foldexpr(lnum)`, `M.foldtext()`.
+**UndoPost does not exist in Neovim ≤ 0.11.x** — do not register it.
+
+**trash.lua** — soft-delete system. Trash folder: `{root}/.pkm-trash/`.
+Manifest: `manifest.json` array of `{filename, original_path, title, deleted_at,
+deleted_timestamp}`. `trash_note(filepath)` — moves file, does NOT strip backlinks.
+`restore_note(entry)` — moves back, re-indexes; backlinks intact, no reconstruction.
+`empty()` — permanent delete + `cleanup_deleted_note` for each entry.
+`purge_old()` — auto-purge entries older than `max_age_days`.
+`setup(cfg)` — stores config, schedules `purge_old()` via `vim.defer_fn(fn, 5000)`.
+
+**markdown.lua** — `append_next_header`, `shift_header_level`, `setup_symbols`,
+`renumber_sequence` (per-level counter stack; list/list_emph/list_bold_line/
+hdr_prefix/hdr_suffix families; blockquote-aware),
+`renumber_at_cursor`, `convert_list(start, end, direction?)`,
+`convert_list_at_cursor(direction?)`.
+
+**bench.lua** — developer benchmarking. Not user-facing. Four-phase suite: raw scan,
+index build, index query, filter eval. `views_suite(opts?)` — scaling bench for
+O(V × N) sidebar path. Self-cleaning; `baseline()` times real corpus read-only.
 
 ---
 
@@ -215,7 +265,7 @@ Four-phase suite: raw scan, index build, index query, filter eval. Self-cleaning
 
 ```lua
 require('pkm').setup({
-  root_path = vim.fn.expand('~/Notes'),  -- required
+  root_path = vim.fn.expand('~/Notes'),  -- required; defaults to ~/Notes
 
   folders = {
     scratchpad   = "01-Scratchpad",
@@ -235,65 +285,93 @@ require('pkm').setup({
   },
 
   user = {
-    name        = "",
-    email       = "",
-    institution = "",
+    name  = "",
+    email = "",
   },
 
-  -- Optional: define views declaratively. Prefer :PKMViewNew / views.json
-  -- for views that change frequently. Sidecar (views.json) wins on collision.
-    projects = {
-      "rpg":    "tag:rpg AND (title:ringforge OR text:ringforge)",
-      "ringforge-mechanics": {
-        "parent": "ringforge",
-        "filter": "tag:mechanics"
-      }
-      clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
-    }
+  -- Named project views (declarative). Sidecar views.json wins on collision.
+  -- Prefer :PKMViewNew / views.json for views that change frequently.
+  projects = {
+    clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
+    -- Subproject example:
+    -- ringforge = 'tag:ringforge',
+    -- ["ringforge-mechanics"] = { parent = "ringforge", filter = "tag:mechanics" },
+  },
 
-  sidebar_width = 40,  -- width of the :PKMViewSidebar window
+  sidebar_width = 40,
 
-  -- Buffer-local symbol abbreviations and insert-mode keymaps.
-  -- trigger (iabbrev) and key (insert-mode keymap) are both optional;
-  -- expansion is required. Registered per-buffer on BufReadPost.
+  -- Buffer-local insert-mode keymaps registered on BufReadPost for PKM notes.
+  -- trigger and key are both optional; expansion is required.
   symbols = {
     { trigger = 'emdash', key = '<M-->', expansion = '—' },
     { trigger = 'sect',   key = '<M-s>', expansion = '§' },
     { trigger = 'ordm',   key = '<M-o>', expansion = 'º' },
   },
 
+  -- PKM Mode behaviour
+  pkm_mode = {
+    triggers = {
+      open_note = true,   -- activate on BufReadPost for any PKM file
+      enter_dir = false,  -- activate on DirChanged to/from PKM root
+    },
+    layout = {
+      sidebar  = true,    -- open sidebar on activation
+      bufpanel = true,    -- open buffer panel on activation
+    },
+    index = {
+      prebuild = true,    -- eagerly rebuild index on first activation
+    },
+    syntax = {
+      enabled = true,     -- enable tree-sitter syntax highlighting
+    },
+  },
+
+  -- Soft-delete trash
+  trash = {
+    enabled      = true,   -- true = trash; false = permanent delete (old behaviour)
+    max_age_days = 60,     -- auto-purge after N days on startup; 0 = disable
+  },
+
   keymaps = {
     -- Note operations
-    new_note        = "<leader>nn",
-    new_journal     = "<leader>nj",
-    new_scratchpad  = "<leader>ns",
-    rename_note     = "<leader>nr",
-    insert_citation = "<leader>nc",
-    goto_citation   = "<leader>ng",
-    delete_note     = "<leader>nd",
-    link_note       = "<leader>nl",
-    follow_link     = "gf",
-    backlinks       = "<leader>nb",
-    import_note     = "<leader>ni",
-    convert_note    = "<leader>nx",
-    promote_note    = "<leader>np",
-    transpose_note  = "<leader>nT",
+    new_note         = "<leader>nn",
+    new_journal      = "<leader>nj",
+    new_scratchpad   = "<leader>ns",
+    rename_note      = "<leader>nr",
+    insert_citation  = "<leader>nc",
+    goto_citation    = "<leader>ng",
+    delete_note      = "<leader>nd",
+    link_note        = "<leader>nl",
+    follow_link      = "gf",
+    backlinks        = "<leader>nb",
+    import_note      = "<leader>ni",
+    convert_note     = "<leader>nx",
+    promote_note     = "<leader>np",
+    transpose_note   = "<leader>nT",
     change_note_type = "<leader>nC",
+    -- Metadata (buffer-only)
+    set_title        = false,
+    add_tag          = false,
+    remove_tag       = false,
     -- Views
-    view_last    = "<leader>nV",
-    view_list    = "<leader>nv",
-    view_sidebar = "<leader>nS",
-    view_buffers = "<leader>vb",
-    -- Search and browsing
-    browse       = "<leader>nf",   -- :PKMBrowse — primary, unified search bar
-    browse_tags  = "<leader>nt",   -- :PKMTags  — secondary, quick tag entry
+    view_last        = "<leader>nV",
+    view_list        = "<leader>nv",
+    view_sidebar     = "<leader>nS",
+    view_buffers     = "<leader>vb",
+    focus_sidebar    = false,   -- jump focus to sidebar window
+    -- Mode
+    toggle_mode      = false,   -- :PKMMode toggle
+    -- Search
+    browse           = "<leader>nf",
+    browse_tags      = "<leader>nt",
     -- Markdown editing
-    ---- Headers
-    next_header        = "<leader>Mh",
-    header_level_up    = "<leader>M^",
-    header_level_down  = "<leader>M_",
-    renumber_list      = "<leader>Mr",
+    next_header      = "<leader>Mh",
+    header_level_up  = "<leader>M^",
+    header_level_down = "<leader>M_",
+    renumber_list    = "<leader>Mr",
+    convert_list     = false,   -- :PKMConvertList (range or paragraph)
   },
+})
 ```
 
 ---
@@ -302,260 +380,117 @@ require('pkm').setup({
 
 ### Active
 
-No items currently in active development. Navigation system complete through Step 3.
+No items currently in active development. All implementation phases are complete.
 
 ---
 
-### Implementation phases
+### Implementation Phases (complete)
 
-A sequencing layer over the Next-Steps and Near-term items. The lists record
-WHAT; this records IN WHAT ORDER and WHY. Rules: (1) bugs before features built
-on the same subsystem; (2) shared foundations before their consumers;
-(3) measure before optimising (the bench.lua rule). An item may be scheduled
-earlier than its heading suggests — the heading is its category, the phase is
-its turn.
-
-**(Complete) Phase 0 — Bug triage (small, unblock everything).**
-- `:PKMBrowse` arg parsing: `nargs='?'` → `nargs='*'` (needed so the §2
-  command-line shortcut `:PKMBrowse <expr>` accepts multi-token expressions).
-- Cross-citation write-through to open buffers (Near-term §4) — DATA LOSS;
-  scheduled here despite its filing.
-- Buffer-panel `E32` on `w`, and the phantom-window-on-last-buffer bug
-  (Next Steps §5, "Fix").
+**(Complete) Phase 0 — Bug triage.**
+`:PKMBrowse` nargs fix; cross-citation modified-buffer write-through (data loss);
+buffer-panel E32 and phantom-window bugs.
 
 **(Complete) Phase 1 — Core search + small self-contained features.**
-- §2 Unified filter-as-you-type search: extend `filter.lua` with the default
-  "any" predicate, rewrite the picker to evaluate the live prompt, delete
-  `:PKMSearch`, repoint `<leader>nf`. High-value; several items below browse
-  through it.
-- §1 Metadata commands (`:PKMSetTitle` / `:PKMAddTag` / `:PKMRemoveTag`).
-- §4 `:PKMOrphans`.
-- §6 `:PKMViewUpdate` rename / reparent.
-- Near-term §2 `:PKMBrowseRecent`.
-- Near-term §1 filter autocomplete (after the §2 grammar lands and the nargs
-  fix; complements the search bar).
-- §9 conventions SPEC only (implementation is Phase 4).
+Filter `any` predicate; live `:PKMBrowse`; delete `:PKMSearch`; metadata commands
+(`:PKMSetTitle`, `:PKMAddTag`, `:PKMRemoveTag`); `:PKMOrphans`; `:PKMViewUpdate`
+rename/reparent; `:PKMBrowseRecent`; filter autocomplete; §9 conventions spec.
 
 **(Complete) Phase 2 — Foundations for the explorer UI.**
-- Near-term §4 per-tab-page window state — prerequisite for the unified UI,
-  not a late polish item; promoted here.
-- §4 Sidebar readability improvements.
-- §7 `bench.views_suite` — measure before any match_all-caching lands.
-- ~~**Item 4 — Notes-navigator sidebar**~~ — **CUT.** Neovim's built-in
-  `:Ex` (netrw) covers filesystem navigation without added plugin surface.
-  The per-tabpage window state from Item 1 remains the correct foundation
-  if a navigator is ever reconsidered.
+Per-tabpage sidebar and bufpanel state; sidebar readability improvements;
+`bench.views_suite` (gate measurement for `_match_cache`).
+Notes-navigator sidebar: **CUT** (netrw covers filesystem navigation).
 
 **(Complete) Phase 3 — Larger features.**
-- §5 unified, toggleable explorer UI + auto-on/off policies.
-- §3 improved renumbering (nested / quoted / emphasis families).
-- §5 PKM mode
+Unified explorer UI (`PKMMode`, `PKMExplorer`); improved `renumber_sequence`
+(nested lists, blockquotes, emphasis families, `list_bold_line`); PKM mode
+session lifecycle.
 
-**(Complete) Phase 4 — Markdown presentation (one workstream; decide mechanism first).**
-- §3 syntax mechanism decision (consolidate Vimscript `after/syntax` vs migrate
-  to bundled tree-sitter queries).
-- §3 frontmatter folding / conceal.
-- §3 context-aware highlighting + its two bugs.
-- §3 `**1.**`-style ordered-list indent recognition.
-- §9 conventions IMPLEMENTATION.
+**(Complete) Phase 4 — Markdown presentation.**
+Syntax mechanism decision: bundled tree-sitter queries chosen over Vimscript
+consolidation. Frontmatter folding/foldtext. Citation and meta-comment highlighting.
+`@pkm.indented` capture (suppress 4-space code colour). List marker depth fix.
+§9 conventions implementation (PKMCitation, PKMMetaComment via matchadd).
 
-**Phase 5 — Last changes, fi feasible.**
-- §8 deleted-note trash (tombstone-manifest caveat). (if too complex or
-  performance intensive, defer. Otherwise, implement).
-- preview.lua, persistent index, review queue, `_match_cache` (only if §7
-  proves it necessary, otherwise defer).
+**(Complete) Phase 5 — Trash and list conversion.**
+Soft-delete trash system (`trash.lua`; `.pkm-trash/`; manifest with auto-purge).
+`:PKMConvertList` (ordered ↔ unordered; depth prompt; mixed-list prompt).
+`filter.lua` `type:` predicate. Sidebar `<C-t>` type filter. Sidebar `<C-s>` no-op.
+Note numbering skips trashed entries.
 
--- Current update plan finishes here --
+**Deferred from Phase 5** (moved to Distant Additions):
+`preview.lua`, persistent index, review queue, `_match_cache` (bench shows not warranted).
 
-After finishing phases and reaching this point, and only then, do:
-1. Review ROADMAP and check if all steps were successfully completed. 
-2. Reincorporate deferred (see below, and also if you defer any items from
-   Phase 5) items into their designed stops (e.g. Distant additions, potential
-   additions, near-term, etc.).
-3. Rewrite the plan from Next Steps up to distant and potential additions. 
-4. Update other relevant ROADMAP sections.
-5. Update pkm.txt, README.md, and any other pertinent docs (e.g.
-   LLM_Context.md, if necessary).
-
-**Deferred:**
-- Explorer UI customisation: moved from near-term to distant.
-- ASCII / text diagrams: moved from near-term to distant
+---
 
 ### Next Steps
 
-- A command to convert unordered list to ordered and the other way around (
-if there are multiple levels, the user should be prompted about how deep to convert. Note that converting mixed lists should ignore the part that is already as intended, e.g. if converting unordered to ordered, any numbers in the selected
-range should be kept as they are. 
+No implementation items are currently queued. All planned phases are complete.
 
----
-
-**5. PKM "explorer:"** 
-- Notes sidebar: - **CUT.** Neovim's built-in
-  `:Ex` (netrw) covers filesystem navigation without added plugin surface.
-
----
-
-**7. Performance: views and sidebar at scale**
-
-*Motivation:* The sidebar tree header calls `M.match_all()` for the parent and
-every child to display note counts. Each `match_all` call does a full index scan
-+ filter eval. At small scales (< 50 views, < 10k notes) this is negligible,
-but it has not been measured at realistic scale.
-
-**Benchmark plan:**
-Complete.
-
-Expected bottleneck: `sidebar_build_lines` calls `match_all` for parent + all
-direct children. At 20 children × 10k notes, this is ~200k filter evals per
-sidebar open.
-
-Results:
-
-```
-- Scaling is perfectly linear: ms/view is constant across all view counts.
-- 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
-→ 3087ms  (~3.1ms/view)
-- 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
-→  130ms  (~0.13ms/view)
-- JIT accounts for ~2–3× speedup between cold and warm runs at same note
-count.
-- Caching decision: not warranted at current scale. Revisit at ~5k notes or
-~200+ views.
-```
-
-**Potential optimisation:** Add `_match_cache = {}` to `views.lua` module state —
-cached path arrays per view name, invalidated alongside `_tree_cache` in
-`invalidate()`. `match_all()` would populate this cache; `open_sidebar()` and
-tree header builds would read from it on repeat accesses without re-scanning.
-Should not be implemented before benchmarking confirms it is necessary.
-
----
-
-**8. Deleted note retriavability** deleted notes go either into the OS's trash
-or at a dedicated "notes trash" that conserves them temporarily for retrievability
-via a specific command or a general "undo" command in the "notes explorer".
-
----
-
-### Near-term additions
-
-
-**4. Potential bugs to investigate before next major version:**
-- **Sidebar + tab pages:** `_sidebar_win` tracks one window globally. If the
- user has multiple tab pages, opening a sidebar in a second tab would
- conflict with the first tab's state. Mitigation: track sidebar state per
- tab page (`vim.api.nvim_get_current_tabpage()`).
+If new items arise from daily use, add them here with enough context for an LLM
+to act on them without cross-referencing the conversation history.
 
 ---
 
 ### Distant Additions (mid-term to long-term)
 
-- Customization of the "explorer" UI:  
-  - positions, width and length of each bar;
-  - options for when the UI should automatically turn on or off (by terminal
-    folder, by neovim working folder, by buffer (the buffer pertains to a PKM
-    file)), or any combination of those, or none); as well as 
-  - other important options that we predict users may need.
+- **Explorer UI customisation** — positions and width of each panel; auto-on/off
+  triggers by directory, CWD, or buffer type; other layout options users may need.
+  Deferred from Phase 3.
 
-- **`lua/pkm/preview.lua`** Browser-based live preview: Markdown + LaTeX
-  (MathJax), WebSocket live updates on save, cross-platform browser opening,
-  terminal fallback (glow/mdcat).
+- **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
+  WebSocket live updates on save, cross-platform browser opening, terminal fallback
+  (glow/mdcat). Deferred from Phase 5.
 
-- **Persistent index** Serialize the in-memory index to disk (msgpack or JSON)
-  with mtime-based incremental updates on startup. Needed only if startup scan
-  time becomes unacceptable at very large corpus sizes (likely >50k notes).
-  Evaluate other solutions for speed at >10k notes before committing to this.
-  Run `bench.baseline()` on the real corpus first.
+- **Persistent index** — Serialize the in-memory index to disk (msgpack or JSON) with
+  mtime-based incremental updates on startup. Needed only if startup scan time becomes
+  unacceptable at very large corpus sizes (likely >50k notes). The current build cost
+  is ~0.25 ms/note; at 500 notes (realistic current scale) that is ~125 ms, which is
+  imperceptible. Run `bench.baseline()` on the real corpus before implementing this.
+  Deferred from Phase 5.
 
-- **`_match_cache` in views.lua** Cache the matched path arrays alongside the
-  filter trees. Would make repeated `match_all` calls (e.g. sidebar tree header
-  builds) O(1) until the next cache invalidation. Implement only after
-  benchmarking shows it is necessary.
+- **`_match_cache` in views.lua** — Cache matched path arrays alongside filter trees.
+  Makes repeated `match_all` calls O(1) until invalidation. Bench showed 3.1 ms/view at
+  10k notes; not warranted at current scale. Revisit at ~5k notes or ~200+ views with
+  observed latency. Deferred from Phase 5.
 
-- **Note review queue.** Enables the user to select and keep track of notes intended
-  for review. Might include organizers, separators, or interact with filters to
-  enable the user to categorize such notes according to priority, subject, etc.
+- **Note review queue** — Select and track notes intended for review. May include
+  organizers, separators, or filter interactions for priority/subject categorisation.
+  Deferred from Phase 5.
 
-- **Alternative diagram and imaging methods** to allow enhancement of notes
-without dependence on external image files: e.g. ASCII (text-based) art.
-
-((All features under this item should be examined for readability (AI, machine,
-and human) and portability before further detailing and implementation)).
-- Add support or consider already supported methods, with emphasis on human and
-  AI readability and general portability, and, as a secondary goal, easyness of
-  use.
-- Standardize methods for human and AI usage, in order to aid correct usage
-  of such graphics and their understanding by any user.
+- **Alternative diagram and imaging methods** — ASCII/text-based art and other portable
+  methods for enhancing notes without external image files. Any approach must be examined
+  for human readability, AI/machine readability, and portability before implementation.
+  Deferred from Phase 3.
 
 ---
 
 ### Potential but not guaranteed goals (do not design toward)
 
-- **Alternative PKM modes:** Obsidian-style backlink graph, pure Zettelkasten ID-based
+- **Alternative PKM modes:** Obsidian-style backlink graph, Zettelkasten ID-based
   linking, etc. Would be selectable configurations, not the default.
 
-- **Image and visualization support:** embed images with normalized paths, Mermaid
-  diagram support in preview, possibly inline rendering (kitty/iTerm2 protocols).
+- **Image and visualization support:** embedded images, Mermaid diagram support in
+  preview, inline rendering (kitty/iTerm2 protocols).
 
-- **`:PKMViewStats`** — show a table of all views with their note counts and
-  subproject depth. Provides an overview of how the knowledge base is
-  organised. Implementation: iterate `views.list()`, call `match_all()` for
-  each, format as a notification or float.
+- **`:PKMViewStats`** — table of all views with note counts and subproject depth.
+  Implementation: iterate `views.list()`, call `match_all()` for each, format as
+  notification or float.
 
-- **Metadata system review (in-file vs separated metadata).** Recorded for
-  future reconsideration only — not designed toward. The decision gate (D)
-  requires the cheaper in-file mitigations to be exhausted first.
-
-  A. Current state — in-file metadata.
-     Positive: easy export; immediate coupling with content during AI/RAG
-       contextualisation; one-hop navigation to cited notes.
-     Negative: complex buffer management for cross-citation of open files (the
-       root cause of the Near-term §4 data-loss bug); long citation lists bloat
-       the frontmatter and hurt readability; metadata is hard to protect from
-       accidental edits.
-     Mixed: title lives in metadata — no first-level header required, but
-       readers must look to the frontmatter to find it.
-
-  B. Alternative — separated metadata (sidecar).
-     Positive: cross-citation only ever writes the sidecar, never a note body
-       the user may have open → removes the data-loss failure mode entirely;
-       long citation lists leave the note body, so they cannot hurt its
-       readability; metadata can be guarded independently (separate, optionally
-       read-only file).
-     Negative: export becomes two files per note and must associate them;
-       AI/RAG must recognise and attach the sidecar (true cost depends on the
-       consumer's RAG implementation); navigating to cited notes needs full
-       in-text links or extra indirection; cross-citation must open/edit a
-       separate file (cost depends on implementation/perf).
-     Mixed: requires a first-level header or accepting the filename as a
-       surrogate title; if title stays in metadata, a sync mechanism between the
-       user-set title and the sidecar is needed.
-
-  C. Other: a metadata FOOTER within the note, if viable.
-
-  D. Decision gate — do not design toward separation yet.
-     - The one concrete pain motivating B (in-file "complex buffer management")
-       is exactly the Near-term §4 bug, which has a LOCAL fix (write-through to
-       open buffers). Do not justify a cross-cutting redesign (yaml, citations,
-       index, notes, export, templates all change) by a bug with a local fix.
-     - The other real pain (long-metadata readability) is largely solved
-       in-file by frontmatter folding/conceal — now a Next Step (§3).
-     - Separation also trades against stated principles: "easy export" becomes
-       two files; "immediate AI/RAG coupling" becomes consumer-dependent.
-     - Criterion: revisit separation ONLY IF, after (1) the buffer
-       write-through fix and (2) frontmatter folding/conceal, the in-file
-       approach is still unacceptable in daily use.
+- **Metadata system review (in-file vs. sidecar).** Recorded for future reconsideration
+  only. Decision gate: revisit ONLY IF, after (1) the modified-buffer write-through fix
+  and (2) frontmatter folding/conceal, the in-file approach remains unacceptable in
+  daily use.
 
 ---
 
-### Unlikely goals, nongoals, or out of consideration (do not design toward)
+### Unlikely goals, nongoals, or out of consideration
 
-- **Multi-wiki:** multiple independent note namespaces with separate counters and citation
-  permission rules. Superseded by the project-view system for all realistic use cases.
-  The single global counter is a guarantee of note uniqueness; do not break it.
-  Could be revisited only if physical namespace isolation becomes a concrete requirement.
-- **Non-flat citations:** hierarchical or categorized citation structure beyond the current
-  `notes`/`bib` grouping. Undecided; the current structure may be permanently sufficient.
+- **Multi-wiki** — multiple independent namespaces with separate counters. Superseded
+  by the view system. The single global counter guarantees uniqueness; do not break it.
+- **Non-flat citations** — hierarchical structure beyond `notes`/`bib`. Undecided;
+  current structure may be permanently sufficient.
+
+---
 
 ## Critical Rules for LLM Assistants
 
@@ -563,19 +498,22 @@ and human) and portability before further detailing and implementation)).
 
 | Rule | Reason |
 |---|---|
-| Modify `yaml.lua` without strong justification | Complex, carefully fixed bugs; any regression corrupts files |
-| Check Telescope availability at module load time | Lazy.nvim defers loading; always check at call time with `pcall(require, 'telescope')` |
-| Use `generic_sorter` for exact-match contexts | It uses fzy (subsequence matching); use `finders.new_dynamic` with `string.find(..., 1, true)` |
+| Modify `yaml.lua` without strong justification | Complex, carefully fixed bugs; any regression corrupts note files |
+| Check Telescope availability at module load time | Lazy.nvim defers loading; use `pcall(require, 'telescope')` at call time |
+| Use `generic_sorter` for exact-match contexts | Applies fzy scoring; use `finders.new_dynamic` + `sorters.empty()` with `string.find(..., 1, true)` |
 | Reintroduce the `status` field | Intentionally removed |
 | Use deprecated Neovim APIs | Use `nvim_set_option_value`, `vim.keymap.set` |
-| Assume path separator | Always use `utils.sep` or `package.config:sub(1, 1)` |
+| Assume path separator | Always use `utils.sep` or `utils.join(...)` |
 | Design toward multi-wiki | Superseded by project views; not a current goal |
-| Physically separate notes for project organisation | Projects are views, not folders; all notes share one namespace |
-| Optimize `collect_files` without first running `bench.lua` | Optimizing blind; baseline measurements are required first |
+| Physically separate notes for project organisation | Projects are views, not folders |
+| Optimize `collect_files` without first running `bench.lua` | Baseline measurements required before any performance work |
+| Register `UndoPost` autocmd | This event does not exist in Neovim ≤ 0.11.x; `vim.treesitter` tracks changes via `on_bytes` automatically |
+| Call `index.invalidate` from buffer-only metadata commands | No disk write occurred; the index re-reads correctly on the user's next `:w` |
+| Strip backlinks in `trash_note()` | Backlinks are preserved for clean restoration; `cleanup_deleted_note` is called only in `empty()` and `purge_old()` |
 
 ### Always do this
 
-- File-level header block
+File-level header block before `local M = {}`:
 ```lua
 -- =============================================================================
 -- pkm.module — One-line description
@@ -588,37 +526,45 @@ and human) and portability before further detailing and implementation)).
 -- =============================================================================
 ```
 
-- `local M = {}` and module-level locals
-
-
-- Section separators** between logical groups:
+Section separators between logical groups:
 ```lua
 -- =============================================================================
 -- SECTION: Section name
 -- =============================================================================
 ```
 
-- Cross-platform paths
+Cross-platform paths:
 ```lua
 local path = utils.join(dir, file)
 local files = vim.fn.glob(dir .. utils.sep .. "*.md", false, true)
 ```
 
-- Exact substring matching (never fzy)
+Exact substring matching (never fzy):
 ```lua
 if haystack:lower():find(needle:lower(), 1, true) then ... end
 ```
 
-- Telescope at call time
+Telescope at call time:
 ```lua
 local ok = pcall(require, 'telescope')
 if ok then ... else ... end
 ```
 
-- Option setting (Neovim 0.10+)
+Option setting (Neovim 0.10+):
 ```lua
 vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
 vim.keymap.set('n', 'q', fn, { noremap = true, silent = true, buffer = buf })
+```
+
+Per-tabpage state pattern:
+```lua
+local _tabs = {}
+local function get_tab()
+  local id = vim.api.nvim_get_current_tabpage()
+  if not _tabs[id] then _tabs[id] = { ... } end
+  return _tabs[id]
+end
+-- In setup(): register TabClosed autocmd to prune dead entries.
 ```
 
 ### OS detection
@@ -654,6 +600,7 @@ cited_by:
 | Plugin path | `P:/Active/pkm-nvim/` (Windows) · `/mnt/p/Active/pkm-nvim/` (WSL) |
 | Notes path | `P:/Notes` (Windows) · `/mnt/p/Notes` (WSL) |
 | Config path | `~/AppData/Local/nvim/` (Windows) · `~/.config/nvim/` (WSL) |
+| Git | `git gc` is disabled on this repo (Google Drive sync conflict); `gc.auto 0` |
 
 ---
 
@@ -661,9 +608,12 @@ cited_by:
 
 ```vim
 :lua print(vim.inspect(require('pkm').config))
+:lua print(vim.inspect(require('pkm.trash').list()))
 :messages
 :PKMStats
+:PKMMode on
 :lua require('pkm.yaml').validate_frontmatter()
+:lua require('pkm.bench').baseline()
 ```
 
 ---
@@ -681,6 +631,11 @@ Types: `feat` `fix` `docs` `refactor` `test` `chore`
 
 **Branches:** `feat/<name>`, `fix/<name>`
 
+**Do not run `git gc`** on this repo — it lives on Google Drive sync which causes
+object-directory deletion conflicts. Global git config: `gc.auto 0`,
+`gc.autoPackLimit 0`, `gc.autoDetach true`. The `pkm-merge` PowerShell alias
+automates `dev→main` merges.
+
 ---
 
 ## Knowledge Base
@@ -688,7 +643,6 @@ Types: `feat` `fix` `docs` `refactor` `test` `chore`
 - Neovim docs: https://neovim.io/doc/
 - Lua docs: https://www.lua.org/docs.html
 - LuaRocks style guide: https://github.com/luarocks/lua-style-guide
-- LaTeX docs: https://www.latex-project.org/help/documentation/
 
 ---
 

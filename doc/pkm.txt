@@ -9,19 +9,21 @@ CONTENTS                                                       *pkm-contents*
     4. Setup ................................... |pkm-setup|
     5. Workflow ................................ |pkm-workflow|
     6. Commands ................................ |pkm-commands|
-    7. Citations ............................... |pkm-citations|
-    8. Export .................................. |pkm-export|
-    9. Configuration ........................... |pkm-configuration|
-   10. Keymaps ................................. |pkm-keymaps|
-   11. Frontmatter ............................. |pkm-frontmatter|
-   12. File Naming ............................. |pkm-naming|
+    7. PKM Mode ................................ |pkm-mode|
+    8. Trash ................................... |pkm-trash|
+    9. Citations ............................... |pkm-citations|
+   10. Export .................................. |pkm-export|
+   11. Configuration ........................... |pkm-configuration|
+   12. Keymaps ................................. |pkm-keymaps|
+   13. Frontmatter ............................. |pkm-frontmatter|
+   14. File Naming ............................. |pkm-naming|
 
 ==============================================================================
 1. INTRODUCTION                                             *pkm-introduction*
 
 PKM.nvim is a personal knowledge management plugin for Neovim. It manages
 a collection of markdown notes with YAML frontmatter, automatic bidirectional
-citation tracking, and Telescope integration for search and navigation.
+citation tracking, project views, and Telescope integration.
 
 The system is built around a three-stage workflow:
 
@@ -32,14 +34,16 @@ The system is built around a three-stage workflow:
   Consolidated →  permanent numbered knowledge base
 
 Notes are plain markdown files. No proprietary formats, no cloud dependency.
-Everything works from the filesystem. All notes share a single flat namespace
-and a single sequential counter — note numbers are globally unique.
+All notes share a single flat namespace and a single sequential counter —
+note numbers are globally unique and never reused (even after deletion).
 
 ==============================================================================
 2. REQUIREMENTS                                             *pkm-requirements*
 
   • Neovim ≥ 0.10
   • nvim-telescope/telescope.nvim   (optional but strongly recommended)
+  • Tree-sitter markdown parser     (bundled with Neovim 0.10+)
+  • Tree-sitter yaml parser         (optional; enables frontmatter syntax)
 
 ==============================================================================
 3. INSTALLATION                                             *pkm-installation*
@@ -65,17 +69,24 @@ Minimal: >
   })
 <
 
-With user info and custom keymaps: >
+Full example with PKM Mode and trash: >
   require('pkm').setup({
     root_path = vim.fn.expand('~/Notes'),
-    user = {
-      name = "Your Name",
+    user = { name = "Your Name" },
+    pkm_mode = {
+      triggers = { open_note = true, enter_dir = false },
+      layout   = { sidebar = true, bufpanel = true },
+      syntax   = { enabled = true },
+    },
+    trash = {
+      enabled      = true,
+      max_age_days = 60,
     },
     keymaps = {
       new_note        = "<leader>nn",
-      new_journal     = "<leader>nj",
       browse          = "<leader>nf",
       insert_citation = "<leader>nc",
+      view_sidebar    = "<leader>nS",
     },
   })
 <
@@ -87,32 +98,40 @@ Set any keymap value to `false` to disable it.
 5. WORKFLOW                                                     *pkm-workflow*
 
 CAPTURE~
-Use |:PKMNewScratchpad| to write down ideas immediately.
-Scratchpads are timestamped files in 01-Scratchpad/. They carry minimal
-frontmatter and require no decisions at creation time.
+Use |:PKMNewScratchpad| to write down ideas immediately. Scratchpads are
+timestamped files in 01-Scratchpad/ and require no decisions at creation time.
 
 JOURNAL~
 Use |:PKMNewJournal| for dated entries. The timestamp is recorded in the
 filename and frontmatter automatically.
 
 CONSOLIDATE~
-When a scratchpad contains something worth keeping permanently, use
-|:PKMPromote| to move it to a consolidated note or journal entry. You can
-also create consolidated notes directly with |:PKMNewNote|.
+When a scratchpad is worth keeping, use |:PKMPromote| to move it to a
+consolidated note or journal entry. Create consolidated notes directly with
+|:PKMNewNote|.
 
 CONSOLIDATED NOTE TYPES~
   note   Regular knowledge note
-  bib    Bibliography or reference entry (prompts for author and source type)
-  agg    Aggregate or collection note (gathers related content)
+  bib    Bibliography or reference entry
+  agg    Aggregate or collection note
 
 CITE~
-In any note, use |:PKMInsertCitation| to pick another note and insert a
-structured citation. The cited note automatically receives a backlink in its
-`cited_by` frontmatter field. This is maintained bidirectionally.
+Use |:PKMInsertCitation| to pick another note and insert a structured
+citation. The cited note automatically receives a backlink. This is maintained
+bidirectionally and on save.
 
 SEARCH~
-Use |:PKMBrowse| to search note contents (requires ripgrep), or
-|:PKMTags| to browse by tag.
+Use |:PKMBrowse| for live filter-as-you-type search across all notes.
+Use |:PKMTags| to browse by tag. Use |:PKMOrphans| to find unfiled notes.
+
+VIEWS~
+Use |:PKMViewNew| to save filter expressions as named project views.
+Use |:PKMViewSidebar| for a persistent sidebar listing a view's notes.
+Use |:PKMMode| to activate the full explorer interface.
+
+DELETE / RESTORE~
+Use |:PKMDeleteNote| to safely delete a note. With trash enabled (default),
+the note moves to .pkm-trash/ and can be recovered with |:PKMRestoreNote|.
 
 ==============================================================================
 6. COMMANDS                                                     *pkm-commands*
@@ -121,204 +140,309 @@ CREATION~
 
 :PKMNewNote [type]      Create a consolidated note.
                         Type: 'note', 'bib', or 'agg'.
-                        If omitted, a picker prompts for the type.
+                        Prompts for type if omitted.
 
 :PKMNewJournal          Create a journal entry timestamped to the current
-                        time. Opens immediately for editing.
+                        time.
 
 :PKMNewScratchpad       Create a new scratchpad with an optional title.
 
-
-:PKMImport              Import the currently open file into the PKM structure.
-                        Adds the appropriate frontmatter template for its
-                        folder without overwriting existing fields.
+:PKMImport              Import the current file into the PKM structure.
 
 LIFECYCLE~
 
-:PKMConvertNote         Normalize the current note to match its folder format.
-                        Adds any missing frontmatter fields while preserving
-                        existing values. For consolidated notes without a
-                        valid PKM filename, prompts for type and title and
-                        renames the file.
+:PKMConvertNote         Normalize the current note to its folder's format.
+                        Adds missing frontmatter fields, preserves existing
+                        values. Renames and prompts for type/title if the
+                        filename does not follow PKM conventions.
 
-:PKMPromote             Promote a scratchpad to a consolidated note or journal
-                        entry. Only available from the scratchpad folder.
+:PKMPromote             Promote a scratchpad to a consolidated note or
+                        journal entry. Only available from 01-Scratchpad/.
 
 :PKMTranspose           Move the current note to a different PKM folder and
-                        convert it to the appropriate type for that folder.
-                        Useful when a note has outgrown its current context.
+                        convert it to the appropriate type.
 
-:PKMChangeType          Change the type of the current consolidated note
-                        between 'note', 'agg', and 'bib'. Renames the file
-                        and updates the frontmatter template fields.
+:PKMChangeType          Change a consolidated note's type between note/agg/bib.
+                        Renames the file and updates frontmatter fields.
 
-:PKMDeleteNote          Safely delete the current note. Scans all other notes
-                        for references to this file and removes them before
-                        deletion. Always use this instead of deleting files
-                        manually.
+:PKMDeleteNote          Delete the current note. With trash.enabled = true
+                        (default), moves to .pkm-trash/ and preserves
+                        backlinks for recovery. With trash.enabled = false,
+                        strips backlinks and permanently deletes.
+                        Always use this instead of deleting files manually.
+                        See also |pkm-trash|.
+
+:PKMRenameNote          Prompt for a new filename. Sanitizes the input,
+                        renames on disk, redirects the buffer, and propagates
+                        through all citations. Does not modify the title field.
+                        Works on consolidated, journal, and scratchpad notes.
 
 NAVIGATION~
 
 :PKMFollowLink          Open the note referenced by the [[wiki-link]] under
-                        the cursor. Searches all PKM folders.
+                        the cursor.
 
 :PKMLinkNote            Pick a note and insert a [[wiki-link]] at the cursor.
 
-:PKMBacklinks           Show all notes that contain a link to the current note.
+:PKMBacklinks           Show all notes linking to the current note.
 
 :PKMGotoCitation        Jump to the note referenced by the citation string
                         under the cursor (e.g. note[0042]).
 
-SEARCH & BROWSE~
-
+SEARCH AND BROWSE~
 
 :PKMBrowse [expr]       Live filter-as-you-type note browser.
-                        Opening it lists all notes. What you type in the
-                        prompt is evaluated by filter.lua on each keystroke:
+                        The prompt evaluates filter.lua expressions on each
+                        keystroke. Examples:
                           fourier               any field contains "fourier"
-                          tag:math              tag is exactly "math"
+                          tag:math              tag equals "math" (exact)
                           title:ring            title contains "ring"
                           text:laplace          body contains "laplace"
                           filename:0042         stem contains "0042"
+                          type:note             note_type equals "note"
+                          type:bib              note_type equals "bib"
                           tag:math AND title:fourier
                           (tag:math OR tag:physics) AND NOT tag:draft
-                        Bare text matches across title, body, filename, and
-                        tags simultaneously (any predicate). Prefixed
-                        expressions apply structured filters. Unknown field
-                        prefixes (e.g. body:x) are treated as any-value
-                        searches. On incomplete input, falls back to any-
-                        field substring so the bar never errors mid-typing.
+                          type:note AND tag:draft
+
+                        Valid type values: note, agg, bib, journal, scratch,
+                        other. Bare text and unknown fields trigger the 'any'
+                        predicate (substring across all fields simultaneously).
                         Optional [expr] pre-seeds the prompt.
                         Telescope: live. Fallback: prompt once, then select.
+                        Tab-completion: field prefixes, operators, tag values,
+                        type values.
+
+:PKMBrowseRecent [n]    Show the n most recently modified notes (default 20),
+                        sorted by modification time descending.
+                        Telescope live picker or vim.ui.select fallback.
+
+:PKMOrphans             Show notes that have no tags, no citations (in any
+                        cites/cited_by group), and do not match any defined
+                        view. Useful for locating abandoned or unfiled notes.
 
 :PKMTags                Browse notes by tag. Select a tag from the full tag
-                        list, then :PKMBrowse opens pre-filtered to that tag.
-                        Uses the index — no ripgrep required.
+                        list; opens :PKMBrowse pre-filtered to that tag.
 
 :PKMMergeTags           Merge one or more tags into a target tag across all
-                        notes. Three-step Telescope picker (target → sources →
-                        confirm), or a fallback UI without Telescope.
+                        notes. Three-step Telescope picker, or fallback UI.
 
 :PKMStats               Show note counts per folder via vim.notify.
 
-LIFECYCLE~
+FRONTMATTER (BUFFER-ONLY)~
 
-:PKMRenameNote          Prompt for a new filename (pre-filled with the current
-                        stem). Sanitizes the input, renames the file on disk,
-                        redirects the buffer, and propagates the rename through
-                        all citations. Does not modify the title field.
+These commands mutate the current buffer's frontmatter without writing to disk.
+The index is updated on the user's next :w via BufWritePost.
+
+:PKMSetTitle            Prompt for a new title and write it to the 'title'
+                        frontmatter field (buffer-only).
+
+:PKMAddTag [tag]        Append a tag to the frontmatter 'tags' list.
+                        Prompts if no argument. Skips if already present.
+
+:PKMRemoveTag [tag]     Remove a tag from 'tags'. Picker if no argument.
 
 CITATIONS~
 
-:PKMInsertCitation      Open a picker of all citable notes and bibliography
-                        entries. Inserting a selection writes the citation
-                        string and updates both notes' frontmatter.
+:PKMInsertCitation      Open a context-aware picker of all citable notes.
+                        Items are pre-scored by active view membership (+2)
+                        and shared tags (+1). Relevant items are prefixed '~'.
+                        Inserting a selection writes the citation string and
+                        updates both notes' frontmatter bidirectionally.
 
-:PKMGotoCitation        Jump to the note under the cursor.
+:PKMGotoCitation        Jump to the note under the citation at the cursor.
 
-:PKMUpdateReferences    Scan the current buffer for citation strings and
-                        rebuild the `cites` frontmatter list to match.
+:PKMUpdateReferences    Rescan the current buffer and rebuild the 'cites'
+                        frontmatter list to match in-body citations.
 
 EXPORT~
 
 :PKMExport              Open the export filter form. See |pkm-export|.
 
+:PKMExportView [name]   Export all notes in a named view, skipping the filter
+                        form. Tab-completes view names. Without a name,
+                        presents a picker.
+
 VIEWS~
 
-:PKMView [name]         Open a named project view. Without a name, presents a
-                        picker of all defined views. Tab-completes view names.
-                        Simple views are filter expressions (strings). Subproject
-                        views are defined in views.json with parent and filter
-                        fields; their effective filter is the parent's AND own.
+:PKMView [name]         Open a named project view (Telescope or float picker
+                        of notes matching the view's filter). Tab-completes
+                        view names. Without a name, presents a view picker.
 
 :PKMViews               Open a tree-structured picker of all defined views,
                         showing the parent-child hierarchy with note counts.
-                        Root views appear first; subprojects are indented under
-                        their parent. Select a view to open it.
-                        Example display:
-                          • rpg  (8)
-                          ▶ ringforge  (14)
-                            ▶ ringforge-mechanics  (6)
-                            • ringforge-references  (8)
-                        Uses Telescope when available; scrollable float
-                        otherwise.
+                        Select a view to open it via :PKMView.
 
-:PKMViewNew             Prompt for a name and filter expression, then save to
-                        views.json. For subprojects, use :PKMViewEdit directly.
+:PKMViewNew             Prompt for a name and type (simple view or subproject),
+                        then for a filter expression (and parent view if
+                        subproject), and save to views.json.
+
+:PKMViewUpdate [name]   Open an action picker: "Edit filter expression",
+                        "Rename", "Change parent" (subprojects only).
+                        Rename propagates to child subprojects and session
+                        state. Change parent validates against hierarchy cycles.
+                        Tab-completes view names.
 
 :PKMViewEdit            Open views.json for direct editing. Saving the file
-                        automatically reloads all views. Use this to define
-                        subprojects:
-                          {
-                            "physics": "tag:physics",
-                            "physics-mechanics": {
-                              "parent": "physics",
-                              "filter": "tag:mechanics"
-                            }
-                          }
+                        reloads all views automatically.
 
-:PKMViewDelete          Remove a named view from views.json. Tab-completes
-                        view names.
+:PKMViewDelete [name]   Remove a named view from views.json.
+                        Tab-completes view names.
 
 :PKMViewLast            Reopen the last view activated in this session.
                         Session-scoped; does not persist across restarts.
 
-:PKMViewSidebar [name]  Open or toggle the persistent sidebar for a named view.
-                        Without a name, prompts for one (or closes if open).
-                        Same name again → closes; different name → replaces.
-                        When the view participates in the subproject hierarchy,
-                        a tree header is shown above the note list:
-                          ▶ parent-view  (N notes)
-                          ▼ current-view (N notes)
-                          ▶ child-view   (N notes)
-                          ──────────────────────
-                          ...note list...
-                        Sidebar keymaps:
-                          <CR>   open note in last focused window (on note line)
-                                 or navigate to that view (on tree header line)
-                          <BS>   navigate to parent view
-                          r      refresh against current index
-                          q / <Esc>   close sidebar
-:PKMExportView [name]   Export all notes in a named view, skipping the
-                        interactive filter form. Without a name, presents a
-                        picker. Tab-completes view names. Opens the results
-                        picker then prompts for a destination directory.
-                        
-==============================================================================
-BUFFER PANEL                                                *pkm-bufpanel*
+:PKMViewSidebar [name]  Open or toggle the persistent view sidebar.
+                        See |pkm-sidebar| below for full keymap list.
+
+BUFFER PANEL~
 
 :PKMBuffers             Toggle the persistent bottom buffer-list panel.
                         Lists all open regular-file buffers. PKM notes show
-                        their type prefix and title; non-PKM files show their
-                        filename. Modified buffers are marked [+].
+                        type prefix [n]/[a]/[b]/[j]/[s]/[o] and title;
+                        non-PKM files show filename. Modified buffers show [+].
 
                         Keymaps inside the panel:
-                          <CR>   open buffer in the main editing window
+                          <CR>   open buffer in main editing window
                           d      close buffer (:bdelete)
                           D      force-close buffer (:bdelete!)
                           w      write buffer then close it
                           r      refresh the list
-                          q      close the panel
+                          q / <Esc>   close the panel
 
-==============================================================================
 MARKDOWN EDITING~
 
 :PKMNextHeader          Duplicate the header on the current line with its
                         trailing counter incremented, append at EOF.
 
 :PKMHeaderLevelUp       Increase the # depth of all headers in the range.
-                        Default range: whole buffer. Also accepts '<,'> prefix
-                        for visual selection.
+                        Default range: whole buffer. Accepts '<,'> prefix.
 
 :PKMHeaderLevelDown     Decrease the # depth of all headers in the range.
                         Level-1 headers are protected.
 
-:PKMHeadingNext         Jump to the next ATX heading (# …) in the buffer.
+:PKMRenumberList        Renumber ordered-sequence items in range or paragraph.
+                        Supports nested lists (per-level counter stack),
+                        blockquote-prefixed lists, emphasis-wrapped ordinals
+                        (*N*[.)], **N**[.)]), bold-line items (**N. body**),
+                        and header families. Range: visual selection or
+                        paragraph at cursor.
 
-:PKMHeadingPrev         Jump to the previous ATX heading in the buffer.
+:PKMConvertList         Convert list items between ordered and unordered in
+[to_ordered|            range or paragraph at cursor.
+ to_unordered]          Direction is auto-detected: all-ordered → to_unordered;
+                        all-unordered → to_ordered; mixed → prompts.
+                        If multiple indent depths are present, prompts for
+                        maximum conversion depth.
+                        Items already in the target format are preserved
+                        (ordered items are renumbered to maintain sequence).
+                        Optional direction argument skips detection.
 
 ==============================================================================
-7. CITATIONS                                                   *pkm-citations*
+                                                              *pkm-sidebar*
+SIDEBAR KEYMAPS~
+
+The sidebar (`:PKMViewSidebar`) has two modes: overview (all views) and
+detail (notes in one view). Keymaps are the same window in both modes.
+
+  <CR>     In overview: enter the view under the cursor.
+           In detail, on a tree header line (▶/▼): navigate to that view.
+           In detail, on a note line: open note in the main editing window.
+  <C-v>    Open the note under the cursor in a new vertical split.
+           (Detail mode only.)
+  <C-t>    Cycle the type filter: all → note → agg → bib → journal →
+           scratch → all. Filters the note list and shows "N of M" count.
+           (Detail mode only; resets to all on return to overview.)
+  b        Back: pop the navigation history stack; fall back to overview
+           if the stack is empty.
+  <BS>     Same as b.
+  <C-b>    Jump directly to overview, pushing current state to history.
+  /        Scoped search: in detail mode, opens the filter picker over the
+           view's notes; in overview, opens the global :PKMBrowse.
+           Focus switches to the main editing window first so files open
+           there, not over the sidebar.
+  r        Refresh current mode in place.
+  q / <Esc>  Close the sidebar.
+  ?        Show this keymap help as a floating window.
+
+  <C-s>    No-op (prevents global split keymaps from acting on the sidebar).
+
+Type prefixes shown in the note list:
+  [n] note   [a] agg   [b] bib   [j] journal   [s] scratch   [o] other
+
+==============================================================================
+7. PKM MODE                                                       *pkm-mode*
+
+PKM Mode is a session-level context toggle that activates the full explorer
+interface and PKM-specific syntax highlighting.
+
+:PKMMode [on|off]       Activate, deactivate, or toggle PKM Mode.
+                        Without an argument, toggles.
+                        on  → opens sidebar + buffer panel, pre-builds index,
+                              enables tree-sitter syntax on all PKM buffers
+                        off → closes both panels, reverts syntax to default
+
+:PKMExplorer            Toggle sidebar + buffer panel as a unit, independent
+                        of PKM Mode state. If both open: close both. If
+                        either closed: open the closed one(s).
+
+SYNTAX HIGHLIGHTING (PKM MODE)~
+
+When active, PKM Mode enables tree-sitter-based highlighting:
+  • Frontmatter `---…---` block folded by default; `za` to toggle, `zM` to
+    close all, `zR` to open all. Foldtext: `▸ frontmatter (N lines) [za toggle]`
+  • `note[0042]`, `bib[0003]` etc. highlighted as PKMCitation (→ Special)
+  • `((text))` double-paren meta-comments highlighted as PKMMetaComment (→ Comment)
+  • YAML frontmatter syntax via injected yaml parser (if installed)
+  • 4-space-indented text suppressed (no code-block colour)
+  • List markers visible at all nesting depths
+
+AUTO-TRIGGER~
+
+Configure `pkm_mode.triggers.open_note = true` (default) to automatically
+activate PKM Mode when any PKM note is opened. If mode is already active,
+only syntax is enabled on the new buffer — panels are not re-opened.
+
+==============================================================================
+8. TRASH                                                         *pkm-trash*
+
+When `trash.enabled = true` (default), |:PKMDeleteNote| moves notes to a
+`.pkm-trash/` folder inside the PKM root instead of permanently deleting them.
+
+  • Backlinks in other notes are NOT stripped on trash. They are preserved so
+    restoration requires no reconstruction work.
+  • Trashed notes do NOT appear in :PKMBrowse, views, :PKMOrphans, or the
+    sidebar. The only access point is :PKMRestoreNote.
+  • Note numbers are never reused — if note 0042 is trashed and you create a
+    new note, the new note becomes 0043. Gaps are intentional.
+
+:PKMRestoreNote         Open a picker over all trashed notes (showing title,
+                        deletion date, and original path). Selecting an entry
+                        moves the file back to its original location and
+                        re-adds it to the index. Backlinks require no repair.
+
+:PKMEmptyTrash          Permanently delete all trashed notes. Strips backlinks
+                        in other notes via cleanup_deleted_note for each entry.
+                        Requires typing 'yes' to confirm.
+
+AUTO-PURGE~
+
+Set `trash.max_age_days` (default 60) to automatically purge entries older
+than N days on Neovim startup. Set to 0 to disable. A notification is shown
+when entries are purged. To disable trash entirely and revert to permanent
+delete, set `trash.enabled = false`.
+
+TRASH LOCATION~
+
+  {root_path}/.pkm-trash/             trashed note files
+  {root_path}/.pkm-trash/manifest.json  records of each trashed note
+
+The trash folder and manifest are inside the PKM root; they move with the
+notes and can be version-controlled. The manifest stores the original path,
+deletion timestamp, and title of each trashed note.
+
+==============================================================================
+9. CITATIONS                                                   *pkm-citations*
 
 CITATION FORMAT~
 
@@ -330,21 +454,19 @@ The number is the four-digit note number. The prefix identifies the note type.
 
 INSERTING A CITATION~
 
-Use |:PKMInsertCitation| (or the keymap). A Telescope picker shows all notes
-with their identifiers and titles. Selecting one inserts the citation string
-at the cursor and immediately:
+Use |:PKMInsertCitation| (or the keymap). A context-aware picker shows all
+notes, pre-scored by:
+  +2  if the note is in the active view (`:PKMViewSidebar` or last `:PKMView`)
+  +1  per tag shared with the current note
 
+Relevant items are prefixed `~ ` and sorted to the top.
+
+Selecting an item inserts the citation string and immediately:
   1. Adds the cited note to the current file's `cites.notes` or `cites.bib`
   2. Adds the current file to the cited note's `cited_by.notes` or `cited_by.bib`
 
-BIDIRECTIONAL SYNC~
-
-The frontmatter fields `cites` and `cited_by` are always kept in sync:
-
-  • When you insert a citation: both files are updated immediately
-  • On save (if auto_sync_on_save = true): :PKMUpdateReferences rescans
-    the buffer and repairs any inconsistencies
-  • When you delete a note: :PKMDeleteNote removes all references to it
+If the cited note's buffer is open and modified, the backlink is applied
+directly to the buffer without writing to disk, preserving unsaved changes.
 
 FRONTMATTER STRUCTURE~
 >
@@ -361,66 +483,33 @@ FRONTMATTER STRUCTURE~
     notes: []
     bib: []
 <
-Empty groups serialize as `[]` (not omitted). Do not change this structure
-manually; use the PKM commands instead.
 
 ==============================================================================
-8. EXPORT                                                         *pkm-export*
+10. EXPORT                                                       *pkm-export*
 
-:PKMExport opens a filter form to select notes and copy them to a folder.
-Useful for preparing a set of notes to review, share with an LLM, or archive.
+:PKMExport opens an interactive filter form. :PKMExportView [name] exports
+a named view's notes directly without the form.
 
 THE FILTER FORM~
 >
-  ╭─ PKMExport: Advanced Filter ──────────────────────────────────────╮
-  │  Fill in any fields. Leave blank to skip.                         │
-  │  Comma-separated values: OR logic (AND for the second tags field).│
-  │  <Tab>/<S-Tab> move fields   <CR> search   <Esc> cancel           │
-  │  ──────────────────────────────────────────────────────────────── │
+  ╭─ PKMExport: Advanced Filter ─────────────────────────────────────╮
   │  Tags ANY  (OR) :                                                 │
   │  Tags ALL (AND) :                                                 │
   │  Title contains :                                                 │
   │  Text  contains :                                                 │
   ╰───────────────────────────────────────────────────────────────────╯
 <
-  Tags ANY (OR)   Note has at least one of these tags.
-                  Comma-separated. Example: mathematics, physics
-  Tags ALL (AND)  Note has every one of these tags.
-                  Comma-separated. Example: proof, analysis
-  Title contains  Exact case-insensitive substring of the note title.
-  Text  contains  Exact substring anywhere in the note body.
 
-All active fields are AND-ed together. Leave any field blank to skip it.
-Matching is exact substring — never fuzzy.
-
-RESULTS PICKER~
-
-After pressing <CR>, matched notes open in a Telescope picker (or a
-scrollable float if Telescope is unavailable). Press <CR> to confirm the
-selection, then enter a destination folder path.
-
-PROGRAMMATIC API~
->
-  -- Export all notes tagged both "mathematics" AND "proof"
-  require('pkm.export').export(
-    { tags_all = {"mathematics", "proof"} },
-    "/tmp/output"
-  )
-
-  -- Tags: any of math/physics, AND body contains "Fourier"
-  require('pkm.export').export(
-    { tags_any = {"mathematics", "physics"}, text = "Fourier" },
-    "/tmp/output"
-  )
-<
+All active fields are AND-ed together. Matching is exact substring — never
+fuzzy. After filtering, a Telescope picker (or scrollable float) opens.
+Confirm selection and enter a destination folder path.
 
 ==============================================================================
-9. CONFIGURATION                                           *pkm-configuration*
+11. CONFIGURATION                                          *pkm-configuration*
 >
   require('pkm').setup({
-    -- Path to notes root directory. Required.
-    -- Defaults to ~/Notes if omitted.
-    root_path = vim.fn.expand('~/Notes'),
+
+    root_path = vim.fn.expand('~/Notes'),   -- required
 
     folders = {
       scratchpad   = "01-Scratchpad",
@@ -430,9 +519,7 @@ PROGRAMMATIC API~
     },
 
     sync = {
-      -- Master switch for all sync features
-      enabled = true,
-      -- Update last_updated_on and citation lists on every save
+      enabled           = true,
       auto_sync_on_save = true,
     },
 
@@ -445,69 +532,93 @@ PROGRAMMATIC API~
     },
 
     user = {
-      name        = "",   -- Inserted in 'author' frontmatter field
-      email       = "",
-      institution = "",
+      name  = "",   -- inserted into 'author' frontmatter field
+      email = "",
     },
 
-  -- Named project views. Each key is a view name; each value is a filter
-  expression string. Activated with :PKMView <name>.
-  Example:
+    -- Named project views (declarative). views.json sidecar wins on collision.
     projects = {
-      "rpg":    "tag:rpg AND (title:ringforge OR text:ringforge)",
-      "ringforge-mechanics": {
-        "parent": "ringforge",
-        "filter": "tag:mechanics"
-      }
       clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
-    }
+    },
 
-  -- Width of the :PKMViewSidebar window (default 40 columns)
-    sidebar_width = 40,
+    sidebar_width = 40,   -- width of the :PKMViewSidebar window
 
-    -- Buffer-local symbol abbreviations and insert-mode keymaps.
-    -- Registered per PKM note buffer via BufReadPost.
-    -- trigger (iabbrev) and key (insert-mode map) are both optional.
+    -- Buffer-local insert-mode keymaps registered per PKM note on BufReadPost.
     symbols = {
       { trigger = 'emdash', key = '<M-->', expansion = '—' },
-      { trigger = 'sect',   key = '<M-s>', expansion = '§' },
-      { trigger = 'ordm',   key = '<M-o>', expansion = 'º' },
+    },
+
+    -- PKM Mode behaviour
+    pkm_mode = {
+      triggers = {
+        open_note = true,   -- activate when any PKM note is opened
+        enter_dir = false,  -- activate when CWD becomes PKM root
+      },
+      layout = {
+        sidebar  = true,    -- open sidebar on activation
+        bufpanel = true,    -- open buffer panel on activation
+      },
+      index = {
+        prebuild = true,    -- eagerly build index on first activation
+      },
+      syntax = {
+        enabled = true,     -- enable tree-sitter syntax highlighting
+      },
+    },
+
+    -- Soft-delete trash
+    trash = {
+      enabled      = true,   -- true = trash; false = permanent delete
+      max_age_days = 60,     -- auto-purge after N days on startup; 0 = off
     },
 
     keymaps = {
-      -- Set any value to false to disable that keymap
+      -- Set any value to false to disable.
+      -- Note operations
       new_note         = "<leader>nn",
       new_journal      = "<leader>nj",
       new_scratchpad   = "<leader>ns",
+      rename_note      = "<leader>nr",
+      insert_citation  = "<leader>nc",
+      goto_citation    = "<leader>ng",
+      delete_note      = "<leader>nd",
+      link_note        = "<leader>nl",
+      follow_link      = "gf",
+      backlinks        = "<leader>nb",
+      import_note      = "<leader>ni",
       convert_note     = "<leader>nx",
       promote_note     = "<leader>np",
       transpose_note   = "<leader>nT",
       change_note_type = "<leader>nC",
-      import_note      = "<leader>ni",
-      delete_note      = "<leader>nd",
-      insert_citation  = "<leader>nc",
-      goto_citation    = "<leader>ng",
-      link_note        = "<leader>nl",
-      follow_link      = "gf",
-      backlinks        = "<leader>nb",
+      -- Metadata (buffer-only)
+      set_title        = false,
+      add_tag          = false,
+      remove_tag       = false,
+      -- Views
+      view_last        = "<leader>nV",
+      view_list        = "<leader>nv",
+      view_sidebar     = "<leader>nS",
+      view_buffers     = "<leader>vb",
+      focus_sidebar    = false,   -- jump focus directly to sidebar window
+      -- PKM Mode
+      toggle_mode      = false,   -- :PKMMode toggle
+      -- Search
       browse           = "<leader>nf",
       browse_tags      = "<leader>nt",
-      rename_note      = "<leader>nr",
-      view_last        = "<leader>nV",
-      view_sidebar     = false,
-      next_header      = "<leader>mh",
-      header_level_up  = false,
-      header_level_down = false,
-      heading_next     = false,
-      heading_prev     = false,
+      -- Markdown editing
+      next_header      = "<leader>Mh",
+      header_level_up  = "<leader>M^",
+      header_level_down = "<leader>M_",
+      renumber_list    = "<leader>Mr",
+      convert_list     = false,   -- :PKMConvertList (range or paragraph)
     },
   })
 <
 
 ==============================================================================
-10. KEYMAPS                                                      *pkm-keymaps*
+12. KEYMAPS                                                      *pkm-keymaps*
 
-Default keymaps (all overridable via the `keymaps` config table):
+Default keymaps (all overridable; set to false to disable):
 
   <leader>nn   :PKMNewNote
   <leader>nj   :PKMNewJournal
@@ -521,27 +632,37 @@ Default keymaps (all overridable via the `keymaps` config table):
   <leader>nc   :PKMInsertCitation
   <leader>ng   :PKMGotoCitation
   <leader>nl   :PKMLinkNote
-  gf           :PKMFollowLink  (overrides standard goto-file in .md buffers)
+  gf           :PKMFollowLink
   <leader>nb   :PKMBacklinks
   <leader>nf   :PKMBrowse
   <leader>nt   :PKMTags
   <leader>nr   :PKMRenameNote
   <leader>nV   :PKMViewLast
-  <leader>nS   :PKMViewSidebar   (default; set via keymaps.view_sidebar)
+  <leader>nv   :PKMViews
+  <leader>nS   :PKMViewSidebar
+  <leader>vb   :PKMBuffers
   <leader>Mh   :PKMNextHeader
-  <leader>M^   :PKMHeaderLevelUp
-  <leader>M_   :PKMHeaderLevelDown
-  <leader>Mr   :PKMRenumberList
+  <leader>M^   :PKMHeaderLevelUp  (normal and visual)
+  <leader>M_   :PKMHeaderLevelDown  (normal and visual)
+  <leader>Mr   :PKMRenumberList  (normal and visual)
+
+Additional keymaps (default false — assign to enable):
+
+  focus_sidebar    jump focus directly to sidebar window
+  toggle_mode      :PKMMode toggle
+  set_title        :PKMSetTitle
+  add_tag          :PKMAddTag
+  remove_tag       :PKMRemoveTag
+  convert_list     :PKMConvertList  (normal and visual)
 
 ==============================================================================
-11. FRONTMATTER                                               *pkm-frontmatter*
+13. FRONTMATTER                                               *pkm-frontmatter*
+
+The `title` field is free-form and never overwritten by the system after
+creation. Use :PKMSetTitle (buffer-only) or edit it directly. Use :PKMRenameNote
+to change the filename — the title field is not touched.
 
 CONSOLIDATED NOTE~
-
-The `title` field is free-form. The system sets it at creation time from user
-input but never overwrites it afterward. To rename the file, use
-:PKMRenameNote — this changes the filename on disk without touching the title
-field.
 >
   ---
   title: ""
@@ -608,30 +729,26 @@ SCRATCHPAD~
 <
 
 ==============================================================================
-12. FILE NAMING                                                  *pkm-naming*
+14. FILE NAMING                                                  *pkm-naming*
 
 CONSOLIDATED NOTES~
 
   NNNN_type_Title_Words.md
 
-  NNNN   Four-digit zero-padded sequential number (globally unique)
+  NNNN   Four-digit zero-padded sequential number (globally unique; never
+         reused — gaps in numbering are intentional and harmless)
   type   One of: note, bib, agg
-  Title  Words from the title, joined by underscores, sanitized
+  Title  Words from the title, underscores, sanitized
 
 Examples: >
   0042_note_Introduction_to_Fourier_Analysis.md
   0003_bib_Fourier_Analysis_Stein_Shakarchi.md
   0007_agg_Real_Analysis_Reading_List.md
-
-To rename a consolidated note after creation, use |:PKMRenameNote|. It prompts
-for a new name, sanitizes it, renames the file on disk, updates the buffer
-reference, and propagates the change through all citations. The `title`
-frontmatter field is never touched by the rename operation.
+<
 
 JOURNAL ENTRIES~
 
   journal_YYYY-MM-DD_HH-MM-SS.md
-  (or shorter formats depending on timestamp.default_format)
 
 SCRATCHPADS~
 

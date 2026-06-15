@@ -143,11 +143,12 @@ local defaults = {
     set_title        = false,
     add_tag          = false,
     remove_tag       = false,
-    -- Views
-    view_last    = "<leader>nV",
-    view_list    = "<leader>nv",
-    view_sidebar = "<leader>nS",
+    -- Navigation
+    view_last    = "<leader>vl",
+    view_list    = "<leader>va", -- va = view all
+    view_sidebar = "<leader>vs",
     view_buffers = "<leader>vb",
+    toggle_file_explorer = "<leader>ts",   -- ts = toggle sidebar
     focus_sidebar = false,   -- jump focus directly to sidebar window
     -- PKMMode
     toggle_mode   = false,   -- :PKMMode toggle
@@ -155,7 +156,7 @@ local defaults = {
     browse          = "<leader>nf",
     browse_tags     = "<leader>nt",
     -- Markdown editing
-    ---- Headers
+    ---- Headers ----
     next_header        = "<leader>Mh",
     header_level_up    = "<leader>M^",
     header_level_down  = "<leader>M_",

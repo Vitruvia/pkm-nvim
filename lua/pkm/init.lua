@@ -164,6 +164,37 @@ end
 -- SECTION: Note deletion
 -- =============================================================================
 
+--- Switch every non-float window in the current tabpage that is showing
+--- `bufnr` to its alternate buffer, another listed buffer, or a new empty
+--- buffer. Mirrors the detach_buf_from_wins helper in ui.lua; applied here
+--- before bdelete! to prevent the window layout from collapsing.
+local function _detach_buf_from_wins(bufnr)
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_get_config(win).relative == ''
+    and vim.api.nvim_win_get_buf(win) == bufnr then
+      vim.api.nvim_win_call(win, function()
+        local alt = vim.fn.bufnr('#')
+        if alt > 0 and alt ~= bufnr
+        and vim.api.nvim_buf_is_valid(alt)
+        and vim.bo[alt].buflisted then
+          vim.cmd('noautocmd buffer ' .. alt)
+          return
+        end
+        for _, b in ipairs(vim.api.nvim_list_bufs()) do
+          if b ~= bufnr
+          and vim.api.nvim_buf_is_valid(b)
+          and vim.bo[b].buflisted
+          and vim.api.nvim_buf_get_name(b) ~= '' then
+            vim.cmd('noautocmd buffer ' .. b)
+            return
+          end
+        end
+        vim.cmd('noautocmd enew')
+      end)
+    end
+  end
+end
+
 --- Delete or trash the current note.
 --- With trash.enabled = true (default): moves to .pkm-trash/ and preserves
 --- backlinks; use :PKMRestoreNote to undo or :PKMEmptyTrash to permanently
@@ -195,8 +226,13 @@ function M.delete_note_safely()
     return
   end
 
+  -- Detach the buffer from all windows before deletion so the layout
+  -- is never disrupted (same pattern as ui.lua's detach_buf_from_wins).
+  local bufnr = vim.fn.bufnr('%')
+  _detach_buf_from_wins(bufnr)
+
   if trash_enabled then
-    vim.cmd('bdelete!')
+    vim.cmd('bdelete! ' .. bufnr)
     local trash = require('pkm.trash')
     if trash.trash_note(filepath) then
       require('pkm.index').invalidate(filepath)
@@ -209,7 +245,7 @@ function M.delete_note_safely()
     end
   else
     require('pkm.citations').cleanup_deleted_note(filepath)
-    vim.cmd('bdelete!')
+    vim.cmd('bdelete! ' .. bufnr)
     if vim.fn.delete(filepath) == 0 then
       require('pkm.index').invalidate(filepath)
       require('pkm.views').refresh_sidebar_if_open()

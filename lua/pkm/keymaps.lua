@@ -78,6 +78,38 @@ function M.register(config)
       { desc = 'PKM: toggle PKM mode', silent = true })
   end
 
+  if k.toggle_file_explorer then
+    vim.keymap.set('n', k.toggle_file_explorer, function()
+      local views   = require('pkm.views')
+      local cfg     = require('pkm').config
+      local width   = cfg.sidebar_width or 40
+      local pkm_dir = vim.fn.fnameescape(cfg.root_path)
+
+      -- Detect any open netrw window in the current tabpage.
+      local netrw_win = nil
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if vim.api.nvim_win_get_config(win).relative == '' then
+          if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'netrw' then
+            netrw_win = win; break
+          end
+        end
+      end
+
+      if views.is_sidebar_open() then
+        -- PKM sidebar → close it, open netrw at the same width on the left.
+        views.open_sidebar()   -- no-arg call toggles closed
+        vim.cmd(string.format('topleft %dvsplit %s', width, pkm_dir))
+      elseif netrw_win then
+        -- Netrw open → close it, restore the PKM sidebar.
+        vim.api.nvim_win_close(netrw_win, false)
+        views.open_sidebar()
+      else
+        -- Neither open → open PKM sidebar (default).
+        views.open_sidebar()
+      end
+    end, { desc = 'PKM: toggle netrw file explorer / views sidebar', silent = true })
+  end
+
   -- --------------------------------------------------------------------------
   -- KEYMAPS: markdown editing
   -- -------------------------------------------------------------------------- 

@@ -4,6 +4,48 @@
 
 ## [Unreleased]
 
+### Known Bugs (queued)
+
+- `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
+  malformed paths when `bench_dir` is a Unix-style path (e.g. `/tmp/pkm_bench`).
+  Files are still created correctly because `vim.fn.mkdir`/`glob` tolerate
+  mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
+  the correct separator for the path type, or document that `bench_dir` must use
+  the native separator.
+
+- `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
+  defined view to build the viewed-path set). `bench.views_suite` was run at
+  10k notes: overview costs V × 3.1ms (50 views → 158ms, 300 views → 935ms).
+  At current real corpus scale (hundreds of notes, tens of views) the cost is
+  negligible. `_match_cache` is deferred: revisit if corpus reaches ~5k notes
+  or view count exceeds ~200 with observed latency.
+
+### Benchmarks 
+
+#### Post-index integration (bench_dir on NTFS/WSL, P: drive)
+
+  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
+  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
+  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
+  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
+    filesystem speed, not a regression.
+
+### Views_suite (NTFS/WSL, P: drive, synthetic notes)
+
+  - Scaling is perfectly linear: ms/view is constant across all view counts.
+  - 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
+    → 3087ms  (~3.1ms/view)
+  - 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
+    →  130ms  (~0.13ms/view)
+  - JIT accounts for ~2–3× speedup between cold and warm runs at same note
+    count.
+  - Caching decision: not warranted at current scale. Revisit at ~5k notes or
+    ~200+ views.
+
+---
+
+## [1.5.0] - 2026-6-15
+
 ### Decisions
 - **Trash isolation over OS integration** — PKM trash is a self-contained
   `.pkm-trash/` folder inside the root rather than the OS recycling bin.
@@ -33,12 +75,26 @@
   injection, and context-aware highlighting work.
 
 ### Added
+- **Creation commands respect window context** — `:PKMNewNote`, `:PKMNewJournal`,
+  `:PKMNewScratchpad`, `:PKMImport` now call `focus_main_win()` before opening
+  any buffer. When the current window is the PKM sidebar (`pkm-sidebar`),
+  buffer panel (`pkm-bufpanel`), or netrw file explorer, focus switches to the
+  nearest non-panel non-float window, or a new split is created if none exists.
+  Pressing `<leader>nn` (or any creation keymap) from the sidebar, buffer panel,
+  or netrw now opens the new note in the main editing area.
+
+- **`config.keymaps.toggle_file_explorer`** (default `"<leader>nE"`) — cycles
+  between the PKM views sidebar and a netrw file explorer (`:topleft vsplit`
+  over `root_path`). PKM sidebar open → close sidebar, open netrw at the same
+  width; netrw open → close netrw, open PKM sidebar; neither → open PKM sidebar.
+
 - **Trash autoclear** — `config.trash.max_age_days` (default 60; 0 = disabled).
   `trash.M.purge_old()` is called via `vim.defer_fn` (5 s after startup),
   permanently deletes manifest entries older than the threshold, and strips
   their backlinks. Manifest entries now include `deleted_timestamp` (Unix
   epoch) for accurate comparison; legacy entries without this field fall back
   to parsing `deleted_at` date string.
+
 - **Phase 5: Trash system** — `:PKMDeleteNote` with `trash.enabled = true`
   (default) now moves notes to `{root}/.pkm-trash/` instead of permanently
   deleting them. Backlinks in other notes are NOT stripped on trash — they are
@@ -77,15 +133,25 @@
   normal mode uses paragraph bounds.
 
 ### Fixed
+- **`:PKMDeleteNote` leaves dead space when last buffer is closed** — `bdelete!`
+  was called while the note buffer was still shown in its window. If the buffer
+  panel was open, the layout collapsed or repositioned. Root cause identical to
+  the buffer-panel `d`/`D`/`w` fix. Added `_detach_buf_from_wins(bufnr)` local
+  helper in `init.lua`; called before every `bdelete!` in `delete_note_safely`.
+  Uses the same alternate-buffer → listed-buffer → `enew` priority as `ui.lua`.
+
 - **`filter.lua` `type:` predicate never matched** — `elseif field == 'type'`
   used an undefined variable (`field`; should be `tree.field`). Predicate
   silently evaluated false for all notes.
+
 - **`sidebar_show_help` width 38 instead of 44** — duplicate `local width`
   declaration; second shadowed first, clipping the `<C-t>` line. Fixed to 44.
+
 - **`refresh_sidebar_if_open` nil error when window destroyed externally** —
   extra `end` placed the three buffer-write API calls outside the valid-window
   `else` block; with `lines` out of scope (nil), `nvim_buf_set_lines` errored.
   Removed the extra `end`; write operations are now correctly inside `else`.
+
 - **Note numbers reused after deletion** — `get_next_note_number()` only
   scanned the consolidated folder; if the highest-numbered note was trashed,
   the number would be reused by the next new note, conflicting with a later
@@ -96,6 +162,7 @@
   it instead of the intended main editing window. Added a buffer-local no-op
   for `<C-s>` in the sidebar buffer; buffer-local keymaps take precedence over
   globals, so the split command is suppressed while the sidebar has focus.
+
 - **`renumber_sequence`: `list_bold_line` family** — detects `**N. body**`
   (double asterisks wrapping the whole ordered list item) as a distinct family.
   Detection comes before `list_emph` in the detection order. Renumbering
@@ -501,45 +568,7 @@
   `nvim_buf_is_valid` guard (previously only `if bufnr then`). This also
   consolidates the three keymaps to share the detach helper.
 
-### Known Bugs (queued)
-
-- `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
-  malformed paths when `bench_dir` is a Unix-style path (e.g. `/tmp/pkm_bench`).
-  Files are still created correctly because `vim.fn.mkdir`/`glob` tolerate
-  mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
-  the correct separator for the path type, or document that `bench_dir` must use
-  the native separator.
-
-- `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
-  defined view to build the viewed-path set). `bench.views_suite` was run at
-  10k notes: overview costs V × 3.1ms (50 views → 158ms, 300 views → 935ms).
-  At current real corpus scale (hundreds of notes, tens of views) the cost is
-  negligible. `_match_cache` is deferred: revisit if corpus reaches ~5k notes
-  or view count exceeds ~200 with observed latency.
-
-
-
-### Benchmarks 
-
-#### Post-index integration (bench_dir on NTFS/WSL, P: drive)
-
-  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
-  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
-  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
-  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
-    filesystem speed, not a regression.
-
-### Views_suite (NTFS/WSL, P: drive, synthetic notes)
-
-  - Scaling is perfectly linear: ms/view is constant across all view counts.
-  - 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
-    → 3087ms  (~3.1ms/view)
-  - 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
-    →  130ms  (~0.13ms/view)
-  - JIT accounts for ~2–3× speedup between cold and warm runs at same note
-    count.
-  - Caching decision: not warranted at current scale. Revisit at ~5k notes or
-    ~200+ views.
+---
 
 ## [1.4.1] - 2026-6-8
 
@@ -605,6 +634,8 @@
   `_pending_marker`) removed from `markdown.lua`. `map_emphasis` and all
   `wrap_*` keymap slots removed from `keymaps.lua` and `config.lua`. Use
   vim-surround for all wrapping operations.
+
+---
 
 ## [1.4.0] - 2026-6-7
 
@@ -715,6 +746,8 @@
   the integer as the completion type argument and errored. Fix: extra parentheses
   `(name_part:gsub('_', ' '))` discard the second return value.
 
+---
+
 ## [1.3.3] - 2026-6-7
 
 ### Added
@@ -764,6 +797,8 @@
   `build_tree_entries()` while still allowing exact substring filtering on
   view names via the prompt.
 
+---
+
 ## [1.3.2] - 2026-6-7
 
 ### Added
@@ -793,6 +828,8 @@
   of a `vim.notify` comma list. Previous behaviour was unreadable beyond a
   handful of views.
 - Config: `keymaps.view_list` (default `"<leader>nv"`).
+
+---
 
 ## [1.3.0] - 2026-6-6
 
@@ -975,6 +1012,7 @@
   design. The `BufReadPost` call had already been commented out. Function body
   deleted from `journal.lua`; commented-out call removed from `init.lua`.
 
+---
 
 ## [1.2.1] — 2026-05-28
 
@@ -1059,6 +1097,8 @@
 
 - **`M.template_picker` stub** in `templates.lua` — empty function, never
   called externally, listed as dead code since 1.1.3. Deleted.
+
+---
 
 ## [1.2.0, dev-view] - 2026-5-16
 
