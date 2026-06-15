@@ -137,6 +137,10 @@ function M.setup_sync_autocmds()
           -- noautocmd suppresses Syntax/FileType autocmds; re-fire Syntax only
           -- so modeline scanning cannot trigger.
           vim.cmd('doautocmd Syntax')
+          -- Restart PKM tree-sitter if active; noautocmd e stops it implicitly.
+          if require('pkm.mode').is_active() then
+            pcall(vim.treesitter.start, written_buf, 'markdown')
+          end
         end)
       end)
     end,

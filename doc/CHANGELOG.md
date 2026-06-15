@@ -242,6 +242,51 @@
   1.4.1 but defaults were not cleaned up.
 
 ### Fixed
+- **Unwanted conceal (backticks, link brackets, citation brackets)** — setting
+  `conceallevel = 2` in `setup_win_opts` activated ALL built-in tree-sitter
+  markdown conceal rules, including code span delimiters and link brackets,
+  causing `bib[0042]` to display as `bibnumber`. Removed `conceallevel` and
+  `concealcursor` settings entirely; removed wiki-link Conceal matchadd
+  patterns. Built-in tree-sitter markdown conceals are suppressed when
+  `conceallevel = 0` (Neovim default).
+
+- **YAML highlight colour** — yaml injection highlight groups mapped to
+  pink/magenta in kanagawa-wave. Added overrides in `setup_hl_groups()`:
+  `@property.yaml → Identifier`, `@string.yaml → Normal`,
+  `@punctuation.*.yaml → NonText`, `@boolean.yaml → Keyword`,
+  `@number.yaml → Number`.
+
+- **`[No Name]` and line/col counter in sidebar and bufpanel statuslines** —
+  lualine rendered its default statusline (filename + location) in these
+  windows. Fixed by setting `filetype = 'pkm-sidebar'` / `'pkm-bufpanel'` on
+  the buffers and overriding `statusline` via `vim.schedule` in a `WinEnter`
+  autocmd, which runs after lualine's handler and replaces it with a concise
+  hint line.
+
+- **Syntax highlighting disappears after saving** — `noautocmd e` in
+  `init.lua` BufWritePost reloads the buffer, which implicitly stops
+  tree-sitter. Added `pcall(vim.treesitter.start, written_buf, 'markdown')`
+  after the reload, guarded by `require('pkm.mode').is_active()`.
+
+- **Fold behavior — `+` indicator, no visible toggle key** — default
+  `foldtext` showed cryptic `+-- N lines: ---`. Replaced with
+  `M.foldtext()` showing `▸ frontmatter (N lines) [za toggle · zR open all]`.
+  Added `foldcolumn = '0'` to suppress gutter indicators. Documented `za`
+  (toggle), `zM` (close all), `zR` (open all) in sidebar help float. Note:
+  entering insert mode auto-opens folds (standard Neovim behaviour via
+  `foldopen`); `za` or `zM` re-closes them without requiring a save.
+
+- **Sidebar `/` search opens file over sidebar** — Telescope opened files in
+  the window from which it was invoked (the sidebar). The `/` keymap now
+  switches focus to the main editing window before invoking the picker, so
+  file selection opens there.
+
+- **Sidebar `<C-v>` keymap** — opens the note under cursor in a new vertical
+  split. Finds the nearest main editing window and splits it; falls back to
+  `rightbelow vsplit` if no other window exists. Available in detail mode only.
+
+- **Sidebar help float** — updated to include `<C-v>`, fold keymaps, and a
+  note that `/` now opens in the main window.
 - **`syntax.lua` parse error on load** — the Lua long string `[[\]\]]]`
   (pattern for wiki-link closing `]]`) was parsed incorrectly: the level-0
   long string scanner found `]]` inside the content (`\]` + first `]` of the

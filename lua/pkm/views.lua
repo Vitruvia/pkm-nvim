@@ -1465,16 +1465,20 @@ local function sidebar_switch_to_detail(name)
 end
 
 --- Open a compact help float listing all sidebar keymaps.
-local function sidebar_show_help()
-  local lines = {
+local lines = {
     '  <CR>    open note / enter view',
+    '  <C-v>   open note in vertical split',
     '  b       back (pop history)',
     '  <BS>    same as b',
     '  <C-b>   jump to overview',
-    '  /       search in current view',
+    '  /       search (opens in main window)',
     '  r       refresh',
     '  q       close sidebar',
     '  ?       this help',
+    '',
+    '  za      toggle frontmatter fold',
+    '  zM      close all folds',
+    '  zR      open all folds',
   }
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -1566,6 +1570,24 @@ function M.open_sidebar(name)
   }) do
     vim.api.nvim_set_option_value(opt, val, { buf = buf })
   end
+
+  vim.api.nvim_set_option_value('filetype', 'pkm-sidebar', { buf = buf })
+
+  local function refresh_sidebar_sl()
+    vim.schedule(function()
+      if vim.api.nvim_win_is_valid(t.win) then
+        vim.api.nvim_set_option_value(
+          'statusline',
+          '  PKM Views  · CR open  · / search  · za fold  · ? help  · q close',
+          { win = t.win })
+      end
+    end)
+  end
+  refresh_sidebar_sl()
+  vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
+    buffer   = buf,
+    callback = refresh_sidebar_sl,
+  })
 
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer   = buf,
@@ -1674,9 +1696,25 @@ function M.open_sidebar(name)
     end
   end, ko)
 
-  -- /: scoped search
+  -- /: scoped search — focus main window first so picker opens files there
   vim.keymap.set('n', '/', function()
-    local ct       = get_tab()
+    local ct = get_tab()
+    local target
+    local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
+    if alt_id ~= 0 and alt_id ~= ct.win
+    and vim.api.nvim_win_is_valid(alt_id)
+    and vim.api.nvim_win_get_config(alt_id).relative == '' then
+      target = alt_id
+    end
+    if not target then
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if win ~= ct.win
+        and vim.api.nvim_win_get_config(win).relative == '' then
+          target = win; break
+        end
+      end
+    end
+    if target then vim.api.nvim_set_current_win(target) end
     local has_tele = pcall(require, 'telescope')
     if ct.mode == 'detail' then
       local title = string.format('Search: %s', ct.name)
@@ -1688,6 +1726,34 @@ function M.open_sidebar(name)
     else
       if has_tele then require('pkm.telescope').browse()
       else             require('pkm.ui').browse() end
+    end
+  end, ko)
+
+  -- <C-v>: open note in a new vertical split (detail mode only)
+  vim.keymap.set('n', '<C-v>', function()
+    local ct  = get_tab()
+    if ct.mode ~= 'detail' then return end
+    local row = vim.api.nvim_win_get_cursor(ct.win)[1]
+    local idx = row - ct.header_count
+    if idx < 1 or idx > #ct.paths then return end
+    local path = ct.paths[idx]
+    if vim.fn.filereadable(path) == 0 then
+      vim.notify('[pkm] file no longer exists: ' .. vim.fn.fnamemodify(path, ':t'),
+        vim.log.levels.WARN)
+      return
+    end
+    local target
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if win ~= ct.win
+      and vim.api.nvim_win_get_config(win).relative == '' then
+        target = win; break
+      end
+    end
+    if target then
+      vim.api.nvim_set_current_win(target)
+      vim.cmd('vsplit ' .. vim.fn.fnameescape(path))
+    else
+      vim.cmd('rightbelow vsplit ' .. vim.fn.fnameescape(path))
     end
   end, ko)
 

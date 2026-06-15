@@ -336,7 +336,7 @@ its turn.
   fix; complements the search bar).
 - §9 conventions SPEC only (implementation is Phase 4).
 
-**(Currently here) Phase 2 — Foundations for the explorer UI.**
+**(Complete) Phase 2 — Foundations for the explorer UI.**
 - Near-term §4 per-tab-page window state — prerequisite for the unified UI,
   not a late polish item; promoted here.
 - §4 Sidebar readability improvements.
@@ -346,7 +346,7 @@ its turn.
   The per-tabpage window state from Item 1 remains the correct foundation
   if a navigator is ever reconsidered.
 
-**Phase 3 — Larger features.**
+**(Complete) Phase 3 — Larger features.**
 - §5 unified, toggleable explorer UI + auto-on/off policies.
 - §3 improved renumbering (nested / quoted / emphasis families).
 

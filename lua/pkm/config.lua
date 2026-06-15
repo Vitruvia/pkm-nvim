@@ -93,7 +93,7 @@ local defaults = {
   },
 
   symbols = {
-    { trigger = 'emdash', key = '<M-->', expansion = '—' },
+    { trigger = '^-', key = '<M-->', expansion = '—' },
     { trigger = '^$',   key = '<M-s>', expansion = '§' },
     { trigger = '^o',   key = '<M-o>', expansion = 'º' },
   },

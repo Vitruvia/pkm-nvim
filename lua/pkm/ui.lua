@@ -197,6 +197,24 @@ function M.toggle_bufpanel()
     vim.api.nvim_set_option_value(opt, val, { buf = buf })
   end
 
+  vim.api.nvim_set_option_value('filetype', 'pkm-bufpanel', { buf = buf })
+
+  local function refresh_bufpanel_sl()
+    vim.schedule(function()
+      if vim.api.nvim_win_is_valid(t.win) then
+        vim.api.nvim_set_option_value(
+          'statusline',
+          '  PKM Buffers  · CR open  · d close  · w save+close  · q close panel',
+          { win = t.win })
+      end
+    end)
+  end
+  refresh_bufpanel_sl()
+  vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
+    buffer   = buf,
+    callback = refresh_bufpanel_sl,
+  })
+
   local lines, buf_map = bufpanel_build_lines()
   t.map = buf_map
   vim.api.nvim_set_option_value('modifiable', true,  { buf = buf })

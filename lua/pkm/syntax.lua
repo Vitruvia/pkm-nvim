@@ -75,6 +75,14 @@ local function setup_hl_groups()
 
   -- §9 meta-comment highlight: ((text)) double-paren convention.
   vim.api.nvim_set_hl(0, 'PKMMetaComment', { link = 'Comment' })
+
+  -- YAML injection: replace distracting pink/magenta with subdued colours.
+  vim.api.nvim_set_hl(0, '@property.yaml',              { link = 'Identifier' })
+  vim.api.nvim_set_hl(0, '@string.yaml',                { link = 'Normal'     })
+  vim.api.nvim_set_hl(0, '@punctuation.delimiter.yaml', { link = 'NonText'    })
+  vim.api.nvim_set_hl(0, '@punctuation.special.yaml',   { link = 'NonText'    })
+  vim.api.nvim_set_hl(0, '@boolean.yaml',               { link = 'Keyword'    })
+  vim.api.nvim_set_hl(0, '@number.yaml',                { link = 'Number'     })
 end
 
 -- =============================================================================
@@ -105,11 +113,6 @@ local function setup_win_matches(win_id)
   add('PKMMetaComment',
     [=[\v\(\(.{-}\)\)]=],
     10, { window = win_id })
-
-  -- Wiki-link bracket conceal: hide [[ and ]] delimiters.
-  -- conceallevel must be >= 1 (set in setup_win_opts) for conceal to render.
-  add('Conceal', [=[\[\[]=], 10, { window = win_id, conceal = '' })
-  add('Conceal', [=[\]\]]=], 10, { window = win_id, conceal = '' })
 
   _win_matches[win_id] = ids
 end
@@ -142,12 +145,9 @@ local function setup_win_opts(win_id)
     vim.wo.foldexpr    = "v:lua.require('pkm.syntax').foldexpr(v:lnum)"
     vim.wo.foldenable  = true
     vim.wo.foldlevel   = 0
+    vim.wo.foldcolumn = '0'
+    vim.wo.foldtext   = "v:lua.require('pkm.syntax').foldtext()"
 
-    -- Wiki-link bracket conceal.
-    -- conceallevel=2: conceal cchar replaces the text (brackets disappear).
-    -- concealcursor='': reveal conceal on cursor line in all modes (safe for editing).
-    vim.wo.conceallevel  = 2
-    vim.wo.concealcursor = ''
   end)
 end
 
@@ -160,8 +160,8 @@ local function teardown_win_opts(win_id)
     vim.wo.foldexpr      = ''
     vim.wo.foldenable    = false
     vim.wo.foldlevel     = 0
-    vim.wo.conceallevel  = 0
-    vim.wo.concealcursor = ''
+    vim.wo.foldcolumn = vim.o.foldcolumn
+    vim.wo.foldtext   = ''
   end)
 end
 
@@ -228,6 +228,14 @@ end
 -- =============================================================================
 -- SECTION: Public API
 -- =============================================================================
+--
+--- Fold text for the closed frontmatter fold.
+--- Called by Neovim as: v:lua.require('pkm.syntax').foldtext()
+---@return string
+function M.foldtext()
+  local n = vim.v.foldend - vim.v.foldstart + 1
+  return string.format('  ▸ frontmatter  (%d lines)  [za toggle · zR open all]', n)
+end
 
 --- Activate PKM-specific tree-sitter highlighting on the given buffer.
 --- Idempotent: safe to call when already active.
