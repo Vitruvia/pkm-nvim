@@ -64,7 +64,8 @@ local function bufpanel_build_lines()
     and vim.api.nvim_buf_is_valid(bufnr)
     and vim.bo[bufnr].buflisted
     and vim.bo[bufnr].buftype == ''
-    and vim.bo[bufnr].filetype ~= 'netrw' then
+    and vim.bo[bufnr].filetype ~= 'netrw'
+    and vim.fn.isdirectory(vim.api.nvim_buf_get_name(bufnr)) == 0 then
       local name = vim.api.nvim_buf_get_name(bufnr)
       if name ~= '' then listed[#listed + 1] = bufnr end
     end
