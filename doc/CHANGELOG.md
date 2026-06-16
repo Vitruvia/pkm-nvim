@@ -44,6 +44,53 @@
 
 ---
 
+## [1.5.2] - 2026-6-15
+
+### Fixed
+
+- **TS `end_row out of range` on line deletion** — deleting lines with `dd`
+  or `d{motion}` left tree-sitter extmarks referencing rows that no longer
+  existed, causing repeated highlighter errors. Root cause: only programmatic
+  writes (via `renumber_sequence`) restarted TS; normal editing did not.
+  Fix: `TextChanged` + `TextChangedI` autocmds in `syntax.M.enable` now
+  schedule `parser:parse()` after every buffer change, forcing an incremental
+  re-parse before the decoration provider next runs.
+
+- **Frontmatter fold closes after save** — `vim.treesitter.start` called in
+  `BufWritePost` re-evaluated all fold expressions, resetting `foldlevel` to 0
+  and closing user-opened folds. `winsaveview`/`winrestview` do not preserve
+  fold open/closed state. Fix: `BufWritePost` now saves `foldclosed(1)` for
+  every non-float window showing the written buffer before the TS restart, then
+  in a `vim.schedule` callback reopens folds (`zR`) in any window where they
+  were open before the save. Per-window, so two splits with different fold
+  states are handled independently.
+
+### Added
+
+- **Buffer panel `colorcolumn` cleared** — the 80-column highlight (set
+  globally in user config) was visible in the buffer panel window.
+  `vim.api.nvim_set_option_value('colorcolumn', '', { win = t.win })` added
+  after the window-options loop in `toggle_bufpanel`.
+
+- **Buffer panel window indicators** — each buffer entry now shows which main
+  editing window(s) currently display it: `w1`, `w2`, etc. Windows are
+  numbered in tabpage order, excluding panels (sidebar, bufpanel, netrw) and
+  floats. A buffer open in two splits shows `w1,w2` adjacent to its title.
+
+- **PKMCitation bold highlight** — `setup_hl_groups` now reads Special's
+  foreground at definition time and defines `PKMCitation` as
+  `{ fg = sp.fg, bold = true }` rather than a plain link to Special. This
+  makes citations visually distinct even when nested inside outer bracket
+  structures (e.g. `[CF/88 (bib[0035]) Art. 165]`). Falls back to
+  `{ link = 'Special' }` if Special has no explicit fg. Refreshed on
+  `ColorScheme` via the existing autocmd.
+
+- **Foldtext simplified** — `M.foldtext()` now returns
+  `▸ frontmatter (N lines)` without key hints. Fold commands documented in
+  `pkm.txt` section 7 instead.
+
+---
+
 ## [1.5.1] - 2026-6-15
 
 ### Fixed

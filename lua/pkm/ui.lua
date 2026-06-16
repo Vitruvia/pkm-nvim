@@ -74,17 +74,36 @@ local function bufpanel_build_lines()
   local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  w save+close  q close panel' }
   local buf_map = {}
 
+  -- Map bufnr → window label(s) for non-panel windows currently showing it.
+  -- Windows are numbered w1, w2… in tabpage order, excluding panels and floats.
+  local win_labels = {}
+  local win_num    = 0
+  local _PANEL_FT  = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_get_config(win).relative == '' then
+      if not _PANEL_FT[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+        win_num = win_num + 1
+        local wbuf = vim.api.nvim_win_get_buf(win)
+        if not win_labels[wbuf] then win_labels[wbuf] = {} end
+        table.insert(win_labels[wbuf], 'w' .. win_num)
+      end
+    end
+  end
+
   for i, bufnr in ipairs(listed) do
     local name     = vim.api.nvim_buf_get_name(bufnr)
-    local modified = vim.bo[bufnr].modified and ' [+]' or '    '
+    local modified = vim.bo[bufnr].modified and ' [+]' or ''
+    local wlabel   = win_labels[bufnr]
+                     and (' ' .. table.concat(win_labels[bufnr], ','))
+                     or ''
     local entry    = index.get(name)
     local display
     if entry then
-      display = string.format('  %3d  %s %s%s',
-        i, type_prefix(entry.note_type), entry.title, modified)
+      display = string.format('  %3d  %s %s%s%s',
+        i, type_prefix(entry.note_type), entry.title, wlabel, modified)
     else
-      display = string.format('  %3d  %s %s%s',
-        i, type_prefix('file'), vim.fn.fnamemodify(name, ':t'), modified)
+      display = string.format('  %3d  %s %s%s%s',
+        i, type_prefix('file'), vim.fn.fnamemodify(name, ':t'), wlabel, modified)
     end
     lines[#lines + 1] = display
     buf_map[#lines]   = bufnr
@@ -198,6 +217,7 @@ function M.toggle_bufpanel()
   }) do
     vim.api.nvim_set_option_value(opt, val, { win = t.win })
   end
+  vim.api.nvim_set_option_value('colorcolumn', '', { win = t.win })  -- ← add
 
   for opt, val in pairs({
     bufhidden = 'wipe', buftype = 'nofile', swapfile = false,

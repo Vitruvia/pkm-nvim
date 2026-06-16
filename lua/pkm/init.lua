@@ -140,7 +140,30 @@ function M.setup_sync_autocmds()
           vim.cmd('doautocmd Syntax')
           -- Restart PKM tree-sitter if active; noautocmd e stops it implicitly.
           if require('pkm.mode').is_active() then
+            -- Save per-window frontmatter fold state before TS restart.
+            -- foldclosed(1) == -1 means line 1 (opening ---) is in an open fold.
+            local fold_states = {}
+            for _, win in ipairs(vim.api.nvim_list_wins()) do
+              if vim.api.nvim_win_get_buf(win) == written_buf
+              and vim.api.nvim_win_get_config(win).relative == '' then
+                fold_states[win] = vim.api.nvim_win_call(win,
+                  function() return vim.fn.foldclosed(1) == -1 end)
+              end
+            end
+
             pcall(vim.treesitter.start, written_buf, 'markdown')
+
+            -- Restore: TS restart closes all folds; reopen per window if they were open.
+            vim.schedule(function()
+              if not vim.api.nvim_buf_is_valid(written_buf) then return end
+              for win, was_open in pairs(fold_states) do
+                if vim.api.nvim_win_is_valid(win) and was_open then
+                  vim.api.nvim_win_call(win, function()
+                    vim.cmd('silent! normal! zR')
+                  end)
+                end
+              end
+            end)
           end
         end)
       end)

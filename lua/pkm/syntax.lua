@@ -70,8 +70,14 @@ local function setup_hl_groups()
   -- queries/markdown/highlights.scm); link to Normal so it reads as text.
   vim.api.nvim_set_hl(0, '@pkm.indented.markdown', { link = 'Normal' })
 
-  -- In-text citation highlight. Linked to Special; users may override.
-  vim.api.nvim_set_hl(0, 'PKMCitation', { link = 'Special' })
+  -- PKMCitation: Special foreground + bold so citations pop inside nested brackets.
+  -- Read Special's fg at definition time; refresh via ColorScheme autocmd.
+  local sp = vim.api.nvim_get_hl(0, { name = 'Special', link = false })
+  if sp and sp.fg then
+    vim.api.nvim_set_hl(0, 'PKMCitation', { fg = sp.fg, bold = true })
+  else
+    vim.api.nvim_set_hl(0, 'PKMCitation', { link = 'Special' })
+  end
 
   -- §9 meta-comment highlight: ((text)) double-paren convention.
   vim.api.nvim_set_hl(0, 'PKMMetaComment', { link = 'Comment' })
@@ -231,7 +237,7 @@ end
 ---@return string
 function M.foldtext()
   local n = vim.v.foldend - vim.v.foldstart + 1
-  return string.format('  ▸ frontmatter  (%d lines)  [za toggle · zR open all]', n)
+  return '▸ frontmatter (' .. n .. ' lines)'
 end
 
 --- Activate PKM-specific tree-sitter highlighting on the given buffer.
@@ -284,7 +290,22 @@ function M.enable(bufnr)
     buffer   = bufnr,
     callback = function() vim.b[bufnr]._pkm_fm_end = nil end,
   })
-end
+
+  -- Force incremental re-parse on every buffer change so TS extmarks stay
+  -- within current buffer bounds. Without this, dd/d{motion} leave stale
+  -- row references that trigger 'end_row out of range' in the highlighter.
+  vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
+    group    = ag,
+    buffer   = bufnr,
+    callback = function()
+      vim.schedule(function()
+        if not vim.api.nvim_buf_is_valid(bufnr) then return end
+        local ok, parser = pcall(vim.treesitter.get_parser, bufnr, 'markdown')
+        if ok and parser then pcall(function() parser:parse() end) end
+      end)
+    end,
+  })
+  end
 
 --- Deactivate PKM-specific highlighting and restore default Vimscript syntax.
 --- Idempotent: safe to call when already inactive.

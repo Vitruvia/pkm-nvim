@@ -389,8 +389,13 @@ interface and PKM-specific syntax highlighting.
 SYNTAX HIGHLIGHTING (PKM MODE)~
 
 When active, PKM Mode enables tree-sitter-based highlighting:
-  • Frontmatter `---…---` block folded by default; `za` to toggle, `zM` to
-    close all, `zR` to open all. Foldtext: `▸ frontmatter (N lines) [za toggle]`
+  • Frontmatter `---…---` block folded by default.
+    Fold commands (cursor must be on or inside the frontmatter):
+      za   toggle fold (open if closed, close if open)
+      zR   open all folds (expand frontmatter)
+      zM   close all folds (re-hide frontmatter)
+    Note: entering insert mode auto-opens folds (standard Neovim behaviour);
+    use za or zM to re-close without saving.
   • `note[0042]`, `bib[0003]` etc. highlighted as PKMCitation (→ Special)
   • `((text))` double-paren meta-comments highlighted as PKMMetaComment (→ Comment)
   • YAML frontmatter syntax via injected yaml parser (if installed)

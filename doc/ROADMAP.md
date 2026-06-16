@@ -386,44 +386,6 @@ No items currently in active development. All implementation phases are complete
 
 ---
 
-### Implementation Phases (complete)
-
-**(Complete) Phase 0 — Bug triage.**
-`:PKMBrowse` nargs fix; cross-citation modified-buffer write-through (data loss);
-buffer-panel E32 and phantom-window bugs.
-
-**(Complete) Phase 1 — Core search + small self-contained features.**
-Filter `any` predicate; live `:PKMBrowse`; delete `:PKMSearch`; metadata commands
-(`:PKMSetTitle`, `:PKMAddTag`, `:PKMRemoveTag`); `:PKMOrphans`; `:PKMViewUpdate`
-rename/reparent; `:PKMBrowseRecent`; filter autocomplete; §9 conventions spec.
-
-**(Complete) Phase 2 — Foundations for the explorer UI.**
-Per-tabpage sidebar and bufpanel state; sidebar readability improvements;
-`bench.views_suite` (gate measurement for `_match_cache`).
-Notes-navigator sidebar: **CUT** (netrw covers filesystem navigation).
-
-**(Complete) Phase 3 — Larger features.**
-Unified explorer UI (`PKMMode`, `PKMExplorer`); improved `renumber_sequence`
-(nested lists, blockquotes, emphasis families, `list_bold_line`); PKM mode
-session lifecycle.
-
-**(Complete) Phase 4 — Markdown presentation.**
-Syntax mechanism decision: bundled tree-sitter queries chosen over Vimscript
-consolidation. Frontmatter folding/foldtext. Citation and meta-comment highlighting.
-`@pkm.indented` capture (suppress 4-space code colour). List marker depth fix.
-§9 conventions implementation (PKMCitation, PKMMetaComment via matchadd).
-
-**(Complete) Phase 5 — Trash and list conversion.**
-Soft-delete trash system (`trash.lua`; `.pkm-trash/`; manifest with auto-purge).
-`:PKMConvertList` (ordered ↔ unordered; depth prompt; mixed-list prompt).
-`filter.lua` `type:` predicate. Sidebar `<C-t>` type filter. Sidebar `<C-s>` no-op.
-Note numbering skips trashed entries.
-
-**Deferred from Phase 5** (moved to Distant Additions):
-`preview.lua`, persistent index, review queue, `_match_cache` (bench shows not warranted).
-
----
-
 ### Next Steps
 
 No implementation items are currently queued. All planned phases are complete.
@@ -438,6 +400,10 @@ to act on them without cross-referencing the conversation history.
 - **Explorer UI customisation** — positions and width of each panel; auto-on/off
   triggers by directory, CWD, or buffer type; other layout options users may need.
   Deferred from Phase 3.
+
+- Improved help panel with main keymaps for PKM (the current panel is sidebar
+  only). This panel would have to update depending on how the user customizes
+  their config, so this change is related to "Explorer UI Customisation".
 
 - **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
