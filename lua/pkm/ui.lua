@@ -252,7 +252,7 @@ function M.toggle_bufpanel()
 
   t.augroup = vim.api.nvim_create_augroup(
     'PKMBufPanel_' .. my_tab_id, { clear = true })
-  for _, event in ipairs({ 'BufAdd', 'BufDelete', 'BufWipeout', 'BufModifiedSet' }) do
+  for _, event in ipairs({ 'BufAdd', 'BufDelete', 'BufWipeout', 'BufModifiedSet', 'BufEnter' }) do
     vim.api.nvim_create_autocmd(event, {
       group    = t.augroup,
       callback = function() vim.schedule(bufpanel_refresh) end,

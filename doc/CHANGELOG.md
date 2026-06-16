@@ -65,6 +65,13 @@
   were open before the save. Per-window, so two splits with different fold
   states are handled independently.
 
+- **Buffer panel window markers stale after buffer switch** — the `w1`/`w2`
+  indicators only updated when a buffer was added or deleted (`BufAdd`,
+  `BufDelete`). Switching a window to an already-open buffer (via panel `<CR>`
+  or sidebar navigation) fires neither event, so the markers did not move.
+  Added `BufEnter` to the refresh autocmd list; the panel now re-evaluates
+  the window-to-buffer mapping on every buffer switch.
+
 ### Added
 
 - **Buffer panel `colorcolumn` cleared** — the 80-column highlight (set
