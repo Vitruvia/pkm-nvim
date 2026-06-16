@@ -85,7 +85,7 @@ local function bufpanel_build_lines()
         win_num = win_num + 1
         local wbuf = vim.api.nvim_win_get_buf(win)
         if not win_labels[wbuf] then win_labels[wbuf] = {} end
-        table.insert(win_labels[wbuf], 'w' .. win_num)
+        table.insert(win_labels[wbuf], '<- w' .. win_num)
       end
     end
   end
