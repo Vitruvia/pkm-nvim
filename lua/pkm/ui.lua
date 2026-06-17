@@ -15,6 +15,9 @@
 --                               sorted by view membership and shared tags
 --   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
 --   show_stats()             → Show note counts via vim.notify
+--   get_display_mode()    → 'filename' | 'title'
+--   toggle_display_mode() → toggle and return new mode
+--   refresh_bufpanel()    → refresh panel from outside
 --   toggle_bufpanel()  → toggle the persistent bottom buffer-list panel (per-tabpage)
 --   is_bufpanel_open()   → boolean, whether buffer panel is open in current tabpage
 -- =============================================================================
@@ -22,6 +25,7 @@ local M = {}
 
 local utils = require('pkm.utils')
 local config = {}
+local _display_mode = 'filename'  -- 'filename' | 'title'
 
 -- Per-tabpage bufpanel state. Keyed by nvim_get_current_tabpage().
 local _tabs = {}
@@ -99,8 +103,10 @@ local function bufpanel_build_lines()
     local entry    = index.get(name)
     local display
     if entry then
+      local label = (_display_mode == 'title' and entry.title ~= '')
+                    and entry.title or entry.filename
       display = string.format('  %3d  %s %s%s%s',
-        i, type_prefix(entry.note_type), entry.title, wlabel, modified)
+        i, type_prefix(entry.note_type), label, wlabel, modified)
     else
       display = string.format('  %3d  %s %s%s%s',
         i, type_prefix('file'), vim.fn.fnamemodify(name, ':t'), wlabel, modified)
@@ -181,6 +187,24 @@ local function detach_buf_from_wins(bufnr)
       end)
     end
   end
+end
+
+--- Return the current note label display mode.
+---@return string  'filename' | 'title'
+function M.get_display_mode()
+  return _display_mode
+end
+
+--- Toggle between filename and title display. Returns the new mode.
+---@return string
+function M.toggle_display_mode()
+  _display_mode = (_display_mode == 'filename') and 'title' or 'filename'
+  return _display_mode
+end
+
+--- Refresh the buffer panel from outside this module.
+function M.refresh_bufpanel()
+  bufpanel_refresh()
 end
 
 --- Toggle the persistent bottom buffer-list panel.
@@ -345,6 +369,13 @@ function M.toggle_bufpanel()
     vim.notify('[pkm] buffer panel refreshed', vim.log.levels.INFO)
   end, ko)
 
+  vim.keymap.set('n', 'T', function()
+    local mode = M.toggle_display_mode()
+    bufpanel_refresh()
+    require('pkm.views').refresh_sidebar_if_open()
+    vim.notify('[pkm] note labels: ' .. mode, vim.log.levels.INFO)
+  end, ko)
+
   local function close_panel()
     local ct = get_tab()
     if ct.win and vim.api.nvim_win_is_valid(ct.win) then
@@ -370,6 +401,7 @@ end
 ---@param user_config table Resolved PKM config from pkm.config.resolve()
 function M.setup(user_config)
   config = user_config
+  _display_mode = (user_config.display_mode == 'title') and 'title' or 'filename'
   local augroup = vim.api.nvim_create_augroup('PKMUITabs', { clear = true })
   vim.api.nvim_create_autocmd('TabClosed', {
     group    = augroup,

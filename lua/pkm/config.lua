@@ -99,7 +99,7 @@ local defaults = {
     { trigger = '^o',   key = '<M-o>', expansion = 'º' },
   },
 
-  -- PKM Mode
+  -- PKM Mode and Explorer UI
   pkm_mode = {
     triggers = {
       open_note = true,   -- activate when any PKM note is opened (BufReadPost)
@@ -116,6 +116,8 @@ local defaults = {
       enabled = true,     -- enable PKM syntax highlighting on activation
     },
   },
+
+  display_mode = 'filename',   -- 'filename' | 'title'; default label in panels and sidebar
 
   -- Trash
   trash = {

@@ -166,7 +166,10 @@ function M.setup_sync_autocmds()
             end)
           end
         end)
-      end)
+        -- Index was already re-read synchronously; refresh sidebar so
+        -- tag/title/view-membership changes appear immediately.
+        require('pkm.views').refresh_sidebar_if_open()
+      end)   
     end,
   })
 

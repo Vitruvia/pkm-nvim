@@ -1417,11 +1417,18 @@ local function sidebar_build_lines(name, paths, total_count)
   local header_count = #lines
   local sorted       = sort_paths_by_type(paths)
 
+  local dm = require('pkm.ui').get_display_mode()
   for i, path in ipairs(sorted) do
     local entry     = index.get(path)
     local note_type = entry and entry.note_type or 'other'
-    local title     = entry and entry.title or vim.fn.fnamemodify(path, ':t:r')
-    lines[#lines + 1] = string.format('  %3d  %s %s', i, type_prefix(note_type), title)
+    local label
+    if entry then
+      label = (dm == 'title' and entry.title and entry.title ~= '')
+              and entry.title or entry.filename
+    else
+      label = vim.fn.fnamemodify(path, ':t:r')
+    end
+    lines[#lines + 1] = string.format('  %3d  %s %s', i, type_prefix(note_type), label)
   end
   if #sorted == 0 then
     lines[#lines + 1] = '  (no notes match)'
@@ -1490,25 +1497,26 @@ end
 --- Open a compact help float listing all sidebar keymaps.
 local function sidebar_show_help()
   local lines = {
-    '  <CR>    open note / enter view',
-    '  <C-v>   open note in vertical split',
-    '  <C-t>   cycle type filter  (all/n/a/b/j/s)',
-    '  b       back (pop history)',
-    '  <BS>    same as b',
-    '  <C-b>   jump to overview',
-    '  /       search (opens in main window)',
-    '  r       refresh',
-    '  q       close sidebar',
-    '  ?       this help',
+    '  <CR>     open note / enter view',
+    '  N<CR>    open note in window N (leftmost = 1)',
+    '  <C-v>    open note in new vertical split',
+    '  <C-t>    cycle type filter  (all/n/a/b/j/s)',
+    '  T        toggle filename / title labels',
+    '  b        back (pop history)',
+    '  <BS>     same as b',
+    '  <C-b>    jump to overview',
+    '  /        search (opens in main window)',
+    '  r        refresh',
+    '  q        close sidebar',
+    '  ?        this help',
   }
-  -- ...
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
   vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
 
-  local width  = 44
+  local width  = 50
   local height = #lines + 2
   local win    = vim.api.nvim_open_win(buf, true, {
     relative  = 'editor',
@@ -1586,6 +1594,9 @@ function M.open_sidebar(name)
   }) do
     vim.api.nvim_set_option_value(opt, val, { win = t.win })
   end
+  -- winfixwidth is now set; equalize other windows so the sidebar does not
+  -- squeeze the leftmost editing window below a usable width.
+  vim.cmd('wincmd =')
 
   for opt, val in pairs({
     bufhidden = 'wipe', buftype = 'nofile', swapfile = false,
@@ -1655,18 +1666,52 @@ function M.open_sidebar(name)
       return
     end
 
+    local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
+
+    -- [count]<CR>: open in the Nth editing window (1 = leftmost), sorted left→right.
+    local count = vim.v.count
+    if count > 0 then
+      local editing_wins = {}
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if win ~= ct.win
+        and vim.api.nvim_win_get_config(win).relative == '' then
+          if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+            editing_wins[#editing_wins + 1] = win
+          end
+        end
+      end
+      table.sort(editing_wins, function(a, b)
+        return vim.api.nvim_win_get_position(a)[2]
+             < vim.api.nvim_win_get_position(b)[2]
+      end)
+      if count <= #editing_wins then
+        vim.api.nvim_set_current_win(editing_wins[count])
+        vim.cmd('edit ' .. vim.fn.fnameescape(path))
+      else
+        vim.notify(string.format('[pkm] no window %d (only %d editing window%s)',
+          count, #editing_wins, #editing_wins == 1 and '' or 's'),
+          vim.log.levels.WARN)
+      end
+      return
+    end
+
+    -- Default: prefer alternate window, fall back to first non-panel window.
     local target
     local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
     if alt_id ~= 0 and alt_id ~= ct.win
     and vim.api.nvim_win_is_valid(alt_id)
     and vim.api.nvim_win_get_config(alt_id).relative == '' then
-      target = alt_id
+      if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(alt_id)].filetype] then
+        target = alt_id
+      end
     end
     if not target then
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if win ~= ct.win
         and vim.api.nvim_win_get_config(win).relative == '' then
-          target = win; break
+          if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+            target = win; break
+          end
         end
       end
     end
@@ -1802,6 +1847,20 @@ function M.open_sidebar(name)
     vim.notify('[pkm] type filter: ' .. (ct.type_filter or 'all'), vim.log.levels.INFO)
   end, ko)
 
+  -- T: toggle filename/title display across sidebar and buffer panel
+  vim.keymap.set('n', 'T', function()
+    local ui_m = require('pkm.ui')
+    local mode = ui_m.toggle_display_mode()
+    local ct   = get_tab()
+    if ct.mode == 'overview' then
+      sidebar_switch_to_overview()
+    else
+      sidebar_switch_to_detail(ct.name)
+    end
+    ui_m.refresh_bufpanel()
+    vim.notify('[pkm] note labels: ' .. mode, vim.log.levels.INFO)
+  end, ko)
+
   -- ?: show sidebar keymap help
   vim.keymap.set('n', '?', sidebar_show_help, ko)
 
@@ -1850,7 +1909,13 @@ function M.open_sidebar(name)
         local row = vim.api.nvim_win_get_cursor(ct.win)[1]
         local idx = row - ct.header_count
         if idx >= 1 and idx <= #ct.paths then
-          winbar = ' ' .. vim.fn.fnamemodify(ct.paths[idx], ':t')
+          local ui_m = require('pkm.ui')
+          local e    = require('pkm.index').get(ct.paths[idx])
+          if ui_m.get_display_mode() == 'title' and e and e.title and e.title ~= '' then
+            winbar = ' ' .. e.title
+          else
+            winbar = ' ' .. vim.fn.fnamemodify(ct.paths[idx], ':t:r')
+          end
         else
           local filter_label = ct.type_filter and ('  [' .. ct.type_filter .. ']') or ''
           winbar = ' ≡ ' .. (ct.name or '') .. filter_label

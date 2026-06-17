@@ -44,6 +44,55 @@
 
 ---
 
+## [1.5.3] - 2026-6-17
+
+### Fixed
+
+- **TS highlighter extmark out-of-range errors** — all four variants (end_row
+  on `dd`/`d{motion}`, end_col on bracket deletion, probabilistic on `J`, and
+  end_col on line deletion above a header) share the same root cause:
+  `parser:parse()` was deferred via `vim.schedule`, leaving stale extmarks
+  visible during the synchronous redraw that follows any buffer change.
+  Fix: removed `vim.schedule`; the parse now runs synchronously in the
+  `TextChanged`/`TextChangedI` callback. `parser:parse()` is incremental and
+  cannot trigger further change events.
+
+- **Sidebar/view panel not refreshed after metadata save** — `:PKMAddTag`,
+  `:PKMRemoveTag`, `:PKMSetTitle` are buffer-only; after `:w`, the index was
+  updated but `refresh_sidebar_if_open()` was never called. Notes remained
+  visible in views despite tag removal. Fix: `refresh_sidebar_if_open()`
+  added at the end of the PKMSync `BufWritePost` `vim.schedule` block.
+
+- **Sidebar opening squeezes leftmost editing window** — `topleft vsplit`
+  took space from the leftmost editing window; when two or more vertical splits
+  were present, setting the sidebar to its configured width left the remaining
+  windows narrower than expected. Fix: `vim.cmd('wincmd =')` called after
+  `winfixwidth` is set on the sidebar, redistributing remaining space equally
+  among unfixed editing windows.
+
+- **Sidebar `<CR>` could target bufpanel or netrw** — the fallback window
+  scan in the `<CR>` handler did not filter panel filetypes, so in edge cases
+  the buffer panel or netrw could be selected as the open target. Added
+  `_PANELS` filter to both the alternate-window check and the scan loop.
+
+### Added
+
+- **Filename / title display toggle** — `config.display_mode` (`'filename'`
+  default | `'title'`). All note labels in the sidebar, buffer panel, and
+  sidebar winbar respect this setting. Runtime toggle: `T` inside either
+  panel switches both simultaneously. New public functions in `ui.lua`:
+  `get_display_mode()`, `toggle_display_mode()`, `refresh_bufpanel()`.
+  Falls back to filename stem if title is empty.
+
+- **`[N]<CR>` window selection in sidebar** — pressing `N<CR>` (where N is
+  a count, e.g. `2<CR>`) opens the note in the Nth main editing window,
+  sorted left to right by column position. Warns if N exceeds the number of
+  available windows. Plain `<CR>` without a count retains existing behavior
+  (alternate window, then first non-panel window, then new split).
+
+
+---
+
 ## [1.5.2] - 2026-6-15
 
 ### Fixed

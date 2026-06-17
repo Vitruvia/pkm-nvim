@@ -298,14 +298,12 @@ function M.enable(bufnr)
     group    = ag,
     buffer   = bufnr,
     callback = function()
-      vim.schedule(function()
-        if not vim.api.nvim_buf_is_valid(bufnr) then return end
-        local ok, parser = pcall(vim.treesitter.get_parser, bufnr, 'markdown')
-        if ok and parser then pcall(function() parser:parse() end) end
-      end)
+      if not vim.api.nvim_buf_is_valid(bufnr) then return end
+      local ok, parser = pcall(vim.treesitter.get_parser, bufnr, 'markdown')
+      if ok and parser then pcall(function() parser:parse() end) end
     end,
-  })
-  end
+  }) 
+end 
 
 --- Deactivate PKM-specific highlighting and restore default Vimscript syntax.
 --- Idempotent: safe to call when already inactive.

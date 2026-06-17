@@ -397,38 +397,47 @@ to act on them without cross-referencing the conversation history.
 
 ### Distant Additions (mid-term to long-term)
 
-- **Explorer UI customisation** — positions and width of each panel; auto-on/off
+1. **Explorer UI customisation** — positions and width of each panel; auto-on/off
   triggers by directory, CWD, or buffer type; other layout options users may need.
-  Deferred from Phase 3.
 
-- Improved help panel with main keymaps for PKM (the current panel is sidebar
+2. Improved help panel with main keymaps for PKM (the current panel is sidebar
   only). This panel would have to update depending on how the user customizes
   their config, so this change is related to "Explorer UI Customisation".
 
-- **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
+3. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
-  (glow/mdcat). Deferred from Phase 5.
+  (glow/mdcat).
 
-- **Persistent index** — Serialize the in-memory index to disk (msgpack or JSON) with
+4. **Persistent index** — Serialize the in-memory index to disk (msgpack or JSON) with
   mtime-based incremental updates on startup. Needed only if startup scan time becomes
   unacceptable at very large corpus sizes (likely >50k notes). The current build cost
   is ~0.25 ms/note; at 500 notes (realistic current scale) that is ~125 ms, which is
   imperceptible. Run `bench.baseline()` on the real corpus before implementing this.
-  Deferred from Phase 5.
 
-- **`_match_cache` in views.lua** — Cache matched path arrays alongside filter trees.
+5. **`_match_cache` in views.lua** — Cache matched path arrays alongside filter trees.
   Makes repeated `match_all` calls O(1) until invalidation. Bench showed 3.1 ms/view at
   10k notes; not warranted at current scale. Revisit at ~5k notes or ~200+ views with
-  observed latency. Deferred from Phase 5.
+  observed latency.
 
-- **Note review queue** — Select and track notes intended for review. May include
+6. **Note review queue** — Select and track notes intended for review. May include
   organizers, separators, or filter interactions for priority/subject categorisation.
-  Deferred from Phase 5.
 
-- **Alternative diagram and imaging methods** — ASCII/text-based art and other portable
+7. **Alternative diagram and imaging methods** — ASCII/text-based art and other portable
   methods for enhancing notes without external image files. Any approach must be examined
   for human readability, AI/machine readability, and portability before implementation.
-  Deferred from Phase 3.
+  
+
+8. **Flexible note concealer**: a character or character sequence to mark the
+  beggining and ending of a text block to be concealed, such that the user
+  can decide what parts of their note they want to hide. Should work seamlessly
+  and not collide with frontmatter concealment and syntax highlighting.
+  1. Basic: conceals every line between the markers.
+  2. Advanced: an extra character sequence to mark that only the exact strings
+     between the markers should be concealed.
+  3. More advanced: the feature at § 8.2. works across lines (that is, if one or
+  more strings occupy more than one line, they get concealed, but not
+  the whole line (unless the markers contain all strings in any given line. In this case,
+  such lines will naturally be completely concealed).
 
 ---
 

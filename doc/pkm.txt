@@ -308,6 +308,7 @@ BUFFER PANEL~
                           D      force-close buffer (:bdelete!)
                           w      write buffer then close it
                           r      refresh the list
+                          T      toggle note label: filename ↔ title
                           q / <Esc>   close the panel
 
 MARKDOWN EDITING~
@@ -353,6 +354,12 @@ detail (notes in one view). Keymaps are the same window in both modes.
   <C-t>    Cycle the type filter: all → note → agg → bib → journal →
            scratch → all. Filters the note list and shows "N of M" count.
            (Detail mode only; resets to all on return to overview.)
+  N<CR>    Open the note in the Nth editing window, counted left to right
+           (1 = leftmost). Falls back with a warning if N exceeds the
+           number of open editing windows.
+  T        Toggle note label between filename stem and frontmatter title.
+           Applies simultaneously to the sidebar, buffer panel, and winbar.
+           Persists for the session; resets to config.display_mode on restart.
   b        Back: pop the navigation history stack; fall back to overview
            if the stack is empty.
   <BS>     Same as b.
@@ -547,6 +554,9 @@ Confirm selection and enter a destination folder path.
     },
 
     sidebar_width = 40,   -- width of the :PKMViewSidebar window
+
+    -- Default note label in all panels and sidebar.
+    display_mode = 'filename',   -- 'filename' | 'title'
 
     -- Buffer-local insert-mode keymaps registered per PKM note on BufReadPost.
     symbols = {
