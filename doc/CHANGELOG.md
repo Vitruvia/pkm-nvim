@@ -90,6 +90,32 @@
   available windows. Plain `<CR>` without a count retains existing behavior
   (alternate window, then first non-panel window, then new split).
 
+### Changed
+
+- **Sidebar and buffer panel: stripped display prefixes** — filename labels
+  no longer show the leading `NNNN_type_` portion of consolidated note stems
+  (`0042_note_Introduction` → `Introduction`) or the `journal_`/`scratch_`
+  prefix of timestamped notes. The note type is already communicated by the
+  `[n]`/`[a]`/etc. bracket prefix; the number is a system identifier that
+  provides no display value. Line-counter indices (`1`, `2`, …) removed from
+  both sidebar and buffer panel entry lines. Title mode unaffected (frontmatter
+  titles are free-form and have no prefix to strip).
+
+- **Sidebar and buffer panel: sorted by mtime** — note lists now sort by
+  `entry.mtime` (most recently modified first) instead of by type then title.
+  The type prefix `[n]`/`[a]`/etc. still communicates note type visually.
+  Buffer panel non-PKM files fall back to `vim.fn.getftime()` for sorting.
+
+- **Sidebar focus retained on open** — `:PKMViewSidebar` / `<leader>vs` no
+  longer returns focus to the editing window after opening. The sidebar retains
+  focus so the user can immediately navigate, open a note, or use a
+  sidebar-specific keymap. Switching to the editing window is `<C-w>l` or any
+  standard Vim window navigation.
+
+- **LLM rule added** — note numbers (`NNNN`) are PKM system identifiers and
+  must not appear in any user-facing UI display. Strip `NNNN_type_` from all
+  sidebar, panel, and picker labels. Recorded in `LLM_CONTEXT.md`.
+
 
 ---
 

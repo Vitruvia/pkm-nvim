@@ -53,6 +53,15 @@ local function type_prefix(note_type)
   return '[' .. (_TYPE_ABBREV[note_type or 'other'] or 'o') .. ']'
 end
 
+local function strip_display_prefix(filename, note_type)
+  if note_type == 'journal' or note_type == 'scratch' then
+    return filename:match('^%a+_(.+)$') or filename
+  elseif note_type == 'note' or note_type == 'agg' or note_type == 'bib' then
+    return filename:match('^%d+_%a+_(.+)$') or filename
+  end
+  return filename
+end
+
 -- =============================================================================
 -- SECTION: Buffer panel
 -- =============================================================================
@@ -73,6 +82,59 @@ local function bufpanel_build_lines()
       local name = vim.api.nvim_buf_get_name(bufnr)
       if name ~= '' then listed[#listed + 1] = bufnr end
     end
+  end
+
+  -- Sort by mtime — most recently modified buffer first.
+  table.sort(listed, function(a, b)
+    local na = vim.api.nvim_buf_get_name(a)
+    local nb = vim.api.nvim_buf_get_name(b)
+    local ea = index.get(na)
+    local eb = index.get(nb)
+    local ma = ea and ea.mtime or vim.fn.getftime(na)
+    local mb = eb and eb.mtime or vim.fn.getftime(nb)
+    return ma > mb
+  end)
+
+  local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  w save+close  q close panel' }
+  local buf_map = {}
+
+  local win_labels = {}
+  local win_num    = 0
+  local _PANEL_FT  = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_get_config(win).relative == '' then
+      if not _PANEL_FT[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+        win_num = win_num + 1
+        local wbuf = vim.api.nvim_win_get_buf(win)
+        if not win_labels[wbuf] then win_labels[wbuf] = {} end
+        table.insert(win_labels[wbuf], '<- w' .. win_num)
+      end
+    end
+  end
+
+  for _, bufnr in ipairs(listed) do
+    local name     = vim.api.nvim_buf_get_name(bufnr)
+    local modified = vim.bo[bufnr].modified and ' [+]' or ''
+    local wlabel   = win_labels[bufnr]
+                     and (' ' .. table.concat(win_labels[bufnr], ','))
+                     or ''
+    local entry    = index.get(name)
+    local display
+    if entry then
+      local label
+      if _display_mode == 'title' and entry.title and entry.title ~= '' then
+        label = entry.title
+      else
+        label = strip_display_prefix(entry.filename, entry.note_type)
+      end
+      display = string.format('  %s %s%s%s',
+        type_prefix(entry.note_type), label, wlabel, modified)
+    else
+      display = string.format('  %s %s%s%s',
+        type_prefix('file'), vim.fn.fnamemodify(name, ':t'), wlabel, modified)
+    end
+    lines[#lines + 1] = display
+    buf_map[#lines]   = bufnr
   end
 
   local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  w save+close  q close panel' }

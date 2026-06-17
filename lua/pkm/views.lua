@@ -266,6 +266,37 @@ local function type_prefix(note_type)
   return '[' .. (_TYPE_ABBREV[note_type or 'other'] or 'o') .. ']'
 end
 
+--- Strip the leading note-number and type prefix from a filename stem.
+--- "0042_note_Title_Words"      → "Title_Words"
+--- "journal_2026-06-17_10-30"  → "2026-06-17_10-30"
+--- "scratch_2026-06-17_10-30"  → "2026-06-17_10-30"
+--- Unknown conventions: returned unchanged.
+---@param filename  string  Index `filename` field (stem, no extension)
+---@param note_type string
+---@return string
+local function strip_display_prefix(filename, note_type)
+  if note_type == 'journal' or note_type == 'scratch' then
+    return filename:match('^%a+_(.+)$') or filename
+  elseif note_type == 'note' or note_type == 'agg' or note_type == 'bib' then
+    return filename:match('^%d+_%a+_(.+)$') or filename
+  end
+  return filename
+end
+
+--- Sort a path list by modification time, most recent first.
+---@param paths string[]
+---@return string[]
+local function sort_paths_by_mtime(paths)
+  local index  = require('pkm.index')
+  local sorted = vim.list_extend({}, paths)
+  table.sort(sorted, function(a, b)
+    local ea = index.get(a)
+    local eb = index.get(b)
+    return (ea and ea.mtime or 0) > (eb and eb.mtime or 0)
+  end)
+  return sorted
+end
+
 --- Parse and cache the filter tree for a named view.
 --- Handles string expressions (simple views) and table values
 --- (subprojects: {parent=string, filter=string}). Detects cycles.
@@ -1577,7 +1608,6 @@ function M.open_sidebar(name)
   end
 
   -- Open new sidebar window.
-  local prev_win = vim.api.nvim_get_current_win()
   local width    = (require('pkm').config.sidebar_width or 40)
 
   vim.cmd('noautocmd topleft vsplit')
@@ -1934,8 +1964,6 @@ function M.open_sidebar(name)
   else
     sidebar_switch_to_overview()
   end
-
-  vim.api.nvim_set_current_win(prev_win)
 end
 
 --- Refresh the sidebar content if it is currently open. No-op otherwise.

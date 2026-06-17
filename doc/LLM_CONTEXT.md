@@ -6,7 +6,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current State (v1.5.0, as of 2026-06-15)
+## Current State (v1.5.3, as of 2026-06-17)
 
 All implementation phases (0–5) are complete. No items are in active development.
 
