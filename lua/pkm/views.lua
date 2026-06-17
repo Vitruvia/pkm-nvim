@@ -1446,21 +1446,25 @@ local function sidebar_build_lines(name, paths, total_count)
   end
 
   local header_count = #lines
-  local sorted       = sort_paths_by_type(paths)
+  local sorted       = sort_paths_by_mtime(paths)
 
   local dm = require('pkm.ui').get_display_mode()
-  for i, path in ipairs(sorted) do
+  for _, path in ipairs(sorted) do
     local entry     = index.get(path)
     local note_type = entry and entry.note_type or 'other'
     local label
     if entry then
-      label = (dm == 'title' and entry.title and entry.title ~= '')
-              and entry.title or entry.filename
+      if dm == 'title' and entry.title and entry.title ~= '' then
+        label = entry.title
+      else
+        label = strip_display_prefix(entry.filename, note_type)
+      end
     else
       label = vim.fn.fnamemodify(path, ':t:r')
     end
-    lines[#lines + 1] = string.format('  %3d  %s %s', i, type_prefix(note_type), label)
+    lines[#lines + 1] = string.format('  %s %s', type_prefix(note_type), label)
   end
+
   if #sorted == 0 then
     lines[#lines + 1] = '  (no notes match)'
   end
@@ -1944,7 +1948,8 @@ function M.open_sidebar(name)
           if ui_m.get_display_mode() == 'title' and e and e.title and e.title ~= '' then
             winbar = ' ' .. e.title
           else
-            winbar = ' ' .. vim.fn.fnamemodify(ct.paths[idx], ':t:r')
+            local stem = vim.fn.fnamemodify(ct.paths[idx], ':t:r')
+            winbar = ' ' .. (e and strip_display_prefix(stem, e.note_type) or stem)
           end
         else
           local filter_label = ct.type_filter and ('  [' .. ct.type_filter .. ']') or ''
