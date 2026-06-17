@@ -117,7 +117,7 @@ local defaults = {
     },
   },
 
-  display_mode = 'filename',   -- 'filename' | 'title'; default label in panels and sidebar
+  display_mode = 'title',   -- 'filename' | 'title'; default label in panels and sidebar
 
   -- Trash
   trash = {
