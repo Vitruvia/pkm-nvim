@@ -75,6 +75,18 @@
   the buffer panel or netrw could be selected as the open target. Added
   `_PANELS` filter to both the alternate-window check and the scan loop.
 
+- **Frontmatter fold closes on save (regression)** — removing `vim.schedule`
+  from the `TextChanged`/`TextChangedI` callback (the extmark out-of-range
+  fix) made `parser:parse()` run synchronously during `BufWritePre`. This
+  triggered an immediate `foldmethod=expr` re-evaluation with `foldlevel=0`,
+  closing the frontmatter fold before `BufWritePost` could save its open
+  state. The saved state was then `was_open = false`, preventing restoration.
+  Fix: fold states are now captured at the very start of `BufWritePre`,
+  before any buffer modification, and stored in `_pre_write_fold_states[buf]`.
+  `BufWritePost` reads and clears this entry instead of re-sampling fold state
+  mid-sequence. Falls back to mid-sequence sampling when PKM mode was inactive
+  at write time.
+
 ### Added
 
 - **Filename / title display toggle** — `config.display_mode` (`'filename'`

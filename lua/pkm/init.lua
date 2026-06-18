@@ -20,6 +20,10 @@
 -- =============================================================================
 local M = {}
 
+-- Pre-write fold state: bufnr → {win_id → was_open (boolean)}
+-- Populated by BufWritePre before any buffer modification; consumed by BufWritePost.
+local _pre_write_fold_states = {}
+
 -- =============================================================================
 -- SECTION: Setup
 -- =============================================================================
@@ -72,6 +76,20 @@ function M.setup_sync_autocmds()
       local norm_root = M.config.root_path:gsub("\\", "/")
       if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
 
+      -- Capture fold states before any buffer modification so BufWritePost can
+      -- restore them even if sync parser:parse() or noautocmd e closes them.
+      local pre_buf = vim.api.nvim_get_current_buf()
+      if require('pkm.mode').is_active() then
+        local fold_capture = {}
+        for _, win in ipairs(vim.fn.win_findbuf(pre_buf)) do
+          if vim.api.nvim_win_get_config(win).relative == '' then
+            fold_capture[win] = vim.api.nvim_win_call(win,
+              function() return vim.fn.foldclosed(1) == -1 end)
+          end
+        end
+        _pre_write_fold_states[pre_buf] = fold_capture
+      end
+    
       local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
       if not lines or lines[1] ~= "---" then return end
 
@@ -142,15 +160,20 @@ function M.setup_sync_autocmds()
           if require('pkm.mode').is_active() then
             -- Save per-window frontmatter fold state before TS restart.
             -- foldclosed(1) == -1 means line 1 (opening ---) is in an open fold.
-            local fold_states = {}
-            for _, win in ipairs(vim.api.nvim_list_wins()) do
-              if vim.api.nvim_win_get_buf(win) == written_buf
-              and vim.api.nvim_win_get_config(win).relative == '' then
-                fold_states[win] = vim.api.nvim_win_call(win,
-                  function() return vim.fn.foldclosed(1) == -1 end)
+            -- Use pre-write states saved in BufWritePre (before buffer modification).
+            -- Falls back to current state if PKM mode was inactive at write time.
+            local fold_states = _pre_write_fold_states[written_buf]
+            _pre_write_fold_states[written_buf] = nil
+            if not fold_states then
+              fold_states = {}
+              for _, win in ipairs(vim.api.nvim_list_wins()) do
+                if vim.api.nvim_win_get_buf(win) == written_buf
+                and vim.api.nvim_win_get_config(win).relative == '' then
+                  fold_states[win] = vim.api.nvim_win_call(win,
+                    function() return vim.fn.foldclosed(1) == -1 end)
+                end
               end
             end
-
             pcall(vim.treesitter.start, written_buf, 'markdown')
 
             -- Restore: TS restart closes all folds; reopen per window if they were open.
