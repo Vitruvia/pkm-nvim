@@ -183,6 +183,7 @@ function M.register()
   -- Search and browse
   -- ---------------------------------------------------------------------------
   vim.api.nvim_create_user_command('PKMBrowse', function(opts)
+    focus_main_win()
     local expr = opts.args ~= '' and opts.args or nil
     local has_tele = pcall(require, 'telescope')
     if has_tele then

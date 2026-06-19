@@ -18,6 +18,7 @@
 --                 PKMMetaComment — ((text)) double-paren meta-comments (§9 conventions)
 --                 Conceal       — [[ and ]] wiki-link bracket conceal
 --               frontmatter folding: foldmethod=expr per-window
+--               line numbers suppressed per-window (number/relativenumber)
 --
 --   disable() → vim.treesitter.stop(bufnr)
 --               vim.cmd('syntax on') restores Vimscript highlighting
@@ -150,6 +151,8 @@ local function setup_win_opts(win_id)
     vim.wo.foldlevel   = 0
     vim.wo.foldcolumn  = '0'
     vim.wo.foldtext    = "v:lua.require('pkm.syntax').foldtext()"
+    vim.wo.number          = false
+    vim.wo.relativenumber = false
     vim.cmd('silent! normal! zM')  -- force-close frontmatter fold immediately
   end)
 end
@@ -165,6 +168,8 @@ local function teardown_win_opts(win_id)
     vim.wo.foldlevel     = 0
     vim.wo.foldcolumn = vim.o.foldcolumn
     vim.wo.foldtext   = ''
+    vim.wo.number          = vim.o.number
+    vim.wo.relativenumber = vim.o.relativenumber
   end)
 end
 
@@ -300,9 +305,9 @@ function M.enable(bufnr)
     callback = function()
       if not vim.api.nvim_buf_is_valid(bufnr) then return end
       local ok, parser = pcall(vim.treesitter.get_parser, bufnr, 'markdown')
-      if ok and parser then pcall(function() parser:parse() end) end
+      if ok and parser then pcall(function() parser:parse(true) end) end
     end,
-  }) 
+  })
 end 
 
 --- Deactivate PKM-specific highlighting and restore default Vimscript syntax.

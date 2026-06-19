@@ -44,6 +44,25 @@
 
 ---
 
+## [1.5.4] - 2026-6-19
+
+### Fixed
+
+- **TS highlighter extmark out-of-range errors persisting after 1.5.3** — the
+  1.5.3 fix made `parser:parse()` run synchronously in `TextChanged`/
+  `TextChangedI`, but `parser:parse()` with no argument only guarantees the
+  root `markdown` tree is reparsed; per `:h LanguageTree:parse()`, injected
+  trees (`markdown_inline` for header/paragraph content, `yaml` for
+  frontmatter) are only reparsed if the given range intersects them. Since no
+  range was given, every inline injection kept its pre-edit tree, so any edit
+  that shifted rows left stale extmark positions in headers and paragraph
+  text — exactly the cases reported (near headers, multi-line text, second
+  headers; not reproducible when nothing followed the header but blank
+  lines). Fix: `parser:parse()` → `parser:parse(true)`, forcing all regions
+  (root + injections) to reparse on every change.
+
+---
+
 ## [1.5.3] - 2026-6-17
 
 ### Fixed
