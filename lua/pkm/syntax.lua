@@ -268,6 +268,21 @@ end
 -- SECTION: Public API
 -- =============================================================================
 --
+--- Recompute and reapply the frontmatter fold for every window currently
+--- showing `bufnr`. Call after anything that can leave the fold stale or
+--- destroyed: a buffer-only metadata mutation that changes frontmatter
+--- line count, or a silent buffer reload (foldmethod=manual folds do not
+--- survive a buffer reload — they must be explicitly rebuilt).
+---@param bufnr integer
+function M.refresh_fold(bufnr)
+  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr) and _active_bufs[bufnr]) then return end
+  vim.b[bufnr]._pkm_fm_end = nil
+  for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
+    pcall(vim.api.nvim_win_call, win_id, function() vim.cmd('silent! normal! zE') end)
+    setup_win_opts(win_id)
+  end
+end
+
 --- Fold text for the closed frontmatter fold.
 --- Called by Neovim as: v:lua.require('pkm.syntax').foldtext()
 ---@return string

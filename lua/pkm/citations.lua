@@ -171,6 +171,7 @@ function M.add_tag(tag)
 
   fm.tags[#fm.tags + 1] = tag
   yaml.save_frontmatter(fm, content_start)   -- Case A: buffer-only
+  require('pkm.syntax').refresh_fold(vim.api.nvim_get_current_buf())
   vim.notify('[pkm] tag added: ' .. tag .. ' — save to persist', vim.log.levels.INFO)
 end
 
@@ -207,6 +208,7 @@ function M.remove_tag(tag)
     end
     fm.tags = new_tags
     yaml.save_frontmatter(fm, content_start)  -- Case A: buffer-only
+    require('pkm.syntax').refresh_fold(vim.api.nvim_get_current_buf())
     vim.notify('[pkm] tag removed: ' .. t .. ' — save to persist', vim.log.levels.INFO)
   end
 
@@ -427,6 +429,7 @@ local function manage_backlink(citing_path, target_path, action)
     new_content[#new_content + 1] = "---"
     for i = content_start, #content       do new_content[#new_content + 1] = content[i] end
     pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_content)
+    require('pkm.syntax').refresh_fold(target_bufnr)
   else
     -- Target not open, or open but unmodified: write to disk.
     yaml.save_frontmatter(fm, content_start, target_path)
@@ -439,6 +442,7 @@ local function manage_backlink(citing_path, target_path, action)
       if ok2 then
         pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_lines)
         pcall(vim.api.nvim_set_option_value, 'modified', false, { buf = target_bufnr })
+        require('pkm.syntax').refresh_fold(target_bufnr)
       end
     end
   end

@@ -176,9 +176,14 @@ function M.setup_sync_autocmds()
             end
             pcall(vim.treesitter.start, written_buf, 'markdown')
 
-            -- Restore: TS restart closes all folds; reopen per window if they were open.
+            -- Rebuild the frontmatter fold: foldmethod=manual folds do not
+            -- survive noautocmd e (unlike the old foldexpr system this
+            -- restore logic predates) — zR alone has nothing to reopen.
+            -- Rebuild via pkm.syntax first, then reopen per window only
+            -- where it was open before the write.
             vim.schedule(function()
               if not vim.api.nvim_buf_is_valid(written_buf) then return end
+              require('pkm.syntax').refresh_fold(written_buf)
               for win, was_open in pairs(fold_states) do
                 if vim.api.nvim_win_is_valid(win) and was_open then
                   vim.api.nvim_win_call(win, function()
