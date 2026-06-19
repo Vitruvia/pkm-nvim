@@ -1,6 +1,6 @@
-; queries/markdown.highlights.scm
-
 ; extends
+
+; queries/markdown.highlights.scm
 
 ; ─── Indented code blocks ──────────────────────────────────────────────────
 ; Markdown treats 4-space-indented paragraphs as code and highlights them

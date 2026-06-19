@@ -1,6 +1,6 @@
-; queries/markdown/injections.scm
-
 ; extends
+
+; queries/markdown/injections.scm
 
 ; ─── YAML frontmatter injection ────────────────────────────────────────────
 ; Injects the yaml parser into the frontmatter region (--- ... --- block at
