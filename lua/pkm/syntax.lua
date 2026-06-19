@@ -192,11 +192,11 @@ local function setup_win_opts(win_id)
     -- Check the window's actual fold state instead of a memoized flag — a
     -- flag keyed only by win_id survives a buffer switch in a reused window
     -- and wrongly skips creating the fold for whatever note loads next.
-    -- local fm_end = compute_fm_end(bufnr)
-    -- if fm_end > 0 and vim.fn.foldlevel(1) == 0 then
-    --   vim.cmd('silent! 1,' .. fm_end .. 'fold')
-    --   vim.cmd('silent! normal! zM')
-    -- end
+    local fm_end = compute_fm_end(bufnr)
+    if fm_end > 0 and vim.fn.foldlevel(1) == 0 then
+      vim.cmd('silent! 1,' .. fm_end .. 'fold')
+      vim.cmd('silent! normal! zM')
+    end
   end)
 end
 
