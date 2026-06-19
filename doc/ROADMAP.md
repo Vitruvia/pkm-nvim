@@ -388,10 +388,40 @@ No items currently in active development. All implementation phases are complete
 
 ### Next Steps
 
-No implementation items are currently queued. All planned phases are complete.
+1. **Bugfixes**
 
-If new items arise from daily use, add them here with enough context for an LLM
-to act on them without cross-referencing the conversation history.
+  1. Error still happens when deleting a line above a header:
+
+  ```
+
+  Error in decoration provider "line" (ns=nvim.treesitter.highlighter):
+  Error executing lua: ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:370: Invalid 'end_row': out of range
+  stack traceback:
+          [C]: in function 'nvim_buf_set_extmark'
+          ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:370: in function 'fn'
+          ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:232: in function 'for_each_highlight_state'
+          ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:322: in function 'on_line_impl'
+          ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:411: in function <...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:405>
+  1 more line; before #27  2 seconds ago
+  Error in decoration provider "line" (ns=nvim.treesitter.highlighter):
+  Error executing lua: ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:370: Invalid 'end_row': out of range
+  stack traceback:
+          [C]: in function 'nvim_buf_set_extmark'
+          ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:370: in function 'fn'
+          ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:232: in function 'for_each_highlight_state'
+          ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:322: in function 'on_line_impl'
+          ...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:411: in function <...64/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:405>
+
+  ```  
+
+  2. Using `<leader>nf`, but no `/` on the sidebar and pressing `<CR>` to enter a note opens it
+  in the sidebar instead of the active window. This used to be a bug also with `/`, but it was solved in a  previous version
+
+
+2. **Improvements**:
+
+   1. There is no way to chose which window to open a file in when using either
+      `<leader>nf` (see Bugfixes Item 2) or `/` in the sidebar.
 
 ---
 
