@@ -44,6 +44,43 @@
 
 ---
 
+
+## [1.5.5] - 2026-6-19
+
+### Fixed
+
+- **Custom markdown highlight/injection queries never merged with Neovim's
+  bundled defaults** — both `queries/markdown/highlights.scm` and
+  `queries/markdown/injections.scm` carried an `extends` modeline, but it
+  was preceded by a descriptive file-path comment and a blank line. Per
+  `:h treesitter-query-modeline-extends`, the modeline must sit at the
+  literal top of the query file; ours didn't, so Neovim treated each file
+  as a full *replacement* of the bundled query rather than an extension.
+  Confirmed directly via `vim.treesitter.highlighter.active[bufnr]`: the
+  resolved `markdown` highlights query contained only our own two captures
+  (`pkm.indented`, `markup.list`) — none of the bundled heading, blockquote,
+  link, or list-checkbox captures were present. This had been the case
+  since both files were first written (Phase 4); it wasn't introduced by
+  the recent performance work, it surfaced because that work was the first
+  time live highlighter state got directly inspected. Fix: moved the
+  modeline to the literal first line of both files, with the descriptive
+  comment moved below it. Verified post-fix via the same live-state check:
+  the resolved query now includes the full bundled capture set.
+
+  Side effect: this also restored the bundled `markdown_inline` injection,
+  which the same bug had been silently suppressing in `injections.scm` —
+  see the performance entry above; `ensure_injection_override()` now needs
+  to be active (not commented out) to keep that injection deliberately
+  suppressed, rather than relying on this bug to do it by accident.
+
+  Process note: two earlier attempts at this exact fix targeted the
+  modeline's exact spelling (`;; extends` vs `; extends`) rather than its
+  position, and made no measurable difference — confirmed both times via
+  the same live introspection rather than visual inspection, which is what
+  caught that the first two attempts hadn't actually changed anything.
+
+---
+
 ## [1.5.4] - 2026-6-19
 
 ### Fixed

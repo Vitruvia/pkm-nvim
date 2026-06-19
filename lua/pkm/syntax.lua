@@ -287,7 +287,7 @@ function M.enable(bufnr)
   if _active_bufs[bufnr] then return end
   _active_bufs[bufnr] = true
 
-  -- ensure_injection_override()
+  ensure_injection_override()
 
   local ok, err = pcall(vim.treesitter.start, bufnr, 'markdown')
   if not ok then
