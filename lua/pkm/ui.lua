@@ -323,23 +323,32 @@ function M.toggle_bufpanel()
     local ct    = get_tab()
     local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+
+    local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
     local target
     local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
     if alt_id ~= 0 and alt_id ~= ct.win
     and vim.api.nvim_win_is_valid(alt_id)
     and vim.api.nvim_win_get_config(alt_id).relative == '' then
-      target = alt_id
+      if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(alt_id)].filetype] then
+        target = alt_id
+      end
     end
     if not target then
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if win ~= ct.win
         and vim.api.nvim_win_get_config(win).relative == '' then
-          target = win; break
+          if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+            target = win; break
+          end
         end
       end
     end
     if target then
       vim.api.nvim_set_current_win(target)
+      vim.api.nvim_set_current_buf(bufnr)
+    else
+      vim.cmd('rightbelow vsplit')
       vim.api.nvim_set_current_buf(bufnr)
     end
   end, ko)

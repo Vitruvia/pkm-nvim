@@ -416,7 +416,6 @@ function M.setup()
     group    = augroup,
     pattern  = 'views.json',
     callback = function()
-      -- Guard: only invalidate for the PKM views.json, not an unrelated file.
       local written  = vim.fn.expand('<afile>:p'):gsub('\\', '/')
       local root     = get_config().root_path:gsub('\\', '/')
       local expected = root:gsub('[/\\]+$', '') .. '/views.json'
@@ -435,6 +434,26 @@ function M.setup()
       for id in pairs(_tabs) do
         if not live[id] then _tabs[id] = nil end
       end
+    end,
+  })
+
+  -- winfixwidth only stops the sidebar being squeezed when a sibling
+  -- window grows — it does nothing when a sibling closes and Neovim has
+  -- to give the freed space to something. Re-assert the configured width
+  -- after every window close so the sidebar only ever changes size via
+  -- config or an explicit keymap, never as a side effect.
+  vim.api.nvim_create_autocmd('WinClosed', {
+    group    = augroup,
+    callback = function()
+      vim.schedule(function()
+        local width = (require('pkm').config.sidebar_width or 40)
+        for _, id in ipairs(vim.api.nvim_list_tabpages()) do
+          local t = _tabs[id]
+          if t and t.win and vim.api.nvim_win_is_valid(t.win) then
+            pcall(vim.api.nvim_win_set_width, t.win, width)
+          end
+        end
+      end)
     end,
   })
 end
@@ -1843,11 +1862,14 @@ function M.open_sidebar(name)
         vim.log.levels.WARN)
       return
     end
+    local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
     local target
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
       if win ~= ct.win
       and vim.api.nvim_win_get_config(win).relative == '' then
-        target = win; break
+        if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+          target = win; break
+        end
       end
     end
     if target then
