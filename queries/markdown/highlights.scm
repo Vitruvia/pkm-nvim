@@ -1,3 +1,5 @@
+; queries/markdown.highlights.scm
+
 ;; extends
 
 ; ─── Indented code blocks ──────────────────────────────────────────────────

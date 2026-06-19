@@ -16,9 +16,10 @@
 --               match-based highlights via vim.fn.matchadd (per-window):
 --                 PKMCitation   — note[0042], bib[...], journal[...], scratch[...]
 --                 PKMMetaComment — ((text)) double-paren meta-comments (§9 conventions)
---                 Conceal       — [[ and ]] wiki-link bracket conceal
---                 frontmatter folding: foldmethod=manual; single fold created
---                 on enable, recreated after save
+--                 Conceal       — frontmatter folding: foldmethod=manual;
+--                 single fold created on enable, recreated after save;
+--               'markdown' injections query overridden at runtime to drop
+--               markdown_inline (performance; see ensure_injection_override)
 --
 --   disable() → vim.treesitter.stop(bufnr)
 --               vim.cmd('syntax on') restores Vimscript highlighting
@@ -32,7 +33,7 @@
 -- Public API:
 --   enable(bufnr)   → activate PKM highlighting on buffer
 --   disable(bufnr)  → deactivate PKM highlighting; restore Vimscript syntax
---   foldexpr(lnum)  → fold expression for frontmatter; called by Neovim
+--   foldtext()      → fold display text for the closed frontmatter fold
 -- =============================================================================
 
 local M = {}
@@ -140,26 +141,40 @@ end
 -- SECTION: Per-window options
 -- =============================================================================
 
-local _win_folded = {}  -- win_id -> true once the frontmatter fold is created
-
 --- Compute (and cache) the frontmatter end line for a buffer.
 ---@param bufnr integer
 ---@return integer  0 if no frontmatter block
 local function compute_fm_end(bufnr)
   local fm_end = vim.b[bufnr]._pkm_fm_end
-  if fm_end == nil then
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, 100, false)
-    fm_end = 0
-    if lines[1] == '---' then
-      for i = 2, #lines do
-        if lines[i] == '---' or lines[i] == '...' then
-          fm_end = i
+  if fm_end ~= nil then return fm_end end
+
+  fm_end = 0
+  local first = vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1]
+  if first == '---' then
+    -- No fixed cap: cites/cited_by metadata grows without bound as notes
+    -- accumulate citations, so frontmatter length isn't predictable.
+    -- Read in growing chunks instead of one bulk slice of the whole
+    -- buffer — cheap (usually one chunk) for ordinary notes, still
+    -- correct for a frontmatter block running into the hundreds of lines.
+    local total   = vim.api.nvim_buf_line_count(bufnr)
+    local scanned = 1   -- line 1 already checked above
+    local chunk   = 200
+    while scanned < total do
+      local hi    = math.min(scanned + chunk, total)
+      local lines = vim.api.nvim_buf_get_lines(bufnr, scanned, hi, false)
+      for i, l in ipairs(lines) do
+        if l == '---' or l == '...' then
+          fm_end = scanned + i
           break
         end
       end
+      if fm_end > 0 then break end
+      scanned = hi
+      chunk   = chunk * 2
     end
-    vim.b[bufnr]._pkm_fm_end = fm_end
   end
+
+  vim.b[bufnr]._pkm_fm_end = fm_end
   return fm_end
 end
 
@@ -174,13 +189,13 @@ local function setup_win_opts(win_id)
     vim.wo.number         = false
     vim.wo.relativenumber = false
 
-    if not _win_folded[win_id] then
-      local fm_end = compute_fm_end(bufnr)
-      if fm_end > 0 then
-        vim.cmd('silent! 1,' .. fm_end .. 'fold')
-        vim.cmd('silent! normal! zM')
-      end
-      _win_folded[win_id] = true
+    -- Check the window's actual fold state instead of a memoized flag — a
+    -- flag keyed only by win_id survives a buffer switch in a reused window
+    -- and wrongly skips creating the fold for whatever note loads next.
+    local fm_end = compute_fm_end(bufnr)
+    if fm_end > 0 and vim.fn.foldlevel(1) == 0 then
+      vim.cmd('silent! 1,' .. fm_end .. 'fold')
+      vim.cmd('silent! normal! zM')
     end
   end)
 end
@@ -188,7 +203,7 @@ end
 local function teardown_win_opts(win_id)
   if not vim.api.nvim_win_is_valid(win_id) then return end
   vim.api.nvim_win_call(win_id, function()
-    vim.cmd('silent! normal! zE')   -- delete all folds in this window
+    vim.cmd('silent! normal! zE')
     vim.wo.foldmethod     = 'manual'
     vim.wo.foldenable     = false
     vim.wo.foldcolumn     = vim.o.foldcolumn
@@ -196,7 +211,6 @@ local function teardown_win_opts(win_id)
     vim.wo.number         = vim.o.number
     vim.wo.relativenumber = vim.o.relativenumber
   end)
-  _win_folded[win_id] = nil
 end
 
 -- =============================================================================
@@ -214,7 +228,6 @@ local function ensure_global_autocmds()
     callback = function(ev)
       local win_id = tonumber(ev.match)
       teardown_win_matches(win_id)
-      _win_folded[win_id] = nil
     end,
   })
 
@@ -223,6 +236,32 @@ local function ensure_global_autocmds()
     group    = ag,
     callback = setup_hl_groups,
   })
+end
+
+-- =============================================================================
+-- SECTION: Injection override (performance)
+-- =============================================================================
+
+-- Overrides Neovim's resolved 'markdown' injections query to drop the
+-- bundled markdown_inline injection — one injection region per paragraph/
+-- heading/list item, documented (:h treesitter) as running over the whole
+-- buffer rather than the visible range, and confirmed as the cause of
+-- editing/scroll lag on large aggregator notes. Keeps only PKM's own
+-- YAML-frontmatter injection. See queries/markdown/injections.scm for the
+-- full rationale and trade-off; this is a belt-and-suspenders enforcement
+-- of the same change, independent of query-file extends/merge semantics.
+local PKM_MARKDOWN_INJECTIONS = [=[
+((minus_metadata) @injection.content
+  (#set! injection.language "yaml")
+  (#set! injection.include-children))
+]=]
+
+local _injections_overridden = false
+
+local function ensure_injection_override()
+  if _injections_overridden then return end
+  _injections_overridden = true
+  pcall(vim.treesitter.query.set, 'markdown', 'injections', PKM_MARKDOWN_INJECTIONS)
 end
 
 -- =============================================================================
@@ -247,6 +286,8 @@ function M.enable(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then return end
   if _active_bufs[bufnr] then return end
   _active_bufs[bufnr] = true
+
+  ensure_injection_override()
 
   local ok, err = pcall(vim.treesitter.start, bufnr, 'markdown')
   if not ok then
@@ -288,13 +329,10 @@ function M.enable(bufnr)
     callback = function()
       vim.b[bufnr]._pkm_fm_end = nil
       for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
-        _win_folded[win_id] = nil
         pcall(vim.api.nvim_win_call, win_id, function() vim.cmd('silent! normal! zE') end)
         setup_win_opts(win_id)
       end
-      -- (setup_win_opts isn't called here directly — it'll re-run naturally
-      -- on the next BufWinEnter; if you want it to refold immediately
-      -- without waiting for that, call setup_win_opts(win_id) per window here too)
+
       local ok, parser = pcall(vim.treesitter.get_parser, bufnr, 'markdown')
       if ok and parser then pcall(function() parser:parse(true) end) end
     end,

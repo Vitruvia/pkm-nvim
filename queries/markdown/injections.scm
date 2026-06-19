@@ -1,3 +1,5 @@
+; queries/markdown/injections.scm
+
 ;; extends
 
 ; ─── YAML frontmatter injection ────────────────────────────────────────────
