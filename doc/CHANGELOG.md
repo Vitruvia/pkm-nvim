@@ -61,6 +61,14 @@
   lines). Fix: `parser:parse()` → `parser:parse(true)`, forcing all regions
   (root + injections) to reparse on every change.
 
+### Decisions
+- **Markdown indentation: 4 spaces, unchanged.** Tested against CommonMark's
+  content-alignment rule and behavior across GitHub, GitLab, Bitbucket,
+  Pandoc, Reddit, VS Code, and Obsidian: 4 spaces is the only width that
+  renders nested lists correctly everywhere. 2-space breaks on Bitbucket,
+  Pandoc, and Reddit; 3-space breaks on GitLab, Bitbucket, Pandoc, and
+  Reddit. Personal usage (not config) should match — see below.
+
 ---
 
 ## [1.5.3] - 2026-6-17

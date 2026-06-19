@@ -309,7 +309,8 @@ function M.eval(tree, note)
       return tostring(note.title or ''):lower():find(val, 1, true) ~= nil
 
     elseif tree.field == 'text' then
-      return tostring(note.body or ''):lower():find(val, 1, true) ~= nil
+      local body_l = note.body_lower or tostring(note.body or ''):lower()
+      return body_l:find(val, 1, true) ~= nil
 
     elseif tree.field == 'filename' then
       return tostring(note.filename or ''):lower():find(val, 1, true) ~= nil
@@ -318,9 +319,9 @@ function M.eval(tree, note)
       return (note.note_type or 'other'):lower() == val
 
     elseif tree.field == 'any' then
-      -- Plain substring over all text fields; tag values are also substring here.
       if tostring(note.title    or ''):lower():find(val, 1, true) then return true end
-      if tostring(note.body     or ''):lower():find(val, 1, true) then return true end
+      local body_l = note.body_lower or tostring(note.body or ''):lower()
+      if body_l:find(val, 1, true) then return true end
       if tostring(note.filename or ''):lower():find(val, 1, true) then return true end
       for _, t in ipairs(note.tags or {}) do
         if tostring(t):lower():find(val, 1, true) then return true end

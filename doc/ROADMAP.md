@@ -388,7 +388,43 @@ No items currently in active development. All implementation phases are complete
 
 ### Next Steps
 
-(None).
+1. Syntax highlight / readability: concealing boldtext `**` and italics `_`
+   markers around words (but not when only on one side) can improve
+   readability. Evaluate if this is viable and desirable in the neovim edit
+   window or if it should be implemented in the distant "preview" feature. If
+   implementing on the edit window, a highlight is necessary for italics and a
+   way to differentiate intra-word italics should be devised in order to
+   prevent words that have underscores as part of the word itself to be
+   italiscized (a single `*` is a common option, but we should verify if it
+   doesn't cause other issues).
+
+2. Tabs and indent level is currently set to 4 spaces in .md files, but I have
+   been using 2 spaces for list levels. Decide conventions for markdown
+   indentations (at least the PKM specific ones) and set the default PKM
+   indentation and tab levels to match. This means that pressing `S->` on
+   normal mode should indent lines according to the identation defined, and
+   `<S-<>` should unindent the line by the same amount. There should also be an
+   easy way to unindent on insert mode, (tabs already provide an easy indent,
+   but backspace at the beginning of a line currently does not erase "one
+   indent level" per press, and I don't know if this is ideal). Indentation
+   should be able to adapt as necessary to match list prefixes (numbers and
+   similar of any size), citation (`>`) marks, etc. when they exist.
+
+3. Neovim's autowrap (`gq + motion`) wraps headers and code separators
+   (multiline) around text if that text is inserted below them (without a
+   newline). Unless there is a good reason to use the convention of always
+   separating those blocks with newlines from the text that immediately follows
+   and precedes them, this should be modified (it can be modified partially if,
+   for example, we consider that we want to always separate headers from text
+   that *precedes* it using one new line, but not text that immediately follows
+   them). Note: if the text contain list prefixes, the wrapping does not occur, so
+   wrapping line elements with line "headers" (e.g. `**list:**`) is not an issue, 
+   is list elements wrapping onto each other.
+
+4. Performance issue (important): noticed slower editing and browsing of large
+   notes. Some notes are aggregators with thousands of lines, so this is a real
+   issues. Besides, it goes against the philosophy of keeping the program at
+   vim-level performance.
 
 ---
 
@@ -422,7 +458,6 @@ No items currently in active development. All implementation phases are complete
 7. **Alternative diagram and imaging methods** — ASCII/text-based art and other portable
   methods for enhancing notes without external image files. Any approach must be examined
   for human readability, AI/machine readability, and portability before implementation.
-  
 
 8. **Flexible note concealer**: a character or character sequence to mark the
   beggining and ending of a text block to be concealed, such that the user

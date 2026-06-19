@@ -18,6 +18,8 @@
 --     body          : string   note body (lines after frontmatter joined with "\n")
 --     mtime         : number   vim.fn.getftime() at last index time
 --     has_citations : boolean  true when cites or cited_by has ≥1 entry in any group
+--     body_lower    : string   lowercased body, cached to avoid recomputing
+--                               :lower() on every filter.eval() call
 --   }
 --
 -- Thread-safety: Neovim Lua is single-threaded; no locking needed.
@@ -98,6 +100,7 @@ end
 ---@param path string  Absolute path to a .md note file
 ---@return table|nil entry
 local function read_entry(path)
+
   local ok, lines = pcall(vim.fn.readfile, path)
   if not ok or type(lines) ~= 'table' or #lines == 0 then return nil end
 
@@ -150,14 +153,16 @@ local function read_entry(path)
     end
   end
 
+  local body = table.concat(body_parts, '\n')
   return {
-    path     = path,
-    filename = filename,
-    note_type = note_type,
-    title    = title,
-    tags     = tags,
-    body     = table.concat(body_parts, '\n'),
-    mtime    = vim.fn.getftime(path),
+    path       = path,
+    filename   = filename,
+    note_type  = note_type,
+    title      = title,
+    tags       = tags,
+    body       = body,
+    body_lower = body:lower(),
+    mtime      = vim.fn.getftime(path),
     has_citations = has_cites,
   }
 end

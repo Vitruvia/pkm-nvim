@@ -17,8 +17,8 @@
 --                 PKMCitation   — note[0042], bib[...], journal[...], scratch[...]
 --                 PKMMetaComment — ((text)) double-paren meta-comments (§9 conventions)
 --                 Conceal       — [[ and ]] wiki-link bracket conceal
---               frontmatter folding: foldmethod=expr per-window
---               line numbers suppressed per-window (number/relativenumber)
+--                 frontmatter folding: foldmethod=manual; single fold created
+--                 on enable, recreated after save
 --
 --   disable() → vim.treesitter.stop(bufnr)
 --               vim.cmd('syntax on') restores Vimscript highlighting
@@ -140,37 +140,63 @@ end
 -- SECTION: Per-window options
 -- =============================================================================
 
---- Apply PKM window options: folding and wiki-link conceal.
----@param win_id integer
+local _win_folded = {}  -- win_id -> true once the frontmatter fold is created
+
+--- Compute (and cache) the frontmatter end line for a buffer.
+---@param bufnr integer
+---@return integer  0 if no frontmatter block
+local function compute_fm_end(bufnr)
+  local fm_end = vim.b[bufnr]._pkm_fm_end
+  if fm_end == nil then
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, 100, false)
+    fm_end = 0
+    if lines[1] == '---' then
+      for i = 2, #lines do
+        if lines[i] == '---' or lines[i] == '...' then
+          fm_end = i
+          break
+        end
+      end
+    end
+    vim.b[bufnr]._pkm_fm_end = fm_end
+  end
+  return fm_end
+end
+
 local function setup_win_opts(win_id)
   if not vim.api.nvim_win_is_valid(win_id) then return end
+  local bufnr = vim.api.nvim_win_get_buf(win_id)
   vim.api.nvim_win_call(win_id, function()
-    vim.wo.foldmethod  = 'expr'
-    vim.wo.foldexpr    = "v:lua.require('pkm.syntax').foldexpr(v:lnum)"
-    vim.wo.foldenable  = true
-    vim.wo.foldlevel   = 0
-    vim.wo.foldcolumn  = '0'
-    vim.wo.foldtext    = "v:lua.require('pkm.syntax').foldtext()"
-    vim.wo.number          = false
+    vim.wo.foldmethod     = 'manual'
+    vim.wo.foldenable     = true
+    vim.wo.foldcolumn     = '0'
+    vim.wo.foldtext       = "v:lua.require('pkm.syntax').foldtext()"
+    vim.wo.number         = false
     vim.wo.relativenumber = false
-    vim.cmd('silent! normal! zM')  -- force-close frontmatter fold immediately
+
+    if not _win_folded[win_id] then
+      local fm_end = compute_fm_end(bufnr)
+      if fm_end > 0 then
+        vim.cmd('silent! 1,' .. fm_end .. 'fold')
+        vim.cmd('silent! normal! zM')
+      end
+      _win_folded[win_id] = true
+    end
   end)
 end
 
---- Restore window options changed by setup_win_opts.
----@param win_id integer
 local function teardown_win_opts(win_id)
   if not vim.api.nvim_win_is_valid(win_id) then return end
   vim.api.nvim_win_call(win_id, function()
-    vim.wo.foldmethod    = 'manual'
-    vim.wo.foldexpr      = ''
-    vim.wo.foldenable    = false
-    vim.wo.foldlevel     = 0
-    vim.wo.foldcolumn = vim.o.foldcolumn
-    vim.wo.foldtext   = ''
-    vim.wo.number          = vim.o.number
+    vim.cmd('silent! normal! zE')   -- delete all folds in this window
+    vim.wo.foldmethod     = 'manual'
+    vim.wo.foldenable     = false
+    vim.wo.foldcolumn     = vim.o.foldcolumn
+    vim.wo.foldtext       = ''
+    vim.wo.number         = vim.o.number
     vim.wo.relativenumber = vim.o.relativenumber
   end)
+  _win_folded[win_id] = nil
 end
 
 -- =============================================================================
@@ -186,7 +212,9 @@ local function ensure_global_autocmds()
   vim.api.nvim_create_autocmd('WinClosed', {
     group    = ag,
     callback = function(ev)
-      teardown_win_matches(tonumber(ev.match))
+      local win_id = tonumber(ev.match)
+      teardown_win_matches(win_id)
+      _win_folded[win_id] = nil
     end,
   })
 
@@ -195,42 +223,6 @@ local function ensure_global_autocmds()
     group    = ag,
     callback = setup_hl_groups,
   })
-end
-
--- =============================================================================
--- SECTION: Fold expression
--- =============================================================================
-
---- Fold expression for PKM markdown frontmatter.
---- Returns '>1' for the opening --- line (starts a fold), '1' for frontmatter
---- body lines (inside the fold), '0' for everything else.
---- Caches the frontmatter end line in vim.b._pkm_fm_end per buffer;
---- cache is cleared on BufWritePost.
---- Called by Neovim as: v:lua.require('pkm.syntax').foldexpr(v:lnum)
----@param lnum integer  1-indexed line number (v:lnum)
----@return string  foldlevel expression
-function M.foldexpr(lnum)
-  local bufnr = vim.api.nvim_get_current_buf()
-
-  local fm_end = vim.b[bufnr]._pkm_fm_end
-  if fm_end == nil then
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, 100, false)
-    fm_end = 0
-    if lines[1] == '---' then
-      for i = 2, #lines do
-        if lines[i] == '---' or lines[i] == '...' then
-          fm_end = i
-          break
-        end
-      end
-    end
-    vim.b[bufnr]._pkm_fm_end = fm_end
-  end
-
-  if fm_end == 0    then return '0'  end
-  if lnum == 1      then return '>1' end
-  if lnum <= fm_end then return '1'  end
-  return '0'
 end
 
 -- =============================================================================
@@ -293,22 +285,42 @@ function M.enable(bufnr)
   vim.api.nvim_create_autocmd('BufWritePost', {
     group    = ag,
     buffer   = bufnr,
-    callback = function() vim.b[bufnr]._pkm_fm_end = nil end,
+    callback = function()
+      vim.b[bufnr]._pkm_fm_end = nil
+      for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
+        _win_folded[win_id] = nil
+        pcall(vim.api.nvim_win_call, win_id, function() vim.cmd('silent! normal! zE') end)
+        setup_win_opts(win_id)
+      end
+      -- (setup_win_opts isn't called here directly — it'll re-run naturally
+      -- on the next BufWinEnter; if you want it to refold immediately
+      -- without waiting for that, call setup_win_opts(win_id) per window here too)
+      local ok, parser = pcall(vim.treesitter.get_parser, bufnr, 'markdown')
+      if ok and parser then pcall(function() parser:parse(true) end) end
+    end,
   })
 
-  -- Force incremental re-parse on every buffer change so TS extmarks stay
-  -- within current buffer bounds. Without this, dd/d{motion} leave stale
-  -- row references that trigger 'end_row out of range' in the highlighter.
+  -- Force the *local* injected tree (the header/paragraph under the cursor)
+  -- to reparse on every change, without forcing every injection in the
+  -- whole document to reparse — that scales O(n) per keystroke on large
+  -- aggregator notes. A full forced reparse still runs on save (below),
+  -- which catches anything a margin-bounded reparse could miss (e.g. :g
+  -- commands touching lines far from the cursor).
   vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
     group    = ag,
     buffer   = bufnr,
     callback = function()
       if not vim.api.nvim_buf_is_valid(bufnr) then return end
       local ok, parser = pcall(vim.treesitter.get_parser, bufnr, 'markdown')
-      if ok and parser then pcall(function() parser:parse(true) end) end
+      if not (ok and parser) then return end
+      local last = vim.api.nvim_buf_line_count(bufnr)
+      local row  = vim.api.nvim_win_get_cursor(0)[1] - 1
+      local lo, hi = math.max(row - 20, 0), math.min(row + 20, last)
+      pcall(function() parser:parse({ lo, 0, hi, 0 }) end)
     end,
   })
-end 
+
+end
 
 --- Deactivate PKM-specific highlighting and restore default Vimscript syntax.
 --- Idempotent: safe to call when already inactive.
