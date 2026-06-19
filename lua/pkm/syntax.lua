@@ -262,6 +262,7 @@ local function ensure_injection_override()
   if _injections_overridden then return end
   _injections_overridden = true
   pcall(vim.treesitter.query.set, 'markdown', 'injections', PKM_MARKDOWN_INJECTIONS)
+end
 
 -- =============================================================================
 -- SECTION: Public API
