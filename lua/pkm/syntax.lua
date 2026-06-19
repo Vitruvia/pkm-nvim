@@ -258,11 +258,10 @@ local PKM_MARKDOWN_INJECTIONS = [=[
 
 local _injections_overridden = false
 
--- local function ensure_injection_override()
+local function ensure_injection_override()
   if _injections_overridden then return end
   _injections_overridden = true
   pcall(vim.treesitter.query.set, 'markdown', 'injections', PKM_MARKDOWN_INJECTIONS)
-end
 
 -- =============================================================================
 -- SECTION: Public API
@@ -287,7 +286,7 @@ function M.enable(bufnr)
   if _active_bufs[bufnr] then return end
   _active_bufs[bufnr] = true
 
-  ensure_injection_override()
+  -- ensure_injection_override()
 
   local ok, err = pcall(vim.treesitter.start, bufnr, 'markdown')
   if not ok then
