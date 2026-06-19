@@ -438,11 +438,13 @@ function M.setup()
   })
 
   -- winfixwidth only stops the sidebar being squeezed when a sibling
-  -- window grows — it does nothing when a sibling closes and Neovim has
-  -- to give the freed space to something. Re-assert the configured width
-  -- after every window close so the sidebar only ever changes size via
-  -- config or an explicit keymap, never as a side effect.
-  vim.api.nvim_create_autocmd('WinClosed', {
+  -- window grows — it does nothing when a sibling closes (nothing left
+  -- to reassert against) or when a *new* window appears afterward and
+  -- inherits whatever proportions existed at that moment. WinResized
+  -- fires after any layout change in the tabpage, covering both cases,
+  -- so the sidebar only ever changes size via config or an explicit
+  -- keymap, never as a side effect of windows opening or closing.
+  vim.api.nvim_create_autocmd('WinResized', {
     group    = augroup,
     callback = function()
       vim.schedule(function()
@@ -456,7 +458,6 @@ function M.setup()
       end)
     end,
   })
-end
 
 -- =============================================================================
 -- SECTION: Public API — read
