@@ -388,18 +388,104 @@ No items currently in active development. All implementation phases are complete
 
 ### Next Steps
 
-(none).
+1.  **Improved PKM interface and navigation:** Use UI panels for displaying note
+    and view lists, leaving simple native Neovim UI for short and fixed sets of
+    choices (like the exportation types described in Next Steps 3)
+    - `:PKMAddTag`: improve UI to show a panel where tags can be chosen and
+      searched (similar to the existing browse panels).
+    - Trash: improve `:PKMRestoreNote`'s UI to show a panel where previously
+      deleted notes can be browsed and searched (similar to the existing browse
+      panels). This panel should allow the user to select notes and then press
+      a key to restore them. To avoid any accidental losses, deleting notes or
+      recycling the whole trashbin should not be possible in this UI for now
+      (that feature remains confined to `:PKMEmptyTrash`, which should always
+      prompt the user for confirmation before executing).
+    - `:PKMViewNew` and `:PKMUpdateView` should be incorporated into the views
+      panel (`:PKMViews`), which should now also open UI panels similar to
+      other browsing and searching panels, but now with a key combination for
+      creating and updating views / subviews (that is, for calling `PKMViewNew`
+      and `PKMUpdateView`. As a safety measure, do not add a key for view
+      deletion in those panels for now.
+    - `:PKMViewDelete` should have its own UI panel, similar to the other
+      browsing and searching panels described here. 
+    - `:PKMViewDelete` and `:PKMViewNew` can persist as residual commands with
+      an optional arguments.
+    - Add a key to open `:PKMViews` in the sidebar.
+
+2. **PKM new view autorefresh sidebar:** currently, adding a new view with
+   `:PKMViewNew` does not autorefresh the sidebar. The new view appears only
+   after navigating to another view and back or pressing `r` in the sidebar to
+   refresh it. With this change, the new view should appear immediately after
+   being added (it should autorefresh the sidebar and return to the previously
+   active window, which may or not be the sidebar itself).
+
+3. **Deep exportation:** modify `export.lua` and any other files related to
+   exportation with the goal to enable "deep exportation". Deep exportation is
+   defined here as an exportation of all selected notes plus the notes they
+   depend on. To do so, the system must, for each note selected for
+   exportation, check each note that it cites (and this includes any types such
+   as journal, agg, bib, or note). If the cited note is not also included in
+   the exportation list, then the system should include it. Deep exportation
+   does not replace simple exportation, it is an extra option. Notes to be
+   exported in deep exporation are those selected by the user and those cited
+   by them, but not the ones that cite them (e.g. Note 1, selected for
+   exportation, cites Notes 2, 4, 5; it is cited by Notes 2, 3, 6, but it does
+   not cite Notes 3 and 6. Deep export will export Notes 1, 2, 4, 5, but not
+   Notes 3, 6).
+
+4. **Consistent view renaming:** `:PKMUpdateView` should ensure that any
+   renamed views are also renamed in places that reference them (e.g. subviews
+   that register them as a parent, any relevant index entry, etc.)
+
+5.  **Bugfixes:**
+    - Files can still open in the sidebar panel via `:PKMViewAll` and other
+      commands. `:Ex` still opens explorer mode in the sidepanel, if used when
+      the sidebar is the active window, so does `:PKMViewEdit`. This should
+      have been fixed in previous versions.
+    - `:PKMRenameNote` is not case sensitive (e.g. renaming a file from
+      "prazos" to "Prazos" is not allowed triggers and error `[pkm] cannot
+      rename: target already exists: 0142_agg_Prazos.md`)
 
 ---
 
 ### Distant Additions (mid-term to long-term)
 
-1. **Explorer UI customisation** — positions and width of each panel; auto-on/off
-  triggers by directory, CWD, or buffer type; other layout options users may need.
+1.  **Explorer UI customisation:**
+    1.  positions and width of each panel; auto-on/off triggers by directory,
+        CWD, or buffer type; other layout options users may need. 
+    2.  Improved help panel with main keymaps for PKM (the current panel is
+        sidebar only). This panel would have to update depending on how the
+        user customizes their config, so this change is related to "Explorer UI
+        Customisation".
 
-2. Improved help panel with main keymaps for PKM (the current panel is sidebar
-  only). This panel would have to update depending on how the user customizes
-  their config, so this change is related to "Explorer UI Customisation".
+2.  **Markdown improvements:**
+    1.  Conventions for spacing: github's guidelines suggest using two spaces
+        after number prefixes and 3 spaces after simple symbol prefixes to
+        reach a 4 space indentation, but what about symbols 4 character-large
+        or more and numbers 3 character-large or more (the numbers are followed
+        by an additional separator character and each prefix is followed by at
+        least one space, so we would have to deal with an indentation level of
+        5). A possible solution is to allow text to start 1 space after the
+        prefix (counting the separator for number prefixes) but then start at
+        the correct indentation level from the second line onwards.
+    2.  Improved editor navigation: add keymapped commands to allow navigating
+        between:
+        - Same level headers;
+        - Same level list component;
+        - Different level headers;
+        - Diferent level list components;
+        - Blocks of the same type (code blocks, lists, citation);
+    3. Extended list prefixes: evaluate cost-benefit of extending possible list
+       prefix to any alphanumeric symbol + a separator from a standard
+       separators list (e.g. `-`, `.`, `)`, `:`). Consider the same for symbol
+       sequences. This would allow things such as `text:`, `I -`, `I)`, and
+       many others to be highlighted and to provide a basis for text wrapping
+       and indentation. This needs to be analyzed in conjunction with Distant
+       Additions 2.1. and with the current syntax highlighting constraints, as
+       well as with any other conflicts that may arise from using these symbols
+       as such (note that they would only have this effect if located at the
+       beginning of a line and at the correct identation level, just like
+       default lists prefixes).
 
 3. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
@@ -423,17 +509,8 @@ No items currently in active development. All implementation phases are complete
   methods for enhancing notes without external image files. Any approach must be examined
   for human readability, AI/machine readability, and portability before implementation.
 
-8. **Flexible note concealer**: a character or character sequence to mark the
-  beggining and ending of a text block to be concealed, such that the user
-  can decide what parts of their note they want to hide. Should work seamlessly
-  and not collide with frontmatter concealment and syntax highlighting.
-  1. Basic: conceals every line between the markers.
-  2. Advanced: an extra character sequence to mark that only the exact strings
-     between the markers should be concealed.
-  3. More advanced: the feature at § 8.2. works across lines (that is, if one or
-  more strings occupy more than one line, they get concealed, but not
-  the whole line (unless the markers contain all strings in any given line. In this case,
-  such lines will naturally be completely concealed).
+8. **Improved contextual search/browsing:** improve the context detection
+   algorithm, but only if it does not significantly impair performance.
 
 ---
 
