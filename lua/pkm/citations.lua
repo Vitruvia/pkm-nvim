@@ -428,7 +428,13 @@ local function manage_backlink(citing_path, target_path, action)
     for _, line in ipairs(fm_lines)       do new_content[#new_content + 1] = line end
     new_content[#new_content + 1] = "---"
     for i = content_start, #content       do new_content[#new_content + 1] = content[i] end
-    pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_content)
+    vim.api.nvim_buf_call(target_bufnr, function()
+      -- Merge into target_bufnr's own undo history rather than creating a
+      -- separate step in a buffer the user may not have focused — this is
+      -- the system reacting to a citation change elsewhere, not user input.
+      pcall(vim.cmd, 'undojoin')
+      pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_content)
+    end)
     require('pkm.syntax').refresh_fold(target_bufnr)
   else
     -- Target not open, or open but unmodified: write to disk.
@@ -440,7 +446,12 @@ local function manage_backlink(citing_path, target_path, action)
     if target_bufnr then
       local ok2, new_lines = pcall(vim.fn.readfile, target_path)
       if ok2 then
-        pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_lines)
+        vim.api.nvim_buf_call(target_bufnr, function()
+          -- Same reasoning as the modified-buffer branch above: this silent
+          -- disk-sync reload must not become its own undo step either.
+          pcall(vim.cmd, 'undojoin')
+          pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_lines)
+        end)
         pcall(vim.api.nvim_set_option_value, 'modified', false, { buf = target_bufnr })
         require('pkm.syntax').refresh_fold(target_bufnr)
       end

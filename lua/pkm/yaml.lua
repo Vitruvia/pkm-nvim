@@ -13,7 +13,7 @@
 --   parse_frontmatter(lines)              → (frontmatter, content_start) from line array
 --   parse_yaml(lines)                     → table from raw YAML lines
 --   parse_value(value)                    → typed Lua value from YAML string
---   generate_yaml(data, indent?)          → string[] YAML lines from table
+--   generate_yaml(data, indent?, key_order?) → string[] YAML lines from table
 --   format_value(value)                   → YAML-safe string from Lua value
 --   create_frontmatter(note_type, data?)  → string[] full frontmatter block with delimiters
 --   save_frontmatter(fm, content_start, filepath?) → write fm to buffer or file
@@ -207,24 +207,39 @@ end
 -- =============================================================================
 -- SECTION: Generation
 -- =============================================================================
+
 --- Serialize a Lua table to YAML lines with a fixed key ordering.
 --- Empty tables emit "key: []". Nested maps and object arrays are indented.
 --- Key order: title, author, source_author, tags, created_on, last_updated_on,
 ---            cites, cited_by, citation, source_type, source_location, then rest.
+--- Grouped fields (cites, cited_by) use a fixed sub-order: notes, bib,
+--- journal, scratch — independent of Lua's unspecified pairs() order.
 ---@param data table
 ---@param indent integer? Indentation level (default 0, each level = 2 spaces)
+---@param key_order string[]? Key order for this recursion level (internal —
+---       callers should not normally pass this; defaults to top-level order)
 ---@return string[]
-function M.generate_yaml(data, indent)
+function M.generate_yaml(data, indent, key_order)
   indent = indent or 0
   local lines = {}
   local indent_str = string.rep("  ", indent)
 
   -- 1. Define the desired logical order for keys.
-  local key_order = {
+  key_order = key_order or {
     "title", "author", "source_author", "note_author", "status", "tags",
     "created_on", "last_updated_on", "cites", "cited_by", "citation",
     "source_type", "source_location"
   }
+
+  -- Sub-key order for grouped structures (cites/cited_by). Without this,
+  -- "notes"/"bib"/"journal"/"scratch" fall through to the unordered pairs()
+  -- pass below and visibly reshuffle position on every regeneration, even
+  -- when no citation actually changed.
+  local nested_key_orders = {
+    cites    = { "notes", "bib", "journal", "scratch" },
+    cited_by = { "notes", "bib", "journal", "scratch" },
+  }
+
   local seen = {}
 
   -- Helper function to process a key-value pair
@@ -257,7 +272,7 @@ function M.generate_yaml(data, indent)
       else
         -- Case 3: The table is a dictionary/map.
         table.insert(lines, indent_str .. key .. ":")
-        local nested_lines = M.generate_yaml(value, indent + 1)
+        local nested_lines = M.generate_yaml(value, indent + 1, nested_key_orders[key])
         for _, nested_line in ipairs(nested_lines) do
           table.insert(lines, nested_line)
         end

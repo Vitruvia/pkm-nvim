@@ -391,26 +391,42 @@ No items currently in active development. All implementation phases are complete
 1.  **Improved PKM interface and navigation:** Use UI panels for displaying note
     and view lists, leaving simple native Neovim UI for short and fixed sets of
     choices (like the exportation types described in Next Steps 3)
-    - `:PKMAddTag`: improve UI to show a panel where tags can be chosen and
-      searched (similar to the existing browse panels).
-    - Trash: improve `:PKMRestoreNote`'s UI to show a panel where previously
-      deleted notes can be browsed and searched (similar to the existing browse
-      panels). This panel should allow the user to select notes and then press
-      a key to restore them. To avoid any accidental losses, deleting notes or
-      recycling the whole trashbin should not be possible in this UI for now
-      (that feature remains confined to `:PKMEmptyTrash`, which should always
-      prompt the user for confirmation before executing).
-    - `:PKMViewNew` and `:PKMUpdateView` should be incorporated into the views
-      panel (`:PKMViews`), which should now also open UI panels similar to
-      other browsing and searching panels, but now with a key combination for
-      creating and updating views / subviews (that is, for calling `PKMViewNew`
-      and `PKMUpdateView`. As a safety measure, do not add a key for view
-      deletion in those panels for now.
-    - `:PKMViewDelete` should have its own UI panel, similar to the other
-      browsing and searching panels described here. 
-    - `:PKMViewDelete` and `:PKMViewNew` can persist as residual commands with
-      an optional arguments.
-    - Add a key to open `:PKMViews` in the sidebar.
+    -   `:PKMAddTag`: improve UI to show a panel where tags can be chosen and
+        searched (similar to the existing browse panels).
+    -   Trash: improve `:PKMRestoreNote`'s UI to show a panel where previously
+        deleted notes can be browsed and searched (similar to the existing
+        browse panels). This panel should allow the user to select notes and
+        then press a key to restore them. To avoid any accidental losses,
+        deleting notes or recycling the whole trashbin should not be possible
+        in this UI for now (that feature remains confined to `:PKMEmptyTrash`,
+        which should always prompt the user for confirmation before executing).
+    -   `:PKMViewNew` and `:PKMUpdateView` should be incorporated into the
+        views panel (`:PKMViews`), which should now also open UI panels similar
+        to other browsing and searching panels, but now with a key combination
+        for creating and updating views / subviews (that is, for calling
+        `PKMViewNew` and `PKMUpdateView`. As a safety measure, do not add a key
+        for view deletion in those panels for now.
+    -   `:PKMViewDelete` should have its own UI panel, similar to the other
+        browsing and searching panels described here. 
+    -   `:PKMViewDelete` and `:PKMViewNew` can persist as residual commands
+        with an optional arguments.
+    -   Add a key to open `:PKMViews` in the sidebar.
+    -   `:PKMViews` and `:PKMSearch` toggle: toggling from the first to the
+        second is not smooth (a console shows during the transition), make it
+        smoother if possible. Helplines are missing for some already
+        functioning commads (such as `T` for toggling between title and
+        filename display).
+    -   using `<c-v>` on a note title/filename on the sidebar correctly opens
+        the note on a new vertical buffer. however, by default it creates a
+        split on the right. change it to create a split on the left, or create
+        a keymap to allow the user to do so, if you think preserving the choice
+        on the left is adequate.
+    -   Using `#<CR>`, where `#` is a number, correctly opens a file on the #th
+        window. However, it only does so if that window already exists.
+        Consider allowing it to create that window, if it doesn't exist,
+        effectively replacing `<C-v>` and allowing the user to choose between
+        any window when opening a file in a new split (this would solve the
+        issue presented in the previous point).
 
 2. **PKM new view autorefresh sidebar:** currently, adding a new view with
    `:PKMViewNew` does not autorefresh the sidebar. The new view appears only
@@ -419,23 +435,71 @@ No items currently in active development. All implementation phases are complete
    being added (it should autorefresh the sidebar and return to the previously
    active window, which may or not be the sidebar itself).
 
-3. **Deep exportation:** modify `export.lua` and any other files related to
-   exportation with the goal to enable "deep exportation". Deep exportation is
-   defined here as an exportation of all selected notes plus the notes they
-   depend on. To do so, the system must, for each note selected for
-   exportation, check each note that it cites (and this includes any types such
-   as journal, agg, bib, or note). If the cited note is not also included in
-   the exportation list, then the system should include it. Deep exportation
-   does not replace simple exportation, it is an extra option. Notes to be
-   exported in deep exporation are those selected by the user and those cited
-   by them, but not the ones that cite them (e.g. Note 1, selected for
-   exportation, cites Notes 2, 4, 5; it is cited by Notes 2, 3, 6, but it does
-   not cite Notes 3 and 6. Deep export will export Notes 1, 2, 4, 5, but not
-   Notes 3, 6).
+3.  **Deep exportation:** modify `export.lua` and any other files related to
+    exportation with the goal to enable "deep exportation". Deep exportation is
+    defined here as an exportation of all selected notes plus the notes they
+    depend on. To do so, the system must, for each note selected for
+    exportation, check each note that it cites (and this includes any types
+    such as journal, agg, bib, or note). If the cited note is not also included
+    in the exportation list, then the system should include it. Deep
+    exportation does not replace simple exportation, it is an extra option.
+    Notes to be exported in deep exporation are those selected by the user and
+    those cited by them, and the ones that cite them. The depth should be
+    selectable at every function call, with a default of 0 for "cited by" and 2
+    for "cites". This means that, by default, no notes that cite the selected
+    notes (and therefore are listed in the "cited_by" metadata will be
+    selected, and that notes cited by the selected note, as well as notes that
+    these note cite will be selected.
+    Example:
+
+    ```
+    Note 1 is selected for exportation, and:
+    -   Note 1 cites Notes 2, 4, 5 (cites - depth 1); 
+    -   Notes 2 and 4 cite no other notes, 
+    -   Note 5 cites Note 7 (cites - depth 2); 
+    -   Note 7 cites Note 8 (cites - depth 3). 
+    -   Note 1 is cited by Notes 2, 3, 6, (cited by - depth 1). 
+
+    By the default configuration, deep export will export Notes 1, 2, 4, 5,
+    (cites - depth 1) and 7 (cites - depth 2), but not Notes 3, 6, since those
+    two are cited neither by Note 1 nor by any note that Note 1 cites
+    directly).
+    ```
 
 4. **Consistent view renaming:** `:PKMUpdateView` should ensure that any
    renamed views are also renamed in places that reference them (e.g. subviews
    that register them as a parent, any relevant index entry, etc.)
+
+5.  **Improved editing:**
+    1.  Every metadata modification, even automatic timestamp updating in
+        "last_updated_on", is registered as a normal editing step, This causes 
+        undo commands (e.g. by pressing `u` in normal mode) to undo these metadata
+        "edits" before actually undoing text modified by the user, disrupting the
+        workflow (more important) and potentially misrepresenting the true "last_updated_on" time.
+        This happens only if the user edits -> saves -> undos, since the save is what
+        triggers automatic metadata edits. 
+        1.  Keep in mind that purposeful editing of metadata by the user
+          (directly or via specific metadata commands such as `:PKMAddTag`)
+          should register as edits an be undoable by this process, but not
+          automatic edits triggered by saving (these should simply change to reflect
+          the document's state, and the last_modified_on block should only be changable directly, not
+          accidentally by "undo").
+        2.  It seems that metadata items are reordered without any reason during
+           save. The elements noted to change are those in "cited" and
+           "cited_by" (e.g. "scratch", "journal", "note", "bib). The exact
+           element to change varies by note, probably depending on which of
+           them is empty or not.
+        3.  When pressing `u` to undo, neovim shows a large number of changes,
+            which increases depending on the file's size. The number of changes
+            seems to correspond to the number of lines in the file plus any
+            other changes that were made by the user (and are being undone).
+            This indicates that the whole file is being changed at some point
+            during save, but the undo does not show any real change in those
+            lines. My hypothesis is that saving rewrites the whole file at some
+            point. If this is intended (and important / necessary), then keep
+            it, since it does not seem to disrupt the work process. Change it
+            only if it completely unecessary and changing it is easy and not
+            prone to introducing new bugs.
 
 5.  **Bugfixes:**
     - Files can still open in the sidebar panel via `:PKMViewAll` and other
@@ -450,7 +514,91 @@ No items currently in active development. All implementation phases are complete
 
 ### Distant Additions (mid-term to long-term)
 
-1.  **Explorer UI customisation:**
+1.  **Markdown improvements:**
+    1.  Establish our own conventions for markdown, in order to provide a
+        guideline for consistent and high-quality note-taking, reviewing, and
+        editing, as well as LLM/AI collaboration. Some of these conventions may drive
+        syntax highlighting and formatting, while others are simply meant to guide the
+        user in using consistent notation and terminology. Examples (non-exhaustive):
+        -   spacing: github's guidelines suggest using two spaces after number
+            prefixes and 3 spaces after simple symbol prefixes to reach a 4
+            space indentation, but what about symbols 4 character-large or more
+            and numbers 3 character-large or more (the numbers are followed by
+            an additional separator character and each prefix is followed by at
+            least one space, so we would have to deal with an indentation level
+            of 5). A possible solution is to allow text to start 1 space after
+            the prefix (counting the separator for number prefixes) but then
+            start at the correct indentation level from the second line
+            onwards;
+        -   evaluate cost-benefit of extending possible list prefix to any
+            alphanumeric symbol + a separator from a standard separators list
+            (e.g. `-`, `.`, `)`, `:`). Consider the same for symbol sequences.
+            This would allow things such as `text:`, `I -`, `I)`, and many
+            others to be highlighted and to provide a basis for text wrapping
+            and indentation;
+        -   tables: 
+            -   decision on table types to support (markdown, csv, tsv, etc.);
+            -   conventions for separators; 
+            -   consider allowing text wrapping
+            inside table cells (this would require an adjustment in neovim's
+            autowrap inside tables OR a custom autowrap for PKM (leaving the
+            native autowrap untouched)).
+        -   juxtaposing equivalent names like `AI/LLM` or `não-exaustivo/não-taxativo`.
+    2.  Improved editor navigation: add keymapped commands to allow navigating
+        between:
+        -   Same level headers;
+        -   Same level list component;
+        -   Different level headers;
+        -   Diferent level list components;
+        -   Blocks of the same type (code blocks, lists, citation);
+    3.  Extended list prefixs recognition. This needs to be analyzed in conjunction with Distant
+        Additions 2.1. and with the current syntax highlighting constraints, as
+        well as with any other conflicts that may arise from using these
+        symbols as such (note that they would only have this effect if located
+        at the beginning of a line and at the correct identation level, just
+        like default lists prefixes).
+    4.  A markdown table formatter, accoring to our conventions.
+    5.  A custom autowrap that will correctly work with the elements of a PKM
+        note, like YAML frontmatter, code blocks, headers (no autowrapping
+        headers with text that imediately precedes or follows them), tables,
+        etc.
+
+2. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
+  WebSocket live updates on save, cross-platform browser opening, terminal fallback
+  (glow/mdcat).
+
+3. **Persistent index** — Serialize the in-memory index to disk (msgpack or JSON) with
+  mtime-based incremental updates on startup. Needed only if startup scan time becomes
+    1.  Every metadata modification, even automatic timestamp updating in
+  unacceptable at very large corpus sizes (likely >50k notes). The current build cost
+  is ~0.25 ms/note; at 500 notes (realistic current scale) that is ~125 ms, which is
+  imperceptible. Run `bench.baseline()` on the real corpus before implementing this.
+
+4.  **`_match_cache` in views.lua** — Cache matched path arrays alongside
+    filter trees. Makes repeated `match_all` calls O(1) until invalidation.
+    Bench showed 3.1 ms/view at 10k notes; not warranted at current scale.
+    Revisit at ~5k notes or ~200+ views with observed latency.
+
+5.  **Note review queue** — Select and track notes intended for review. May
+    include organizers, separators, or filter interactions for priority/subject
+    categorisation.
+
+6.  **Alternative diagram and imaging methods** — ASCII/text-based art and
+    other portable methods for enhancing notes without external image files.
+    Any approach must be examined for human readability, AI/machine
+    readability, and portability before implementation.
+
+7.  **Improved contextual search/browsing:** improve the context detection
+    algorithm, but only if it does not significantly impair performance, this
+    context detection should enable notes to be ordered due to relevance both
+    on search and on the panels (buffer and sidebar). E.g. notes related to the
+    view, notes with similar citations, recently modified notes, recently
+    opened notes. We should define a rationale for the criteria priority and
+    consider algorithms used in popular tools to rank the relevance of files,
+    urls, etc (like google's). This should make note navigation much more
+    intuitive both during edition and when starting a new session.
+
+8.  **Explorer UI customisation:**
     1.  positions and width of each panel; auto-on/off triggers by directory,
         CWD, or buffer type; other layout options users may need. 
     2.  Improved help panel with main keymaps for PKM (the current panel is
@@ -458,59 +606,9 @@ No items currently in active development. All implementation phases are complete
         user customizes their config, so this change is related to "Explorer UI
         Customisation".
 
-2.  **Markdown improvements:**
-    1.  Conventions for spacing: github's guidelines suggest using two spaces
-        after number prefixes and 3 spaces after simple symbol prefixes to
-        reach a 4 space indentation, but what about symbols 4 character-large
-        or more and numbers 3 character-large or more (the numbers are followed
-        by an additional separator character and each prefix is followed by at
-        least one space, so we would have to deal with an indentation level of
-        5). A possible solution is to allow text to start 1 space after the
-        prefix (counting the separator for number prefixes) but then start at
-        the correct indentation level from the second line onwards.
-    2.  Improved editor navigation: add keymapped commands to allow navigating
-        between:
-        - Same level headers;
-        - Same level list component;
-        - Different level headers;
-        - Diferent level list components;
-        - Blocks of the same type (code blocks, lists, citation);
-    3. Extended list prefixes: evaluate cost-benefit of extending possible list
-       prefix to any alphanumeric symbol + a separator from a standard
-       separators list (e.g. `-`, `.`, `)`, `:`). Consider the same for symbol
-       sequences. This would allow things such as `text:`, `I -`, `I)`, and
-       many others to be highlighted and to provide a basis for text wrapping
-       and indentation. This needs to be analyzed in conjunction with Distant
-       Additions 2.1. and with the current syntax highlighting constraints, as
-       well as with any other conflicts that may arise from using these symbols
-       as such (note that they would only have this effect if located at the
-       beginning of a line and at the correct identation level, just like
-       default lists prefixes).
-
-3. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
-  WebSocket live updates on save, cross-platform browser opening, terminal fallback
-  (glow/mdcat).
-
-4. **Persistent index** — Serialize the in-memory index to disk (msgpack or JSON) with
-  mtime-based incremental updates on startup. Needed only if startup scan time becomes
-  unacceptable at very large corpus sizes (likely >50k notes). The current build cost
-  is ~0.25 ms/note; at 500 notes (realistic current scale) that is ~125 ms, which is
-  imperceptible. Run `bench.baseline()` on the real corpus before implementing this.
-
-5. **`_match_cache` in views.lua** — Cache matched path arrays alongside filter trees.
-  Makes repeated `match_all` calls O(1) until invalidation. Bench showed 3.1 ms/view at
-  10k notes; not warranted at current scale. Revisit at ~5k notes or ~200+ views with
-  observed latency.
-
-6. **Note review queue** — Select and track notes intended for review. May include
-  organizers, separators, or filter interactions for priority/subject categorisation.
-
-7. **Alternative diagram and imaging methods** — ASCII/text-based art and other portable
-  methods for enhancing notes without external image files. Any approach must be examined
-  for human readability, AI/machine readability, and portability before implementation.
-
-8. **Improved contextual search/browsing:** improve the context detection
-   algorithm, but only if it does not significantly impair performance.
+9.  **System customization:**
+    1. Turn on/off our markdown features, to allow the user to use external
+       markdown plugins if they prefer.
 
 ---
 
@@ -693,6 +791,49 @@ automates `dev→main` merges.
 - Neovim docs: https://neovim.io/doc/
 - Lua docs: https://www.lua.org/docs.html
 - LuaRocks style guide: https://github.com/luarocks/lua-style-guide
+
+---
+
+## Neovim Version Compatibility Watch List
+
+Audited 2026-06-21 against Neovim 0.12 (stable, 0.12.3) while still running
+0.11.3. Full breaking-changes/deprecations list reviewed; no code changes
+required for the 0.11 → 0.12 upgrade itself. Recorded here so future upgrades
+don't need to re-derive this from scratch.
+
+**Confirmed safe (re-verified against 0.12 `news.txt`, no action needed):**
+- `vim.treesitter.get_parser()` now returns `nil` on failure instead of
+  throwing. All call sites in `syntax.lua` already wrap in `pcall` and check
+  for `nil`, handling both behaviors. No regression.
+- `UndoPost` still does not exist as an autocmd event in 0.12. The existing
+  rule ("never register `UndoPost`") remains correct — re-check this line
+  specifically at the next major version audit, since it's the one rule most
+  likely to silently become obsolete (i.e., wrong, not broken) if Neovim ever
+  adds the event.
+
+**Low-priority migration (deprecated, not removed — no urgency):**
+- `nvim_create_autocmd()`'s `buffer` key is deprecated in 0.12 in favor of
+  `buf` (old key still accepted). Used in `syntax.lua` and `views.lua` at
+  minimum. Safe to leave as-is; rename opportunistically when touching those
+  autocmds for other reasons, not as a standalone task.
+
+**Watch item (uncertain risk, verify after actual upgrade):**
+- 0.12 tightened URI-scheme detection on buffer names (RFC3986). PKM does not
+  call `vim.uri_*` or otherwise parse buffer names as URIs, so Windows
+  drive-letter paths (`P:/Active/...`, `P:/Notes/...`) should be unaffected.
+  Not verified empirically. After upgrading, sanity-check `:PKMNewNote`,
+  `follow_link` (`gf`), and sidebar note-opening (`edit` + `fnameescape`)
+  against a `P:/Notes` path before trusting this is a non-issue.
+
+**Process for future upgrades:**
+- Re-run this audit against `:help news` for the target version before
+  upgrading, not after. Check specifically: treesitter API changes (PKM's
+  heaviest Neovim-API surface), autocmd event additions/removals, and any
+  change to `foldmethod=manual` / `matchadd` semantics (used in `syntax.lua`'s
+  frontmatter folding and citation highlighting).
+- As of this audit, Neovim's own unreleased/HEAD changelog has no concrete
+  items affecting PKM's code surface (no LSP, no diagnostics, no `vim.pack`
+  dependency, no use of `vim.pos`/`vim.range`).
 
 ---
 

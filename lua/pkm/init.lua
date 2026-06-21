@@ -100,6 +100,11 @@ function M.setup_sync_autocmds()
       if frontmatter.cites and type(frontmatter.cites) ~= "table" then return end
 
       frontmatter.last_updated_on = timestamp_m.to_iso8601()
+      -- Merge into the same undo block as the user's last edit so `u` doesn't
+      -- need an extra press to reach it. pcall guards E790 (undojoin not allowed
+      -- right after undo/redo) and the case where there's no prior change to
+      -- join (e.g. :w immediately after opening the file, no edits yet).
+      pcall(vim.cmd, 'undojoin')
       yaml_m.save_frontmatter(frontmatter, content_start)  -- Case A: buffer update, no disk write
     end,
   })
@@ -150,9 +155,14 @@ function M.setup_sync_autocmds()
         -- in the panel). Second validity check covers bdelete during sync.
         if not vim.api.nvim_buf_is_valid(written_buf) then return end
         vim.api.nvim_buf_call(written_buf, function()
-          local view = vim.fn.winsaveview()
-          vim.cmd('noautocmd e')
-          vim.fn.winrestview(view)
+        local view = vim.fn.winsaveview()
+        -- Same reasoning as BufWritePre: this reload reflects update_references'
+        -- own disk-side rewrite, not anything the user typed.
+        pcall(vim.cmd, 'undojoin')
+        vim.cmd('noautocmd e')
+        vim.fn.winrestview(view)
+        -- (rest of the fold-restore / TS-restart logic is unchanged — it touches
+        -- windows and the TS parser, not buffer text, so it doesn't need undojoin)
           -- noautocmd suppresses Syntax/FileType autocmds; re-fire Syntax only
           -- so modeline scanning cannot trigger.
           vim.cmd('doautocmd Syntax')

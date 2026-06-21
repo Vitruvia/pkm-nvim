@@ -44,6 +44,39 @@
 
 ---
 
+## [1.5.6] - 2026-6-21
+
+### Fixed
+
+- **Automatic save edits created spurious undo steps** — `BufWritePre`'s
+  `last_updated_on` injection and `BufWritePost`'s `noautocmd e` reload (after
+  `update_references`) both mutated the buffer as ordinary, separately
+  undoable changes, landing on top of the undo stack after the user's real
+  edit. Fix: both call sites now `pcall(vim.cmd, 'undojoin')` immediately
+  before their mutation, merging into the same undo block as the user's last
+  edit. Tradeoff: `last_updated_on` is no longer independent of undo — it
+  reverts together with the edit it stamps. True independence isn't
+  achievable without either discarding buffer undo history entirely (the
+  `'undolevels' = -1` trick does this — rejected) or moving metadata out of
+  the buffer (against the in-file metadata commitment).
+
+- **`cites`/`cited_by` sub-groups (`notes`/`bib`/`journal`/`scratch`)
+  reordered on every save** — `generate_yaml`'s `key_order` only covered
+  top-level keys; nested groups fell through to an unordered `pairs()` pass,
+  whose iteration order is unspecified by Lua and varies across the freshly
+  parsed tables rebuilt on every save. Fix: `generate_yaml` takes an optional
+  `key_order` parameter; recursion into `cites`/`cited_by` now passes a fixed
+  sub-order (`notes, bib, journal, scratch`).
+
+- **`manage_backlink()` polluted undo in unrelated open buffers** — both
+  branches (modified-target in-buffer apply, and unmodified-target silent
+  disk-sync reload) mutated `target_bufnr` via raw `nvim_buf_set_lines`
+  without `undojoin`, creating a separate undo step in a buffer the user
+  wasn't even saving — triggered purely by citing/un-citing it from another
+  note. Fix: both mutations now run inside
+  `nvim_buf_call(target_bufnr, function() pcall(vim.cmd, 'undojoin'); ... end)`,
+  merging into that buffer's own undo history. Same `undojoin`-over-`undolevels=-1`
+  reasoning as the `init.lua` BufWritePre/BufWritePost fix above.
 
 ## [1.5.5] - 2026-6-19
 

@@ -120,6 +120,24 @@ or sync, and external services required for basic operation are out of scope.
 
 ---
 
+## 7. User-Oriented Design
+
+Creating, fixing, and maintaining this project should always be done having
+user experience in mind, including, but not limited to, the following concerns
+(always consider this list incomplete and non-exhaustive):
+-   note readability;
+-   UI intuitivity;
+-   system performance when editing, browsing, and searching notes;
+-   system performance on startup;
+-   simple setup, with robust defaults that cover most use cases and allow for
+    any user to quickly start using the program.
+-   diverse customization options, but organized in a way that makes it easy
+    for the user to determine what they want to customize or not. The
+    customization itself should also be easy to implement (customization should
+    be desgined after defaults are defined and have been shown to be stable);
+
+---
+
 ## How to Use This Document
 
 When a proposed feature, change, or integration is under discussion:
