@@ -160,6 +160,7 @@ function M.setup_sync_autocmds()
           if ok_read then
             pcall(vim.cmd, 'undojoin')
             pcall(vim.api.nvim_buf_set_lines, written_buf, 0, -1, false, reload_lines)
+            pcall(vim.cmd, 'noautocmd write!')
           end
           vim.fn.winrestview(view)
           -- noautocmd e is no longer used, so there's no modeline-scan risk

@@ -48,6 +48,20 @@
 
 ### Fixed
 
+- **BufWritePost reload left every PKM buffer permanently "modified," and
+  the next `:w` after that warned the file had changed on disk** —
+  regression introduced by the `nvim_buf_set_lines`-based reload fix above:
+  unlike `:e`, `nvim_buf_set_lines` updates buffer content but neither
+  clears `modified` nor refreshes Neovim's internal "file mtime as of last
+  read" bookkeeping. Surfaced as: `:wqall` prompting on unmodified buffers,
+  buffer panel `d` refusing to close without `!`, and a "file changed since
+  reading it" warning on save → undo → save. Fix: added a quiet
+  `noautocmd write!` immediately after the `nvim_buf_set_lines` reload —
+  refreshes both `modified` and the mtime record as a side effect of a real
+  (if content-redundant) write, without reintroducing `:e`'s fold-
+  destruction or tree-sitter-detach side effects. Verified via headless
+  Neovim test that `noautocmd write!` touches neither.
+
 - **Automatic save edits created spurious undo steps** — `BufWritePre`'s
   `last_updated_on` injection and `BufWritePost`'s `noautocmd e` reload (after
   `update_references`) both mutated the buffer as ordinary, separately
