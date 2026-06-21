@@ -231,6 +231,8 @@ function M.generate_yaml(data, indent, key_order)
     "source_type", "source_location"
   }
 
+  local citation_entry_order = { "identifier", "title", "link" }
+
   -- Sub-key order for grouped structures (cites/cited_by). Without this,
   -- "notes"/"bib"/"journal"/"scratch" fall through to the unordered pairs()
   -- pass below and visibly reshuffle position on every regeneration, even
@@ -260,7 +262,7 @@ function M.generate_yaml(data, indent, key_order)
         for _, item in ipairs(value) do
           if type(item) == "table" then
             -- Handle nested objects within an array
-            local nested_lines = M.generate_yaml(item, indent + 2)
+            local nested_lines = M.generate_yaml(item, indent + 2, citation_entry_order)
             table.insert(lines, indent_str .. "  -")
             for _, nested_line in ipairs(nested_lines) do
                 table.insert(lines, "  " .. nested_line)

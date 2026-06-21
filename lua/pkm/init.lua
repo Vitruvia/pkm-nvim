@@ -155,18 +155,18 @@ function M.setup_sync_autocmds()
         -- in the panel). Second validity check covers bdelete during sync.
         if not vim.api.nvim_buf_is_valid(written_buf) then return end
         vim.api.nvim_buf_call(written_buf, function()
-        local view = vim.fn.winsaveview()
-        -- Same reasoning as BufWritePre: this reload reflects update_references'
-        -- own disk-side rewrite, not anything the user typed.
-        pcall(vim.cmd, 'undojoin')
-        vim.cmd('noautocmd e')
-        vim.fn.winrestview(view)
-        -- (rest of the fold-restore / TS-restart logic is unchanged — it touches
-        -- windows and the TS parser, not buffer text, so it doesn't need undojoin)
-          -- noautocmd suppresses Syntax/FileType autocmds; re-fire Syntax only
-          -- so modeline scanning cannot trigger.
+          local view = vim.fn.winsaveview()
+          local ok_read, reload_lines = pcall(vim.fn.readfile, filepath)
+          if ok_read then
+            pcall(vim.cmd, 'undojoin')
+            pcall(vim.api.nvim_buf_set_lines, written_buf, 0, -1, false, reload_lines)
+          end
+          vim.fn.winrestview(view)
+          -- noautocmd e is no longer used, so there's no modeline-scan risk
+          -- to guard against — this Syntax refire is now a no-op, kept as-is.
           vim.cmd('doautocmd Syntax')
-          -- Restart PKM tree-sitter if active; noautocmd e stops it implicitly.
+          -- Restart PKM tree-sitter if active; harmless no-op now that the
+          -- highlighter is never actually stopped by the reload above.
           if require('pkm.mode').is_active() then
             -- Save per-window frontmatter fold state before TS restart.
             -- foldclosed(1) == -1 means line 1 (opening ---) is in an open fold.

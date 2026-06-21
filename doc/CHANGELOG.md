@@ -78,6 +78,30 @@
   merging into that buffer's own undo history. Same `undojoin`-over-`undolevels=-1`
   reasoning as the `init.lua` BufWritePre/BufWritePost fix above.
 
+- **Citation entries (`identifier`/`title`/`link`) reordering on every save**
+  — same root cause as the `cites`/`cited_by` group-ordering fix above, one
+  level deeper: `generate_yaml`'s array-of-objects branch (Case 2) never
+  passed a key order into its recursive call, so each citation entry table
+  fell back to the top-level order (where `title` matched and always
+  rendered first) with `identifier`/`link` falling through to unordered
+  `pairs()`. Fix: new `citation_entry_order = {"identifier","title","link"}`
+  passed into the Case 2 recursive `generate_yaml` call. Applies identically
+  to `cited_by` entries — same code path, not a separate bug.
+
+- **BufWritePost reload still produced a separate undo step despite
+  `undojoin`** — confirmed via headless-Neovim testing that `:e` (file
+  reload) does not honor a preceding `:undojoin` under any invocation; it
+  unconditionally opens a fresh undo block. This was the actual cause of the
+  "swap reverts, then timestamp reverts" two-press undo behavior. Fix:
+  replaced `noautocmd e` with `pcall(vim.cmd,'undojoin')` +
+  `nvim_buf_set_lines(written_buf, 0, -1, false, readfile(filepath))`, which
+  *does* honor undojoin — confirmed via the same testing. Side effects
+  verified safe: `nvim_buf_set_lines` (unlike `:e`) does not destroy manual
+  folds and does not detach an active tree-sitter highlighter, so the
+  existing fold-restore and TS-restart logic become harmless no-ops rather
+  than newly-broken paths. Left in place as redundant defensive code rather
+  than removed — out of scope for this fix.
+
 ## [1.5.5] - 2026-6-19
 
 ### Fixed
