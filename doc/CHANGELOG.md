@@ -48,6 +48,32 @@
 
 ### Fixed
 
+- **Buffer panel `d` evicted a modified buffer's window before knowing the
+  close would succeed** — `detach_buf_from_wins(bufnr)` ran unconditionally
+  before attempting `bdelete`, so on a modified buffer the window switched
+  away first and only then did `bdelete` (no `!`) fail, leaving the buffer
+  open but no longer visible anywhere. Fix: `d` now checks `modified` first
+  and prompts (`vim.fn.confirm`, Yes/No/Cancel) — Yes writes then closes
+  normally, No force-closes and discards, Cancel/Esc leaves the buffer and
+  its window untouched. Detach only happens once the outcome is settled.
+
+- **Buffer panel `<CR>` split the panel's own window when no editing window
+  existed** — the fallback path (`rightbelow vsplit`) operated on whatever
+  window was current, which at that point is the panel's own buffer-local
+  keymap context — producing a vertical sliver of the panel itself instead
+  of a proper editing pane. Pre-existing latent bug, not a recent
+  regression; only reachable when the last editing window is closed while
+  the panel stays open. Fix: creates a real window above the panel first
+  (same technique as `ensure_main_window`), then loads the buffer into it.
+
+- **Buffer panel could still end up as the sole window** — `ensure_main_window()`
+  was only invoked from the panel's own `d`/`D`/`w` keymaps, so closing the
+  last editing window through any other means (`:q`, `:bd`, `<C-w>c` typed
+  directly in it) left the panel alone on screen with no rebalancing. Fix:
+  added a `WinClosed` autocmd in `toggle_bufpanel` that calls
+  `ensure_main_window()` after any window closes in the tabpage, covering
+  every path rather than just the panel's three keymaps.
+
 - **BufWritePost reload left every PKM buffer permanently "modified," and
   the next `:w` after that warned the file had changed on disk** —
   regression introduced by the `nvim_buf_set_lines`-based reload fix above:

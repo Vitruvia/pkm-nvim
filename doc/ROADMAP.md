@@ -539,10 +539,25 @@ No items currently in active development. All implementation phases are complete
         -   tables: 
             -   decision on table types to support (markdown, csv, tsv, etc.);
             -   conventions for separators; 
-            -   consider allowing text wrapping
-            inside table cells (this would require an adjustment in neovim's
-            autowrap inside tables OR a custom autowrap for PKM (leaving the
-            native autowrap untouched)).
+            -   consider allowing text wrapping inside table cells (this would
+                require an adjustment in neovim's autowrap inside tables OR a
+                custom autowrap for PKM (leaving the native autowrap
+                untouched)). A similar autowrap should also be considered for
+                text disposed in two or more columns.
+                Example, suppose a user is writing a text that he clearly separated
+                in two columns, using spaces or tabs as a delimiter, then the
+                wrapping should occur as:
+
+                ```
+                -- WRONG --
+                - XLIII       Crimes de tortura, tráfico ilícito de entorpecentes e afins,
+                terrorismo e crimes hediondos
+
+                -- CORRECT --
+                - XLIII       Crimes de tortura, tráfico ilícito de entorpecentes e afins,
+                              terrorismo e crimes hediondos
+                ```
+
         -   juxtaposing equivalent names like `AI/LLM` or `não-exaustivo/não-taxativo`.
     2.  Improved editor navigation: add keymapped commands to allow navigating
         between:
@@ -562,6 +577,15 @@ No items currently in active development. All implementation phases are complete
         note, like YAML frontmatter, code blocks, headers (no autowrapping
         headers with text that imediately precedes or follows them), tables,
         etc.
+    6. Improved motion inside tables (quickly move to next cell, column or
+       line, including if it is not filled yet. This should make editing
+       easier).
+    7. Consider expanding our custom syntax highlighting and commands to all
+       files outside PKM, this is not specific to PKM, but we can create a
+       config to enable a broader reach of the markdown highlight and of the
+       markdown functions as an option. Since this is something that I may find
+       beneficial, consider this as an option before even if we are still not
+       creating customization options for users.
 
 2. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback

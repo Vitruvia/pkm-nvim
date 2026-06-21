@@ -305,6 +305,23 @@ function M.toggle_bufpanel()
     })
   end
 
+  -- Safety net: ensure_main_window() already prevents the panel from
+  -- becoming the sole window after the panel's own d/D/w close a buffer.
+  -- This generalizes that to every path — closing the last editing window
+  -- via plain :q, :bd, <C-w>c, etc. typed directly in it, with the panel
+  -- left open, was never covered by those three keymaps and is a
+  -- pre-existing gap, not something introduced by recent changes.
+  vim.api.nvim_create_autocmd('WinClosed', {
+    group    = t.augroup,
+    callback = function()
+      vim.schedule(function()
+        if t.win and vim.api.nvim_win_is_valid(t.win) then
+          ensure_main_window()
+        end
+      end)
+    end,
+  })
+
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer   = buf,
     once     = true,
@@ -348,7 +365,9 @@ function M.toggle_bufpanel()
       vim.api.nvim_set_current_win(target)
       vim.api.nvim_set_current_buf(bufnr)
     else
-      vim.cmd('rightbelow vsplit')
+      vim.api.nvim_set_current_win(ct.win)
+      vim.cmd('aboveleft new')
+      vim.bo.bufhidden = 'wipe'
       vim.api.nvim_set_current_buf(bufnr)
     end
   end, ko)
@@ -357,8 +376,37 @@ function M.toggle_bufpanel()
     local ct    = get_tab()
     local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+
+    if vim.bo[bufnr].modified then
+      local name  = vim.api.nvim_buf_get_name(bufnr)
+      local label = name ~= '' and vim.fn.fnamemodify(name, ':t') or '[No Name]'
+      local choice = vim.fn.confirm(
+        string.format("Save changes to '%s' before closing?", label),
+        '&Yes\n&No\n&Cancel', 1)
+      if choice ~= 1 and choice ~= 2 then
+        -- Cancel, <Esc>, or dialog dismissed: leave the buffer and its
+        -- window exactly as they were.
+        return
+      end
+      if choice == 1 then
+        local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function() vim.cmd('write') end)
+        if not ok then
+          vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
+          return
+        end
+      end
+      -- choice == 2 (No): fall through and force-close below, discarding
+      -- the unsaved changes.
+    end
+
+    -- Only detach the buffer from its window now that we know the close
+    -- will actually succeed — previously this ran unconditionally before
+    -- attempting bdelete, so a modified buffer's window got switched away
+    -- even when the subsequent bdelete then failed, forcing a trip back
+    -- to find the buffer just to save it.
     detach_buf_from_wins(bufnr)
-    local ok, err = pcall(vim.cmd, 'bdelete ' .. bufnr)
+    local force = vim.bo[bufnr].modified and '!' or ''
+    local ok, err = pcall(vim.cmd, 'bdelete' .. force .. ' ' .. bufnr)
     if not ok then
       vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
     else
