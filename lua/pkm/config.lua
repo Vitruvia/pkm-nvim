@@ -94,9 +94,10 @@ local defaults = {
 
   -- Markdown Symbols
   symbols = {
-    { trigger = '^-', key = '<M-->', expansion = '—' },
-    { trigger = '^$',   key = '<M-s>', expansion = '§' },
-    { trigger = '^o',   key = '<M-o>', expansion = 'º' },
+    { trigger = '^-', key = '', expansion = '—' },
+    { trigger = '^$',   key = '', expansion = '§' },
+    { trigger = '^o',   key = '', expansion = 'º' },
+    { trigger = '^a',   key = '', expansion = 'ª' },
   },
 
   -- PKM Mode and Explorer UI

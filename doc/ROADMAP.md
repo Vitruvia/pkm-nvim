@@ -990,8 +990,12 @@ only after the whole release lands.*
        files outside PKM, this is not specific to PKM, but we can create a
        config to enable a broader reach of the markdown highlight and of the
        markdown functions as an option. Since this is something that I may find
-       beneficial, consider this as an option before even if we are still not
-       creating customization options for users.
+       beneficial, we can implement it before the customization options for users (that is,
+       this feature does not break the philosophy guidelines that instructs postponing
+       customization, because it is something that I want to test and might want to keep
+       always on if I find it useful (e.g. the default behavior of having
+       4-space indented text highlight as code, even when prefixed as list, is
+       distracting and does not serve any purpose).
 
 2. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
@@ -1018,15 +1022,37 @@ only after the whole release lands.*
     Any approach must be examined for human readability, AI/machine
     readability, and portability before implementation.
 
-7.  **Improved contextual search/browsing:** improve the context detection
-    algorithm, but only if it does not significantly impair performance, this
-    context detection should enable notes to be ordered due to relevance both
-    on search and on the panels (buffer and sidebar). E.g. notes related to the
-    view, notes with similar citations, recently modified notes, recently
-    opened notes. We should define a rationale for the criteria priority and
-    consider algorithms used in popular tools to rank the relevance of files,
-    urls, etc (like google's). This should make note navigation much more
-    intuitive both during edition and when starting a new session.
+7.  **Improved contextual search/browse and citations:** improve the context
+    detection algorithm, but only if it does not significantly impair
+    performance, this context detection should enable notes to be ordered due
+    to relevance both on search and on the panels (buffer and sidebar). E.g.
+    notes related to the view, notes with similar citations, recently modified
+    notes, recently opened notes. We should define a rationale for the criteria
+    priority and consider algorithms used in popular tools to rank the
+    relevance of files, urls, etc (like google's). This should make note
+    navigation much more intuitive both during edition and when starting a new
+    session.
+
+    Example 1: `0035_bib_Constituição_da_República_Federativa_do_Brasil_1988.md`
+    was not tagged as "direito-constitucional", so it was not captured as a
+    contextual note when trying to cite it in other notes within the "Direito
+    Constitucional" view. However, its name already suggest it is related to
+    the subject, and it is cited by many other notes in the "Direito
+    Constitucional" view or with the "direito-constitucional" tag. 
+
+    We should analyze if there is a reasonable way to detect this, and perhaps
+    even to rank what appears first depending on a combination of context, last
+    opened/edited, frequently opened together, etc., and implement whatever is
+    reasonable within our capabilities and neovim's/lua constraints, also
+    keeping in mind that maintenability, compatibility with future vim's
+    version, compatibility with pre-existing and future PKM features, and
+    performance are all very important. This is a UX feature and it is
+    important, however, discard part of or all of it if it cannot be
+    implemented while also protecting or enhancing the points listed at the end
+    of the previous sentence.
+
+    Example 2: notes in the sidebar should be ordered according to relevance
+    (e.g. last opened within that view/subview).
 
 8.  **Explorer UI customisation:**
     1.  positions and width of each panel; auto-on/off triggers by directory,
@@ -1035,6 +1061,29 @@ only after the whole release lands.*
         sidebar only). This panel would have to update depending on how the
         user customizes their config, so this change is related to "Explorer UI
         Customisation".
+    3.  Sidebar options
+        -   always on;
+        -   always off;
+        -   on when a note is opened, then remain on;
+        -   on when entering the home notes folder (when it becomes the neovim's
+        working folder), then remain on;
+        -   off when any note is opened (this is a negative toggle, cumulative with
+        the positive toggles, and it takes
+        precedence over the positive toggles, e.g. if it is always on + off when any note
+        is opened, then it is always on, but as soon as a note is opened, it is turned off;
+        it becomes on again if no notes are opened or if the user toggles it on).
+    4. Buffer panel options:
+        -   always on;
+        -   always off;
+        -   on when a note is opened, then remain on;
+        -   on when entering the home notes folder (when it becomes the neovim's
+        working folder), then remain on;
+        -   on when a note is opened, but off again when all notes are closed.
+    5.  `:PKMExplore` will use its own options for the sidebar and buffer
+        panel. Whatever is toggled later (explore or buffer/sidebar) takes
+        precedence. User manual toggles always take precedence over anything
+        else.
+
 
 9.  **System customization:**
     1. Turn on/off our markdown features, to allow the user to use external
