@@ -382,7 +382,219 @@ require('pkm').setup({
 
 ### Active
 
-No items currently in active development. All implementation phases are complete.
+v1.6.0 implementation underway — see "v1.6.0 Implementation Plan" below.
+
+---
+
+### v1.6.0 Implementation Plan
+
+Phased execution plan covering Next Steps items 1–5 below. Phases are ordered
+to surface the one remaining structural decision (Phase 2) early, while
+letting everything that doesn't depend on it proceed regardless of when —
+or whether — that decision lands.
+
+```
+Phase 1 (bugfixes, no deps)
+   │
+   ▼
+Decide: shared panel infra? ──┬─→ Phase 2 ─→ Phase 3
+                               └─→ Phase 3 directly
+   │
+   ▼ (independent of the above)
+Phase 6 (deep export)         — fully specified, can start anytime
+Phase 4 (nav polish)          — fully specified, can start anytime
+Phase 5 (rename completeness) — fully specified, can start anytime
+```
+
+**Phase 1 — Independent bugfixes and small completeness items.**
+*(Next Steps items 2, 5)*
+
+1. `rename_note()` fails on case-only renames (e.g. `prazos` → `Prazos`) on
+   case-insensitive filesystems. Root cause: the collision check
+   (`vim.fn.filereadable(new_filepath) == 1`) can't distinguish "a different
+   file occupies this name" from "the file being renamed already has this
+   name, differing only by case" — both paths resolve to the same inode on
+   NTFS. Fix: compare `new_filepath` and `filepath` case-insensitively; if
+   equal under that comparison but not under exact comparison, treat it as a
+   legitimate case-only rename and skip the collision check for that case.
+
+2. `:Ex`, `:PKMViewEdit`, and `:PKMViews` open files inside the sidebar's own
+   reserved window when invoked while the sidebar has focus. All three call
+   an `:edit`-family command without first checking whether the current
+   window is the sidebar's. Fix: reuse (or extract into a shared helper) the
+   `focus_main_win()`-style guard already used by `:PKMNewNote` and friends —
+   detect `filetype == 'pkm-sidebar'` (and the bufpanel/netrw equivalents)
+   before the `:edit`, redirect focus to a real editing window first.
+
+3. Sidebar doesn't autorefresh when a new view is created via `:PKMViewNew` —
+   it only appears after manual refresh or navigating away and back. Fix:
+   call `M.refresh_sidebar_if_open()` (already exists) at the end of view
+   creation, then restore focus to whichever window was active before the
+   command ran.
+
+4. Audit `sidebar_show_help()` and the header-hint lines in both `views.lua`
+   and `ui.lua` against the keymaps actually registered in each; at minimum
+   `T` (filename/title toggle) is confirmed missing. Add whatever else the
+   audit turns up.
+
+**Phase 2 — Panel infrastructure.** *(supports Next Steps item 1)*
+
+⚠ **Decision needed before this phase can be scoped further.** Three new
+panels are planned in Phase 3 (tag picker, trash-restore, views-with-CRUD),
+each needing the same skeleton `ui.lua`'s buffer panel and `views.lua`'s
+sidebar already implement independently: per-tab state (`_tabs`/`get_tab()`),
+a scoped augroup, refresh-on-event, a buffer-local keymap set, an
+`ensure_main_window()`-style layout safety net.
+
+- **Option A** — extract `lua/pkm/panel.lua`: a generic
+  `panel.create({ name, build_lines, keymaps, ... })` returning
+  `{ open, close, toggle, refresh, is_open }`. Validate it by porting the
+  *existing* buffer panel onto it first — a clean port confirms the
+  abstraction is sound before three more things get built on it.
+- **Option B** — four independent implementations, each modeled on the
+  existing buffer panel as a copy-and-adapt starting point. Faster per-panel;
+  the skeleton gets written a third, fourth, and fifth time.
+
+**Phase 3 — The three new panels.** *(Next Steps item 1)*
+
+Each assumes Phase 2's infrastructure (or, under Option B, a from-scratch
+skeleton per panel).
+
+1. **Tag panel** (for `:PKMAddTag`; worth extending to `:PKMRemoveTag`/
+   `:PKMTags`) — searchable, scrollable list replacing the current
+   `vim.ui.select`/`vim.fn.input` flow. Selection mutates the current
+   buffer's frontmatter only (matching the existing `add_tag()`/`remove_tag()`
+   contract — no `index.invalidate`).
+2. **Trash-restore panel** (for `:PKMRestoreNote`) — browses the trash
+   manifest, select-and-restore via a keymap. **No deletion key** — that
+   stays exclusive to `:PKMEmptyTrash`, which must continue to require typed
+   confirmation.
+3. **Views panel** (extends `:PKMViews`) — adds keys for `:PKMViewNew` and
+   `:PKMViewUpdate` directly from the panel. **No deletion key.**
+   `:PKMViewNew`/`:PKMViewDelete` remain available as standalone commands
+   with optional arguments.
+4. **View-deletion panel** — separate from item 3 by design. Browse, select,
+   confirm before delete — matching the project's existing pattern for
+   destructive actions (`:PKMEmptyTrash`, `delete_note_safely()`).
+5. Sidebar keymap to jump directly into the views panel.
+
+**Phase 4 — Navigation polish.** *(Next Steps item 1, remaining sub-items)*
+
+1. **Sidebar `N<CR>`:**
+   - Window numbering excludes all panel filetypes (sidebar/bufpanel/netrw),
+     counting only real editing windows left-to-right, anchored at "first
+     window right of the sidebar" — reuses the buffer panel's existing
+     `w1`/`w2` window-labeling filter.
+   - `N` ≤ current window count → open in that existing window (unchanged
+     behavior).
+   - `N` > current window count, **including zero windows open** → create
+     exactly **one** new window (the next sequential slot), regardless of how
+     far `N` overshoots — a fat-fingered `9<CR>` with one window open behaves
+     like `2<CR>`, never spawning eight windows.
+   - Window creation must never use Vim's `topleft` modifier (absolute
+     leftmost-in-tabpage) — the sidebar itself is opened via `topleft`, so a
+     second absolute-positioned split could land left of it. Always locate
+     the current rightmost real editing window and split `rightbelow` from
+     there. The sidebar must always remain the leftmost panel.
+
+2. **`<C-v>` repurposed**, not removed: "insert a new window immediately
+   right of the sidebar, shifting existing windows right by one" — the
+   complementary action `N<CR>` can't do (go-to-or-append vs. insert-before).
+   No `<C-CR>` binding — Ctrl+Enter keycode reliability in terminals isn't
+   guaranteed without extended-keyboard-protocol support (this project has
+   already hit an adjacent issue with Windows Terminal and Ctrl+] under
+   ABNT2); reusing an existing keystroke avoids that risk entirely.
+
+3. **`:PKMViews` ↔ `:PKMBrowse` transition shows a console flash.** Root
+   cause undiagnosed — needs reproduction in a live session (likely a
+   Telescope picker-to-picker handoff redraw quirk). Investigate during
+   implementation.
+
+4. **Relative split actions for `:PKMBrowse`/`:PKMViews`** — "open selection
+   in a new split to the right of the window the picker was invoked from" and
+   "...to the left," rather than numbered addressing (digits inside a
+   Telescope prompt are search-query text, not a count prefix, so `N<CR>`'s
+   mechanism doesn't transfer here).
+   - Capture the invocation window (`vim.api.nvim_get_current_win()`) *before*
+     opening the picker — once Telescope's floating prompt opens, it becomes
+     the "current window." Same technique the sidebar's `/` keymap already
+     uses.
+   - If the captured window's `filetype` is `pkm-sidebar` (or another panel),
+     disable "left" for that invocation (no-op); "right" still works. Keeps
+     the leftmost-sidebar invariant intact.
+   - If the captured window no longer exists by selection time: "right" falls
+     back to "rightmost current real editing window, split right"; "left"
+     has no safe fallback and stays unavailable.
+   - Telescope: implement as `attach_mappings`, matching the existing
+     `<C-v>`/`<C-x>`/`<C-t>` split/hsplit/tab convention already used
+     elsewhere in `telescope.lua`. `vim.ui.select` fallback needs its own
+     simpler mechanism (e.g. a one-line follow-up prompt after selection) —
+     work out the exact shape during implementation.
+   - Keybindings: avoid `<C-h>`/`<C-l>` (commonly reserved for backspace /
+     screen-redraw in various terminal configs) and Shift+Ctrl combos (same
+     keycode-reliability class as the dropped `<C-CR>`). Plain Ctrl+letter
+     combos are the safest, most portable choice in terminal Neovim.
+
+**Phase 5 — View-rename completeness.** *(Next Steps item 4)*
+
+`rename_view_prompt` already propagates renames to child subprojects'
+`parent` fields and session state *within* `views.json` — but only scans the
+sidecar, not `config.lua`. A subproject defined in `config.lua` with `parent`
+pointing at a sidecar view that gets renamed goes silently stale (the plugin
+can't rewrite the user's config file to fix it, and currently doesn't even
+warn).
+
+- **Code fix:** before completing a sidecar rename, scan `config.projects`
+  for any entry with `parent == old_name`. Warn only if a match is found
+  (silent otherwise) — never block; the rename can proceed regardless, the
+  warning is advisory. Identical scan/warning in `reparent_view_prompt`,
+  which has the same exposure for the same reason.
+- **Documentation fix, same root issue:** `config.lua`-defined views fail the
+  "system can clearly see and change them" test today — `rename_view_prompt`
+  explicitly refuses to rename them, and `:PKMViewDelete` only touches
+  `views.json`. Building config.lua-rewriting to close that gap was
+  considered and rejected (arbitrary user Lua source isn't safely
+  round-trippable, and this project already solved the identical problem
+  correctly twice — `views.json` and the trash `manifest.json` both exist
+  specifically because mutable state shouldn't live in a file the plugin
+  can't safely rewrite). Replace the `projects` comment block in the
+  Configuration Reference with:
+
+  ```lua
+    -- Named project views (declarative). Sidecar views.json wins on collision.
+    -- Views defined here cannot be renamed or deleted through PKM's own
+    -- commands (:PKMViewUpdate's Rename, :PKMViewDelete) — the plugin cannot
+    -- safely rewrite this file's source. Use :PKMViewNew / views.json for any
+    -- view you intend to manage through PKM's commands; reserve config.lua for
+    -- views you're committed to maintaining by hand. Subprojects (entries with
+    -- a `parent` field) are NOT recommended here at all, even for manually-
+    -- maintained views: if the parent name lives in the sidecar and gets
+    -- renamed through the UI, this entry's `parent` field goes silently stale
+    -- with no warning visible from this file.
+  ```
+
+  Annotate (don't delete) the existing `ringforge`/`ringforge-mechanics`
+  subproject example as a discouraged pattern rather than a recommended one.
+
+**Phase 6 — Deep exportation.** *(Next Steps item 3)*
+
+Independent of every other phase — pure logic in `export.lua` +
+`citations.lua`'s existing `cites`/`cited_by` traversal, no UI dependency.
+
+- New optional mode alongside simple export, not a replacement.
+- Two independent depth parameters: `cites_depth` (default **2**) and
+  `cited_by_depth` (default **0**), selectable per invocation.
+- From the user's selected note(s), follow `cites` edges outward up to
+  `cites_depth` levels and `cited_by` edges outward up to `cited_by_depth`
+  levels, unioning every note reached into the export set. Depth 0 in either
+  direction means "do not traverse that direction at all."
+- Traversal must cover all four citable types (`notes`, `bib`, `journal`,
+  `scratch` groups in both `cites` and `cited_by`), not just `notes`.
+- Implementation: breadth-first walk with cycle detection (citation graphs
+  aren't guaranteed acyclic) and a per-direction depth counter, terminating
+  each branch when its direction's limit is reached. Feeds into
+  `export.export_direct()`'s existing path-list interface — no changes to
+  the export mechanism itself required.
 
 ---
 
@@ -469,37 +681,6 @@ No items currently in active development. All implementation phases are complete
 4. **Consistent view renaming:** `:PKMUpdateView` should ensure that any
    renamed views are also renamed in places that reference them (e.g. subviews
    that register them as a parent, any relevant index entry, etc.)
-
-5.  **Improved editing:**
-    1.  Every metadata modification, even automatic timestamp updating in
-        "last_updated_on", is registered as a normal editing step, This causes 
-        undo commands (e.g. by pressing `u` in normal mode) to undo these metadata
-        "edits" before actually undoing text modified by the user, disrupting the
-        workflow (more important) and potentially misrepresenting the true "last_updated_on" time.
-        This happens only if the user edits -> saves -> undos, since the save is what
-        triggers automatic metadata edits. 
-        1.  Keep in mind that purposeful editing of metadata by the user
-          (directly or via specific metadata commands such as `:PKMAddTag`)
-          should register as edits an be undoable by this process, but not
-          automatic edits triggered by saving (these should simply change to reflect
-          the document's state, and the last_modified_on block should only be changable directly, not
-          accidentally by "undo").
-        2.  It seems that metadata items are reordered without any reason during
-           save. The elements noted to change are those in "cited" and
-           "cited_by" (e.g. "scratch", "journal", "note", "bib). The exact
-           element to change varies by note, probably depending on which of
-           them is empty or not.
-        3.  When pressing `u` to undo, neovim shows a large number of changes,
-            which increases depending on the file's size. The number of changes
-            seems to correspond to the number of lines in the file plus any
-            other changes that were made by the user (and are being undone).
-            This indicates that the whole file is being changed at some point
-            during save, but the undo does not show any real change in those
-            lines. My hypothesis is that saving rewrites the whole file at some
-            point. If this is intended (and important / necessary), then keep
-            it, since it does not seem to disrupt the work process. Change it
-            only if it completely unecessary and changing it is easy and not
-            prone to introducing new bugs.
 
 5.  **Bugfixes:**
     - Files can still open in the sidebar panel via `:PKMViewAll` and other
