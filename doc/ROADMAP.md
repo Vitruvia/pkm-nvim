@@ -971,21 +971,22 @@ only after the whole release lands.*
         -   Different level headers (same level headers is already implemented
             by standard neovim);
         -   Diferent level list components;
-        -   Blocks of the same type (code blocks, lists, citation);
-    3.  Extended list prefixs recognition. This needs to be analyzed in conjunction with Distant
-        Additions 2.1. and with the current syntax highlighting constraints, as
-        well as with any other conflicts that may arise from using these
-        symbols as such (note that they would only have this effect if located
-        at the beginning of a line and at the correct identation level, just
-        like default lists prefixes).
+        -   blocks of the same type (code blocks, lists, citation);
+    3.  Extended list prefixs recognition. This needs to be analyzed in
+        conjunction with Distant Additions 2.1. and with the current syntax
+        highlighting constraints, as well as with any other conflicts that may
+        arise from using these symbols as such (note that they would only have
+        this effect if located at the beginning of a line and at the correct
+        identation level, just
+        like default lists prefixes);
     4.  A markdown table formatter, accoring to our conventions.
     5.  A custom autowrap that will correctly work with the elements of a PKM
         note, like YAML frontmatter, code blocks, headers (no autowrapping
         headers with text that imediately precedes or follows them), tables,
-        etc.
+        etc.;
     6. Improved motion inside tables (quickly move to next cell, column or
        line, including if it is not filled yet. This should make editing
-       easier).
+       easier);
     7. Consider expanding our custom syntax highlighting and commands to all
        files outside PKM, this is not specific to PKM, but we can create a
        config to enable a broader reach of the markdown highlight and of the
@@ -995,7 +996,15 @@ only after the whole release lands.*
        customization, because it is something that I want to test and might want to keep
        always on if I find it useful (e.g. the default behavior of having
        4-space indented text highlight as code, even when prefixed as list, is
-       distracting and does not serve any purpose).
+       distracting and does not serve any purpose). Note: many commands already work
+       outside PKM, for example, the `:PKMRenameNote`. This is good but perhaps warrants a different naming for the command, since it is not confined to PKM, and a way to
+       allow the user to delimit PKM specific keymaps and to toggle the command off
+       when outside PKM Mode (for this command and other similar situations,
+       this last part can be deferred to customization);
+       8. Improve the next_header command to work even when the cursor is not on a
+       specific header, and to set the next header based on the last header
+       number of that type. If the cursor is over a header, however, it will
+       create the next header of that type (polymorphic behavior).
 
 2. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
@@ -1022,39 +1031,8 @@ only after the whole release lands.*
     Any approach must be examined for human readability, AI/machine
     readability, and portability before implementation.
 
-7.  **Improved contextual search/browse and citations:** improve the context
-    detection algorithm, but only if it does not significantly impair
-    performance, this context detection should enable notes to be ordered due
-    to relevance both on search and on the panels (buffer and sidebar). E.g.
-    notes related to the view, notes with similar citations, recently modified
-    notes, recently opened notes. We should define a rationale for the criteria
-    priority and consider algorithms used in popular tools to rank the
-    relevance of files, urls, etc (like google's). This should make note
-    navigation much more intuitive both during edition and when starting a new
-    session.
 
-    Example 1: `0035_bib_Constituição_da_República_Federativa_do_Brasil_1988.md`
-    was not tagged as "direito-constitucional", so it was not captured as a
-    contextual note when trying to cite it in other notes within the "Direito
-    Constitucional" view. However, its name already suggest it is related to
-    the subject, and it is cited by many other notes in the "Direito
-    Constitucional" view or with the "direito-constitucional" tag. 
-
-    We should analyze if there is a reasonable way to detect this, and perhaps
-    even to rank what appears first depending on a combination of context, last
-    opened/edited, frequently opened together, etc., and implement whatever is
-    reasonable within our capabilities and neovim's/lua constraints, also
-    keeping in mind that maintenability, compatibility with future vim's
-    version, compatibility with pre-existing and future PKM features, and
-    performance are all very important. This is a UX feature and it is
-    important, however, discard part of or all of it if it cannot be
-    implemented while also protecting or enhancing the points listed at the end
-    of the previous sentence.
-
-    Example 2: notes in the sidebar should be ordered according to relevance
-    (e.g. last opened within that view/subview).
-
-8.  **Explorer UI customisation:**
+7.  **Explorer UI customisation:**
     1.  positions and width of each panel; auto-on/off triggers by directory,
         CWD, or buffer type; other layout options users may need. 
     2.  Improved help panel with main keymaps for PKM (the current panel is
@@ -1085,9 +1063,47 @@ only after the whole release lands.*
         else.
 
 
-9.  **System customization:**
+8.  **System customization:**
     1. Turn on/off our markdown features, to allow the user to use external
        markdown plugins if they prefer.
+
+9.  **Improved search/browse and citations:** 
+    1.  improve the context detection algorithm, but only if it does not
+        significantly impair performance, this context detection should enable
+        notes to be ordered due to relevance both on search and on the panels
+        (buffer and sidebar). E.g. notes related to the view, notes with
+        similar citations, recently modified notes, recently opened notes. We
+        should define a rationale for the criteria priority and consider
+        algorithms used in popular tools to rank the relevance of files, urls,
+        etc (like google's). This should make note navigation much more
+        intuitive both during edition and when starting a new session.
+
+        Example 1:
+        `0035_bib_Constituição_da_República_Federativa_do_Brasil_1988.md` was
+        not tagged as "direito-constitucional", so it was not captured as a
+        contextual note when trying to cite it in other notes within the
+        "Direito Constitucional" view. However, its name already suggest it is
+        related to the subject, and it is cited by many other notes in the
+        "Direito Constitucional" view or with the "direito-constitucional" tag. 
+
+        We should analyze if there is a reasonable way to detect this, and
+        perhaps even to rank what appears first depending on a combination of
+        context, last opened/edited, frequently opened together, etc., and
+        implement whatever is reasonable within our capabilities and
+        neovim's/lua constraints, also keeping in mind that maintenability,
+        compatibility with future vim's version, compatibility with
+        pre-existing and future PKM features, and performance are all very
+        important. This is a UX feature and it is important, however, discard
+        part of or all of it if it cannot be implemented while also protecting
+        or enhancing the points listed at the end of the previous sentence.
+
+        Example 2: notes in the sidebar should be ordered according to
+        relevance (e.g. last opened within that view/subview).
+    2.  Smart search without losing the current textual match protocol, which
+        is correct (withou becoming completely fuzzy, since that makes
+        irrelevant text match). Example: typing "remedios" should be able to
+        detect "remédios" and typing "remedios constitucionais" should be albe
+        to detect "remédios-constitucionais". If there is an exact match, however, it should rank above these partial or smart matches.
 
 ---
 
