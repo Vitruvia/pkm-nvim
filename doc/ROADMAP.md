@@ -865,7 +865,7 @@ only after the whole release lands.*
         any window when opening a file in a new split (this would solve the
         issue presented in the previous point).
 
-2. **PKM new view autorefresh sidebar:** currently, adding a new view with
+2.  **PKM new view autorefresh sidebar:** currently, adding a new view with
    `:PKMViewNew` does not autorefresh the sidebar. The new view appears only
    after navigating to another view and back or pressing `r` in the sidebar to
    refresh it. With this change, the new view should appear immediately after
@@ -908,10 +908,10 @@ only after the whole release lands.*
    that register them as a parent, any relevant index entry, etc.)
 
 5.  **Bugfixes:**
-    - Files can still open in the sidebar panel via `:PKMViewAll` and other
-      commands. `:Ex` still opens explorer mode in the sidepanel, if used when
-      the sidebar is the active window, so does `:PKMViewEdit`. This should
-      have been fixed in previous versions.
+    - Files can still open in the sidebar and buffer panels via `:PKMViewAll` and other
+      commands. `:Ex` still opens explorer mode in the sidebar and buffer
+      panels, if used when they are the active window, so does `:PKMViewEdit`.
+      This should have been fixed in previous versions.
     - `:PKMRenameNote` is not case sensitive (e.g. renaming a file from
       "prazos" to "Prazos" is not allowed triggers and error `[pkm] cannot
       rename: target already exists: 0142_agg_Prazos.md`)
@@ -967,10 +967,11 @@ only after the whole release lands.*
         -   juxtaposing equivalent names like `AI/LLM` or `não-exaustivo/não-taxativo`.
     2.  Improved editor navigation: add keymapped commands to allow navigating
         between:
-        -   Same level list component;
-        -   Different level headers (same level headers is already implemented
+        -   same level list component;
+        -   jump to the end or beginning of a list
+        -   different level headers (same level headers is already implemented
             by standard neovim);
-        -   Diferent level list components;
+        -   diferent level list components;
         -   blocks of the same type (code blocks, lists, citation);
     3.  Extended list prefixs recognition. This needs to be analyzed in
         conjunction with Distant Additions 2.1. and with the current syntax
@@ -996,12 +997,14 @@ only after the whole release lands.*
        customization, because it is something that I want to test and might want to keep
        always on if I find it useful (e.g. the default behavior of having
        4-space indented text highlight as code, even when prefixed as list, is
-       distracting and does not serve any purpose). Note: many commands already work
-       outside PKM, for example, the `:PKMRenameNote`. This is good but perhaps warrants a different naming for the command, since it is not confined to PKM, and a way to
-       allow the user to delimit PKM specific keymaps and to toggle the command off
-       when outside PKM Mode (for this command and other similar situations,
-       this last part can be deferred to customization);
-       8. Improve the next_header command to work even when the cursor is not on a
+       distracting and does not serve any purpose). Note: many commands already
+       work outside PKM, for example, the `:PKMRenameNote`. This is good but
+       perhaps warrants a different naming for the command, since it is not
+       confined to PKM, and a way to allow the user to delimit PKM specific
+       keymaps and to toggle the command off when outside PKM Mode (for this
+       command and other similar situations, this last part can be deferred to
+       customization);
+    8. Improve the next_header command to work even when the cursor is not on a
        specific header, and to set the next header based on the last header
        number of that type. If the cursor is over a header, however, it will
        create the next header of that type (polymorphic behavior).
@@ -1099,30 +1102,65 @@ only after the whole release lands.*
 
         Example 2: notes in the sidebar should be ordered according to
         relevance (e.g. last opened within that view/subview).
+
     2.  Smart search without losing the current textual match protocol, which
         is correct (withou becoming completely fuzzy, since that makes
         irrelevant text match). Example: typing "remedios" should be able to
         detect "remédios" and typing "remedios constitucionais" should be albe
-        to detect "remédios-constitucionais". If there is an exact match, however, it should rank above these partial or smart matches.
+        to detect "remédios-constitucionais". If there is an exact match,
+        however, it should rank above these partial or smart matches.
 
 ---
 
 ### Potential but not guaranteed goals (do not design toward)
 
-- **Alternative PKM modes:** Obsidian-style backlink graph, Zettelkasten ID-based
-  linking, etc. Would be selectable configurations, not the default.
+-   **Alternative PKM modes:** Obsidian-style backlink graph, Zettelkasten
+    ID-based linking, etc. Would be selectable configurations, not the default.
 
-- **Image and visualization support:** embedded images, Mermaid diagram support in
-  preview, inline rendering (kitty/iTerm2 protocols).
+-   **Image and visualization support:** embedded images, Mermaid diagram
+    support in preview, inline rendering (kitty/iTerm2 protocols).
 
-- **`:PKMViewStats`** — table of all views with note counts and subproject depth.
-  Implementation: iterate `views.list()`, call `match_all()` for each, format as
-  notification or float.
+-   **`:PKMViewStats`** — table of all views with note counts and subproject
+    depth. Implementation: iterate `views.list()`, call `match_all()` for each,
+    format as notification or float.
 
-- **Metadata system review (in-file vs. sidecar).** Recorded for future reconsideration
-  only. Decision gate: revisit ONLY IF, after (1) the modified-buffer write-through fix
-  and (2) frontmatter folding/conceal, the in-file approach remains unacceptable in
-  daily use.
+-   **Metadata system review (in-file vs. sidecar).** Recorded for future
+    reconsideration only. Decision gate: revisit ONLY IF, after (1) the
+    modified-buffer write-through fix and (2) frontmatter folding/conceal, the
+    in-file approach remains unacceptable in daily use.
+
+-   **Insertable folds**: a character or character combination to mark
+    beginning and ending of folds in any file. These should only be implemented
+    if they do not generate heavy performance costs. Otherwise, evaluate if a
+    partial implementation can be done without heavy performance costs. If
+    neither are possible, skip this feature and note in the roadmap why we
+    decided not to implement it yet, and what needs to change for use to
+    consider it again. The full spec should:
+        -   enable any line or collection of lines marked with the "fold-start"
+            and "fold-end" characters to be concealed;
+        -   detect if a folding starts in a header and includes all content
+            encompassed by it, and if so, show the header's name when folded,
+            using a notation or highlighting that makes it clear that it is a
+            header and preserving the header title/name.
+        -   detect if a folding starts and ends (wraps) a code block, citation
+            block, list, or table and mark it as such when folded. If more than
+            one of such block exists, a counter should differentiate them (e.g.
+            "code block 1, 2...").
+        -   detect whether the folding markers wrap around plain text
+            (including inline code blocks, bold or italic markers, etc.), but
+            not headers, code-blocks, or other existing native "wrappers", and
+            identify as just text.
+        -   preserve performance even if several folds exist in the same file.
+        -   a partial implementation allows concealment only of headers and the
+            content they wrap around.
+        -   advanced: also include autoconceal options (default: {headers: [on;
+            level 2; autofold off], frontmatter [on; level 1; auotfold on]};
+            meaning only level 2 headers are wrapped in concealers by default
+            but do not start folded. The configs for frontmatter are meant to
+            reflect our current usage, in which frontmatter is always wrapped
+            with "fold markers" and starts folded by default). Keep in mind
+            that the autoconceal option notation was just a "pseudo notation"
+            made me for illustration purposes.
 
 ---
 
