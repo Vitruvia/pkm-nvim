@@ -107,7 +107,7 @@ local defaults = {
       enter_dir = false,  -- activate when CWD is/becomes PKM root (DirChanged)
     },
     layout = {
-      sidebar  = true,    -- open views sidebar on activation
+      sidebar  = false,    -- open views sidebar on activation
       bufpanel = true,    -- open buffer panel on activation
     },
     index = {

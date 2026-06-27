@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+-   PKM Mode's default layout now starts with `sidebar = false`.
+
 ### Known Bugs (queued)
 
 - `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing

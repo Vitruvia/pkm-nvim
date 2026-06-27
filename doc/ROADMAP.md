@@ -315,7 +315,7 @@ require('pkm').setup({
       enter_dir = false,  -- activate on DirChanged to/from PKM root
     },
     layout = {
-      sidebar  = true,    -- open sidebar on activation
+      sidebar  = false,    -- open sidebar on activation
       bufpanel = true,    -- open buffer panel on activation
     },
     index = {
@@ -1004,10 +1004,16 @@ only after the whole release lands.*
        keymaps and to toggle the command off when outside PKM Mode (for this
        command and other similar situations, this last part can be deferred to
        customization);
-    8. Improve the next_header command to work even when the cursor is not on a
-       specific header, and to set the next header based on the last header
-       number of that type. If the cursor is over a header, however, it will
-       create the next header of that type (polymorphic behavior).
+    8. The next_header command currently only works when the cursor is above a
+       header. If used this way, it will create a header numbered as the
+       current + 1. Create a new "global' next_header command which creates a
+       new header based on the last header number (highest numbered /
+       last-in-order) of the same level. It creates this header after every
+       other header of that same level and below (including plain text), but
+       before any header of a higher level (if none exist, then this will be the
+       last line in the file), then moves the cursor to the newly
+       created header (that is, it will create `## header-(n+1)` whenever the
+       cursor is at `## header-m`, for any `m <= n`. 
 
 2. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
