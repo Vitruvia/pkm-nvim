@@ -9,19 +9,44 @@
 
 ### Known Bugs (queued)
 
-- `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
-  malformed paths when `bench_dir` is a Unix-style path (e.g. `/tmp/pkm_bench`).
-  Files are still created correctly because `vim.fn.mkdir`/`glob` tolerate
-  mixed separators on WSL. Fix: accept `bench_dir` as-is and join subdirs with
-  the correct separator for the path type, or document that `bench_dir` must use
-  the native separator.
+-   `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
+     malformed paths when `bench_dir` is a Unix-style path (e.g.
+     `/tmp/pkm_bench`). Files are still created correctly because
+     `vim.fn.mkdir`/`glob` tolerate mixed separators on WSL. Fix: accept
+     `bench_dir` as-is and join subdirs with the correct separator for the path
+     type, or document that `bench_dir` must use the native separator.
 
-- `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
-  defined view to build the viewed-path set). `bench.views_suite` was run at
-  10k notes: overview costs V × 3.1ms (50 views → 158ms, 300 views → 935ms).
-  At current real corpus scale (hundreds of notes, tens of views) the cost is
-  negligible. `_match_cache` is deferred: revisit if corpus reaches ~5k notes
-  or view count exceeds ~200 with observed latency.
+-   `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
+     defined view to build the viewed-path set). `bench.views_suite` was run at
+     10k notes: overview costs V × 3.1ms (50 views → 158ms, 300 views → 935ms).
+     At current real corpus scale (hundreds of notes, tens of views) the cost
+     is negligible. `_match_cache` is deferred: revisit if corpus reaches ~5k
+     notes or view count exceeds ~200 with observed latency.
+
+-   Error below when ending any file with `ex: <text>`. The current workoround
+    has been to simply avoid ending files that way, or wrapping any `ex:
+    <text>` at the end of some line in `(` `)`.
+
+    ```
+
+    Error executing vim.schedule lua callback:
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: Error
+    executing lua: vim/_editor.lua:445: nvim_exec2()[1]..modelines, line 318:
+    Vim(doaut ocmd):E518: Unknown option: "Será
+    stack traceback:
+    [C]: in function 'nvim_exec2'
+    vim/_editor.lua:445: in function 'cmd'
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:168: in
+    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157>
+    [C]: in function 'nvim_buf_call'
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: in
+    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
+    stack traceback:
+    [C]: in function 'nvim_buf_call'
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: in
+    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
+
+    ```
 
 ### Benchmarks 
 

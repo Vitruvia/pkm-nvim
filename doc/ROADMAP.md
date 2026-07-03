@@ -26,6 +26,10 @@ The note namespace is intentionally **flat and global** — all notes share a si
 
 ## Current State
 
+**Released:** v1.4.1 (main). **Active development:** v1.5.3 (dev, unreleased).
+All prior implementation phases (0–5) are complete; the upcoming work is
+organised under **Release Plan** below.
+
 **Working features:**
 
 == General ==
@@ -154,6 +158,11 @@ pkm.nvim/
 ├── test/               # Test files
 └── README.md
 ```
+
+> Planned new module `lua/pkm/panel.lua` (generic panel infrastructure) is
+> introduced in v1.6.0; it is not present yet and so is absent from the tree
+> above. Planned new doc `doc/CONVENTIONS.md` is tracked under Distant
+> Additions 1.1.
 
 ---
 
@@ -290,10 +299,17 @@ require('pkm').setup({
   },
 
   -- Named project views (declarative). Sidecar views.json wins on collision.
-  -- Prefer :PKMViewNew / views.json for views that change frequently.
+  -- Views defined here CANNOT be renamed or deleted through PKM's own commands
+  -- (:PKMViewUpdate's Rename, :PKMViewDelete) — the plugin cannot safely rewrite
+  -- this file's Lua source. Use :PKMViewNew / views.json for any view you intend
+  -- to manage through PKM's commands; reserve config.lua for views you commit to
+  -- maintaining by hand. Subprojects (entries with a `parent` field) are NOT
+  -- recommended here even for hand-maintained views: if the parent lives in the
+  -- sidecar and is renamed through the UI, this entry's `parent` goes silently
+  -- stale (from v1.5.4 the rename emits an advisory warning, but cannot fix it).
   projects = {
     clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
-    -- Subproject example:
+    -- Subproject example (discouraged here — see note above):
     -- ringforge = 'tag:ringforge',
     -- ["ringforge-mechanics"] = { parent = "ringforge", filter = "tag:mechanics" },
   },
@@ -382,285 +398,293 @@ require('pkm').setup({
 
 ### Active
 
-v1.6.0 implementation underway — see "v1.6.0 Implementation Plan" below.
+Current dev version: **v1.5.3**. The next planned increments are **v1.5.4**
+(patch), **v1.6.0** (minor), **v1.6.1** (patch), and **v1.7.0** (minor). See
+**Release Plan** below for the phase-by-phase breakdown.
 
 ---
 
-### v1.6.0 Implementation Plan
+### Versioning Policy
 
-#### Operating principles for this release
+The project sits in the 1.x range but is **pre-release**: there are no external
+API consumers and the only user is the author. Versioning follows a constrained
+form of [Semantic Versioning](https://semver.org/):
+
+- **MAJOR is frozen at `1`** for the whole pre-release period. `2.0.0` is
+  reserved for the first public-stability release and is not created during
+  ordinary development.
+- **MINOR (`1.Y.0`)** — introduces at least one backward-compatible,
+  user-facing feature. May also carry bug fixes and refactors.
+- **PATCH (`1.y.Z`)** — bug fixes, performance work, and internal refactors
+  only. No new user-facing features.
+- **"Backward-compatible"** is judged against the author's own configuration and
+  workflow, since there are no other consumers. A change that requires the
+  author to edit their config is still a MINOR during this phase (never a
+  MAJOR), but must be recorded under a **Config changes** note in the CHANGELOG.
+- **Phases are the unit of implementation and review** within a version. A phase
+  edits each file in **exactly one pass** (see Release Plan operating
+  principles). A version may contain one phase or several.
+- **Tags** (`git tag -a vX.Y.Z`) are applied only after every phase of a version
+  has landed and passed the verification protocol — never mid-version.
+
+---
+
+### Release Plan
+
+*This replaces the former single-version "v1.6.0 Implementation Plan". The
+reorganised Next Steps are partitioned into the versions below. Discussion-only
+items were moved to **Design Questions**; genuinely long-horizon items remain in
+**Distant Additions**.*
+
+```
+v1.5.4  PATCH  Correctness & robustness ──────────────┐  (no deps)
+v1.6.0  MINOR  Panels & navigation                    │
+        Ph1 panel infra + tag panel                   │
+          ├─→ Ph2 trash-restore panel                 │
+          └─→ Ph3 views panels + sidebar nav          │
+              Ph4 picker polish                        │
+v1.6.1  PATCH  :PKMViews open-latency (bench-driven) ──┘  (after v1.6.0)
+v1.7.0  MINOR  Exportation, note creation & header nav    (no deps)
+        Ph1 deep export   Ph2 relative note   Ph3 header navigation
+```
+
+Dependency summary: v1.6.0 Ph1 precedes Ph2 and Ph3 (they build on
+`panel.lua`); v1.6.1 follows v1.6.0 (it tunes the reworked `:PKMViews`);
+everything else floats and may be reordered.
+
+---
+
+#### Operating principles (apply to every version and phase)
 
 1. **One pass per file per phase.** A phase may touch many files, but never the
-   same file twice. When a feature would require two passes over one file, it
-   is split along a seam where each part still functions independently, and the
-   parts land in different phases. Different phases *may* re-touch the same file
-   — the constraint is per-phase, not global.
+   same file twice within that phase. All edits to a given file in a phase must
+   be mutually compatible, low-risk, and verifiable together, so it is safe to
+   apply them all before verifying. When a file would need two incompatible
+   passes, the work is split along a seam where each part still functions
+   independently, and the parts land in different phases (possibly different
+   versions). Different phases **may** re-touch the same file.
 
-2. **A phase groups by safe co-modification, not by category.** If several
-   items can be applied to a file in one coherent, low-risk pass, they share a
-   phase even if one is a bugfix and another a feature. The per-file rule is a
-   *ceiling*, not a mandate to cram unrelated work together: where combining
-   would bloat a review or mix unrelated regions of a file, the items are kept
-   in separate phases instead.
+2. **A phase groups by safe co-modification, not by category.** Items share a
+   phase when their file edits combine cleanly, even if one is a bugfix and
+   another a feature. The rule is a ceiling, not a mandate to cram unrelated
+   work together.
 
-3. **Each phase fits one response.** Implementation of a phase is delivered as a
-   single message containing every modification that phase needs. The
-   views-panel phase (E) is the heaviest; it is delivered file-by-file *within
-   one response*, never split across messages.
-
-4. **Critical path is short.** Only the panel phases depend on each other
-   (C → D, C → E). Every other phase floats and may be reordered freely.
-
-```
-A  bugfixes + view-layer completeness ─┐  (no deps)
-B  deep export ────────────────────────┤  (no deps)
-C  panel infra + buffer-panel port + tag panel
-        │
-        ├─→ D  trash-restore panel
-        └─→ E  views panels + sidebar window navigation
-F  picker polish (relative splits, handoff flash) ─┐ (no deps)
-G  header navigation motions ──────────────────────┤ (no deps)
-H  note-taking conventions spec (docs only) ───────┘ (no deps, optional)
-```
+3. **Each phase fits one response.** A phase is delivered as a single message
+   containing every modification it needs, file-by-file, never split across
+   messages.
 
 ---
 
-#### Standing bug-prevention design rules (apply to every phase)
+#### Standing bug-prevention design rules
 
-- **`winfixbuf` safety net.** Every PKM panel window (sidebar, buffer panel,
-  and every panel built on `panel.lua`) sets `winfixbuf = true` immediately
-  after its buffer is assigned. This converts the entire class of "a file
-  opened inside the panel" bugs (`:Ex`, `:edit`, `:PKMViewEdit` invoked while a
-  panel holds focus) from a *silent hijack that destroys the panel* into a
-  *loud, harmless error*. PKM's own open/create commands additionally redirect
-  through `focus_main_win()` for a smooth UX; `winfixbuf` catches everything
-  not explicitly guarded, including built-ins PKM cannot intercept.
-- **Pure-logic-first.** Any non-trivial logic (deep-export traversal,
-  case-rename identity test, citation-edge extraction, header targeting,
-  window-slot arithmetic) is written as a pure function taking explicit inputs
-  and returning explicit outputs, with no editor or filesystem side effects in
-  the core. This is what the per-phase test file exercises; the command/UI layer
-  is a thin wrapper.
+- **`winfixbuf` safety net.** Every PKM panel window (sidebar, buffer panel, and
+  every panel built on `panel.lua`) sets `winfixbuf = true` immediately after
+  its buffer is assigned. This converts the whole class of "a file opened inside
+  the panel" bugs (`:Ex`, `:edit`, `:PKMViewEdit` invoked while a panel holds
+  focus) from a silent hijack that destroys the panel into a loud, harmless
+  error. PKM's own open/create commands additionally redirect through
+  `focus_main_win()` for smooth UX; `winfixbuf` catches everything not explicitly
+  guarded, including built-ins PKM cannot intercept.
+- **Pure-logic-first.** Non-trivial logic (deep-export traversal, case-rename
+  identity test, title-propagation diff, citation-edge extraction, header
+  targeting, window-slot arithmetic, tag-set relatedness) is written as a pure
+  function with explicit inputs/outputs and no editor or filesystem side effects
+  in the core. The per-phase test file exercises the pure function; the
+  command/UI layer is a thin wrapper.
 - **Reuse, don't reimplement.** Resolve citation identifiers through
-  `citations.get_citable_items_map()`; redirect panel focus through the existing
-  `focus_main_win()`; refresh sidebars through `views.refresh_sidebar_if_open()`.
-  No parallel implementations of solved problems.
-- **Invariants restated per phase.** Each phase's spec lists the project
-  invariants it must not break (e.g. *never* `index.invalidate` from
-  buffer-only metadata commands; *never* strip backlinks in `trash_note()`;
-  *never* register `UndoPost`; *never* run `git gc`; always `utils.join` /
-  `utils.normalize` for paths; Telescope checked at call time). A phase that
-  cannot satisfy an invariant is wrong as specified and is re-scoped, not
-  forced.
+  `citations.get_citable_items_map()`; redirect panel focus through
+  `focus_main_win()`; refresh sidebars through `views.refresh_sidebar_if_open()`;
+  propagate identity changes through the existing rename-propagation machinery.
+- **Invariants restated per phase.** Each phase names the invariants it must not
+  break (e.g. never `index.invalidate` from buffer-only metadata commands; never
+  strip backlinks in `trash_note()`; never register `UndoPost`; never run
+  `git gc`; always `utils.join` / `utils.normalize` for paths; Telescope checked
+  at call time; never optimize without a `bench.lua` baseline). A phase that
+  cannot satisfy an invariant is re-scoped, not forced.
 
 ---
 
-#### Standing verification protocol (apply to every phase)
+#### Standing verification protocol
 
 Every phase is verified in this order before its commit:
 
-1. **Headless sandbox run.** Execute the phase's new/changed code paths in
-   headless Neovim against a disposable scratch corpus, never the live `Notes`
-   tree. Pattern:
+1. **Headless sandbox run** against a disposable scratch corpus, never the live
+   `Notes` tree:
    `nvim --headless -u test/min_init.lua -c "luafile test/test_<phase>.lua" -c "qa!"`.
    Empirical execution precedes any claim that a fix works.
-2. **Per-phase test file.** Each phase ships `test/test_<phase>.lua` asserting
-   the pure-logic outputs (success and failure cases, boundary conditions,
-   cycle/empty/nil inputs). Pure functions make this possible without a live
-   editor.
-3. **Static pass.** `luacheck lua/pkm/<changed files>` for undeclared globals,
-   shadowed/duplicate locals, and unused variables. Plus the project's recurring
-   issue checklist: string-concatenated paths, cross-module `M.` references,
-   load-time Telescope checks, greedy timestamp patterns, missing
-   `update_references_on_rename`, double declarations, template-key/config-key
-   mismatches.
-4. **Cross-platform spot-check.** Any path-touching change is exercised against
-   a Windows-style drive path (`P:/Notes/...`) and a WSL mount path
-   (`/mnt/p/Notes/...`) at least in the test fixture.
-5. **Manual smoke checklist.** The phase spec names the exact `:PKM*` commands
-   to run by hand and the expected outcome of each.
+2. **Per-phase test file** `test/test_<version>_<phase>.lua` asserting pure-logic
+   outputs including success, failure, boundary, cycle, empty, and nil inputs.
+3. **Static pass** — `luacheck` on changed files, plus the recurring-issue
+   checklist (string-concatenated paths; cross-module `M.` references; load-time
+   Telescope checks; greedy timestamp patterns; missing
+   `update_references_on_rename`; double declarations; template-key/config-key
+   mismatches).
+4. **Cross-platform spot-check** — path-touching changes exercised against a
+   Windows drive path (`P:/Notes/...`) and a WSL mount path (`/mnt/p/Notes/...`)
+   in the fixture.
+5. **Manual smoke checklist** — the exact `:PKM*` commands to run and their
+   expected outcomes.
 
-**Review protocol for returned modifications.** When the applied changes are
-pasted back, each is checked against six points: (a) the edit landed in the
-named function/region and nowhere else; (b) file-header, section-separator, and
-LuaDoc discipline preserved; (c) no second pass introduced on any file already
-touched this phase; (d) no forbidden pattern reintroduced (see invariants);
-(e) the phase's test and verification artefacts are present and pass; (f) the
-observable behaviour matches the spec. Discrepancies are reported with the root
-cause before any follow-up edit is proposed.
+**Review protocol for returned modifications.** When applied changes are pasted
+back, each is checked for: (a) landing only in the named function/region;
+(b) header/section/LuaDoc discipline; (c) no second pass on a file already
+touched this phase; (d) no forbidden pattern reintroduced; (e) presence and pass
+of the phase's test artefacts; (f) behaviour matching the spec. Discrepancies
+are reported with root cause before any follow-up edit.
 
 ---
 
-#### Distant Additions triage for v1.6.0
+#### v1.5.4 (PATCH) — Correctness & robustness
 
-Folded in (implementable now, backward-compatible, independently functional):
+*All bug/completeness fixes from the former Next Steps 4 and 5, plus the view
+autorefresh (former Next Steps 2). No new user-facing features. Done first so
+later feature work builds on corrected behaviour. Three phases with disjoint
+file sets — no file is re-touched even across phases.*
 
-- **Phase G — header navigation motions** (a scoped subset of *Distant
-  Additions 1.2*). Same-level and any-level header jumps only. List-component
-  and block navigation are **deferred**: they depend on the list-prefix and
-  block conventions in *Distant Additions 1.3 / 2.1*, which are not yet settled.
-- **Phase H — note-taking conventions specification** (the documentation
-  portion of *Distant Additions 1.1*). Doc-only, zero code risk; it serves the
-  AI-facilitation principle by giving collaborators a written convention.
-  Optional and lowest priority — may slip to v1.7.0 without affecting anything
-  else.
-
-Deferred, with reason:
-
-- *DA 1.3 / 1.4 / 1.5 / 1.6, 2.1, 4* (extended list prefixes, table formatter,
-  custom autowrap, table motion, markdown conventions that drive syntax) —
-  interdependent and unsettled; require the conventions spec (H) to land first
-  and a syntax-mechanism decision. Out of scope for v1.6.0.
-- *DA 7, 9.1* (broaden markdown features to non-PKM files; on/off toggles) —
-  PHILOSOPHY §7 requires customisation to be designed *after* defaults are
-  stable; the syntax/markdown defaults are still new (v1.5.x). Defer.
-- *DA 8.2* (config-aware global help panel) — depends on the customisation
-  surface above. The discoverability gap it targets is partially closed by the
-  helpline audit in Phase A.
-- *DA 2, 3, 5, 6, 8.1* (preview, persistent index, review queue, ASCII diagrams,
-  explorer layout customisation) — already long-term in this roadmap; unchanged.
-
----
-
-#### Phase A — Bugfixes and view-layer completeness
-
-*Folds in Next Steps 2, 4, 5, and the former Phase 1/Phase 5. No new
-infrastructure. Highest priority: every item is an active defect or a small
-completeness gap.*
+**Phase 1 — rename & citation-metadata correctness.**
 
 | File | Single-pass changes |
 |---|---|
-| `notes.lua` | `rename_note()`: permit case-only renames. Robust form: when `filereadable(new)==1`, treat it as the same file (not a collision) iff `new` and `old` are the **same on-disk object** — compare `vim.loop.fs_stat` `dev`+`ino` when available, falling back to `utils.normalize`-lowercased equality only on case-insensitive filesystems (`is_windows`, or WSL on a `/mnt/<drive>` mount). Distinct files that merely differ in case on a case-sensitive FS still collide correctly. |
-| `views.lua` | (1) After successful view creation (`M.save` / `M.save_subproject` success path, and/or the `:PKMViewNew` handler's completion) call `M.refresh_sidebar_if_open()`, then restore focus to the window active before the command ran. (2) In `rename_view_prompt` and `reparent_view_prompt`, before completing, scan `config.projects` for any entry whose `parent == old_name`; if found, emit an advisory `WARN` (never block). (3) `open_sidebar`: set `winfixbuf = true` on the sidebar window, after `nvim_win_set_buf`, alongside the existing `winfixwidth` block. (4) Helpline/`?` help-float audit: add every registered-but-undocumented key — at minimum `T` (filename/title toggle); add whatever the audit turns up. (5) **Verify** whether residual flat `_sidebar_*` globals/helpers coexist with the per-tab `_tabs` state; if confirmed dead, remove in this same pass (clean removal over leaving latent code). |
-| `ui.lua` | (1) Buffer panel (`toggle_bufpanel`): set `winfixbuf = true` after the panel buffer is assigned. (2) Header-hint audit for the fallback browse/recent/orphans panels — match hints to keys actually registered. |
-| `commands.lua` | Audit every PKM open/create command registered here for `focus_main_win()` coverage; add it to any that open a buffer and currently lack it. (The `winfixbuf` net in `views.lua`/`ui.lua` is the structural fix for un-guardable cases such as `:Ex`; this pass only ensures PKM's own commands additionally redirect smoothly.) |
-| docs | `CHANGELOG` (Fixed + Changed). `ROADMAP` Configuration Reference: replace the `projects` comment block with the config.lua-views caveat (cannot be renamed/deleted via PKM commands; subprojects discouraged there), and annotate the `ringforge` example as a discouraged pattern rather than deleting it. `LLM_CONTEXT` if any invariant phrasing changes. |
+| `notes.lua` | (1) `rename_note()`: permit case-only renames — when `filereadable(new)==1`, treat as the same file (not a collision) iff `new` and `old` are the same on-disk object (`vim.loop.fs_stat` `dev`+`ino`; fall back to `utils.normalize`-lowercased equality only on case-insensitive filesystems). (2) Fix the `E13: File exists` forced-write prompt in `rename_note()` and `change_note_type()` when no other edits were made: re-point the buffer to its new name without a colliding `:saveas`/`:write` (e.g. `nvim_buf_set_name` + `writefile` of current lines, then delete the old file), so an otherwise-unmodified rename never prompts. |
+| `citations.lua` | Add `propagate_title(note_path)` — pure-ish: rewrite the `title` field of every entry referencing `note_path` in other notes' `cites`/`cited_by` (all four groups), **idempotently** (rewrite a file only when its stored title differs from the current one). Reuses `get_note_type_and_id`, `get_note_title`, `get_citable_items_map`, and the existing per-file write path used by `update_references_on_rename`. |
+| `init.lua` | In `setup_sync_autocmds` BufWritePost, after the existing `update_references`, call `citations.propagate_title(current_path)` so a title change reaches citing/cited notes on save — regardless of whether the target notes are open in buffers (the existing modified-buffer-aware write path handles the open case). |
+| docs | `CHANGELOG` (Fixed): case-rename, E13 prompt, title cross-update. |
 
-Verification specifics: `test/test_phaseA.lua` unit-tests the rename identity
-predicate (same-inode → allow; different file same-case-fold → block; exact
-equal → no-op). Smoke: rename `prazos`→`Prazos`; create a view and confirm the
-sidebar updates with focus returned; from the sidebar run `:Ex` and confirm a
-harmless error (not a hijack); confirm `T` appears in `?` help.
+Verification: `test/test_v154_p1.lua` unit-tests the rename identity predicate
+(same-inode → allow; distinct file same-case-fold → block; exact equal → no-op)
+and the title-propagation diff (no write when unchanged; correct rewrite when
+changed). Smoke: rename `prazos`→`Prazos`; rename/change-type a note with no
+other edits and confirm no `E13`; change a note's title, `:w`, and confirm
+citing notes' metadata now shows the new title.
 
-Invariants in play: paths via `utils.normalize`/`utils.join`; no
-`index.invalidate` added to buffer-only paths; `winfixbuf` set *after*
-`nvim_win_set_buf`.
+Invariants: `set_title()` stays buffer-only (no `index.invalidate`); title
+propagation writes *other* files (like citation sync), never re-points the
+current buffer's index outside the normal BufWritePost path; paths via
+`utils.normalize`/`utils.join`.
 
 Commit:
 
 ```
-fix: case-only rename, panel buffer hijack, and view-create refresh
+fix: case-only rename, E13 write prompt, and title cross-update
 
-- notes: allow case-only renames via same-object identity check, case-sensitive
-  filesystems still collide on distinct files
+- notes: allow case-only renames via same-object identity check; eliminate the
+  spurious E13 forced-write on unmodified rename / change-type
+- citations: propagate_title() rewrites the title field in referencing notes,
+  idempotently; runs on BufWritePost so title edits reach cites/cited_by
+- init: trigger title propagation in the save-sync autocmd
+- docs: changelog
+```
+
+**Phase 2 — panel window safety & view-layer completeness.**
+
+| File | Single-pass changes |
+|---|---|
+| `views.lua` | (1) `open_sidebar`: set `winfixbuf = true` on the sidebar window after `nvim_win_set_buf`, alongside the existing `winfixwidth` block. (2) After successful view creation (`M.save`/`M.save_subproject` success path and/or the `:PKMViewNew` handler completion) call `M.refresh_sidebar_if_open()`, then restore focus to the window active before the command. (3) In `rename_view_prompt` and `reparent_view_prompt`, scan `config.projects` for any entry whose `parent == old_name`; if found, emit an advisory `WARN` (never block) — closes the "consistent view renaming" gap the plugin cannot otherwise fix (config.lua is not safely rewritable). (4) Help-float/`?` and header-hint audit: add every registered-but-undocumented key, at minimum `T` (filename/title toggle). (5) Verify whether residual flat `_sidebar_*` globals coexist with the per-tab `_tabs` state; remove if confirmed dead (clean removal over latent code). |
+| `ui.lua` | (1) `toggle_bufpanel`: set `winfixbuf = true` after the panel buffer is assigned. (2) Header-hint audit for the fallback browse/recent/orphans panels. |
+| `commands.lua` | Complete `focus_main_win()` coverage on every PKM open/create command registered here; the `winfixbuf` net covers un-guardable cases (`:Ex`). |
+| docs | `CHANGELOG` (Fixed + Changed): panel hijack; view autorefresh; view-rename config warning; helpline audit. |
+
+Verification: `test/test_v154_p2.lua` asserts the view-rename config-scan
+detects a stale `parent` and warns without blocking. Smoke: from the sidebar
+run `:Ex`/`:PKMViewEdit` and confirm a harmless error (not a hijack); create a
+view and confirm the sidebar refreshes with focus returned; confirm `T` in `?`
+help.
+
+Invariants: `winfixbuf` set after `nvim_win_set_buf`; sidebar leftmost invariant
+untouched.
+
+Commit:
+
+```
+fix: panel buffer hijack, view-create refresh, and rename consistency
+
 - views: winfixbuf on sidebar; autorefresh + focus restore on view creation;
   advisory warning when a config.lua subproject's parent is renamed/reparented;
-  helpline audit (T toggle et al.)
+  helpline audit (T toggle et al.); drop residual global sidebar state if dead
 - ui: winfixbuf on buffer panel; fallback-panel hint audit
 - commands: complete focus_main_win coverage on panel-invoked open commands
-- docs: config-reference caveat for config.lua-defined views; changelog
+- docs: changelog
 ```
 
----
-
-#### Phase B — Deep export
-
-*Next Steps 3. Fully independent: pure traversal in `export.lua` plus a depth
-prompt in `commands.lua`. No change to the copy mechanism — the union path list
-feeds the existing `export_direct()`.*
+**Phase 3 — multi-line highlighting.**
 
 | File | Single-pass changes |
 |---|---|
-| `export.lua` | (1) `read_citation_edges(path)` — pure: read frontmatter via the existing `get_file_data`, return `{ cites = {ids…}, cited_by = {ids…} }` unioning all four groups (`notes`, `bib`, `journal`, `scratch`) in each direction. (2) `collect_deep(seed_paths, opts)` — pure BFS with **separate per-direction depth counters** (`cites_depth` default 2, `cited_by_depth` default 0; 0 = do not traverse that direction), **cycle detection** via a visited-set (citation graphs are not guaranteed acyclic), resolving identifiers→paths through `require('pkm.citations').get_citable_items_map()`. Returns the deduplicated, sorted union (seeds always included). (3) A deep-export entry that prompts for mode and the two depths, then hands the union to `export_direct(label, paths)`. |
-| `commands.lua` | Extend the `:PKMExport` flow (or add a sibling command) to offer **simple vs deep**, and on deep, the two depths — using native `vim.ui.select`/input for this short fixed choice set (per Next Steps 1: small fixed sets stay native UI). |
-| docs | `CHANGELOG` (Added). `ROADMAP` mark Next Steps 3 done; note defaults 2/0. |
+| `syntax.lua` | Extend the author-comment `((…))` highlight (and, if reliably feasible, ATX headers) to span multiple lines via multi-line-aware matchadd / tree-sitter captures. |
+| `queries/markdown/highlights.scm` | Multi-line author-comment capture (modeline must remain the literal first line — see Key Learnings). |
+| `after/syntax/markdown.vim` | Multi-line author-comment rule for the Vimscript fallback. |
+| docs | `CHANGELOG` (Fixed). If multi-line **headers** cannot be highlighted reliably, restrict this fix to author comments and record a convention (Distant Additions 1.1 / `doc/CONVENTIONS.md`) that headers must not wrap across lines, and that any future autowrap must never wrap a header. |
 
-Verification specifics: `test/test_phaseB.lua` builds the roadmap's worked
-example (Note 1 cites 2/4/5; 5→7; 7→8; 1 cited_by 2/3/6) as a fixture and
-asserts the default run yields {1,2,4,5,7} and not {3,6,8}; plus a 2-node cycle
-terminates; plus `cited_by_depth>0` pulls citers; plus all four group types are
-followed. Smoke: deep-export a note with citations across journal/bib types.
+Verification: `test/test_v154_p3.lua` (or a fixture buffer) confirms a two-line
+`((…))` comment highlights fully. Smoke: open a note with a multi-line author
+comment under PKMMode and with PKMMode off.
 
-Invariants: `export.lua` stays read-only — never writes a note; only `require`s
-`citations`/`yaml`, never edits them.
+Invariants: tree-sitter query modeline discipline; `parser:parse()` called
+synchronously in `TextChanged`/`TextChangedI` (no `vim.schedule` wrap).
 
 Commit:
 
 ```
-feat: deep export across the citation graph
+fix: multi-line author-comment highlighting
 
-- export: pure BFS over cites/cited_by with per-direction depth limits
-  (cites=2, cited_by=0 by default) and cycle detection; identifier resolution
-  reuses citations.get_citable_items_map; all four citable groups traversed
-- commands: simple-vs-deep choice and depth selection in the export flow
-- test: worked-example traversal, cycle termination, multi-type edges
-- docs: changelog, roadmap
+- syntax/queries/after-syntax: author comments (( )) highlight across lines
+  under PKMMode and the Vimscript fallback
+- docs: changelog; convention note if multi-line headers remain unsupported
 ```
 
 ---
 
-#### Phase C — Panel infrastructure, buffer-panel port, and tag panel
+#### v1.6.0 (MINOR) — Panels & navigation
 
-*Next Steps 1 (foundation). **Recommended Option A** (shared `panel.lua`).
-Validates the abstraction by porting the existing buffer panel onto it, then
-proves it again by building the first new panel (tag) on it.*
+*The interface overhaul from the former Next Steps 1. Introduces the shared
+panel infrastructure and every panel/sidebar-navigation feature. **Recommended
+Option A** — a shared `panel.lua`, validated by porting the existing buffer
+panel onto it before new panels are built. If Option B (per-panel copies) is
+chosen, drop `panel.lua`; Phase 1 becomes the tag panel alone and Phases 2–3
+each carry their own skeleton — phase boundaries and commits are otherwise
+unchanged.*
 
-> **If Option B is chosen instead:** drop `panel.lua`; this phase becomes the
-> tag panel alone, modelled as a copy-and-adapt of the buffer panel, and the
-> later panels (D, E) each carry their own skeleton. Phase boundaries and
-> commits are otherwise unchanged.
+**Phase 1 — panel infrastructure, buffer-panel port, and tag panel.**
 
 | File | Single-pass changes |
 |---|---|
-| `panel.lua` *(new)* | `panel.create({ name, build_lines, keymaps, filetype, … }) → { open, close, toggle, refresh, is_open }`. Encapsulates per-tab state (`_tabs`/`get_tab()`), a scoped augroup, refresh-on-event, a buffer-local keymap set, the `ensure_main_window()` layout guard, and `winfixbuf = true` on the panel window. Full module header, section separators, LuaDoc per export. |
-| `ui.lua` | Port `toggle_bufpanel` onto `panel.create` (behaviour-preserving). Add the **tag panel**: searchable, scrollable tag list replacing the current `vim.ui.select`/`input` flow for `:PKMAddTag` (and `:PKMRemoveTag`). Selection mutates the **current buffer's** frontmatter only, via the existing `citations.add_tag`/`remove_tag` — i.e. **no `index.invalidate`** (buffer-only contract preserved). |
-| `commands.lua` | Route `:PKMAddTag` / `:PKMRemoveTag` through the tag panel. |
-| docs | `CHANGELOG` (Added). `ROADMAP` module map gains `panel.lua`. |
+| `panel.lua` *(new)* | `panel.create({ name, build_lines, keymaps, filetype, … }) → { open, close, toggle, refresh, is_open }`. Encapsulates per-tab state (`_tabs`/`get_tab()`), a scoped augroup, refresh-on-event, buffer-local keymaps, the `ensure_main_window()` layout guard, and `winfixbuf`. Full module header, section separators, LuaDoc per export. |
+| `ui.lua` | Port `toggle_bufpanel` onto `panel.create` (behaviour-preserving). Add the **tag panel**: searchable, scrollable tag list replacing the `vim.ui.select`/`input` flow for `:PKMAddTag`/`:PKMRemoveTag`; selection mutates the current buffer's frontmatter only via `citations.add_tag`/`remove_tag` — **no `index.invalidate`**. |
+| `commands.lua` | Route `:PKMAddTag`/`:PKMRemoveTag` through the tag panel. |
+| docs | `CHANGELOG` (Added). Module map + File Structure gain `panel.lua`. |
 
-Verification specifics: `test/test_phaseC.lua` asserts the buffer panel's
-observable behaviour is unchanged after the port (open/close/toggle/refresh,
-per-tab isolation) and that the tag panel's selection calls the buffer-only
-mutation without touching the index. Smoke: open the buffer panel in two
-tabpages; `:PKMAddTag` from a note, confirm frontmatter changes and the index is
-re-read only on the next `:w`.
-
-Invariants: buffer-only metadata commands never call `index.invalidate`;
-`winfixbuf` baked into the panel; Telescope (if used by a panel) checked at call
-time.
+Verification: `test/test_v160_p1.lua` asserts buffer-panel parity after the port
+(open/close/toggle/refresh, per-tab isolation) and that tag selection performs a
+buffer-only mutation (index re-read only on next `:w`). Smoke: buffer panel in
+two tabpages; `:PKMAddTag` from a note.
 
 Commit:
 
 ```
-feat: shared panel infrastructure with buffer-panel port and tag panel
+feat: shared panel infrastructure, buffer-panel port, and tag panel
 
 - panel: generic create() — per-tab state, scoped augroup, refresh-on-event,
   buffer-local keymaps, layout guard, winfixbuf
 - ui: port buffer panel onto panel.lua; searchable tag panel (buffer-only
   frontmatter mutation, no index.invalidate)
 - commands: route :PKMAddTag/:PKMRemoveTag through the tag panel
-- test: buffer-panel parity after port; tag panel index contract
-- docs: changelog, roadmap module map
+- test: buffer-panel parity; tag-panel index contract
+- docs: changelog, module map
 ```
 
----
-
-#### Phase D — Trash-restore panel
-
-*Next Steps 1. Depends on C. Disjoint file set from C and E.*
+**Phase 2 — trash-restore panel.**
 
 | File | Single-pass changes |
 |---|---|
-| `trash.lua` | A `panel.create`-based restore panel over the manifest: browse, search, select, and restore via a key. **No deletion key of any kind** — emptying remains exclusive to `:PKMEmptyTrash`, which keeps its typed confirmation. Restore reuses `restore_note` (backlinks already intact). |
+| `trash.lua` | A `panel.create`-based restore panel over the manifest: browse, search, select, restore. **No deletion key of any kind** — emptying stays exclusive to `:PKMEmptyTrash` (typed confirmation retained). Restore reuses `restore_note` (backlinks intact). |
 | `commands.lua` | Route `:PKMRestoreNote` through the panel. |
 | docs | `CHANGELOG` (Added). |
 
-Verification specifics: `test/test_phaseD.lua` populates a scratch
-`.pkm-trash/manifest.json`, restores an entry, asserts the file returns and the
-manifest shrinks, and asserts the panel exposes no destructive key. Smoke:
-delete a note, restore it from the panel, confirm backlinks survive.
+Verification: `test/test_v160_p2.lua` restores an entry from a scratch manifest
+and asserts the file returns, the manifest shrinks, and no destructive key is
+bound. Smoke: delete then restore a note; confirm backlinks survive.
 
-Invariants: `trash_note()` never strips backlinks; cleanup stays confined to
-`empty()`/`purge_old()`.
+Invariants: `trash_note()` never strips backlinks.
 
 Commit:
 
@@ -670,37 +694,28 @@ feat: trash-restore panel
 - trash: browse/search/restore panel over the manifest; no deletion key
   (empty stays exclusive to :PKMEmptyTrash with typed confirmation)
 - commands: route :PKMRestoreNote through the panel
-- test: restore round-trip; panel exposes no destructive key
+- test: restore round-trip; no destructive key
 - docs: changelog
 ```
 
----
-
-#### Phase E — Views panels and sidebar window navigation
-
-*Next Steps 1 (views) + the sidebar half of Next Steps 1's `<C-v>`/`N<CR>`
-items. Depends on C. The heaviest phase: it owns every remaining `views.lua`
-sidebar/panel change so that file is touched exactly once. Delivered
-file-by-file within a single response.*
+**Phase 3 — views panels and sidebar window navigation.**
 
 | File | Single-pass changes |
 |---|---|
-| `views.lua` | (1) **Views panel** (extends `:PKMViews`) on `panel.create`: keys to invoke `:PKMViewNew` and `:PKMViewUpdate` from the panel; **no deletion key**. (2) **View-deletion panel** (separate, by design): browse → select → **confirm before delete**, matching the destructive-action pattern of `:PKMEmptyTrash`. (3) **Sidebar key** to open the views panel directly. (4) **`N<CR>` window targeting:** count only real editing windows (exclude `pkm-sidebar`/`pkm-bufpanel`/`netrw`/floats), left→right, anchored right of the sidebar; `N ≤ count` opens in that window; `N > count` (including zero open) creates **exactly one** new window — the next sequential slot — never more; locate the rightmost real editing window and split `rightbelow` (never `topleft`, which could land left of the sidebar). The sidebar stays leftmost. (5) **`<C-v>` repurposed** (not removed): insert one new window immediately right of the sidebar, shifting existing windows right — the insert-before complement to `N<CR>`'s go-to-or-append. No `<C-CR>` binding (terminal keycode reliability). |
-| `commands.lua` | Route `:PKMViews` and `:PKMViewDelete` through their panels; retain `:PKMViewNew`/`:PKMViewDelete` as residual commands with optional arguments. |
-| `config.lua` | Default keymap for "open views panel in sidebar" (default `false`, opt-in). |
-| `keymaps.lua` | Wire that keymap if set. |
-| docs | `CHANGELOG` (Added). `ROADMAP` mark the relevant Next Steps 1 sub-items done. |
+| `views.lua` | (1) **Views panel** (extends `:PKMViews`) on `panel.create` with keys to invoke `:PKMViewNew`/`:PKMViewUpdate`; **no deletion key**. (2) **View-deletion panel** (separate by design): browse → select → **confirm before delete**. (3) **Sidebar key** to open the views panel. (4) **`N<CR>`**: count only real editing windows (exclude `pkm-sidebar`/`pkm-bufpanel`/`netrw`/floats), left→right, anchored right of the sidebar; `N ≤ count` opens in that window; `N > count` (including zero) creates **exactly one** new window — the next slot — via `rightbelow` from the rightmost real editing window (never `topleft`). (5) **`<C-v>` repurposed**: insert one new window immediately right of the sidebar, shifting existing windows right — the insert-before complement to `N<CR>`. No `<C-CR>` binding (terminal keycode reliability). |
+| `commands.lua` | Route `:PKMViews`/`:PKMViewDelete` through the panels; retain `:PKMViewNew`/`:PKMViewDelete` as residual optional-arg commands. |
+| `config.lua` | Default keymap for "open views panel in sidebar" (default `false`). |
+| `keymaps.lua` | Wire that keymap when set. |
+| docs | `CHANGELOG` (Added). |
 
-Verification specifics: `test/test_phaseE.lua` unit-tests the pure window-slot
-arithmetic (the "9 with one window open behaves like 2" case; the zero-windows
-case; the exclude-panels filter) on a synthetic window list, separate from any
-live split. Smoke: from the sidebar, `2<CR>` then `9<CR>` (no eight-window
-explosion); `<C-v>` inserts left-adjacent to existing editors with the sidebar
-still leftmost; open and use the views panel and the deletion panel (confirm the
-delete prompt).
+Verification: `test/test_v160_p3.lua` unit-tests the window-slot arithmetic (the
+"`9<CR>` with one window behaves like `2<CR>`" case; zero-windows; exclude-panels
+filter). Smoke: from the sidebar, `2<CR>` then `9<CR>` (no window explosion);
+`<C-v>` inserts left-adjacent to editors with the sidebar still leftmost; use the
+views and deletion panels (confirm the delete prompt).
 
-Invariants: never `topleft` for the second split; sidebar leftmost invariant
-preserved; deletion always confirmed.
+Invariants: never `topleft` for the second split; sidebar leftmost; deletion
+always confirmed.
 
 Commit:
 
@@ -708,35 +723,27 @@ Commit:
 feat: views panels and sidebar window navigation
 
 - views: views panel (create/update keys, no delete key); separate
-  view-deletion panel with confirm-before-delete; sidebar key to open the
-  views panel; N<CR> opens or creates exactly the Nth editing window
-  (rightbelow, never topleft); <C-v> inserts a window right of the sidebar
-- commands: route :PKMViews/:PKMViewDelete through panels; residual optional-arg
-  commands retained
+  view-deletion panel with confirm-before-delete; sidebar key to open it;
+  N<CR> opens or creates exactly the Nth editing window (rightbelow, never
+  topleft); <C-v> inserts a window right of the sidebar
+- commands: route :PKMViews/:PKMViewDelete through panels; residual commands kept
 - config/keymaps: opt-in sidebar→views-panel key
-- test: window-slot arithmetic and panel lifecycle
-- docs: changelog, roadmap
+- test: window-slot arithmetic; panel lifecycle
+- docs: changelog
 ```
 
----
-
-#### Phase F — Picker polish
-
-*Next Steps 1 (picker `<C-v>` left/right; `:PKMViews`↔`:PKMBrowse` flash).
-Independent of all panel phases — touches the Telescope/`vim.ui.select` layer,
-not the panels.*
+**Phase 4 — picker polish.**
 
 | File | Single-pass changes |
 |---|---|
-| `telescope.lua` | (1) Relative-split actions for `browse` and the views pickers via `attach_mappings` (matching the existing `<C-v>`/`<C-x>`/`<C-t>` convention): "open selection in a split right of the invocation window" and "…left." Capture `nvim_get_current_win()` **before** opening the picker; if that window is `pkm-sidebar`, disable "left" (no-op) for that invocation; if it no longer exists at selection, "right" falls back to the rightmost real editing window and "left" stays unavailable. Use plain Ctrl+letter bindings (avoid `<C-h>`/`<C-l>` and Shift+Ctrl). (2) Diagnose and fix the `:PKMViews`→`:PKMBrowse` console flash (likely a picker-to-picker handoff redraw); reproduce live, then fix. |
-| `ui.lua` | `vim.ui.select` fallback equivalent for the relative-split actions (a one-line follow-up prompt after selection). |
-| docs | `CHANGELOG` (Added/Fixed). |
+| `telescope.lua` | (1) Relative-split actions for `browse` and the views pickers via `attach_mappings` (matching the existing `<C-v>`/`<C-x>`/`<C-t>` convention): open the selection in a split right or left of the invocation window. Capture `nvim_get_current_win()` **before** opening the picker; if it is `pkm-sidebar`, disable "left"; if it no longer exists at selection, "right" falls back to the rightmost real editing window and "left" stays unavailable. Plain Ctrl+letter bindings only (avoid `<C-h>`/`<C-l>` and Shift+Ctrl). (2) Diagnose and fix the `:PKMViews`→`:PKMBrowse` console flash (reproduce live first). |
+| `ui.lua` | `vim.ui.select` fallback for the relative-split actions (a one-line follow-up prompt after selection). |
+| docs | `CHANGELOG` (Added + Fixed). |
 
-Verification specifics: `test/test_phaseF.lua` unit-tests the invocation-window
-capture and fallback resolution (sidebar → left disabled; vanished window →
-right-fallback) as pure logic. Smoke: from a note window and from the sidebar,
-open `:PKMBrowse`, split-right and split-left a selection; toggle
-`:PKMViews`→`:PKMBrowse` and confirm no flash.
+Verification: `test/test_v160_p4.lua` unit-tests invocation-window capture and
+fallback (sidebar → left disabled; vanished window → right-fallback). Smoke:
+split-right and split-left a `:PKMBrowse` selection from a note window and from
+the sidebar; toggle `:PKMViews`→`:PKMBrowse` and confirm no flash.
 
 Commit:
 
@@ -753,168 +760,174 @@ feat: relative-split picker actions and smoother picker handoff
 
 ---
 
-#### Phase G — Header navigation motions
+#### v1.6.1 (PATCH) — `:PKMViews` open latency
 
-*Distant Additions 1.2, header subset only. Self-contained and
-backward-compatible. List-component and block navigation are deferred until the
-markdown conventions (Phase H, then a future syntax decision) settle.*
+*Former Next Steps 6. Bench-gated performance fix, placed after v1.6.0 so it
+tunes the reworked `:PKMViews` rather than code about to be replaced. If
+diagnosis reveals a root cause independent of the views picker (e.g. a cold
+index build on first activation), the fix may be pulled forward as a standalone
+patch instead.*
 
 | File | Single-pass changes |
 |---|---|
-| `markdown.lua` | Note that neovim already implements same-level header
-                   navigation, so no special commands are needed for that. The other features will
-                   be built in a compatible and intuitive manner considering the default
-                   keymapping and, whenever adequate, the same logic as the native same-level
-                   header. Previously, we had created a same-level command, which was dropped in favor of the native command. This was not noted, and may cause
-                   confusion, so the integration of PKM with vim-native commands should be noted in appropriate locations. |
-| `commands.lua` | `:PKMNextHeader`-family navigation commands. |
-| `keymaps.lua` | Wire the navigation keymaps if set. |
-| `config.lua` | Navigation keymap defaults — consistent with default same-level header and other existing markdown keymaps. |
-| docs | `CHANGELOG` (Added). `ROADMAP` promote the DA 1.2 header subset into completed scope; restate that list/block navigation remains deferred. |
+| `bench.lua` | If needed, a targeted bench for the views-open path (reuse `views_suite`/`baseline`). Developer-only. |
+| `views.lua` **or** `index.lua` | The fix, chosen **after** measurement. Candidates: pre-warm/reuse the index so the first `:PKMViews` does not pay a cold build; memoise `match_all` per view within an open (the `_match_cache` idea, Distant Additions 4) if the bench attributes the cost there. Exactly one of these files is touched, per the diagnosis. |
+| docs | `CHANGELOG` (Fixed/Changed) with the measured before/after; `bench.baseline()` numbers recorded. |
 
-Verification specifics: `test/test_phaseG.lua` runs `find_heading_target` over a
-fixture with mixed `#`-levels and asserts next/prev and same-level targets at
-boundaries (first/last heading, no heading → nil). Smoke: navigate a real note's
-headings up/down and same-level.
+Verification: run `bench.baseline()` and the views-open bench on the real corpus
+**before** any edit (mandatory — never optimize blind), then again after, and
+record both. Smoke: open `:PKMViews`/`<leader>va` on the ~600-note corpus and
+confirm sub-perceptible latency.
+
+Invariants: no correctness change to view results; measurement precedes
+optimization.
+
+Commit:
+
+```
+perf: eliminate :PKMViews first-open latency
+
+- bench: measured the views-open path on the real corpus (before/after recorded)
+- <views|index>: <the diagnosed fix — pre-warm index / memoise match_all>
+- docs: changelog with benchmark numbers
+```
+
+---
+
+#### v1.7.0 (MINOR) — Exportation, note creation, and header navigation
+
+*Three independent features from the former Next Steps 1 and 3 and Distant
+Additions 1.2, across disjoint primary files. Grouped into one minor because
+each is small and self-contained; they may equally ship as separate minors if
+preferred.*
+
+**Phase 1 — deep export.**
+
+| File | Single-pass changes |
+|---|---|
+| `export.lua` | (1) `read_citation_edges(path)` — pure: read frontmatter via `get_file_data`, return `{ cites = {ids…}, cited_by = {ids…} }` unioning all four groups. (2) `collect_deep(seed_paths, opts)` — pure BFS with separate per-direction depth counters (`cites_depth` default 2, `cited_by_depth` default 0; 0 = no traversal), cycle detection, identifiers→paths via `citations.get_citable_items_map()`; returns the deduplicated, sorted union (seeds included). (3) A deep-export entry that prompts for mode + depths, then hands the union to `export_direct`. |
+| `commands.lua` | Extend the `:PKMExport` flow with a simple-vs-deep choice and the two depths, using native `vim.ui.select`/input (small fixed choice set stays native). |
+| docs | `CHANGELOG` (Added); note defaults 2/0. |
+
+Verification: `test/test_v170_p1.lua` builds the worked example (1 cites 2/4/5;
+5→7; 7→8; 1 cited_by 2/3/6) and asserts the default run yields {1,2,4,5,7} and
+not {3,6,8}; plus 2-node cycle termination; plus `cited_by_depth>0` pulls citers;
+plus all four groups followed. Smoke: deep-export a note citing across
+journal/bib types.
+
+Invariants: `export.lua` stays read-only; only `require`s `citations`/`yaml`.
+
+Commit:
+
+```
+feat: deep export across the citation graph
+
+- export: pure BFS over cites/cited_by with per-direction depth limits
+  (cites=2, cited_by=0) and cycle detection; id resolution reuses
+  citations.get_citable_items_map; all four citable groups traversed
+- commands: simple-vs-deep choice and depth selection in the export flow
+- test: worked-example traversal, cycle termination, multi-type edges
+- docs: changelog
+```
+
+**Phase 2 — relative note (new note sharing the current note's tags).**
+
+| File | Single-pass changes |
+|---|---|
+| `notes.lua` | `create_relative_note()` — create a new consolidated note pre-seeded with the current note's `tags` (so it lands in the same view when one exists). Reuses `create_new_note`'s numbering/template path; only the tag seeding is new. A "relative" note, since tags — not a rigid view — define the relationship (see Design Questions: note relationships). |
+| `commands.lua` | `:PKMNewRelative` (or equivalent) invoking it. |
+| `keymaps.lua` | Wire the keymap when set. |
+| `config.lua` | Default keymap (default `false`). |
+| docs | `CHANGELOG` (Added). |
+
+Verification: `test/test_v170_p2.lua` asserts the new note's frontmatter carries
+exactly the source note's tags. Smoke: from a tagged note, create a relative
+note and confirm it appears in the same view.
+
+Commit:
+
+```
+feat: create a relative note sharing the current note's tags
+
+- notes: create_relative_note() seeds the new note with the source tags so it
+  falls within the same view when one exists
+- commands/keymaps/config: :PKMNewRelative and opt-in keymap
+- test: tag inheritance
+- docs: changelog
+```
+
+**Phase 3 — header navigation.**
+
+| File | Single-pass changes |
+|---|---|
+| `markdown.lua` | Add **any-level** header navigation (jump to next/prev ATX heading regardless of level) via a pure `find_heading_target(lines, cursor, opts) → lnum?`. Neovim already provides **same-level** header motion natively, so PKM adds only the any-level complement; document the native integration. Update the module Public-API header and LuaDoc. *(Optional bundling: Distant Additions 1.8's "global next_header" also lives in `markdown.lua` and could ride this same pass if promoted.)* |
+| `commands.lua` | `:PKMNextHeader`-family navigation commands. |
+| `keymaps.lua` | Wire navigation keymaps when set. |
+| `config.lua` | Navigation keymap defaults — consistent with the native same-level motion and existing markdown keymaps (default `false`). |
+| docs | `CHANGELOG` (Added). Record the PKM↔Neovim native-motion integration and note that a previously-created same-level command was dropped in favour of the native one. Promote the "different/any-level header" bullet of Distant Additions 1.2 into completed scope; restate that list-component and block navigation remain deferred pending the markdown conventions. |
+
+Verification: `test/test_v170_p3.lua` runs `find_heading_target` over a
+mixed-level fixture and asserts next/prev targets at boundaries (first/last
+heading; no heading → nil). Smoke: navigate a real note's headings.
 
 Invariants: current Neovim API only; pure targeting function; no global state.
 
 Commit:
 
 ```
-feat: header navigation motions
+feat: any-level header navigation
 
-- markdown: neovim implements same-level header navigation. Add and any-level
-  header jumps via a pure find_heading_target; ATX headings only
+- markdown: any-level header jumps via a pure find_heading_target (ATX only);
+  document integration with Neovim's native same-level motion
 - commands/keymaps/config: opt-in heading-navigation commands and keymaps
 - test: heading targeting over fixtures, including boundaries
-- docs: changelog, roadmap (DA 1.2 header subset promoted)
+- docs: changelog; DA 1.2 (any-level header) promoted; native-motion note
 ```
 
 ---
 
-#### Phase H — Note-taking conventions specification *(optional, lowest priority)*
+### Design Questions (discussion-only — not yet planned)
 
-*Documentation portion of Distant Additions 1.1. Doc-only, zero code risk.
-Guides future syntax/formatting work and AI collaboration. May slip to v1.7.0.*
+*Reserved space for ideas the author wants tracked as ongoing frameworks rather
+than scheduled work. No implementation until explicitly promoted. These three
+are related: all concern how notes describe and relate to one another.*
 
-| File | Single-pass changes |
-|---|---|
-| `doc/CONVENTIONS.md` *(new)* | Written conventions: prefix/indentation spacing (including the long-prefix continuation rule), candidate extended list prefixes, table-type decision and separators, equivalent-name juxtaposition (`AI/LLM`, `não-exaustivo/não-taxativo`). Marked explicitly as *convention guidance*, not yet a syntax contract. |
-| docs | Reference the new file from `PHILOSOPHY`/`ROADMAP`; `CHANGELOG` (Added, docs). |
+1. **Note relationship protocol.** There is no model for rigid relations such as
+   "parent" note: because notes cite each other freely, a "parent" can be cited
+   by a note its "child" cites, so hierarchy is ill-defined and possibly cyclic.
+   A rigid nomenclature is likely unnecessary. A cheap, well-defined alternative
+   is **tag-set relatedness** — notes sharing more tags are more related (e.g. a
+   Jaccard or overlap measure over tag sets), with exact-tag-set matches most
+   related. This is attractive because it is pure, cheap, and feeds directly
+   into the relevance-ranking ideas in Distant Additions 9 (ordering search
+   results and sidebar entries). Recorded as a design framework, not a plan; the
+   "relative note" feature (v1.7.0) already embodies the tag-relatedness view of
+   relationship at creation time.
 
-Verification: documentation review only; no code, no test file.
+2. **A note type for describing other notes.** Some notes describe the rationale
+   and usage of other notes — the author's markdown consensus is part of the
+   *system*, but a user may want their own consensuses per project/view, or a
+   guide explaining what a "question bank" note type is for. Adding a genuine new
+   frontmatter `type` is a **major conceptual change** (it touches templates, the
+   `type:` filter predicate, `index.note_type`, syntax, and the citation
+   groups), even if the code delta is small. **Recommendation:** do *not* add a
+   new type initially. Model these as an existing type (`note` or `agg`)
+   distinguished by convention — a `role`/`meta`/`guide` tag or a naming
+   convention — and only promote to a real type if the convention proves
+   insufficient in daily use. This keeps the type system minimal (Philosophy §2,
+   §7) and is fully reversible. Discussion-only; no implementation.
 
-Commit:
-
-```
-docs: note-taking conventions specification
-
-- doc/CONVENTIONS.md: spacing/indentation, list-prefix candidates, table
-  decisions, equivalent-name juxtaposition; guidance, not yet a syntax contract
-- docs: reference from philosophy/roadmap; changelog
-```
-
----
-
-*Sequencing note: A and B may run in either order; C must precede D and E; F, G,
-H float. Each phase ends on its commit (`git commit -a -m …`); tags are applied
-only after the whole release lands.*
-
----
-
-### Next Steps
-
-1.  **Improved PKM interface and navigation:** Use UI panels for displaying note
-    and view lists, leaving simple native Neovim UI for short and fixed sets of
-    choices (like the exportation types described in Next Steps 3)
-    -   `:PKMAddTag`: improve UI to show a panel where tags can be chosen and
-        searched (similar to the existing browse panels).
-    -   Trash: improve `:PKMRestoreNote`'s UI to show a panel where previously
-        deleted notes can be browsed and searched (similar to the existing
-        browse panels). This panel should allow the user to select notes and
-        then press a key to restore them. To avoid any accidental losses,
-        deleting notes or recycling the whole trashbin should not be possible
-        in this UI for now (that feature remains confined to `:PKMEmptyTrash`,
-        which should always prompt the user for confirmation before executing).
-    -   `:PKMViewNew` and `:PKMUpdateView` should be incorporated into the
-        views panel (`:PKMViews`), which should now also open UI panels similar
-        to other browsing and searching panels, but now with a key combination
-        for creating and updating views / subviews (that is, for calling
-        `PKMViewNew` and `PKMUpdateView`. As a safety measure, do not add a key
-        for view deletion in those panels for now.
-    -   `:PKMViewDelete` should have its own UI panel, similar to the other
-        browsing and searching panels described here. 
-    -   `:PKMViewDelete` and `:PKMViewNew` can persist as residual commands
-        with an optional arguments.
-    -   Add a key to open `:PKMViews` in the sidebar.
-    -   `:PKMViews` and `:PKMSearch` toggle: toggling from the first to the
-        second is not smooth (a console shows during the transition), make it
-        smoother if possible. Helplines are missing for some already
-        functioning commads (such as `T` for toggling between title and
-        filename display).
-    -   using `<c-v>` on a note title/filename on the sidebar correctly opens
-        the note on a new vertical buffer. however, by default it creates a
-        split on the right. change it to create a split on the left, or create
-        a keymap to allow the user to do so, if you think preserving the choice
-        on the left is adequate.
-    -   Using `#<CR>`, where `#` is a number, correctly opens a file on the #th
-        window. However, it only does so if that window already exists.
-        Consider allowing it to create that window, if it doesn't exist,
-        effectively replacing `<C-v>` and allowing the user to choose between
-        any window when opening a file in a new split (this would solve the
-        issue presented in the previous point).
-
-2.  **PKM new view autorefresh sidebar:** currently, adding a new view with
-   `:PKMViewNew` does not autorefresh the sidebar. The new view appears only
-   after navigating to another view and back or pressing `r` in the sidebar to
-   refresh it. With this change, the new view should appear immediately after
-   being added (it should autorefresh the sidebar and return to the previously
-   active window, which may or not be the sidebar itself).
-
-3.  **Deep exportation:** modify `export.lua` and any other files related to
-    exportation with the goal to enable "deep exportation". Deep exportation is
-    defined here as an exportation of all selected notes plus the notes they
-    depend on. To do so, the system must, for each note selected for
-    exportation, check each note that it cites (and this includes any types
-    such as journal, agg, bib, or note). If the cited note is not also included
-    in the exportation list, then the system should include it. Deep
-    exportation does not replace simple exportation, it is an extra option.
-    Notes to be exported in deep exporation are those selected by the user and
-    those cited by them, and the ones that cite them. The depth should be
-    selectable at every function call, with a default of 0 for "cited by" and 2
-    for "cites". This means that, by default, no notes that cite the selected
-    notes (and therefore are listed in the "cited_by" metadata will be
-    selected, and that notes cited by the selected note, as well as notes that
-    these note cite will be selected.
-    Example:
-
-    ```
-    Note 1 is selected for exportation, and:
-    -   Note 1 cites Notes 2, 4, 5 (cites - depth 1); 
-    -   Notes 2 and 4 cite no other notes, 
-    -   Note 5 cites Note 7 (cites - depth 2); 
-    -   Note 7 cites Note 8 (cites - depth 3). 
-    -   Note 1 is cited by Notes 2, 3, 6, (cited by - depth 1). 
-
-    By the default configuration, deep export will export Notes 1, 2, 4, 5,
-    (cites - depth 1) and 7 (cites - depth 2), but not Notes 3, 6, since those
-    two are cited neither by Note 1 nor by any note that Note 1 cites
-    directly).
-    ```
-
-4. **Consistent view renaming:** `:PKMUpdateView` should ensure that any
-   renamed views are also renamed in places that reference them (e.g. subviews
-   that register them as a parent, any relevant index entry, etc.)
-
-5.  **Bugfixes:**
-    - Files can still open in the sidebar and buffer panels via `:PKMViewAll` and other
-      commands. `:Ex` still opens explorer mode in the sidebar and buffer
-      panels, if used when they are the active window, so does `:PKMViewEdit`.
-      This should have been fixed in previous versions.
-    - `:PKMRenameNote` is not case sensitive (e.g. renaming a file from
-      "prazos" to "Prazos" is not allowed triggers and error `[pkm] cannot
-      rename: target already exists: 0142_agg_Prazos.md`)
+3. **AI exportation context protocol.** A way to ship files that tell an AI/LLM
+   how to interpret a set of notes (the markdown conventions being one example;
+   per-view or ad-hoc directives being others). **Recommendation:** for the
+   per-view case, use the zero-code approach the author already favoured — the
+   directive is simply a regular note created inside the view, so ordinary
+   (and deep) export already carries it; no new mechanism is needed. This reuses
+   Design Question 2's convention rather than inventing a parallel one. The only
+   worthwhile future code enhancement would be an export option to
+   *auto-prioritise/always-include* notes bearing the context convention; defer
+   that until the convention itself is settled (Distant Additions 1.1). The
+   arbitrary-set case has no clear low-cost solution and is deferred.
 
 ---
 
@@ -925,17 +938,35 @@ only after the whole release lands.*
         guideline for consistent and high-quality note-taking, reviewing, and
         editing, as well as LLM/AI collaboration. Some of these conventions may drive
         syntax highlighting and formatting, while others are simply meant to guide the
-        user in using consistent notation and terminology. Examples (non-exhaustive):
+        user in using consistent notation and terminology. The written
+        specification will live in a new `doc/CONVENTIONS.md` (guidance, not yet
+        a syntax contract). Examples (non-exhaustive):
         -   spacing: github's guidelines suggest using two spaces after number
             prefixes and 3 spaces after simple symbol prefixes to reach a 4
             space indentation, but what about symbols 4 character-large or more
             and numbers 3 character-large or more (the numbers are followed by
             an additional separator character and each prefix is followed by at
             least one space, so we would have to deal with an indentation level
-            of 5). A possible solution is to allow text to start 1 space after
-            the prefix (counting the separator for number prefixes) but then
-            start at the correct indentation level from the second line
-            onwards;
+            of 5). A possible solution is to use the 4 space for all prefixes
+            up to length 3 (including the separator), and then use an extra
+            indentation (8 spaces) for all prefixes with length from 4 to 7,
+            and so on. However, these would be still "first-level" elements,
+            and so any text after
+            the first line would align at the first-level (4 spaces). The
+            system would need to detect this when autowrapping such prefixes.
+            If a list contains prefixes of several lengths, the user should be
+            able to chose the minimum spaces required per prefix or to align
+            all elements based on the longest prefix (if intending to preserve
+            visibility and aesthetics). If prefixes are so long that would
+            make identation impossible without transgressing the margins (e.g.
+            80 characters), then special notations are ensued (such as power
+            notations like 10^6 and so on), or the user may opt for prefixes
+            that can fit more values in a smaller space (like hexadecimals, or
+            number + characters e.g. `a` - `z`, then `aa` - `zz`, and so on).
+            This requires additional conventions, evaluations of autowrappers
+            and syntax highlighting, and should not break the current working
+            features (see best practices from manuals and guidelines on formatting,
+            text editing, typesetting, and diagraming).
         -   evaluate cost-benefit of extending possible list prefix to any
             alphanumeric symbol + a separator from a standard separators list
             (e.g. `-`, `.`, `)`, `:`). Consider the same for symbol sequences.
@@ -955,6 +986,7 @@ only after the whole release lands.*
                 wrapping should occur as:
 
                 ```
+
                 -- WRONG --
                 - XLIII       Crimes de tortura, tráfico ilícito de entorpecentes e afins,
                 terrorismo e crimes hediondos
@@ -962,6 +994,7 @@ only after the whole release lands.*
                 -- CORRECT --
                 - XLIII       Crimes de tortura, tráfico ilícito de entorpecentes e afins,
                               terrorismo e crimes hediondos
+
                 ```
 
         -   juxtaposing equivalent names like `AI/LLM` or `não-exaustivo/não-taxativo`.
@@ -970,7 +1003,8 @@ only after the whole release lands.*
         -   same level list component;
         -   jump to the end or beginning of a list
         -   different level headers (same level headers is already implemented
-            by standard neovim);
+            by standard neovim; **any-level** header jump is implemented in
+            v1.7.0);
         -   diferent level list components;
         -   blocks of the same type (code blocks, lists, citation);
     3.  Extended list prefixs recognition. This needs to be analyzed in
@@ -1004,6 +1038,16 @@ only after the whole release lands.*
        keymaps and to toggle the command off when outside PKM Mode (for this
        command and other similar situations, this last part can be deferred to
        customization);
+        > **Reorganisation note:** this item is flagged for **near-term
+        > promotion**. It is the one Distant Addition the author explicitly wants
+        > to test soon, and Philosophy §7 is not violated because it is a
+        > personal always-on candidate, not a user customisation surface. A
+        > concrete first slice — a config flag to apply PKM markdown
+        > highlighting/features outside PKM notes, plus suppressing the
+        > distracting "4-space-indented-as-code" highlight for list-prefixed
+        > lines — could become a minor after the current version arc. It is left
+        > here (not yet versioned) only because the command-renaming/toggling
+        > sub-parts are still exploratory; promote on request.
     8. The next_header command currently only works when the cursor is above a
        header. If used this way, it will create a header numbered as the
        current + 1. Create a new "global' next_header command which creates a
@@ -1013,7 +1057,8 @@ only after the whole release lands.*
        before any header of a higher level (if none exist, then this will be the
        last line in the file), then moves the cursor to the newly
        created header (that is, it will create `## header-(n+1)` whenever the
-       cursor is at `## header-m`, for any `m <= n`. 
+       cursor is at `## header-m`, for any `m <= n`. *(Lives in `markdown.lua`;
+       could be bundled with the v1.7.0 header-navigation pass if promoted.)*
 
 2. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
@@ -1025,11 +1070,14 @@ only after the whole release lands.*
   unacceptable at very large corpus sizes (likely >50k notes). The current build cost
   is ~0.25 ms/note; at 500 notes (realistic current scale) that is ~125 ms, which is
   imperceptible. Run `bench.baseline()` on the real corpus before implementing this.
+  
 
 4.  **`_match_cache` in views.lua** — Cache matched path arrays alongside
     filter trees. Makes repeated `match_all` calls O(1) until invalidation.
     Bench showed 3.1 ms/view at 10k notes; not warranted at current scale.
-    Revisit at ~5k notes or ~200+ views with observed latency.
+    Revisit at ~5k notes or ~200+ views with observed latency. **Note:** the
+    v1.6.1 latency investigation may adopt this if the bench attributes the
+    `:PKMViews` cost to repeated `match_all`.
 
 5.  **Note review queue** — Select and track notes intended for review. May
     include organizers, separators, or filter interactions for priority/subject
@@ -1086,6 +1134,7 @@ only after the whole release lands.*
         algorithms used in popular tools to rank the relevance of files, urls,
         etc (like google's). This should make note navigation much more
         intuitive both during edition and when starting a new session.
+        (See Design Questions: tag-set relatedness is a candidate signal.)
 
         Example 1:
         `0035_bib_Constituição_da_República_Federativa_do_Brasil_1988.md` was
@@ -1116,6 +1165,25 @@ only after the whole release lands.*
         to detect "remédios-constitucionais". If there is an exact match,
         however, it should rank above these partial or smart matches.
 
+10.  **Note sync:** Currently, I use Github to store my notes (in a private
+     repo) as a means to preserve them and to allow note-taking in multiple
+     devices. We should, at some point, create a note syncing within PKM, which
+     may allow one or multiple options for a repository (including github
+     itself). The sync needs to allow for privacy (e.g. at least one option of
+     a private storage, as well as an option of local-only notes. If syncing
+     downloads notes in another computer, e.g. Github or Google Drive, there
+     should be an easy way to delete the notes locally after the work is done).
+     The syncing should be robust and tolerate desynchronized edits without
+     issues (using something like a diff to converge modifications). The
+     syncing should be fast (no slow syncing like Evernote).
+
+11. **Note versions and undo:** Currenly, modifying a note and saving it will
+    make the previous note disappear (unless the user wants to restore notes
+    synced to Github by reverting a "version", but that is cumbersome and
+    faulty). Ideally, we should be able to store some versions of the note,
+    allowing "undo" even after a note is saved and the program is closed. This
+    need to be evalutated in terms of performance and storage costs.
+
 ---
 
 ### Potential but not guaranteed goals (do not design toward)
@@ -1134,6 +1202,14 @@ only after the whole release lands.*
     reconsideration only. Decision gate: revisit ONLY IF, after (1) the
     modified-buffer write-through fix and (2) frontmatter folding/conceal, the
     in-file approach remains unacceptable in daily use.
+
+-   **PKM UI** - a UI developed for PKM, not dependent on telescope, which will
+    allow users to chose which UI to use and allow the development of all
+    commands that currently use telescope's UI in a more flexible manner.
+    Telescope's UI will not be replaced, nor will telescope based search if we
+    are still using it in any part of the main program, but users will be able
+    to choose which to enable and, where adequate, they may also be activated
+    together and complementarily.
 
 -   **Insertable folds**: a character or character combination to mark
     beginning and ending of folds in any file. These should only be implemented
@@ -1197,6 +1273,7 @@ only after the whole release lands.*
 | Register `UndoPost` autocmd | This event does not exist in Neovim ≤ 0.11.x; `vim.treesitter` tracks changes via `on_bytes` automatically |
 | Call `index.invalidate` from buffer-only metadata commands | No disk write occurred; the index re-reads correctly on the user's next `:w` |
 | Strip backlinks in `trash_note()` | Backlinks are preserved for clean restoration; `cleanup_deleted_note` is called only in `empty()` and `purge_old()` |
+| Touch a file twice in one phase | Each phase edits each file in a single pass; split incompatible edits across phases (see Versioning Policy / Release Plan) |
 
 ### Always do this
 
@@ -1314,9 +1391,13 @@ cited_by:
 - detail
 - detail
 ```
-Types: `feat` `fix` `docs` `refactor` `test` `chore`
+Types: `feat` `fix` `docs` `refactor` `test` `chore` `perf`
 
 **Branches:** `feat/<name>`, `fix/<name>`
+
+**Versioning & tags:** see the **Versioning Policy** section. Tags
+(`git tag -a vX.Y.Z`) are created only after all phases of a version have landed
+and verified; MAJOR stays at `1` during the pre-release period.
 
 **Do not run `git gc`** on this repo — it lives on Google Drive sync which causes
 object-directory deletion conflicts. Global git config: `gc.auto 0`,
@@ -1330,6 +1411,7 @@ automates `dev→main` merges.
 - Neovim docs: https://neovim.io/doc/
 - Lua docs: https://www.lua.org/docs.html
 - LuaRocks style guide: https://github.com/luarocks/lua-style-guide
+- Semantic Versioning: https://semver.org/
 
 ---
 

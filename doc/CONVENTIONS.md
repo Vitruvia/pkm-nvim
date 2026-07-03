@@ -16,8 +16,8 @@ supplementary remarks that belong to the note's main argument.
 
 `((text))` — author meta-comment. Content is addressed to the author or a
 future reader/AI, not to the note's primary argument. Examples:
-- `((Review tomorrow))`
-- `((See Enderton Logic Ch.2 [bib-xxx]))`
+-   `((Review tomorrow))`
+-   `((See Enderton Logic Ch.2 [bib-xxx]))`
 
 The double-paren distinguishes meta-comments from standard textual parentheses.
 Parentheses that are part of cited or transcribed content should not use the
@@ -42,10 +42,22 @@ bibliography entry.
 
 ## Header and Body Organization
 
-- At most one `#`-level header per note (the note title, if shown at all).
-- `##` through `####` organize sections. Deeper nesting should be rare.
-- Each section header should be self-explanatory without reading the preceding
-  body.
+-   At most one `#`-level header per note (the note title, if shown at all).
+-   `##` through `####` organize sections. Deeper nesting should be rare.
+-   Each section header should be self-explanatory without reading the
+    preceding body.
+
+---
+
+## Lists
+
+-   Ordered lists that use non-native markdown can either:
+    1.  use PKM-styled markdown; or
+    2.  use simple bullets like `-` followed by the prefix. E.g. `- A) <text>`.
+
+    The user may choose any of these options differently based on their needs
+    and intent for each file/note. The second option is more externally
+    compatible, while the first is more readable within PKM.
 
 ---
 
