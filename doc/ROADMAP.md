@@ -26,9 +26,8 @@ The note namespace is intentionally **flat and global** — all notes share a si
 
 ## Current State
 
-**Released:** v1.4.1 (main). **Active development:** v1.5.3 (dev, unreleased).
-All prior implementation phases (0–5) are complete; the upcoming work is
-organised under **Release Plan** below.
+**Released:** v1.5.3 (main). **Active development:** v1.5.3 (dev). The upcoming
+work is organised under **Release Plan** below.
 
 **Working features:**
 
