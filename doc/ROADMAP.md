@@ -631,6 +631,25 @@ fix: multi-line author-comment highlighting
 - docs: changelog; convention note if multi-line headers remain unsupported
 ```
 
+**Phase X — Other bugfixes and improvements.** Do these in any of the previous phases or on
+a phase of its own.
+-   Pressing `zE` to expand folds makes the system no longer detect the yaml
+    fold in a note. Saving the note resumes normal behavior. `za` and `zm` do
+    not cause issues (but they are affected until a new save or a note reopen
+    if the fold stops being detected due to `zE`).
+-   Pressing `gf` on a note citation only follows the link when such citation
+    is the "full citation" (present in the yaml citation block). The
+    "shortened" citation ([note xxxx]) that shows in text does not allow link
+    following. There should be a way to follow a link without having to go up
+    to the metadata manually before doing so.
+-   Pressing `u` on normal mode to undo has been fixed to correctly alter the
+    timestamp while also reverting the modification made. However, the cursor
+    ends up on the timestamp, making it hard to follow the changes (that is,
+    the user needs to manually search for whatever was undone). The cursor
+    should land on the last-undone part (e.g. a text that was regenerated,  an
+    empty character/line that was left after undoing an input, and so on).
+
+
 ---
 
 #### v1.6.0 (MINOR) — Panels & navigation
