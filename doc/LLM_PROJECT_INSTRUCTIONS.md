@@ -1,6 +1,4 @@
-Read `doc/PHILOSOPHY.md` to understand this project's scope and before
-proposing features or design changes. Itsprinciples are non-negotiable
-constraints on all architectural decisions.
+Read `doc/PHILOSOPHY.md` to understand this project's scope and before proposing features or design changes. Its principles are non-negotiable constraints on all architectural decisions.
 
 ---
 
@@ -24,7 +22,7 @@ source. The key files are:
   established patterns, and environment details
 - `doc/CHANGELOG.md` — version history, known bugs, dead code, suspended
   functions, and pending decisions
-- `doc/PKM_ROADMAP.md` — module map, architecture overview, and future plans
+- `doc/ROADMAP.md` — module map, architecture overview, and future plans
   including ideas not yet in scope
 
 Always search the project knowledge base before answering questions about the
@@ -36,7 +34,7 @@ codebase. Do not rely on memory or training data for project-specific details.
 
 This section lists references in order of authority, although primary references should be considered closely tied in general.
 
-### Primary 
+### Primary
 1. **Lua manual** — https://www.lua.org/manual/5.4/ — authoritative for
    language semantics and standard library
 2. **Programming in Lua (PIL)** — by Roberto Ierusalimschy (Lua's creator) —
@@ -121,6 +119,21 @@ This structure applies to all modules, including any created in the future.
 3. Check `doc/CHANGELOG.md` for known bugs and dead code before proposing fixes
 4. Identify all affected files before proposing a change
 
+### Source of Truth for Code Behavior
+When a claim about how code currently behaves is needed, prefer sources in this
+order:
+1. **The file as pasted or modified earlier in this conversation** — if the
+   user has pasted a file's contents, or a file has been edited during this
+   session, that state is more current than anything in the knowledge base,
+   which only reflects the last synced version.
+2. **Live source in the project knowledge base**, when no pasted/in-conversation
+   version exists.
+3. **Documentation** (`LLM_CONTEXT.md`, `CHANGELOG.md`, `ROADMAP.md`) — describes
+   intent, history, and decisions, but is not proof of current behavior and can
+   go stale relative to either of the above.
+
+If sources conflict, say so explicitly rather than silently picking one.
+
 ### Scope and Bugs
 - Fix what was asked. If the fix is wrong or incomplete, say so and explain why
   before proposing an alternative — do not just comply.
@@ -160,9 +173,19 @@ Maintain `doc/CHANGELOG.md` actively:
 - Functions suspended → add to Suspended Functions with options for resolution
 - Features added → add under Added with description of behavior
 
+### Documentation Maintenance Cadence
+- Check and update `LLM_CONTEXT.md`, `CHANGELOG.md`, and `ROADMAP.md` as a
+  batch after each **version** is completed — not after each phase.
+- Avoid touching docs mid-version by default; this prevents redundant edits as
+  a version's scope evolves across phases.
+- Exception: if a version accumulates enough changes that tracking them
+  informally becomes unreliable, update docs mid-version — but do so in a
+  single consolidated pass, following the same one-touch-per-file discipline
+  used for code, rather than incrementally after each phase.
+
 ### Future Plans
 Ideas for future features — including ones not yet in scope — belong in
-`doc/PKM_ROADMAP.md` under clearly labeled future sections. The changelog
+`doc/ROADMAP.md` under clearly labeled future sections. The changelog
 records what happened; the roadmap records what might happen.
 
 ### Explanations

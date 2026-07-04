@@ -145,7 +145,7 @@ When a proposed feature, change, or integration is under discussion:
 1. Identify which principle(s) it touches.
 2. Ask whether it serves or undermines them.
 3. If it contradicts a principle, it is out of scope. Propose a version that
-   does not, or record it in `PKM_ROADMAP.md` under *Postponed or Out of
+   does not, or record it in `ROADMAP.md` under *Postponed or Out of
    Consideration* with an explicit reference to the principle it violates.
 
 These principles apply to all contributors: human and AI alike.

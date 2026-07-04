@@ -150,7 +150,7 @@ pkm.nvim/
 ├── plugin/pkm.lua      # Auto-load marker
 ├── doc/
 │   ├── pkm.txt         # Vim help documentation
-│   ├── PKM_ROADMAP.md  # This file
+│   ├── ROADMAP.md  # This file
 │   ├── LLM_CONTEXT.md  # Fast-read session brief for LLMs
 │   ├── PHILOSOPHY.md   # Design principles (non-negotiable constraints)
 │   └── CHANGELOG.md    # Version history
@@ -642,6 +642,7 @@ a phase of its own.
     "shortened" citation ([note xxxx]) that shows in text does not allow link
     following. There should be a way to follow a link without having to go up
     to the metadata manually before doing so.
+
 -   Pressing `u` on normal mode to undo has been fixed to correctly alter the
     timestamp while also reverting the modification made. However, the cursor
     ends up on the timestamp, making it hard to follow the changes (that is,
@@ -649,6 +650,41 @@ a phase of its own.
     should land on the last-undone part (e.g. a text that was regenerated,  an
     empty character/line that was left after undoing an input, and so on).
 
+-   Being cited by another note while open on a buffer will sometimes create
+    the need for a forced save, even if nothing else has been changed (check if
+    this is mentioned already in some existing version/phase).
+
+-   The files opened in the buffer panel (`<leader>vb`) should display in the following
+order:
+    1. First, the files currently open on the lowest-numbered window (w1 on top, then w2, etc.).
+    2. As for the rest, the last-opened files. An example of the expecte
+       behavior is that opening the first file on w1 will put it on top, then
+       opening a second file on w2 will put it on the second place, then
+       opening a third file on w1 will put it on top and make the previous
+       top-place occupant ("file 1", previously opened on w1) go to the third
+       place (which is the first place among the "recently opened, but not
+       currently opened in any window"). Then, opening a fourth file on w1 will
+       put that on top and cause "file 3", which had been placed at w1, to go
+       to the third place, and the previous occupant of the third place ("file
+       1") to move to the fourth place (this is the second place among
+       "recently opened, but not currently opened in any window) since "file 1"
+       was the first file to be opened, meaning "file 3" was opened more
+       recently than it.
+    3. Reopening any files (by pressing `<CR>` on their buffers or any other
+       means) should reorder them accordingly.
+    
+    The final result is a sequence of opened buffers per window, followed by a
+    sequence of opened buffers that are not on any window, ordered from the
+    most recently opened to the last recently opened, with a dynamic behavior
+    that will change the list as the user interacts with those files. This idea
+    is meant to improve user experience, since the more relevant (currently / recently opened)
+    files will be on top, and since the user will know to look for files that have
+    not been recently opened at the bottom of the list.
+
+    This is a per-session behavior. It is not meant to store "recently opened" across
+    sessions. Such behavior is more complex and, if we decide to implement it, it will
+    not be based on the buffer panel, since the buffer panel is meant to be used
+    to organize the current session only.
 
 ---
 
@@ -1082,13 +1118,12 @@ are related: all concern how notes describe and relate to one another.*
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
   (glow/mdcat).
 
-3. **Persistent index** — Serialize the in-memory index to disk (msgpack or JSON) with
-  mtime-based incremental updates on startup. Needed only if startup scan time becomes
-    1.  Every metadata modification, even automatic timestamp updating in
-  unacceptable at very large corpus sizes (likely >50k notes). The current build cost
-  is ~0.25 ms/note; at 500 notes (realistic current scale) that is ~125 ms, which is
-  imperceptible. Run `bench.baseline()` on the real corpus before implementing this.
-  
+3. **Persistent index** — Serialize the in-memory index to disk (msgpack or
+   JSON) with mtime-based incremental updates on startup. Needed only if
+   startup scan time becomes unacceptable at very large corpus sizes (likely
+   >50k notes). The current build cost is ~0.25 ms/note; at 500 notes
+   (realistic current scale) that is ~125 ms, which is imperceptible. Run
+   `bench.baseline()` on the real corpus before implementing this.
 
 4.  **`_match_cache` in views.lua** — Cache matched path arrays alongside
     filter trees. Makes repeated `match_all` calls O(1) until invalidation.
@@ -1153,6 +1188,17 @@ are related: all concern how notes describe and relate to one another.*
         etc (like google's). This should make note navigation much more
         intuitive both during edition and when starting a new session.
         (See Design Questions: tag-set relatedness is a candidate signal.)
+        Criteria examples: `same subview > same view > same tags, but not
+        the same view > no tag/view relationship`; `for files that meet
+        the same criteria for subview, view, etc. Those that share the exact
+        same tags take precedence over those that have different tags` (these
+        are just examples and do not need to be followed. Other interesting
+        relationships might include files that were created in a similar period,
+        files that were last-modified in a similar period, files that cite
+        or are cited by the same files, etc. Textual matches may also be relevant,
+        but more complex to implement. The final algorithm should balance all
+        this criteria in a rational and useful manner. Inspiration from working
+        software such as obsidian, google, and social network may be helpful).
 
         Example 1:
         `0035_bib_Constituição_da_República_Federativa_do_Brasil_1988.md` was
@@ -1273,163 +1319,17 @@ are related: all concern how notes describe and relate to one another.*
 
 ---
 
-## Critical Rules for LLM Assistants
+## LLM Assistant Rules, Patterns & Environment
 
-### Never do this
+Non-negotiable rules, established code patterns, environment details, debugging
+commands, and git conventions are owned by `doc/LLM_CONTEXT.md` — consult it
+alongside this document. They are intentionally not restated here, since this
+section previously drifted out of sync with its counterpart in `LLM_CONTEXT.md`
+(missing rules on one side, missing environment/config detail on the other).
 
-| Rule | Reason |
-|---|---|
-| Modify `yaml.lua` without strong justification | Complex, carefully fixed bugs; any regression corrupts note files |
-| Check Telescope availability at module load time | Lazy.nvim defers loading; use `pcall(require, 'telescope')` at call time |
-| Use `generic_sorter` for exact-match contexts | Applies fzy scoring; use `finders.new_dynamic` + `sorters.empty()` with `string.find(..., 1, true)` |
-| Reintroduce the `status` field | Intentionally removed |
-| Use deprecated Neovim APIs | Use `nvim_set_option_value`, `vim.keymap.set` |
-| Assume path separator | Always use `utils.sep` or `utils.join(...)` |
-| Design toward multi-wiki | Superseded by project views; not a current goal |
-| Physically separate notes for project organisation | Projects are views, not folders |
-| Optimize `collect_files` without first running `bench.lua` | Baseline measurements required before any performance work |
-| Register `UndoPost` autocmd | This event does not exist in Neovim ≤ 0.11.x; `vim.treesitter` tracks changes via `on_bytes` automatically |
-| Call `index.invalidate` from buffer-only metadata commands | No disk write occurred; the index re-reads correctly on the user's next `:w` |
-| Strip backlinks in `trash_note()` | Backlinks are preserved for clean restoration; `cleanup_deleted_note` is called only in `empty()` and `purge_old()` |
-| Touch a file twice in one phase | Each phase edits each file in a single pass; split incompatible edits across phases (see Versioning Policy / Release Plan) |
-
-### Always do this
-
-File-level header block before `local M = {}`:
-```lua
--- =============================================================================
--- pkm.module — One-line description
--- =============================================================================
--- Dependencies : modules this file requires
--- Consumed by  : modules that require this file
---
--- Public API:
---   function_name(params) → return description
--- =============================================================================
-```
-
-Section separators between logical groups:
-```lua
--- =============================================================================
--- SECTION: Section name
--- =============================================================================
-```
-
-Cross-platform paths:
-```lua
-local path = utils.join(dir, file)
-local files = vim.fn.glob(dir .. utils.sep .. "*.md", false, true)
-```
-
-Exact substring matching (never fzy):
-```lua
-if haystack:lower():find(needle:lower(), 1, true) then ... end
-```
-
-Telescope at call time:
-```lua
-local ok = pcall(require, 'telescope')
-if ok then ... else ... end
-```
-
-Option setting (Neovim 0.10+):
-```lua
-vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-vim.keymap.set('n', 'q', fn, { noremap = true, silent = true, buffer = buf })
-```
-
-Per-tabpage state pattern:
-```lua
-local _tabs = {}
-local function get_tab()
-  local id = vim.api.nvim_get_current_tabpage()
-  if not _tabs[id] then _tabs[id] = { ... } end
-  return _tabs[id]
-end
--- In setup(): register TabClosed autocmd to prune dead entries.
-```
-
-### OS detection
-
-```lua
-utils.is_windows  -- boolean
-utils.is_wsl      -- boolean
-```
-
-### YAML citation structure — do not change
-
-```yaml
-cites:
-  notes:
-    - identifier: note-0042
-      title: "Note Title"
-      link: "[[0042_note_Note_Title]]"
-  bib: []
-cited_by:
-  notes: []
-  bib: []
-```
-
----
-
-## Environment
-
-| Item | Value |
-|---|---|
-| OS | Windows 10 + WSL (Ubuntu) |
-| Editor | Neovim 0.11.3 |
-| Plugin manager | Lazy.nvim |
-| Plugin path | `P:/Active/pkm-nvim/` (Windows) · `/mnt/p/Active/pkm-nvim/` (WSL) |
-| Notes path | `P:/Notes` (Windows) · `/mnt/p/Notes` (WSL) |
-| Config path | `~/AppData/Local/nvim/` (Windows) · `~/.config/nvim/` (WSL) |
-| Git | `git gc` is disabled on this repo (Google Drive sync conflict); `gc.auto 0` |
-
----
-
-## Debugging Quick Reference
-
-```vim
-:lua print(vim.inspect(require('pkm').config))
-:lua print(vim.inspect(require('pkm.trash').list()))
-:messages
-:PKMStats
-:PKMMode on
-:lua require('pkm.yaml').validate_frontmatter()
-:lua require('pkm.bench').baseline()
-```
-
----
-
-## Git Conventions
-
-**Commit format:**
-```
-<type>: <summary>
-
-- detail
-- detail
-```
-Types: `feat` `fix` `docs` `refactor` `test` `chore` `perf`
-
-**Branches:** `feat/<name>`, `fix/<name>`
-
-**Versioning & tags:** see the **Versioning Policy** section. Tags
-(`git tag -a vX.Y.Z`) are created only after all phases of a version have landed
-and verified; MAJOR stays at `1` during the pre-release period.
-
-**Do not run `git gc`** on this repo — it lives on Google Drive sync which causes
-object-directory deletion conflicts. Global git config: `gc.auto 0`,
-`gc.autoPackLimit 0`, `gc.autoDetach true`. The `pkm-merge` PowerShell alias
-automates `dev→main` merges.
-
----
-
-## Knowledge Base
-
-- Neovim docs: https://neovim.io/doc/
-- Lua docs: https://www.lua.org/docs.html
-- LuaRocks style guide: https://github.com/luarocks/lua-style-guide
-- Semantic Versioning: https://semver.org/
+Module structure (file-level header block, section separators, LuaDoc
+annotations) is a coding standard owned by the project instructions —
+see Coding Standards § Module Structure there.
 
 ---
 
@@ -1476,4 +1376,6 @@ don't need to re-derive this from scratch.
 
 ---
 
-*Update this document when the project state changes.*
+*Update this document as a batch after each version is completed, per the
+Documentation Maintenance Cadence in the project instructions — not
+continuously as project state changes.*

@@ -1,6 +1,6 @@
 # PKM.nvim — LLM Session Context
 
-Read this first. It is the fast-read brief. Read PKM_ROADMAP.md for architecture detail.
+Read this first. It is the fast-read brief. Read ROADMAP.md for architecture detail.
 Read `doc/PHILOSOPHY.md` before proposing features or design changes. Its principles
 are non-negotiable constraints on all architectural decisions.
 
@@ -32,30 +32,11 @@ All implementation phases (0–5) are complete. No items are in active developme
 
 ## Module Map
 
-| File | Role |
-|---|---|
-| `init.lua` | Orchestration — setup, delete_note_safely (trash-aware), sync autocmds |
-| `config.lua` | Pure data — defaults (incl. pkm_mode, trash), path resolution |
-| `utils.lua` | Path join, OS flags, ensure_dir |
-| `commands.lua` | All `:PKM*` commands — handlers lazy-require; browse_complete for filter DSL |
-| `keymaps.lua` | All keymaps — receives `config` as parameter to `register(config)` |
-| `yaml.lua` | YAML parse/generate — complex; do not touch without strong justification |
-| `timestamp.lua` | Timestamp formats, filename generation |
-| `citations.lua` | Bidirectional citation sync, tag index, add_tag/remove_tag (buffer-only) |
-| `notes.lua` | Note CRUD, conversion, promotion, linking; set_title (buffer-only); get_next_note_number (checks trash manifest) |
-| `journal.lua` | Journal creation; sync_filename_on_save |
-| `ui.lua` | Fallback UI (no Telescope): browse, tags, recent, orphans, bufpanel |
-| `telescope.lua` | All Telescope pickers — checked at call time via pcall, never load time |
-| `templates.lua` | Template application |
-| `export.lua` | Filter + copy notes — read-only, no setup(), export_direct for views |
-| `filter.lua` | Filter DSL: tag/title/text/filename/type/any fields; any=bare-word/unknown-field |
-| `index.lua` | In-memory index: {path, filename, note_type, title, tags, body, mtime, has_citations} |
-| `views.lua` | Named views; two-mode sidebar with per-tabpage _tabs, type_filter; sidebar_build_lines(name, paths, total_count) |
-| `mode.lua` | PKMMode: activate/deactivate/toggle/is_active; BufReadPost + DirChanged triggers |
-| `syntax.lua` | Tree-sitter syntax: enable/disable per buffer; foldexpr/foldtext; matchadd highlights |
-| `trash.lua` | Soft-delete: manifest.json, trash_note/restore_note/empty/purge_old; setup schedules purge_old via defer_fn |
-| `markdown.lua` | Headers, renumber_sequence (nested/blockquote/emphasis), convert_list, symbols |
-| `bench.lua` | Developer benchmarking suite — not user-facing |
+Full module-by-module detail (role, key functions, invariants) is owned by
+`doc/ROADMAP.md` § **Module Responsibilities** — read there for anything beyond
+quick orientation. Module list: `init, config, utils, commands, keymaps, yaml,
+timestamp, citations, notes, journal, ui, telescope, templates, export, filter,
+index, views, mode, syntax, trash, markdown, bench`.
 
 ---
 
@@ -76,6 +57,7 @@ All implementation phases (0–5) are complete. No items are in active developme
 | Never call `index.invalidate` from buffer-only metadata commands | No disk write occurred; re-index happens on user's next `:w` |
 | Never strip backlinks in `trash_note()` | Backlinks preserved for restoration; `cleanup_deleted_note` only in `empty()` / `purge_old()` |
 | Never run `git gc` on this repo | Google Drive sync causes object-directory deletion conflicts |
+| Never touch a file twice within one phase | Each phase edits every file it touches in a single pass; see `doc/ROADMAP.md` § Operating Principles for how to split work that doesn't fit one pass |
 
 ---
 
@@ -92,6 +74,11 @@ Telescope availability (at call time only):
 ```lua
 local ok = pcall(require, 'telescope')
 if ok then ... else ... fallback ... end
+```
+
+Exact substring matching (never fuzzy):
+```lua
+if haystack:lower():find(needle:lower(), 1, true) then ... end
 ```
 
 Calling init.lua functions from commands.lua:
@@ -183,6 +170,7 @@ cited_by:
 :PKMStats
 :PKMMode on
 :lua require('pkm.yaml').validate_frontmatter()
+:lua require('pkm.bench').baseline()
 ```
 
 ---
@@ -197,21 +185,34 @@ cited_by:
 | Plugin path | `P:/Active/pkm-nvim/` (Windows) · `/mnt/p/Active/pkm-nvim/` (WSL) |
 | Notes path | `P:/Notes` (Windows) · `/mnt/p/Notes` (WSL) |
 | Config path | `~/AppData/Local/nvim/` (Windows) · `~/.config/nvim/` (WSL) |
+| Git | `git gc` is disabled on this repo (Google Drive sync conflict); `gc.auto 0` |
 
 ---
 
 ## Git Conventions
 
+**Commit format:**
 ```
 <type>: <summary>
 
 - detail
+- detail
 ```
+Types: `feat` `fix` `docs` `refactor` `test` `chore` `perf`
 
-Types: `feat` `fix` `docs` `refactor` `test` `chore`
-Branches: `feat/<name>`, `fix/<name>`
-**Do not run `git gc`** — Google Drive sync conflict. `pkm-merge` alias handles `dev→main`.
+**Branches:** `feat/<name>`, `fix/<name>`
+
+**Versioning & tags:** see `doc/ROADMAP.md` § **Versioning Policy** — tags
+(`git tag -a vX.Y.Z`) are applied only after every phase of a version has
+landed and passed verification, never mid-version.
+
+**Do not run `git gc`** on this repo — it lives on Google Drive sync, which
+causes object-directory deletion conflicts. Global git config: `gc.auto 0`,
+`gc.autoPackLimit 0`, `gc.autoDetach true`. The `pkm-merge` PowerShell alias
+automates `dev→main` merges.
 
 ---
 
-*Update this document when the project state changes.*
+*Update this document as a batch after each version is completed, per the
+Documentation Maintenance Cadence in the project instructions — not
+continuously as project state changes.*
