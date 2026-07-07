@@ -686,6 +686,13 @@ order:
     not be based on the buffer panel, since the buffer panel is meant to be used
     to organize the current session only.
 
+- The final confirmation before creating a view/subview is unecessary. We
+  should either remove it or change it to a single keypress (`<CR>`) instead of
+  making the user type `yes`. Leave such multistep processes with confirmations
+  for dangerous tasks (views are safe to create and the process can easily
+  be reverted by deleting the view, if it was created by accident, or by updating it,
+  if it was created with a wrong parameter).
+
 ---
 
 #### v1.6.0 (MINOR) — Panels & navigation
@@ -971,17 +978,37 @@ are related: all concern how notes describe and relate to one another.*
    insufficient in daily use. This keeps the type system minimal (Philosophy §2,
    §7) and is fully reversible. Discussion-only; no implementation.
 
-3. **AI exportation context protocol.** A way to ship files that tell an AI/LLM
-   how to interpret a set of notes (the markdown conventions being one example;
-   per-view or ad-hoc directives being others). **Recommendation:** for the
-   per-view case, use the zero-code approach the author already favoured — the
-   directive is simply a regular note created inside the view, so ordinary
-   (and deep) export already carries it; no new mechanism is needed. This reuses
-   Design Question 2's convention rather than inventing a parallel one. The only
-   worthwhile future code enhancement would be an export option to
-   *auto-prioritise/always-include* notes bearing the context convention; defer
-   that until the convention itself is settled (Distant Additions 1.1). The
-   arbitrary-set case has no clear low-cost solution and is deferred.
+3.  **Exportation improvements:**
+    -   AI exportation context protocol: A way to ship files that tell an
+        AI/LLM how to interpret a set of notes (the markdown conventions being
+        one example; per-view or ad-hoc directives being others).
+        **Recommendation:** for the per-view case, the author suggests using a
+        subview for "meta files" (e.g. named "_meta"). The user can decide
+        whether to create it or not. All we need to do is ensure that exporting
+        a view also exports all its subviews (which is already expected
+        behavior). The default (general) exportation should also allow the user
+        to select (or write) which views they want to export, which tags, and
+        which titles or title parts, thus allowing for a "composed" export. With this,
+        we only need a specific export command that gives the user the options: "export current note, export
+        current view, customized export".
+4.  **Command clearup:** several commands are residual, while others exist
+    mainly to be called as part of other commands. As of now, typing `:PKM` and
+    then pressing `<TAB>` for autocomplete is no longer helpful, since the user
+    is shown an enormous list of commands (many which are alike). A discussion
+    is necessary to determine which commands should be preserved as "typed"
+    commands, which should be keymapped, and which should cease to be commands
+    (and remain only as internal functions to be used by other commands). Adding
+    optional arguments to some commands may be useful as a way to allow advanced
+    users to have a direct access to some commands that are usually provided as options.
+    Common and safe options should be used as defaults for a multimodal command.
+    Cases with multile common options, may be examined to see if any such options
+    should remain as individual commands. Commands that create similar panels
+    should be consolidated into one multifunctional panel, if possible, as long
+    as it does not create a strong dependency on an unstable or not guaranteed
+    external tool. But even in this case, we may consider fallbacks that will
+    simply show options for what type of panel should be opened (unless the user
+    is constantly opening such panels, in which case selecting options will become
+    a drag).
 
 ---
 
@@ -1021,12 +1048,21 @@ are related: all concern how notes describe and relate to one another.*
             and syntax highlighting, and should not break the current working
             features (see best practices from manuals and guidelines on formatting,
             text editing, typesetting, and diagraming).
+        -   extend recognized list prefixes to encompass those used in Brazilian
+            legal texts, that is "Art. nº." (for "artigo" with n equal or below
+            9), "Art. n." (for n above 9), "§ n" (for "parágrafo", following
+            the same numbering rules from "artigo", upper case roman numerals
+            followed by a "-" separator for "incisos", lowercase letters
+            followed by a ")" separator for "alíneas", and lowercase roman
+            numerals followed by a "." separator for "subalíneas". This recognition
+            implies not only syntax highlighting, but all list functions will
+            work with text disposed in this manner.
         -   evaluate cost-benefit of extending possible list prefix to any
             alphanumeric symbol + a separator from a standard separators list
             (e.g. `-`, `.`, `)`, `:`). Consider the same for symbol sequences.
             This would allow things such as `text:`, `I -`, `I)`, and many
             others to be highlighted and to provide a basis for text wrapping
-            and indentation;
+            and indentation.
         -   tables: 
             -   decision on table types to support (markdown, csv, tsv, etc.);
             -   conventions for separators; 
@@ -1073,10 +1109,10 @@ are related: all concern how notes describe and relate to one another.*
         note, like YAML frontmatter, code blocks, headers (no autowrapping
         headers with text that imediately precedes or follows them), tables,
         etc.;
-    6. Improved motion inside tables (quickly move to next cell, column or
+    6.  Improved motion inside tables (quickly move to next cell, column or
        line, including if it is not filled yet. This should make editing
        easier);
-    7. Consider expanding our custom syntax highlighting and commands to all
+    7.  Consider expanding our custom syntax highlighting and commands to all
        files outside PKM, this is not specific to PKM, but we can create a
        config to enable a broader reach of the markdown highlight and of the
        markdown functions as an option. Since this is something that I may find
@@ -1102,7 +1138,8 @@ are related: all concern how notes describe and relate to one another.*
         > lines — could become a minor after the current version arc. It is left
         > here (not yet versioned) only because the command-renaming/toggling
         > sub-parts are still exploratory; promote on request.
-    8. The next_header command currently only works when the cursor is above a
+
+    8.  the next_header command currently only works when the cursor is above a
        header. If used this way, it will create a header numbered as the
        current + 1. Create a new "global' next_header command which creates a
        new header based on the last header number (highest numbered /
@@ -1112,7 +1149,18 @@ are related: all concern how notes describe and relate to one another.*
        last line in the file), then moves the cursor to the newly
        created header (that is, it will create `## header-(n+1)` whenever the
        cursor is at `## header-m`, for any `m <= n`. *(Lives in `markdown.lua`;
-       could be bundled with the v1.7.0 header-navigation pass if promoted.)*
+       could be bundled with the v1.7.0 header-navigation pass if promoted.)*;
+    9. Compatibility export options: if the user choses so, the files will be
+       exported in a common markdown format. For example, every
+       list prefix not present in the common markdown protocols will be
+       standardized (e.g. a legal text containing "Art. 1º." as an item and "§
+       1º." as a subitem will have those prefixes changed to "1." and "1.1."
+       (or "1.", if "1.1." is not generally compatible) with the correct
+       indentation (note that the correct indentation may be present in the
+       original note, so only the prefix needs to change). Similar operations
+       will be done for every PKM or individual user convention that is not
+       supported by the main markdown protocols (we can use CommonMark as a
+       default and add options for other usual markdown protocols).
 
 2. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
