@@ -176,6 +176,19 @@ cited_by:
 
 ## Git Conventions
 
+**Staging:** `git commit -a -m "..."` is the default — stages all modified
+tracked files, no separate `git add`. If a single working session produces
+multiple versions' worth of changes at once, do one `commit -a` covering
+everything, then a separate `git tag -a vX.Y.Z` per version documented in
+the CHANGELOG, all pointing at that same commit — not separate scoped
+commits (`-a` sweeps in every modified tracked file regardless of what was
+explicitly staged, so scoped multi-commit sequences don't combine with it).
+
+**Push before test.** Neovim's Lazy.nvim pulls this plugin from GitHub, not
+local files — changes have no effect on the running plugin until pushed and
+pulled. Order: commit → push → `:Lazy sync` (or `:Lazy update`) + restart
+Neovim → Standing Verification Protocol → only then tag → push tags.
+
 **Commit format:**
 ```
 <type>: <summary>

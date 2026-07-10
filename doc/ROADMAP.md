@@ -513,7 +513,12 @@ everything else floats and may be reordered.
 
 Every phase is verified in this order before its commit:
 
-1. **Headless sandbox run** against a disposable scratch corpus, never the live
+0. **Push, then sync.** `git commit -a -m "..."` → `git push pkm-nvim dev` →
+   `:Lazy sync` (or `:Lazy update`) in Neovim, then restart. Lazy.nvim
+   installs this plugin from GitHub, not the local working tree — none of
+   the steps below can observe a change that hasn't been pushed and pulled
+   first. Tag only after step 5 passes, never before.
+1. **Headless sandbox run** against a disposable scratch corpus...
    `Notes` tree:
    `nvim --headless -u test/min_init.lua -c "luafile test/test_<phase>.lua" -c "qa!"`.
    Empirical execution precedes any claim that a fix works.

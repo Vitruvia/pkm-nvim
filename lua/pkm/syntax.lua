@@ -514,4 +514,6 @@ function M.disable(bufnr)
   end)
 end
 
+M._find_meta_comments = find_meta_comments
+
 return M

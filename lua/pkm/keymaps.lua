@@ -117,6 +117,59 @@ function M.register(config)
     group   = netrw_aug,
     pattern = 'netrw',
     callback = function(ev)
+      -- Guard: netrw's initial listing appears to populate a window's
+      -- buffer in a way winfixbuf's switch-check doesn't catch (only
+      -- navigating further — opening a file or subdirectory — trips
+      -- E1513), so a winfixbuf-protected PKM panel window can end up
+      -- stuck showing an unusable netrw listing. Detected via
+      -- winfixbuf+winfixwidth (sidebar) / winfixbuf+winfixheight (buffer
+      -- panel) rather than views.lua/ui.lua's own tracked window id: the
+      -- sidebar buffer's bufhidden='wipe' already destroyed it and cleared
+      -- that per-tab state the moment netrw's buffer displaced it, before
+      -- this callback ever runs — window-local options are the only signal
+      -- left that survives the swap.
+      do
+        local win = vim.api.nvim_get_current_win()
+        local wo  = vim.wo[win]
+        local was_sidebar  = wo.winfixbuf and wo.winfixwidth
+        local was_bufpanel = wo.winfixbuf and wo.winfixheight
+
+        if was_sidebar or was_bufpanel then
+          vim.notify(
+            '[pkm] cannot browse files inside a PKM panel — closing and reopening it',
+            vim.log.levels.WARN)
+
+          local non_float = 0
+          for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            if vim.api.nvim_win_get_config(w).relative == '' then
+              non_float = non_float + 1
+            end
+          end
+
+          if non_float <= 1 then
+            -- Only window in the tabpage; closing it would leave nothing
+            -- to reopen into. Swap in a scratch buffer instead (winfixbuf
+            -- has to come off briefly to allow even our own switch).
+            local scratch = vim.api.nvim_create_buf(false, true)
+            vim.bo[scratch].bufhidden = 'wipe'
+            pcall(vim.api.nvim_set_option_value, 'winfixbuf', false, { win = win })
+            vim.api.nvim_win_set_buf(win, scratch)
+            pcall(vim.api.nvim_set_option_value, 'winfixbuf', true, { win = win })
+          else
+            pcall(vim.api.nvim_win_close, win, true)
+          end
+
+          vim.schedule(function()
+            if was_sidebar then
+              require('pkm.views').open_sidebar()
+            else
+              require('pkm.ui').toggle_bufpanel()
+            end
+          end)
+          return
+        end
+      end
+
       local function update_winbar()
         local dir = vim.b[ev.buf].netrw_curdir
                  or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(ev.buf), ':p:h')
