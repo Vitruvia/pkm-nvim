@@ -48,6 +48,16 @@
 
     ```
 
+### Known limitations
+
+- `notes.is_same_file()`'s case-fold fallback is gated on
+  `utils.is_windows`/`utils.is_wsl` (session-level) rather than a per-path
+  filesystem case-sensitivity check, which `pkm.utils` doesn't currently
+  expose. Safe for the current single documented root (`P:/Notes`, NTFS,
+  always case-insensitive); would misbehave if a root were ever pointed at
+  a case-sensitive filesystem from a Windows/WSL session. Revisit only if
+  that assumption changes.
+
 ### Benchmarks 
 
 #### Post-index integration (bench_dir on NTFS/WSL, P: drive)
@@ -71,6 +81,133 @@
     ~200+ views.
 
 ---
+
+## [1.5.9] — 2026-7-10
+
+### Fixed
+
+- **`((...))` meta-comments couldn't span multiple lines** — `PKMMetaComment`
+  was implemented via `vim.fn.matchadd()`, which cannot match across line
+  breaks under any pattern (a Vim/Neovim platform limitation, not a regex
+  issue). Migrated to buffer-scoped `nvim_buf_set_extmark` (natively
+  multi-line via `end_row`/`end_col`), with a pure-logic scanner
+  (`find_meta_comments`) finding spans via Lua string patterns — whose `.`
+  matches newline, unlike Vim regex — across the whole buffer. Rescanned on
+  `enable()`, on save, and (debounced 150ms) on text change. A
+  `MAX_META_COMMENT_LINES` cap (50) bounds how far a stray unmatched `((`
+  can highlight before giving up, so a typo can't paint the rest of the
+  document. `PKMCitation` (`note[0042]`-style) is unaffected — inherently
+  single-line, `matchadd()` remains the right tool there.
+  PKMMode-exclusive by decision, matching `PKMCitation`'s existing scope;
+  `after/syntax/markdown.vim` (the non-PKMMode fallback) is untouched.
+
+### Investigated, no change needed
+
+- ATX/setext headers already correctly highlight across their full span
+  under PKMMode — tree-sitter node spans were never subject to `matchadd()`'s
+  single-line limitation, since headers were never implemented via matchadd
+  in the first place. The original Phase 3 plan's hedge on this ("if
+  multi-line headers cannot be highlighted reliably...") turned out to not
+  apply; nothing was broken here to begin with.
+- `queries/markdown/highlights.scm` unchanged — meta-comment highlighting
+  was never tree-sitter-query-based.
+
+## [1.5.8] — 2026-7-10
+
+### Fixed
+
+- **Panel buffer hijack (sidebar)** — `open_sidebar()` set `winfixwidth` but
+  not `winfixbuf`; a stray `:Ex`, `:edit`, or similar invoked while the
+  sidebar held focus could silently repoint its window at an unrelated
+  buffer, corrupting the panel. `winfixbuf = true` now set alongside
+  `winfixwidth`, converting that whole bug class into a loud, harmless
+  error instead. Same fix already covers the buffer panel (`ui.lua`,
+  v1.5.7-adjacent) and now the sidebar.
+- **View creation never refreshed an already-open sidebar** — `M.save()`
+  and `M.save_subproject()` wrote to `views.json` but never called
+  `refresh_sidebar_if_open()`, so a newly created view didn't appear in an
+  open sidebar until an unrelated refresh or manual `r`. Both now call it
+  on success. (No focus-restore needed alongside this: nothing in the
+  view-creation path — `:PKMViewNew`'s prompts, `save`, `save_subproject`,
+  or `refresh_sidebar_if_open` itself — ever moves window focus, confirmed
+  by tracing every call site in `commands.lua` and `views.lua`.)
+- **Renaming a view could silently strand a `config.lua` subproject** — a
+  subproject's `parent` field is only ever safely rewritable when it lives
+  in `views.json`; `config.lua` is Lua source, not a data file, and the
+  plugin cannot safely rewrite it. `rename_view_prompt` already propagated
+  renames correctly across every `views.json` entry (unaffected — this was
+  never actually a completeness gap in the sidecar, only against
+  hand-written config); it now additionally warns (never blocks) if any
+  `config.lua` subproject still references the old name. Enforced at a
+  stronger level too: `M.setup()` now scans `config.projects` at startup
+  and warns if it ever contains a `parent`-bearing entry at all, since
+  under normal use it never should — subprojects belong exclusively in
+  `views.json`, created via `:PKMViewNewSub`.
+  Confirmed `reparent_view_prompt` needs no equivalent warning: reparenting
+  changes a subproject's parent, never its own name, so nothing that could
+  reference it by name is ever invalidated.
+- **Buffer panel and sidebar help text under-documented live keymaps** —
+  buffer panel's header line and statusline advertised only `<CR>`/`d`/`w`/
+  `q`, omitting the live `D` (force-close, discards unsaved changes without
+  the `d` confirm prompt), `r` (refresh), and `T` (filename/title toggle)
+  bindings; now lists all six. Sidebar's statusline separately advertised
+  `za fold`, a generic Vim fold command with no effect in the sidebar buffer
+  (it sets no `foldmethod`) — removed as stale copy-paste from a note-buffer
+  hint string.
+- **Note/view-opening commands could open their target inside a PKM panel**
+  — `:PKMTags`, `:PKMBrowseRecent`, `:PKMOrphans`, `:PKMView`, `:PKMViews`,
+  `:PKMViewLast`, and `:PKMViewEdit` could, if invoked while focus was in
+  the sidebar, buffer panel, or netrw, open their result inside that panel
+  window instead of a normal editing window. All seven now call the
+  existing `focus_main_win()` helper first, matching the coverage already
+  present on `:PKMNewNote`/`:PKMNewJournal`/`:PKMNewScratchpad`/`:PKMImport`/
+  `:PKMBrowse`. Audited but confirmed not applicable: commands that operate
+  on "current buffer" (`:PKMRenameNote`, `:PKMConvertNote`, `:PKMPromote`,
+  `:PKMTranspose`, `:PKMChangeType`) already self-guard via their own
+  PKM-folder membership check; `:PKMViewSidebar` and `:PKMBuffers` open the
+  panels themselves and already carry equivalent window-targeting logic in
+  their own keymaps; `:PKMExportView` and `:PKMExport` never open a note
+  buffer at all — traced the full `export.lua` call chain and confirmed
+  every step (filter form, results picker, destination prompt, copy) uses
+  only floating windows or pure file I/O, never `vim.cmd('edit ...')`.
+
+### Known limitations (carried, not introduced this phase)
+
+- `PKMLinkNote`, invoked from netrw specifically (not sidebar/bufpanel,
+  which are nameless and already guarded), passes its empty-buffer-name
+  check because netrw buffers are named after their directory. Whether
+  this can actually corrupt the netrw listing depends on netrw's buffer
+  modifiability, which wasn't verified empirically. Low-probability edge
+  case; flagged, not fixed this phase.
+
+## [1.5.7]  - 10/7/2026
+
+### Fixed
+
+- **Case-only rename blocked as a false collision** — `rename_note()`
+  treated `filereadable(new)==1` as always meaning "target exists",
+  rejecting renames that only change case (e.g. `prazos` → `Prazos`) on a
+  case-insensitive filesystem even though the target was the same file.
+  Added `is_same_file()` (device+inode identity via `vim.loop.fs_stat`) to
+  distinguish a genuine collision from a case-only rename of the same
+  object. A single `rename()` call is not reliable for case-only changes on
+  every case-insensitive filesystem implementation, so the same-file path
+  now stages the change through a temporary name (two-step rename) to force
+  the new casing to actually land on disk, then rewrites the file with
+  current buffer content so no unsaved edit is lost in the process.
+- **E13-prone buffer redirect in `rename_note()`/`change_note_type()`** —
+  both functions redirected the buffer to its new name via
+  `vim.cmd('keepalt file ...')` after a disk-level rename/write. Replaced
+  with `nvim_buf_set_name` + direct `writefile`, with the write always
+  confirmed successful before the buffer is repointed — removing any Vim
+  write command from the redirect path entirely, so an otherwise-unmodified
+  rename or type change cannot trigger a forced-write prompt.
+- **Citation metadata did not track title changes** — editing a note's
+  `title` never propagated to the `title` field stored in other notes'
+  `cites`/`cited_by` entries. Added `citations.propagate_title(note_path)`,
+  called from the `BufWritePost` sync autocmd after `update_references`,
+  idempotently rewriting only the entries whose stored title has drifted.
+
 
 ## [1.5.6] - 2026-6-21
 

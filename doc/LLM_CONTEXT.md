@@ -6,27 +6,12 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current State (v1.5.3, as of 2026-06-17)
+## Current version: **v1.5.7**. 
 
-All implementation phases (0–5) are complete. No items are in active development.
-
-**What was completed across all phases:**
-- Phases 0–2: bug triage; live filter browser (`:PKMBrowse`); metadata commands;
-  `:PKMOrphans`, `:PKMBrowseRecent`; per-tabpage sidebar and bufpanel state;
-  performance benchmarking; view rename/reparent
-- Phase 3: unified explorer UI (`:PKMMode`, `:PKMExplorer`); improved renumber_sequence
-  (nested lists, blockquotes, emphasis families, `list_bold_line`)
-- Phase 4: tree-sitter syntax (frontmatter folding, citation/meta-comment highlights,
-  suppressed 4-space code, list marker depth fix); §9 conventions implementation
-- Phase 5: soft-delete trash system; `:PKMConvertList`; `type:` filter predicate;
-  sidebar `<C-t>` type filter; `<C-s>` no-op in sidebar; note numbering skips trash
-
-**Established decisions:**
-- Trash is isolated to `.pkm-trash/` inside PKM root (not OS trash)
-- Note numbers skip trashed entries permanently (gaps are intentional)
-- `UndoPost` event does NOT exist in Neovim ≤ 0.11.x — never register it
-- Persistent index: deferred (not warranted at current scale; ~125 ms at 500 notes)
-- `_match_cache`: deferred (bench shows 3.1 ms/view at 10k notes; not warranted)
+The next planned increments are **v1.5.8** and
+**v1.5.9** (patch — remaining phases of the correctness-and-robustness work),
+**v1.6.0** (minor), **v1.6.1** (patch), and **v1.7.0** (minor). See
+**Release Plan** below for the phase-by-phase breakdown.
 
 ---
 

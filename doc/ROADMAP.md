@@ -26,8 +26,10 @@ The note namespace is intentionally **flat and global** — all notes share a si
 
 ## Current State
 
-**Released:** v1.5.3 (main). **Active development:** v1.5.3 (dev). The upcoming
-work is organised under **Release Plan** below.
+**Current version:** v1.5.8. There is no separate release/dev split — all
+work happens directly on `dev`; `main` holds periodic stable backups of
+`dev`, not an independently maintained release line. The upcoming work is
+organised under **Release Plan** below.
 
 **Working features:**
 
@@ -397,8 +399,9 @@ require('pkm').setup({
 
 ### Active
 
-Current dev version: **v1.5.3**. The next planned increments are **v1.5.4**
-(patch), **v1.6.0** (minor), **v1.6.1** (patch), and **v1.7.0** (minor). See
+Current version: **v1.5.7**. The next planned increments are **v1.5.8** and
+**v1.5.9** (patch — remaining phases of the correctness-and-robustness work),
+**v1.6.0** (minor), **v1.6.1** (patch), and **v1.7.0** (minor). See
 **Release Plan** below for the phase-by-phase breakdown.
 
 ---
@@ -436,14 +439,17 @@ items were moved to **Design Questions**; genuinely long-horizon items remain in
 **Distant Additions**.*
 
 ```
-v1.5.4  PATCH  Correctness & robustness ──────────────┐  (no deps)
-v1.6.0  MINOR  Panels & navigation                    │
-        Ph1 panel infra + tag panel                   │
-          ├─→ Ph2 trash-restore panel                 │
-          └─→ Ph3 views panels + sidebar nav          │
-              Ph4 picker polish                        │
-v1.6.1  PATCH  :PKMViews open-latency (bench-driven) ──┘  (after v1.6.0)
-v1.7.0  MINOR  Exportation, note creation & header nav    (no deps)
+-- NEW:
+v1.5.7  PATCH  Correctness & robustness — Ph1  ✅ shipped
+v1.5.8  PATCH  Correctness & robustness — Ph2  ────────┐  (no deps)
+v1.5.9  PATCH  Correctness & robustness — Ph3          │
+v1.6.0  MINOR  Panels & navigation                     │
+        Ph1 panel infra + tag panel                    │
+          ├─→ Ph2 trash-restore panel                  │
+          └─→ Ph3 views panels + sidebar nav           │
+              Ph4 picker polish                         │
+v1.6.1  PATCH  :PKMViews open-latency (bench-driven) ───┘  (after v1.6.0)
+v1.7.0  MINOR  Exportation, note creation & header nav     (no deps)
         Ph1 deep export   Ph2 relative note   Ph3 header navigation
 ```
 
@@ -533,14 +539,16 @@ are reported with root cause before any follow-up edit.
 
 ---
 
-#### v1.5.4 (PATCH) — Correctness & robustness
+#### Correctness & robustness (v1.5.7 – v1.5.9+)
 
 *All bug/completeness fixes from the former Next Steps 4 and 5, plus the view
 autorefresh (former Next Steps 2). No new user-facing features. Done first so
-later feature work builds on corrected behaviour. Three phases with disjoint
-file sets — no file is re-touched even across phases.*
+later feature work builds on corrected behaviour. Each phase ships as its own
+patch version rather than being grouped under one version number; disjoint
+file sets per phase still hold — no file is re-touched even across phases.*
 
-**Phase 1 — rename & citation-metadata correctness.**
+**Phase 1 — rename & citation-metadata correctness.** ✅ **Shipped in v1.5.7**
+— see `CHANGELOG.md` for the fix descriptions.
 
 | File | Single-pass changes |
 |---|---|
@@ -574,12 +582,13 @@ fix: case-only rename, E13 write prompt, and title cross-update
 - docs: changelog
 ```
 
-**Phase 2 — panel window safety & view-layer completeness.**
+**Phase 2 — panel window safety & view-layer completeness.** ✅ **Shipped
+in v1.5.8** — see `CHANGELOG.md` for the fix descriptions.
 
 | File | Single-pass changes |
 |---|---|
 | `views.lua` | (1) `open_sidebar`: set `winfixbuf = true` on the sidebar window after `nvim_win_set_buf`, alongside the existing `winfixwidth` block. (2) After successful view creation (`M.save`/`M.save_subproject` success path and/or the `:PKMViewNew` handler completion) call `M.refresh_sidebar_if_open()`, then restore focus to the window active before the command. (3) In `rename_view_prompt` and `reparent_view_prompt`, scan `config.projects` for any entry whose `parent == old_name`; if found, emit an advisory `WARN` (never block) — closes the "consistent view renaming" gap the plugin cannot otherwise fix (config.lua is not safely rewritable). (4) Help-float/`?` and header-hint audit: add every registered-but-undocumented key, at minimum `T` (filename/title toggle). (5) Verify whether residual flat `_sidebar_*` globals coexist with the per-tab `_tabs` state; remove if confirmed dead (clean removal over latent code). |
-| `ui.lua` | (1) `toggle_bufpanel`: set `winfixbuf = true` after the panel buffer is assigned. (2) Header-hint audit for the fallback browse/recent/orphans panels. |
+| `ui.lua` | (1) `toggle_bufpanel`: set `winfixbuf = true` after the panel buffer is assigned. (2) Header-hint audit: buffer panel's own header line is missing `D`/`r`/`T` (all three are live keymaps); extend to `Dforce Wclose Ttoggle` or similar. Also audit the fallback browse/recent/orphans panels. |
 | `commands.lua` | Complete `focus_main_win()` coverage on every PKM open/create command registered here; the `winfixbuf` net covers un-guardable cases (`:Ex`). |
 | docs | `CHANGELOG` (Fixed + Changed): panel hijack; view autorefresh; view-rename config warning; helpline audit. |
 
@@ -605,93 +614,56 @@ fix: panel buffer hijack, view-create refresh, and rename consistency
 - docs: changelog
 ```
 
-**Phase 3 — multi-line highlighting.**
+**Phase 3 — multi-line highlighting.** ✅ **Shipped in v1.5.9**
 
 | File | Single-pass changes |
 |---|---|
-| `syntax.lua` | Extend the author-comment `((…))` highlight (and, if reliably feasible, ATX headers) to span multiple lines via multi-line-aware matchadd / tree-sitter captures. |
-| `queries/markdown/highlights.scm` | Multi-line author-comment capture (modeline must remain the literal first line — see Key Learnings). |
-| `after/syntax/markdown.vim` | Multi-line author-comment rule for the Vimscript fallback. |
-| docs | `CHANGELOG` (Fixed). If multi-line **headers** cannot be highlighted reliably, restrict this fix to author comments and record a convention (Distant Additions 1.1 / `doc/CONVENTIONS.md`) that headers must not wrap across lines, and that any future autowrap must never wrap a header. |
+| `syntax.lua` | `PKMMetaComment` migrated from `matchadd()` (window-scoped, hard single-line limitation — not a regex problem, a Vim/Neovim platform constraint) to buffer-scoped extmarks (`nvim_buf_set_extmark`, natively multi-line via `end_row`/`end_col`). Pure-logic scanner (`find_meta_comments`) finds `((...))` spans — including across line breaks, via Lua string patterns' `.` matching newline — with a `MAX_META_COMMENT_LINES = 50` cap bounding the blast radius of a stray unmatched `((`. Rescanned on `enable()`, on `BufWritePost`, and (debounced, 150ms) on `TextChanged`/`TextChangedI`. `PKMCitation` unchanged — inherently single-line, `matchadd()` remains correct and simpler there. |
+| docs | `CHANGELOG` (Fixed). |
 
-Verification: `test/test_v154_p3.lua` (or a fixture buffer) confirms a two-line
-`((…))` comment highlights fully. Smoke: open a note with a multi-line author
-comment under PKMMode and with PKMMode off.
+Not applicable, contrary to original plan:
+- `queries/markdown/highlights.scm` — meta-comment highlighting was never
+  tree-sitter-query-based; it's pure Lua/API. No query changes needed.
+- ATX/setext headers — already correctly span multiple lines natively, since
+  tree-sitter node spans were never subject to `matchadd()`'s single-line
+  limitation in the first place (confirmed via the file's own pre-existing
+  "Known behaviour" comment on setext headings). No fix was ever needed here.
+- `after/syntax/markdown.vim` — multi-line meta-comments are PKMMode-only by
+  decision (matching citations, which were also always PKMMode-only); the
+  Vimscript fallback's two existing rules (parenthesis-list markers, indented
+  blockquotes) are unrelated and untouched.
 
-Invariants: tree-sitter query modeline discipline; `parser:parse()` called
-synchronously in `TextChanged`/`TextChangedI` (no `vim.schedule` wrap).
+Verification: pure-logic scanner tested standalone (single-line match,
+two-line span, three-line span ending exactly at end-of-line, two separate
+comments, no-comment case, unmatched-`((`-capped-by-MAX_LINES, within-cap
+multi-line still matches — 7/7 passing). Smoke: open a note with a
+multi-line `((...))` comment under PKMMode and confirm it highlights
+immediately on open (not just after an edit or save); confirm a stray
+unmatched `((` doesn't paint the rest of the document.
+
+Invariants: `PKMCitation`'s `matchadd()` mechanism untouched; tree-sitter
+`parser:parse()` still called synchronously in `TextChanged`/`TextChangedI`
+(the meta-comment rescan added to that same autocmd is separately debounced,
+not synchronous, to avoid the O(n)-per-keystroke cost the injection override
+was written to prevent).
 
 Commit:
 
 ```
-fix: multi-line author-comment highlighting
+fix: multi-line meta-comment highlighting via extmarks
 
-- syntax/queries/after-syntax: author comments (( )) highlight across lines
-  under PKMMode and the Vimscript fallback
-- docs: changelog; convention note if multi-line headers remain unsupported
+- syntax: PKMMetaComment migrated from window-scoped matchadd() (hard
+  single-line limitation) to buffer-scoped extmarks (natively multi-line);
+  pure-logic scanner with a stray-unmatched-(( blast-radius cap; rescanned
+  on enable/save/debounced-text-change
+- confirmed unnecessary: highlights.scm query changes (mechanism was never
+  query-based), header multi-line support (already correct natively via
+  tree-sitter node spans), after/syntax/markdown.vim changes (meta-comments
+  are PKMMode-only by decision, matching citations)
+- test: pure-logic scanner, 7 cases including multi-line boundary and
+  blast-radius cap
+- docs: changelog
 ```
-
-**Phase X — Other bugfixes and improvements.** Do these in any of the previous phases or on
-a phase of its own.
--   Pressing `zE` to expand folds makes the system no longer detect the yaml
-    fold in a note. Saving the note resumes normal behavior. `za` and `zm` do
-    not cause issues (but they are affected until a new save or a note reopen
-    if the fold stops being detected due to `zE`).
--   Pressing `gf` on a note citation only follows the link when such citation
-    is the "full citation" (present in the yaml citation block). The
-    "shortened" citation ([note xxxx]) that shows in text does not allow link
-    following. There should be a way to follow a link without having to go up
-    to the metadata manually before doing so.
-
--   Pressing `u` on normal mode to undo has been fixed to correctly alter the
-    timestamp while also reverting the modification made. However, the cursor
-    ends up on the timestamp, making it hard to follow the changes (that is,
-    the user needs to manually search for whatever was undone). The cursor
-    should land on the last-undone part (e.g. a text that was regenerated,  an
-    empty character/line that was left after undoing an input, and so on).
-
--   Being cited by another note while open on a buffer will sometimes create
-    the need for a forced save, even if nothing else has been changed (check if
-    this is mentioned already in some existing version/phase).
-
--   The files opened in the buffer panel (`<leader>vb`) should display in the following
-order:
-    1. First, the files currently open on the lowest-numbered window (w1 on top, then w2, etc.).
-    2. As for the rest, the last-opened files. An example of the expecte
-       behavior is that opening the first file on w1 will put it on top, then
-       opening a second file on w2 will put it on the second place, then
-       opening a third file on w1 will put it on top and make the previous
-       top-place occupant ("file 1", previously opened on w1) go to the third
-       place (which is the first place among the "recently opened, but not
-       currently opened in any window"). Then, opening a fourth file on w1 will
-       put that on top and cause "file 3", which had been placed at w1, to go
-       to the third place, and the previous occupant of the third place ("file
-       1") to move to the fourth place (this is the second place among
-       "recently opened, but not currently opened in any window) since "file 1"
-       was the first file to be opened, meaning "file 3" was opened more
-       recently than it.
-    3. Reopening any files (by pressing `<CR>` on their buffers or any other
-       means) should reorder them accordingly.
-    
-    The final result is a sequence of opened buffers per window, followed by a
-    sequence of opened buffers that are not on any window, ordered from the
-    most recently opened to the last recently opened, with a dynamic behavior
-    that will change the list as the user interacts with those files. This idea
-    is meant to improve user experience, since the more relevant (currently / recently opened)
-    files will be on top, and since the user will know to look for files that have
-    not been recently opened at the bottom of the list.
-
-    This is a per-session behavior. It is not meant to store "recently opened" across
-    sessions. Such behavior is more complex and, if we decide to implement it, it will
-    not be based on the buffer panel, since the buffer panel is meant to be used
-    to organize the current session only.
-
-- The final confirmation before creating a view/subview is unecessary. We
-  should either remove it or change it to a single keypress (`<CR>`) instead of
-  making the user type `yes`. Leave such multistep processes with confirmations
-  for dangerous tasks (views are safe to create and the process can easily
-  be reverted by deleting the view, if it was created by accident, or by updating it,
-  if it was created with a wrong parameter).
 
 ---
 
@@ -1012,33 +984,49 @@ are related: all concern how notes describe and relate to one another.*
 
 ---
 
-### Distant Additions (mid-term to long-term)
-
-1.  **Markdown improvements:**
-    1.  Establish our own conventions for markdown, in order to provide a
-        guideline for consistent and high-quality note-taking, reviewing, and
-        editing, as well as LLM/AI collaboration. Some of these conventions may drive
+### Near goals (short-term to mid-term)
+1.  **Markdown improvements (near):**
+    1.  the next_header command currently only works when the cursor is above a
+       header. If used this way, it will create a header numbered as the
+       current + 1. Create a new "global' next_header command which creates a
+       new header based on the last header number (highest numbered /
+       last-in-order) of the same level. It creates this header after every
+       other header of that same level and below (including plain text), but
+       before any header of a higher level (if none exist, then this will be the
+       last line in the file), then moves the cursor to the newly
+       created header (that is, it will create `## header-(n+1)` whenever the
+       cursor is at `## header-m`, for any `m <= n`. *(Lives in `markdown.lua`;
+       could be bundled with the v1.7.0 header-navigation pass if promoted.)*;
+    2.  Conventions (near): establish our own conventions for markdown, in
+        order to provide a guideline for consistent and high-quality
+        note-taking, reviewing, and editing, as well as LLM/AI collaboration.
+        Some of these conventions may drive
         syntax highlighting and formatting, while others are simply meant to guide the
         user in using consistent notation and terminology. The written
         specification will live in a new `doc/CONVENTIONS.md` (guidance, not yet
         a syntax contract). Examples (non-exhaustive):
-        -   spacing: github's guidelines suggest using two spaces after number
+        -   spacing: use github's guidelines, which suggest using two spaces after number
             prefixes and 3 spaces after simple symbol prefixes to reach a 4
-            space indentation, but what about symbols 4 character-large or more
-            and numbers 3 character-large or more (the numbers are followed by
-            an additional separator character and each prefix is followed by at
-            least one space, so we would have to deal with an indentation level
-            of 5). A possible solution is to use the 4 space for all prefixes
-            up to length 3 (including the separator), and then use an extra
-            indentation (8 spaces) for all prefixes with length from 4 to 7,
-            and so on. However, these would be still "first-level" elements,
-            and so any text after
-            the first line would align at the first-level (4 spaces). The
-            system would need to detect this when autowrapping such prefixes.
-            If a list contains prefixes of several lengths, the user should be
-            able to chose the minimum spaces required per prefix or to align
-            all elements based on the longest prefix (if intending to preserve
-            visibility and aesthetics). If prefixes are so long that would
+            space indentation. As for symbols 4 character-large or longer
+            and numbers 3 character-large or longer, we should allow the first line
+            to sit wherever it lands after the current level indentation + prefix + a space,
+            but any other line should start at the current level indentation. This will
+            need an adjustment to the wrapping commands, since they currently align all
+            text with the first line.  
+
+            ```
+            -- Current (undesired), assume the following is a first-level prefix.
+
+            11111111111. first line starts here...............................
+                         and all other lines wrap here.
+
+            -- Intended result, assume the following is a first-level prefix.
+
+            11111111111. first line starts here...............................
+                and all other lines wrap here.
+            ```
+
+            If prefixes are so long that would
             make identation impossible without transgressing the margins (e.g.
             80 characters), then special notations are ensued (such as power
             notations like 10^6 and so on), or the user may opt for prefixes
@@ -1057,14 +1045,136 @@ are related: all concern how notes describe and relate to one another.*
             numerals followed by a "." separator for "subalíneas". This recognition
             implies not only syntax highlighting, but all list functions will
             work with text disposed in this manner.
+            -- Current (undesired)
+
+            11111111111. first line starts here...............................
+                         and all other lines wrap here.
+        -   Conventions for notations when juxtaposing equivalent names like
+            `AI/LLM` or `não-exaustivo/não-taxativo`.
+
+2. **Navigation (near):**
+    1.  active window: add keymapped commands to allow navigating
+        between:
+        -   same level list component;
+        -   jump to the end or beginning of a list
+        -   different level headers (same level headers is already implemented
+            by standard neovim; **any-level** header jump is implemented in
+            v1.7.0);
+        -   diferent level list components;
+        -   blocks of the same type (code blocks, lists, citation);
+    2.  bookmarks: extract the headers to create an indexed list of topics,
+    subtopics, and so on, which can be accessed via a command (the command will
+    open a navigation panel for the note in the current active window. This panel
+    will allow the user to navigate quickly between headers, and can also be used
+    to copy the index).
+    3.  Sidebar: Now has a keymap that switches it into the current "bookmark
+        bar" (for the active window). There should be a keymap to do so within
+        the sidebar and one to do the same without leaving the curren active
+        window. The bookmark bar should show the index with
+        collapsable/expandable levels, but also allow quick navigation to the
+        view system. There should be no autoswitch (the sidebar only shows the
+        "bookmark" bar if the user wants it to, and only switches back to the
+        view navigation bar if the user wants it to). Important: headers within
+        container blocks, like code blocks, should not be extracted into the index.
+        Our system should be smart enough to understand our textual structures, and
+        we should use conventions to instruct users and AI on how to understand them as well
+        (e.g. code blocks are for display, quotation symbols are for quotations, so
+        nothing within these blocks is part of the main text's structure, since we
+        may want to insert a structured text as part of a block or quotation).
+
+3.  **Functionality (near):**
+    1.  Expand our custom syntax highlighting and commands to all
+       files outside PKM. Many commands, like `:PKMRenameNote` already
+       work outside our system, all we need to do is create a default list
+       of commands that we want to always work and make sure they do. Customization
+       can be left for a distant future (together with other user customization
+       options). We also need to make syntax highlighting work for all markdown
+       files (customization and toggling options are deferred to the user
+       customization step, to be implemented sometime in the future).
+    2.  A custom autowrap that will correctly work with the elements of a PKM
+        note, like YAML frontmatter, code blocks, headers (no autowrapping
+        headers with text that imediately precedes or follows them), tables, lists
+        with custom prefixes, etc.;
+4.  **Misc** (currently set to be done in the active development's Phase X, meaning
+the LLM assistant should decide when it is best to implement them):
+    -   Pressing `zE` to expand folds makes the system no longer detect the yaml
+        fold in a note. Saving the note resumes normal behavior. `za` and `zm` do
+        not cause issues (but they are affected until a new save or a note reopen
+        if the fold stops being detected due to `zE`).
+    -   Pressing `gf` on a note citation only follows the link when such citation
+        is the "full citation" (present in the yaml citation block). The
+        "shortened" citation ([note xxxx]) that shows in text does not allow link
+        following. There should be a way to follow a link without having to go up
+        to the metadata manually before doing so.
+    
+    -   Pressing `u` on normal mode to undo has been fixed to correctly alter the
+        timestamp while also reverting the modification made. However, the cursor
+        ends up on the timestamp, making it hard to follow the changes (that is,
+        the user needs to manually search for whatever was undone). The cursor
+        should land on the last-undone part (e.g. a text that was regenerated,  an
+        empty character/line that was left after undoing an input, and so on).
+    
+    -   Being cited by another note while open on a buffer will sometimes create
+        the need for a forced save, even if nothing else has been changed (check if
+        this is mentioned already in some existing version/phase).
+    
+    -   The files opened in the buffer panel (`<leader>vb`) should display in the following
+    order:
+        1. First, the files currently open on the lowest-numbered window (w1 on top, then w2, etc.).
+        2. As for the rest, the last-opened files. An example of the expecte
+           behavior is that opening the first file on w1 will put it on top, then
+           opening a second file on w2 will put it on the second place, then
+           opening a third file on w1 will put it on top and make the previous
+           top-place occupant ("file 1", previously opened on w1) go to the third
+           place (which is the first place among the "recently opened, but not
+           currently opened in any window"). Then, opening a fourth file on w1 will
+           put that on top and cause "file 3", which had been placed at w1, to go
+           to the third place, and the previous occupant of the third place ("file
+           1") to move to the fourth place (this is the second place among
+           "recently opened, but not currently opened in any window) since "file 1"
+           was the first file to be opened, meaning "file 3" was opened more
+           recently than it.
+        3. Reopening any files (by pressing `<CR>` on their buffers or any other
+           means) should reorder them accordingly.
+        
+        The final result is a sequence of opened buffers per window, followed by a
+        sequence of opened buffers that are not on any window, ordered from the
+        most recently opened to the last recently opened, with a dynamic behavior
+        that will change the list as the user interacts with those files. This idea
+        is meant to improve user experience, since the more relevant (currently / recently opened)
+        files will be on top, and since the user will know to look for files that have
+        not been recently opened at the bottom of the list.
+    
+        This is a per-session behavior. It is not meant to store "recently opened" across
+        sessions. Such behavior is more complex and, if we decide to implement it, it will
+        not be based on the buffer panel, since the buffer panel is meant to be used
+        to organize the current session only.
+    
+    - The final confirmation before creating a view/subview is unecessary. We
+  should either remove it or change it to a single keypress (`<CR>`) instead of
+  making the user type `yes`. Leave such multistep processes with confirmations
+  for dangerous tasks (views are safe to create and the process can easily
+  be reverted by deleting the view, if it was created by accident, or by updating it,
+  if it was created with a wrong parameter).
+
+
+### Distant goals (mid-term to long-term)
+
+1.  **Markdown improvements (distant):**
+    1.  Conventions (distant) 
         -   evaluate cost-benefit of extending possible list prefix to any
             alphanumeric symbol + a separator from a standard separators list
             (e.g. `-`, `.`, `)`, `:`). Consider the same for symbol sequences.
             This would allow things such as `text:`, `I -`, `I)`, and many
             others to be highlighted and to provide a basis for text wrapping
-            and indentation.
-        -   tables: 
-            -   decision on table types to support (markdown, csv, tsv, etc.);
+            and indentation. add a `-` prefix followed by a space and the
+            custom prefix, (e.g. `-` § 1º.).This workaround requires the
+            indentation conventions and autowrap improvements previously
+            described, since otherwise these prefixes will make text wrap
+            beyond the defaults of their current level.
+        -   displays: 
+            -   support for markdown, tsv, and csv tables.
+            -   support for space or multispace separated tables/displays.
             -   conventions for separators; 
             -   consider allowing text wrapping inside table cells (this would
                 require an adjustment in neovim's autowrap inside tables OR a
@@ -1086,81 +1196,6 @@ are related: all concern how notes describe and relate to one another.*
                               terrorismo e crimes hediondos
 
                 ```
-
-        -   juxtaposing equivalent names like `AI/LLM` or `não-exaustivo/não-taxativo`.
-    2.  Improved editor navigation: add keymapped commands to allow navigating
-        between:
-        -   same level list component;
-        -   jump to the end or beginning of a list
-        -   different level headers (same level headers is already implemented
-            by standard neovim; **any-level** header jump is implemented in
-            v1.7.0);
-        -   diferent level list components;
-        -   blocks of the same type (code blocks, lists, citation);
-    3.  Extended list prefixs recognition. This needs to be analyzed in
-        conjunction with Distant Additions 2.1. and with the current syntax
-        highlighting constraints, as well as with any other conflicts that may
-        arise from using these symbols as such (note that they would only have
-        this effect if located at the beginning of a line and at the correct
-        identation level, just
-        like default lists prefixes);
-    4.  A markdown table formatter, accoring to our conventions.
-    5.  A custom autowrap that will correctly work with the elements of a PKM
-        note, like YAML frontmatter, code blocks, headers (no autowrapping
-        headers with text that imediately precedes or follows them), tables,
-        etc.;
-    6.  Improved motion inside tables (quickly move to next cell, column or
-       line, including if it is not filled yet. This should make editing
-       easier);
-    7.  Consider expanding our custom syntax highlighting and commands to all
-       files outside PKM, this is not specific to PKM, but we can create a
-       config to enable a broader reach of the markdown highlight and of the
-       markdown functions as an option. Since this is something that I may find
-       beneficial, we can implement it before the customization options for users (that is,
-       this feature does not break the philosophy guidelines that instructs postponing
-       customization, because it is something that I want to test and might want to keep
-       always on if I find it useful (e.g. the default behavior of having
-       4-space indented text highlight as code, even when prefixed as list, is
-       distracting and does not serve any purpose). Note: many commands already
-       work outside PKM, for example, the `:PKMRenameNote`. This is good but
-       perhaps warrants a different naming for the command, since it is not
-       confined to PKM, and a way to allow the user to delimit PKM specific
-       keymaps and to toggle the command off when outside PKM Mode (for this
-       command and other similar situations, this last part can be deferred to
-       customization);
-        > **Reorganisation note:** this item is flagged for **near-term
-        > promotion**. It is the one Distant Addition the author explicitly wants
-        > to test soon, and Philosophy §7 is not violated because it is a
-        > personal always-on candidate, not a user customisation surface. A
-        > concrete first slice — a config flag to apply PKM markdown
-        > highlighting/features outside PKM notes, plus suppressing the
-        > distracting "4-space-indented-as-code" highlight for list-prefixed
-        > lines — could become a minor after the current version arc. It is left
-        > here (not yet versioned) only because the command-renaming/toggling
-        > sub-parts are still exploratory; promote on request.
-
-    8.  the next_header command currently only works when the cursor is above a
-       header. If used this way, it will create a header numbered as the
-       current + 1. Create a new "global' next_header command which creates a
-       new header based on the last header number (highest numbered /
-       last-in-order) of the same level. It creates this header after every
-       other header of that same level and below (including plain text), but
-       before any header of a higher level (if none exist, then this will be the
-       last line in the file), then moves the cursor to the newly
-       created header (that is, it will create `## header-(n+1)` whenever the
-       cursor is at `## header-m`, for any `m <= n`. *(Lives in `markdown.lua`;
-       could be bundled with the v1.7.0 header-navigation pass if promoted.)*;
-    9. Compatibility export options: if the user choses so, the files will be
-       exported in a common markdown format. For example, every
-       list prefix not present in the common markdown protocols will be
-       standardized (e.g. a legal text containing "Art. 1º." as an item and "§
-       1º." as a subitem will have those prefixes changed to "1." and "1.1."
-       (or "1.", if "1.1." is not generally compatible) with the correct
-       indentation (note that the correct indentation may be present in the
-       original note, so only the prefix needs to change). Similar operations
-       will be done for every PKM or individual user convention that is not
-       supported by the main markdown protocols (we can use CommonMark as a
-       default and add options for other usual markdown protocols).
 
 2. **`lua/pkm/preview.lua`** — Browser-based live preview: Markdown + LaTeX (MathJax),
   WebSocket live updates on save, cross-platform browser opening, terminal fallback
@@ -1184,13 +1219,7 @@ are related: all concern how notes describe and relate to one another.*
     include organizers, separators, or filter interactions for priority/subject
     categorisation.
 
-6.  **Alternative diagram and imaging methods** — ASCII/text-based art and
-    other portable methods for enhancing notes without external image files.
-    Any approach must be examined for human readability, AI/machine
-    readability, and portability before implementation.
-
-
-7.  **Explorer UI customisation:**
+6.  **Explorer UI customisation:**
     1.  positions and width of each panel; auto-on/off triggers by directory,
         CWD, or buffer type; other layout options users may need. 
     2.  Improved help panel with main keymaps for PKM (the current panel is
@@ -1219,11 +1248,21 @@ are related: all concern how notes describe and relate to one another.*
         panel. Whatever is toggled later (explore or buffer/sidebar) takes
         precedence. User manual toggles always take precedence over anything
         else.
-
+7. **Syntax highlighting (distant):**
+    1. Extended list prefixes recognition. 
 
 8.  **System customization:**
-    1. Turn on/off our markdown features, to allow the user to use external
+    1.  Turn on/off our markdown features, to allow the user to use external
        markdown plugins if they prefer.
+    2.  UI customization (either in the telescope-based or in the possible but
+       not guaranteed "native" UI).
+        -   sidebar and buffer bar positioning.
+    3.  PKMMode: 
+        -   when to activate or not; 
+        -   which functions, commands, and highlighting to propagate generally (outside the pkm system);
+        -   root and note folders renaming;
+        -   note type renaming;
+        -   new note type creation per user need;
 
 9.  **Improved search/browse and citations:** 
     1.  improve the context detection algorithm, but only if it does not
@@ -1289,12 +1328,17 @@ are related: all concern how notes describe and relate to one another.*
      issues (using something like a diff to converge modifications). The
      syncing should be fast (no slow syncing like Evernote).
 
-11. **Note versions and undo:** Currenly, modifying a note and saving it will
+11.     **Note versions and undo:** Currenly, modifying a note and saving it will
     make the previous note disappear (unless the user wants to restore notes
     synced to Github by reverting a "version", but that is cumbersome and
     faulty). Ideally, we should be able to store some versions of the note,
     allowing "undo" even after a note is saved and the program is closed. This
     need to be evalutated in terms of performance and storage costs.
+
+12. **Navigation:**
+    1. Improved motion inside tables (quickly move to next cell, column or
+       line, including if it is not filled yet. This should make editing
+       easier);
 
 ---
 
@@ -1322,6 +1366,11 @@ are related: all concern how notes describe and relate to one another.*
     are still using it in any part of the main program, but users will be able
     to choose which to enable and, where adequate, they may also be activated
     together and complementarily.
+
+-   **Alternative diagram and imaging methods** — ASCII/text-based art and
+    other portable methods for enhancing notes without external image files.
+    Any approach must be examined for human readability, AI/machine
+    readability, and portability before implementation.
 
 -   **Insertable folds**: a character or character combination to mark
     beginning and ending of folds in any file. These should only be implemented
@@ -1355,6 +1404,26 @@ are related: all concern how notes describe and relate to one another.*
             with "fold markers" and starts folded by default). Keep in mind
             that the autoconceal option notation was just a "pseudo notation"
             made me for illustration purposes.
+
+-   **Exportation:**
+    1. Compatibility export options: 
+        -   pkm (standard): export the file in the pkm plugin format. The system
+        already expects users to use this format;
+        -   common markdown format. This requires reformatting, for example, every
+       list prefix not present in the common markdown protocols will be
+       standardized (e.g. a legal text containing "Art. 1º." as an item and "§
+       1º." as a subitem will have those prefixes changed to "1." and "1.1."
+       (or "1.", if "1.1." is not generally compatible) with the correct
+       indentation (note that the correct indentation may be present in the
+       original note, so only the prefix needs to change). Similar operations
+       will be done for every PKM or individual user convention that is not
+       supported by the main markdown protocols (we can use CommonMark as a
+       default and add options for other usual markdown protocols);
+       -    Obsidian: export in a format compatible with Obsidian. This means
+       the frontmatter will probably be extracted and turned into something
+       that can be passed to Obsidian as metadata. Reformatting will
+       also be necessary as to make the markdown and other notation compatible
+       with the Obsidian software.
 
 ---
 
