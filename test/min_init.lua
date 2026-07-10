@@ -16,6 +16,14 @@ local repo_root = vim.fn.fnamemodify(this_file, ':p:h:h')  -- test/min_init.lua 
 
 vim.opt.runtimepath:prepend(repo_root)
 
+-- Disposable test run: never read or write the user's real ShaDa file
+-- (marks, registers, command/search history, oldfiles). Equivalent to
+-- passing -i NONE on the command line, set here so it applies automatically
+-- without editing the invocation. Also sidesteps E138 (all ShaDa temp-file
+-- suffixes exhausted) from repeated rapid headless invocations never
+-- completing their atomic write+rename.
+vim.o.shadafile = 'NONE'
+
 -- Disposable scratch corpus — never the real Notes tree, per the Standing
 -- Verification Protocol. Fresh temp directory every run.
 local scratch_root = vim.fn.tempname()
