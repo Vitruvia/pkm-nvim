@@ -412,6 +412,27 @@ end
 function M.setup()
   local augroup = vim.api.nvim_create_augroup('PKMViews', { clear = true })
 
+  -- Subprojects (parent-bearing entries) are only ever valid in views.json.
+  -- config.lua is Lua source, not a data file the plugin can safely rewrite,
+  -- so a subproject defined there would go silently stale on any rename —
+  -- there would be no way to keep it in sync. Enforced here rather than
+  -- left as a rename-time warning: under normal use config.projects should
+  -- never contain one at all.
+  local bad = {}
+  for k, v in pairs(get_config().projects or {}) do
+    if type(v) == 'table' and v.parent then
+      bad[#bad + 1] = k
+    end
+  end
+  if #bad > 0 then
+    table.sort(bad)
+    vim.notify(
+      string.format(
+        "[pkm] config.lua 'projects' has subproject(s) with a 'parent' field: %s — move to views.json via :PKMViewNewSub; config-defined subprojects cannot be renamed correctly",
+        table.concat(bad, ', ')),
+      vim.log.levels.WARN)
+  end
+
   vim.api.nvim_create_autocmd('BufWritePost', {
     group    = augroup,
     pattern  = 'views.json',
@@ -548,6 +569,7 @@ function M.save(name, expr)
   local ok   = save_sidecar(data)
   if ok then
     vim.notify(string.format("PKMView: saved view '%s'", name), vim.log.levels.INFO)
+    M.refresh_sidebar_if_open()
   end
   return ok
 end
@@ -582,6 +604,7 @@ function M.save_subproject(name, parent, filter_expr)
     vim.notify(
       string.format("PKMView: saved subproject '%s' under '%s'", name, parent),
       vim.log.levels.INFO)
+    M.refresh_sidebar_if_open()
   end
   return ok
 end
@@ -1249,6 +1272,24 @@ local function rename_view_prompt(old_name)
     vim.notify(
       string.format("[pkm] view renamed: '%s' → '%s'", old_name, new_name),
       vim.log.levels.INFO)
+
+    -- config.lua subprojects cannot be safely rewritten by the plugin;
+    -- warn (never block — the sidecar rename above already succeeded).
+    local stale = {}
+    for k, v in pairs(get_config().projects or {}) do
+      if type(v) == 'table' and v.parent == old_name then
+        stale[#stale + 1] = k
+      end
+    end
+    if #stale > 0 then
+      table.sort(stale)
+      vim.notify(
+        string.format(
+          "[pkm] config.lua subproject(s) still reference the old name '%s': %s — update their 'parent' field by hand",
+          old_name, table.concat(stale, ', ')),
+        vim.log.levels.WARN)
+    end
+
     M.refresh_sidebar_if_open()
   end
 end
@@ -1644,7 +1685,7 @@ function M.open_sidebar(name)
   vim.api.nvim_win_set_width(t.win, width)
 
   for opt, val in pairs({
-    winfixwidth = true, wrap = false,
+    winfixbuf = true, winfixwidth = true, wrap = false,
     number = false, cursorline = true, signcolumn = 'no',
   }) do
     vim.api.nvim_set_option_value(opt, val, { win = t.win })
@@ -1666,7 +1707,7 @@ function M.open_sidebar(name)
       if vim.api.nvim_win_is_valid(t.win) then
         vim.api.nvim_set_option_value(
           'statusline',
-          '  PKM Views  · CR open  · / search  · za fold  · ? help  · q close',
+          '  PKM Views  · CR open  · / search  · ? help  · q close',
           { win = t.win })
       end
     end)

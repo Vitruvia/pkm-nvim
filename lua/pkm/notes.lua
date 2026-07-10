@@ -746,14 +746,16 @@ function M.change_note_type()
     local new_fm_lines = yaml.create_frontmatter(fm_key, existing_fm)
     local new_content  = vim.list_extend(new_fm_lines, content)
 
-    -- Rename file on disk
-    if vim.fn.rename(current_path, new_path) ~= 0 then
-      vim.notify("PKMChangeType: failed to rename file.", vim.log.levels.ERROR)
+    -- Write the regenerated frontmatter directly to the new path — the
+    -- content is being fully replaced anyway, so a separate rename step
+    -- before the write is redundant.
+    if vim.fn.writefile(new_content, new_path) ~= 0 then
+      vim.notify("PKMChangeType: failed to write new file.", vim.log.levels.ERROR)
       return
     end
-
-    -- Write updated frontmatter to new path
-    vim.fn.writefile(new_content, new_path)
+    if utils.normalize(current_path) ~= utils.normalize(new_path) then
+      vim.fn.delete(current_path)
+    end
 
     -- Propagate rename through citations
     local old_basename = vim.fn.fnamemodify(current_path, ":t:r")
@@ -765,9 +767,12 @@ function M.change_note_type()
     index.invalidate(current_path)  -- renamed away; remove stale entry
     index.invalidate(new_path)      -- written with new frontmatter; index it
 
-    -- Redirect buffer to new file
-    vim.cmd("keepalt file " .. vim.fn.fnameescape(new_path))
-    vim.bo.modified = false
+    -- Redirect buffer via pure API — never :saveas/:write — so an otherwise-
+    -- unmodified type change cannot trigger an E13 forced-write prompt.
+    -- Only run after the write above has succeeded (see rename_note).
+    local bufnr = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_name(bufnr, new_path)
+    vim.bo[bufnr].modified = false
     vim.notify(string.format("Changed type: %s → %s", current_type, sel.value), vim.log.levels.INFO)
   end)
 end
@@ -775,6 +780,32 @@ end
 -- =============================================================================
 -- SECTION: Note renaming
 -- =============================================================================
+
+--- Determine whether two paths refer to the same on-disk file object.
+--- Primary check: device + inode equality via vim.loop.fs_stat — reliable
+--- for case-only renames on any filesystem, since the OS resolves both
+--- paths to the same object before the rename is applied.
+--- Fallback: case-insensitive path equality, applied ONLY on Windows/WSL
+--- (case-insensitive filesystems). Never applied on a case-sensitive
+--- filesystem, where two case-differing paths are genuinely distinct files.
+---@param path_a string
+---@param path_b string
+---@return boolean
+local function is_same_file(path_a, path_b)
+  local uv = vim.uv or vim.loop
+  local stat_a = uv.fs_stat(path_a)
+  local stat_b = uv.fs_stat(path_b)
+  if stat_a and stat_b and stat_a.dev == stat_b.dev and stat_a.ino == stat_b.ino then
+    return true
+  end
+  if utils.is_windows or utils.is_wsl then
+    return utils.normalize(path_a):lower() == utils.normalize(path_b):lower()
+  end
+  return false
+end
+
+-- Exposed for test/test_v154_p1.lua only; not part of the module's public API.
+M._is_same_file = is_same_file
 
 --- Prompt for a new name and rename the current PKM note file.
 --- For consolidated notes: preserves number and type prefix, renames the title part.
@@ -825,24 +856,61 @@ function M.rename_note()
 
   if new_filepath:gsub('\\', '/') == filepath:gsub('\\', '/') then return end
 
-  if vim.fn.filereadable(new_filepath) == 1 then
+  local target_exists = vim.fn.filereadable(new_filepath) == 1
+  local same_file     = target_exists and is_same_file(filepath, new_filepath)
+
+  if target_exists and not same_file then
     vim.notify('[pkm] cannot rename: target already exists: ' .. new_stem .. '.md', vim.log.levels.ERROR)
     return
   end
 
-  if vim.fn.rename(filepath, new_filepath) ~= 0 then
-    vim.notify('[pkm] rename failed', vim.log.levels.ERROR)
-    return
+  local bufnr = vim.api.nvim_get_current_buf()
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+  if same_file then
+    -- Case-only rename on a case-insensitive filesystem: filepath and
+    -- new_filepath resolve to the SAME directory entry, so writing directly
+    -- to new_filepath would just reopen the existing file under its current
+    -- on-disk casing — the stored name would never actually change. Force
+    -- it via a two-step rename through a distinct temp name; a single
+    -- rename() call is not reliable for case-only changes on every
+    -- case-insensitive filesystem implementation.
+    local tmp_path = filepath .. '.pkmtmp'
+    if vim.fn.filereadable(tmp_path) == 1 then
+      vim.notify('[pkm] rename failed: stale temp file present, try again', vim.log.levels.ERROR)
+      return
+    end
+    if vim.fn.rename(filepath, tmp_path) ~= 0 then
+      vim.notify('[pkm] rename failed: could not stage temp file', vim.log.levels.ERROR)
+      return
+    end
+    if vim.fn.rename(tmp_path, new_filepath) ~= 0 then
+      vim.fn.rename(tmp_path, filepath)  -- best-effort: don't strand the note under .pkmtmp
+      vim.notify('[pkm] rename failed: could not apply new casing', vim.log.levels.ERROR)
+      return
+    end
+    -- Write current buffer content (including any unsaved edits) so a
+    -- case-only rename never silently discards pending changes.
+    vim.fn.writefile(lines, new_filepath)
+    vim.api.nvim_buf_set_name(bufnr, new_filepath)
+    vim.bo[bufnr].modified = false
+  else
+    -- Genuine new target: write-then-delete avoids :saveas/:write entirely,
+    -- so an otherwise-unmodified rename cannot trigger an E13 forced-write
+    -- prompt. writefile() bypasses Vim's own write pipeline.
+    if vim.fn.writefile(lines, new_filepath) ~= 0 then
+      vim.notify('[pkm] rename failed: could not write ' .. new_stem .. '.md', vim.log.levels.ERROR)
+      return
+    end
+    vim.api.nvim_buf_set_name(bufnr, new_filepath)
+    vim.fn.delete(filepath)
+    vim.bo[bufnr].modified = false
   end
 
   local index = require('pkm.index')
   index.invalidate(filepath)
   index.invalidate(new_filepath)
 
-  vim.cmd('keepalt file ' .. vim.fn.fnameescape(new_filepath))
-  vim.bo.modified = false
-
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local fm, _ = yaml.parse_frontmatter(lines)
   local display_title = (fm and type(fm.title) == 'string' and fm.title ~= '')
                         and fm.title

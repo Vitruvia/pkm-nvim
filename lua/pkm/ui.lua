@@ -95,7 +95,7 @@ local function bufpanel_build_lines()
     return ma > mb
   end)
 
-  local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  w save+close  q close panel' }
+  local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  D force  w save+close  r refresh  T title  q close' }
   local buf_map = {}
 
   local win_labels = {}
@@ -258,7 +258,7 @@ function M.toggle_bufpanel()
   vim.api.nvim_win_set_buf(t.win, buf)
 
   for opt, val in pairs({
-    winfixheight = true, wrap = false,
+    winfixbuf = true, winfixheight = true, wrap = false,
     number = false, cursorline = true, signcolumn = 'no',
   }) do
     vim.api.nvim_set_option_value(opt, val, { win = t.win })
@@ -278,7 +278,7 @@ function M.toggle_bufpanel()
       if vim.api.nvim_win_is_valid(t.win) then
         vim.api.nvim_set_option_value(
           'statusline',
-          '  PKM Buffers  · CR open  · d close  · w save+close  · q close panel',
+          '  PKM Buffers  · CR open  · d close  · D force  · w save+close  · r refresh  · T title  · q close',
           { win = t.win })
       end
     end)

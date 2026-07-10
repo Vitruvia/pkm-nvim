@@ -148,6 +148,8 @@ function M.setup_sync_autocmds()
           citations.update_references(filepath)
         end
 
+        citations.propagate_title(filepath)
+
         -- Silently reload the WRITTEN buffer (not whichever buffer is
         -- current now) to reflect changes made by update_references.
         -- nvim_buf_call ensures noautocmd e targets the correct buffer even

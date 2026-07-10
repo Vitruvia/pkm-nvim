@@ -212,8 +212,6 @@ function M.renumber_sequence(start_line, end_line)
 
   -- ── 2. renumber ──────────────────────────────────────────────────────────
 
-  -- ── 2. renumber ──────────────────────────────────────────────────────────
-
   -- Per-level counter stack for list families.
   -- Stepping to a shallower depth clears all deeper entries so sub-lists
   -- restart from 1 under each new parent item.

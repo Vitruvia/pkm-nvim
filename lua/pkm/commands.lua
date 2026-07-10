@@ -198,6 +198,7 @@ function M.register()
   })
 
   vim.api.nvim_create_user_command('PKMTags', function()
+    focus_main_win()
     local has_tele = pcall(require, 'telescope')
     if has_tele then
       require('pkm.telescope').browse_tags()
@@ -216,6 +217,7 @@ function M.register()
   end, { desc = 'Merge tags across all notes' })
 
   vim.api.nvim_create_user_command('PKMBrowseRecent', function(opts)
+    focus_main_win()
     local n = tonumber(opts.args) or 20
     local has_tele = pcall(require, 'telescope')
     if has_tele then
@@ -229,6 +231,7 @@ function M.register()
   })
 
   vim.api.nvim_create_user_command('PKMOrphans', function()
+    focus_main_win()
     local index = require('pkm.index')
     local views = require('pkm.views')
     local utils = require('pkm.utils')
@@ -326,6 +329,7 @@ function M.register()
   -- Views
   -- ---------------------------------------------------------------------------
   vim.api.nvim_create_user_command('PKMView', function(opts)
+    focus_main_win()
     require('pkm.views').open(opts.args ~= '' and opts.args or nil)
   end, {
     nargs    = '?',
@@ -334,6 +338,7 @@ function M.register()
   })
 
   vim.api.nvim_create_user_command('PKMViews', function()
+    focus_main_win()
     require('pkm.views').list_views()
   end, { desc = 'Browse all defined views in a tree picker' })
 
@@ -424,6 +429,7 @@ function M.register()
   })
 
   vim.api.nvim_create_user_command('PKMViewEdit', function()
+    focus_main_win()
     local path = require('pkm.utils').join(require('pkm').config.root_path, 'views.json')
     if vim.fn.filereadable(path) == 0 then
       vim.fn.writefile({ '{}' }, path)
@@ -448,6 +454,7 @@ function M.register()
   })
 
   vim.api.nvim_create_user_command('PKMViewLast', function()
+    focus_main_win()
     require('pkm.views').open_last()
   end, { desc = 'Reopen the last activated view (session-scoped)' })
 
