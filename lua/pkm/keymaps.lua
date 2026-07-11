@@ -135,36 +135,50 @@ function M.register(config)
         local was_bufpanel = wo.winfixbuf and wo.winfixheight
 
         if was_sidebar or was_bufpanel then
-          vim.notify(
-            '[pkm] cannot browse files inside a PKM panel — closing and reopening it',
-            vim.log.levels.WARN)
-
-          local non_float = 0
-          for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-            if vim.api.nvim_win_get_config(w).relative == '' then
-              non_float = non_float + 1
-            end
-          end
-
-          if non_float <= 1 then
-            -- Only window in the tabpage; closing it would leave nothing
-            -- to reopen into. Swap in a scratch buffer instead (winfixbuf
-            -- has to come off briefly to allow even our own switch).
-            local scratch = vim.api.nvim_create_buf(false, true)
-            vim.bo[scratch].bufhidden = 'wipe'
-            pcall(vim.api.nvim_set_option_value, 'winfixbuf', false, { win = win })
-            vim.api.nvim_win_set_buf(win, scratch)
-            pcall(vim.api.nvim_set_option_value, 'winfixbuf', true, { win = win })
-          else
-            pcall(vim.api.nvim_win_close, win, true)
-          end
-
+          -- Defer the actual correction: this callback fires SYNCHRONOUSLY,
+          -- NESTED inside netrw's own still-executing :Explore command
+          -- (FileType autocmds run as part of the triggering command's
+          -- call stack, not after it). Closing or reassigning the window
+          -- from here — while netrw's script, further down that same call
+          -- stack, still expects the window/buffer state it just set up to
+          -- still exist — corrupts netrw's in-flight setup. Observed as an
+          -- empty listing landing in whatever window ends up current, and
+          -- (most likely the same root cause) window-layout bookkeeping
+          -- left inconsistent enough to resurface the buffer-panel
+          -- sole-window bug afterward. Letting netrw's command finish
+          -- completely first, then reacting on the next event-loop tick,
+          -- avoids fighting it mid-execution.
           vim.schedule(function()
-            if was_sidebar then
-              require('pkm.views').open_sidebar()
-            else
-              require('pkm.ui').toggle_bufpanel()
+            if not vim.api.nvim_win_is_valid(win) then return end
+
+            vim.notify(
+              '[pkm] cannot browse files inside a PKM panel — closing and reopening it',
+              vim.log.levels.WARN)
+
+            local non_float = 0
+            for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+              if vim.api.nvim_win_get_config(w).relative == '' then
+                non_float = non_float + 1
+              end
             end
+
+            if non_float <= 1 then
+              local scratch = vim.api.nvim_create_buf(false, true)
+              vim.bo[scratch].bufhidden = 'wipe'
+              pcall(vim.api.nvim_set_option_value, 'winfixbuf', false, { win = win })
+              vim.api.nvim_win_set_buf(win, scratch)
+              pcall(vim.api.nvim_set_option_value, 'winfixbuf', true, { win = win })
+            else
+              pcall(vim.api.nvim_win_close, win, true)
+            end
+
+            vim.schedule(function()
+              if was_sidebar then
+                require('pkm.views').open_sidebar()
+              else
+                require('pkm.ui').toggle_bufpanel()
+              end
+            end)
           end)
           return
         end
