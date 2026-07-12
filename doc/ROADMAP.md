@@ -650,6 +650,10 @@ Invariants: `PKMCitation`'s `matchadd()` mechanism untouched; tree-sitter
 not synchronous, to avoid the O(n)-per-keystroke cost the injection override
 was written to prevent).
 
+(Also: telescope_scoped_search_picker/float_scoped_search, added as a
+standalone fix before this phase, target M.list_views() directly for their
+back-navigation — repoint or replace once the views panel lands.)
+
 Commit:
 
 ```

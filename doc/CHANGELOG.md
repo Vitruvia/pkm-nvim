@@ -82,6 +82,66 @@
 
 ---
 
+## [1.6.0] - Phaes 1 - 12/7/2026
+
+### Fixed
+
+- **`<C-f>` search from the views tree picker had no way back** — it
+  closed the tree picker before opening results, and the shared
+  `browse_paths` utility (also used by unrelated callers like `:PKMOrphans`)
+  has no "return to caller" concept to hook into. Added two dedicated,
+  self-contained pickers (`telescope_scoped_search_picker`,
+  `float_scoped_search`) mirroring the existing detail-view picker's own
+  `<C-b>` pattern. Also removed a dead `has_tele` branch inside the float
+  tree picker's old `<C-f>` handler — unreachable, since you can only be in
+  the float tree picker at all when Telescope was already confirmed absent.
+
+### Added
+
+- **`panel.lua`** — generic panel infrastructure: per-tab state, scoped
+  augroup (refresh-on-event, WinClosed→`ensure_main_window()` safety net,
+  BufWipeout cleanup, TabClosed pruning), buffer-local keymaps, `winfixbuf`
+  always on. `create(spec)` → `{ open, close, toggle, refresh, is_open,
+  get_win }`. Deliberately does not unify header/statusline text or
+  search/filter behavior across panels — those stay per-panel.
+- **Tag panel** — searchable, scrollable replacement for the
+  `vim.ui.select`/`vim.fn.input` flow behind `:PKMAddTag`/`:PKMRemoveTag`
+  (bare, no-argument invocation only — the direct-argument fast path is
+  unchanged). One-shot prompt-then-filter search via `/`, matching the
+  existing convention used elsewhere in `ui.lua` rather than introducing
+  live-per-keystroke filtering. Buffer-only mutation via the existing
+  `citations.add_tag`/`remove_tag` — no `index.invalidate`, no changes to
+  either function.
+
+### Changed
+
+- **Buffer panel** ported onto `panel.lua` — behavior-preserving; stays
+  unfocused on open (glanceable, not modal), matching its pre-port design.
+  `ui.lua`'s module-level `_tabs`/`get_tab()` and the `PKMUITabs` augroup
+  removed entirely — both panels now get per-tab isolation and TabClosed
+  cleanup automatically from `panel.lua`.
+- Renamed "search view" → "search panel" in the views tree picker's hint
+  text, to avoid reading as a type of saved view.
+
+### Fixed (caught in review, before reaching a real session)
+- A `filter = nil` table-constructor bug in `open_tag_panel` that would
+  have let a stale filter silently survive a mode switch (Lua omits
+  `nil`-valued keys from table literals entirely).
+- A `restore_focus()` timing bug: closing the tag panel's `bufhidden=wipe`
+  buffer fires `BufWipeout` synchronously, clearing its `_tabs` entry
+  before `close()` returns — a bare `restore_focus()` re-deriving state at
+  that point would silently no-op. Fixed by passing the keymap's own
+  already-captured `state` reference explicitly.
+
+### Test
+- `test/test_v160_p1.lua` — panel.lua generic lifecycle, per-tab isolation,
+  buffer-panel content correctness, tag-panel candidate-list correctness
+  for both modes. Interactive select-and-mutate flow verified by manual
+  smoke test, not automated (feedkeys-based simulation deemed not worth
+  the fragility for this phase).
+
+---
+
 ## [1.5.9] — 2026-7-10
 
 ### Added
@@ -128,6 +188,8 @@
   apply; nothing was broken here to begin with.
 - `queries/markdown/highlights.scm` unchanged — meta-comment highlighting
   was never tree-sitter-query-based.
+
+---
 
 ## [1.5.8] — 2026-7-10
 
@@ -197,6 +259,8 @@
   modifiability, which wasn't verified empirically. Low-probability edge
   case; flagged, not fixed this phase.
 
+---
+
 ## [1.5.7]  - 10/7/2026
 
 ### Fixed
@@ -225,6 +289,7 @@
   called from the `BufWritePost` sync autocmd after `update_references`,
   idempotently rewriting only the entries whose stored title has drifted.
 
+---
 
 ## [1.5.6] - 2026-6-21
 
@@ -323,6 +388,8 @@
   existing fold-restore and TS-restart logic become harmless no-ops rather
   than newly-broken paths. Left in place as redundant defensive code rather
   than removed — out of scope for this fix.
+
+---
 
 ## [1.5.5] - 2026-6-19
 

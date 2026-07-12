@@ -871,6 +871,72 @@ local function float_view_picker(name, paths)
   vim.keymap.set('n', '<Esc>', close,          ko)
 end
 
+--- Telescope search results, scoped to a view's notes, with a way back to
+--- the views tree. telescope.browse_paths (shared, used by unrelated
+--- callers like :PKMOrphans) has no such concept.
+---@param name  string
+---@param paths string[]
+local function telescope_scoped_search_picker(name, paths)
+  local pickers       = require('telescope.pickers')
+  local finders        = require('telescope.finders')
+  local actions         = require('telescope.actions')
+  local action_state    = require('telescope.actions.state')
+  local previewers      = require('telescope.previewers')
+  local sorters          = require('telescope.sorters')
+  local index            = require('pkm.index')
+
+  local sorted  = sort_paths_by_type(paths)
+  local entries = {}
+  for _, p in ipairs(sorted) do
+    local e         = index.get(p)
+    local note_type = e and e.note_type or 'other'
+    local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
+    entries[#entries + 1] = {
+      value = p, display = type_prefix(note_type) .. ' ' .. title,
+      ordinal = string.format('%05d', #entries + 1),
+    }
+  end
+
+  pickers.new({
+    sorting_strategy = 'ascending',
+    layout_config    = { prompt_position = 'top' },
+  }, {
+    prompt_title = string.format(
+      'Search: %s  (%d note%s)  <C-b> back to views',
+      name, #sorted, #sorted == 1 and '' or 's'),
+    finder = finders.new_dynamic({
+      fn = function(prompt)
+        if not prompt or prompt == '' then return entries end
+        local needle = prompt:lower()
+        local filtered = {}
+        for _, e in ipairs(entries) do
+          if e.display:lower():find(needle, 1, true) then
+            filtered[#filtered + 1] = e
+          end
+        end
+        return filtered
+      end,
+      entry_maker = function(e) return e end,
+    }),
+    sorter    = sorters.Sorter:new({ scoring_function = function() return 0 end }),
+    previewer = previewers.vim_buffer_cat.new({}),
+    attach_mappings = function(prompt_bufnr, map)
+      actions.select_default:replace(function()
+        local entry = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        if entry then vim.cmd('edit ' .. vim.fn.fnameescape(entry.value)) end
+      end)
+      local function go_back()
+        actions.close(prompt_bufnr)
+        vim.schedule(function() M.list_views() end)
+      end
+      map('i', '<C-b>', go_back)
+      map('n', '<C-b>', go_back)
+      return true
+    end,
+  }):find()
+end
+
 --- Telescope tree picker over all defined views.
 --- Selecting a view opens it via M.open(). Uses generic_sorter (fzy is
 --- appropriate here — we are matching short view names, not structured content).
@@ -904,7 +970,7 @@ local function telescope_views_tree_picker()
     sorting_strategy = 'ascending',
     layout_config    = { prompt_position = 'top' },
   }, {
-    prompt_title = 'PKM Views  ·  <C-f> search view',
+    prompt_title = 'PKM Views  ·  <C-f> search panel',
     finder = finders.new_dynamic {
       fn = function(prompt)
         if not prompt or prompt == '' then return items end
@@ -934,14 +1000,7 @@ local function telescope_views_tree_picker()
         if not sel then return end
         actions.close(prompt_bufnr)
         vim.schedule(function()
-          local paths = M.match_all(sel.value)
-          local title = string.format('Search: %s', sel.value)
-          local has_tele = pcall(require, 'telescope')
-          if has_tele then
-            require('pkm.telescope').browse_paths(title, paths)
-          else
-            require('pkm.ui').browse_paths(title, paths)
-          end
+          telescope_scoped_search_picker(sel.value, M.match_all(sel.value))
         end)
       end
 
@@ -951,6 +1010,66 @@ local function telescope_views_tree_picker()
       return true
     end,
   }):find()
+end
+
+--- Scrollable float search results, scoped to a view's notes, with a way
+--- back to the views tree. The generic ui.browse_paths has no such concept
+--- — it's shared by unrelated callers like :PKMOrphans, which have nowhere
+--- sensible to go "back" to.
+---@param name  string
+---@param paths string[]
+local function float_scoped_search(name, paths)
+  local index = require('pkm.index')
+  local header = string.format(
+    '  Search: %s  ·  %d note%s  ·  <CR> open  ·  <C-b> back to views  ·  q/<Esc> close',
+    name, #paths, #paths == 1 and '' or 's')
+  local lines      = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
+  local line_paths = {}
+
+  local sorted = sort_paths_by_type(paths)
+  for _, p in ipairs(sorted) do
+    local e         = index.get(p)
+    local note_type = e and e.note_type or 'other'
+    local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
+    lines[#lines + 1] = '  ' .. type_prefix(note_type) .. ' ' .. title
+    line_paths[#lines] = p
+  end
+  if #sorted == 0 then lines[#lines + 1] = '  (no notes)' end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
+
+  local width  = math.min(math.max(#header + 4, 60), vim.o.columns - 4)
+  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.7))
+  local win    = vim.api.nvim_open_win(buf, true, {
+    relative  = 'editor', width = width, height = height,
+    col       = math.floor((vim.o.columns - width)  / 2),
+    row       = math.floor((vim.o.lines   - height) / 2),
+    style     = 'minimal', border = 'rounded',
+    title     = ' Search Panel ', title_pos = 'center',
+  })
+  if #lines >= 3 then vim.api.nvim_win_set_cursor(win, { 3, 2 }) end
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
+  end
+
+  local ko = { noremap = true, silent = true, buffer = buf }
+  vim.keymap.set('n', '<CR>', function()
+    local row = vim.api.nvim_win_get_cursor(win)[1]
+    if line_paths[row] then
+      close()
+      vim.cmd('edit ' .. vim.fn.fnameescape(line_paths[row]))
+    end
+  end, ko)
+  vim.keymap.set('n', '<C-b>', function()
+    close()
+    vim.schedule(function() M.list_views() end)
+  end, ko)
+  vim.keymap.set('n', 'q',     close, ko)
+  vim.keymap.set('n', '<Esc>', close, ko)
 end
 
 --- Scrollable float tree picker over all defined views.
@@ -963,7 +1082,7 @@ local function float_views_tree_picker()
     return
   end
 
-  local header = '  PKM Views  ·  <CR> open  ·  <C-f> search  ·  q/<Esc> close'
+  local header = '  PKM Views  ·  <CR> open  ·  <C-f> search panel  ·  q/<Esc> close'
   local lines  = { header, '  ' .. string.rep('─', math.max(#header - 2, 20)) }
   local names  = {}  -- line number → view name (only view lines, not header)
 
@@ -1012,14 +1131,7 @@ local function float_views_tree_picker()
     if not name then return end
     close()
     vim.schedule(function()
-      local paths = M.match_all(name)
-      local title = string.format('Search: %s', name)
-      local has_tele = pcall(require, 'telescope')
-      if has_tele then
-        require('pkm.telescope').browse_paths(title, paths)
-      else
-        require('pkm.ui').browse_paths(title, paths)
-      end
+      float_scoped_search(name, M.match_all(name))
     end)
   end, ko)
 

@@ -492,29 +492,10 @@ function M.register()
     desc     = 'Open or toggle the persistent view sidebar',
   })
 
-  -- :PKMRestoreNote — pick a note from trash to restore.
+  -- :PKMRestoreNote — open the browse/search/restore panel.
   vim.api.nvim_create_user_command('PKMRestoreNote', function()
-    local trash = require('pkm.trash')
-    local entries = trash.list()
-    if #entries == 0 then
-      vim.notify('[pkm] trash is empty', vim.log.levels.INFO)
-      return
-    end
-    vim.ui.select(entries, {
-      prompt = 'Restore note from trash:',
-      format_item = function(e)
-        return string.format('[%s] %s  (%s)',
-          e.deleted_at:sub(1, 10), e.title,
-          vim.fn.fnamemodify(e.original_path, ':~'))
-      end,
-    }, function(sel)
-      if not sel then return end
-      if trash.restore_note(sel) then
-        vim.notify(string.format("[pkm] restored '%s'", sel.title), vim.log.levels.INFO)
-        require('pkm.views').refresh_sidebar_if_open()
-      end
-    end)
-  end, { desc = 'Restore a note from the PKM trash' })
+    require('pkm.trash').open_restore_panel()
+  end, { desc = 'Browse and restore notes from the PKM trash' })
 
   -- :PKMEmptyTrash — permanently delete all trashed notes and strip backlinks.
   vim.api.nvim_create_user_command('PKMEmptyTrash', function()

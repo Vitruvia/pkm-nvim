@@ -21,18 +21,20 @@
 --   deleted_timestamp — Unix timestamp (os.time()); used for autoclear comparison
 --
 -- Public API:
---   setup(config)        → store config; schedule autoclear if max_age_days > 0
---   trash_note(filepath) → move note to trash; true on success
---   restore_note(entry)  → move note back to original_path; true on success
---   list()               → array of manifest entries
---   empty()              → permanently delete all trash and strip backlinks
---   purge_old()          → permanently delete entries older than max_age_days
---   trash_dir()          → absolute path to trash folder
+--   setup(config)         → store config; schedule autoclear if max_age_days > 0
+--   trash_note(filepath)  → move note to trash; true on success
+--   restore_note(entry)   → move note back to original_path; true on success
+--   list()                → array of manifest entries
+--   empty()               → permanently delete all trash and strip backlinks
+--   purge_old()           → permanently delete entries older than max_age_days
+--   trash_dir()           → absolute path to trash folder
+--   open_restore_panel()  → open the browse/search/restore panel (v1.6.0 Ph2)
 -- =============================================================================
 
 local M = {}
 
 local utils = require('pkm.utils')
+local panel = require('pkm.panel')
 local _config = nil
 
 -- =============================================================================
@@ -303,5 +305,97 @@ function M.purge_old()
   end
   return purged
 end
+
+-- =============================================================================
+-- SECTION: Restore panel
+-- =============================================================================
+
+local _restore_panel = panel.create({
+  name          = 'trashpanel',
+  split_cmd     = 'noautocmd botright split',
+  focus_on_open = true,
+  resize = function(state, lines)
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 12))
+    end
+  end,
+  build_lines = function(state)
+    local entries = M.list()
+
+    if state.filter and state.filter ~= '' then
+      local needle = state.filter:lower()
+      local filtered = {}
+      for _, e in ipairs(entries) do
+        if (e.title or ''):lower():find(needle, 1, true)
+        or (e.original_path or ''):lower():find(needle, 1, true) then
+          filtered[#filtered + 1] = e
+        end
+      end
+      entries = filtered
+    end
+
+    table.sort(entries, function(a, b)
+      return (a.deleted_timestamp or 0) > (b.deleted_timestamp or 0)
+    end)
+
+    local filter_label = (state.filter and state.filter ~= '')
+      and ('  [filter: ' .. state.filter .. ']') or ''
+    local lines = {
+      string.format('  Trash  (%d)%s  <CR> restore  / search  q close',
+        #entries, filter_label),
+    }
+    local map = {}
+    for _, e in ipairs(entries) do
+      local date     = e.deleted_at and e.deleted_at:sub(1, 10) or '?'
+      local rel_path = vim.fn.fnamemodify(e.original_path or '', ':~')
+      lines[#lines + 1] = string.format('  [%s] %s  (%s)',
+        date, e.title or '?', rel_path)
+      map[#lines] = e
+    end
+    if #entries == 0 then
+      lines[#lines + 1] = (state.filter and state.filter ~= '')
+        and '  (no trashed notes match)' or '  (trash is empty)'
+    end
+    return lines, map
+  end,
+  -- Deliberately no delete key of any kind — emptying stays exclusive to
+  -- :PKMEmptyTrash's typed "yes"/"no" confirmation. Do not add one here.
+  keymaps = {
+    ['<CR>'] = function(state, helpers)
+      local entry = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not entry then return end
+      if M.restore_note(entry) then
+        vim.notify(string.format("[pkm] restored '%s'", entry.title),
+          vim.log.levels.INFO)
+        local ok, views = pcall(require, 'pkm.views')
+        if ok then views.refresh_sidebar_if_open() end
+        helpers.refresh()
+      end
+    end,
+
+    ['/'] = function(state, helpers)
+      vim.fn.inputsave()
+      local query = vim.fn.input('Filter trash: ', state.filter or '')
+      vim.fn.inputrestore()
+      state.filter = (query and query ~= '') and query or nil
+      helpers.refresh()
+    end,
+  },
+})
+
+--- Open the trash browse/search/restore panel. No-op with a notification
+--- if trash is currently empty (matches the pre-panel :PKMRestoreNote
+--- behaviour — avoids opening a panel with nothing to show).
+---@return nil
+function M.open_restore_panel()
+  if #M.list() == 0 then
+    vim.notify('[pkm] trash is empty', vim.log.levels.INFO)
+    return
+  end
+  _restore_panel.open({ filter = '' })
+end
+
+-- Exposed for test/test_v160_p2.lua only; not part of the module's public API.
+M._restore_panel = _restore_panel
 
 return M
