@@ -676,7 +676,14 @@ end
 ---@param selected {type:string, short_id:string}
 function M.complete_insertion(selected)
     if not selected then return end
-    local citation = string.format("%s[%s]", selected.type, selected.short_id)
+    -- §9 convention: PKM structured citations are wrapped in a single outer
+    -- bracket pair, matching the general [text] external-citation marker's
+    -- visual form — see doc/CONVENTIONS.md. Purely cosmetic: every consumer
+    -- of the inner note[id]/bib[id] token (update_references' scanner,
+    -- goto_citation, PKMCitation highlighting, parse_citation) is
+    -- letter-anchored and substring-based, so the outer brackets are
+    -- transparent to all of them — confirmed by inspection, not live-tested.
+    local citation = string.format("[%s[%s]]", selected.type, selected.short_id)
     local row, col = unpack(vim.api.nvim_win_get_cursor(0))
     local line = vim.api.nvim_get_current_line()
     vim.api.nvim_set_current_line(line:sub(1, col) .. citation .. line:sub(col + 1))

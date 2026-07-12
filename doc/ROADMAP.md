@@ -26,7 +26,7 @@ The note namespace is intentionally **flat and global** — all notes share a si
 
 ## Current State
 
-**Current version:** v1.5.8. There is no separate release/dev split — all
+**Current version:** v1.5.9. There is no separate release/dev split — all
 work happens directly on `dev`; `main` holds periodic stable backups of
 `dev`, not an independently maintained release line. The upcoming work is
 organised under **Release Plan** below.
@@ -399,10 +399,7 @@ require('pkm').setup({
 
 ### Active
 
-Current version: **v1.5.7**. The next planned increments are **v1.5.8** and
-**v1.5.9** (patch — remaining phases of the correctness-and-robustness work),
-**v1.6.0** (minor), **v1.6.1** (patch), and **v1.7.0** (minor). See
-**Release Plan** below for the phase-by-phase breakdown.
+See "Current State" above.
 
 ---
 
@@ -624,6 +621,7 @@ fix: panel buffer hijack, view-create refresh, and rename consistency
 | File | Single-pass changes |
 |---|---|
 | `syntax.lua` | `PKMMetaComment` migrated from `matchadd()` (window-scoped, hard single-line limitation — not a regex problem, a Vim/Neovim platform constraint) to buffer-scoped extmarks (`nvim_buf_set_extmark`, natively multi-line via `end_row`/`end_col`). Pure-logic scanner (`find_meta_comments`) finds `((...))` spans — including across line breaks, via Lua string patterns' `.` matching newline — with a `MAX_META_COMMENT_LINES = 50` cap bounding the blast radius of a stray unmatched `((`. Rescanned on `enable()`, on `BufWritePost`, and (debounced, 150ms) on `TextChanged`/`TextChangedI`. `PKMCitation` unchanged — inherently single-line, `matchadd()` remains correct and simpler there. |
+| `keymaps.lua` | `PKMNetrwFixes` augroup (pre-existing, v1.5.1): added a `FileType netrw` guard detecting netrw loading into a `winfixbuf`-protected PKM panel window (sidebar/buffer panel) via the `winfixbuf`+`winfixwidth`/`winfixheight` option signature — `winfixbuf` alone doesn't block netrw's initial takeover of an unmodified buffer's window (confirmed via netrw's own docs: "the browsing window will take over that window" when unmodified), only its *subsequent* internal navigation, which is too late. Correction is deferred via `vim.schedule` rather than run synchronously, since the guard fires nested inside netrw's own still-executing command — synchronous mutation there was corrupting netrw's in-flight setup (empty listings) and, as a downstream consequence, briefly resurfacing the buffer-panel sole-window bug. |
 | docs | `CHANGELOG` (Fixed). |
 
 Not applicable, contrary to original plan:
@@ -1155,12 +1153,28 @@ the LLM assistant should decide when it is best to implement them):
         not be based on the buffer panel, since the buffer panel is meant to be used
         to organize the current session only.
     
-    - The final confirmation before creating a view/subview is unecessary. We
-  should either remove it or change it to a single keypress (`<CR>`) instead of
-  making the user type `yes`. Leave such multistep processes with confirmations
-  for dangerous tasks (views are safe to create and the process can easily
-  be reverted by deleting the view, if it was created by accident, or by updating it,
-  if it was created with a wrong parameter).
+    -   The final confirmation before creating a view/subview is unecessary. We
+        should either remove it or change it to a single keypress (`<CR>`)
+        instead of making the user type `yes`. Leave such multistep processes
+        with confirmations for dangerous tasks (views are safe to create and
+        the process can easily be reverted by deleting the view, if it was
+        created by accident, or by updating it, if it was created with a wrong
+        parameter).
+
+    -   bugfix: syntash highlighting recognizes numbers that start any line as
+        a list prefix, as long as it is in the correct indentation level and
+        order (e.g. `2.` will only be recognized if there is a previous item
+        with number `1.`). The issue is that it does not differentiate lines
+        that are wrapped from real new lines. so a text such as `1. <text
+        ocupying the first line> 1. ((the 1. is part of the wrapped text,
+        starting the next line) <remainder of text> will appear as `1. <list
+        item> \n \indentation ((e.g. four spaces)) 1. <sublist item>. A real
+        case where this happened was this text `1.  Observar as duas questões
+        discursivas, dispostas no edital [note[0205] - 1. Da Prova Discursiva].`,
+        which happened to wrap just at the second `1.`, which became highlighted.
+        But this `1.` is not a new list item, it is a pointer to `1. Da Prova Discursiva`
+        in `note[0205]`. Removing hard-wrapping is an option, but probably not
+        a good one, so evaluate alternatives.
 
 
 ### Distant goals (mid-term to long-term)

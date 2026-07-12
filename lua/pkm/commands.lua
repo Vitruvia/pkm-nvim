@@ -296,12 +296,20 @@ function M.register()
   end, { desc = 'Set title frontmatter field in current buffer (no disk write)' })
 
   vim.api.nvim_create_user_command('PKMAddTag', function(opts)
-    require('pkm.citations').add_tag(opts.args ~= '' and opts.args or nil)
-  end, { nargs = '?', desc = 'Append a tag to current buffer frontmatter (no disk write)' })
+    if opts.args ~= '' then
+      require('pkm.citations').add_tag(opts.args)
+    else
+      require('pkm.ui').open_tag_panel('add')
+    end
+  end, { nargs = '?', desc = 'Append a tag via the tag panel, or directly if an argument is given (no disk write)' })
 
   vim.api.nvim_create_user_command('PKMRemoveTag', function(opts)
-    require('pkm.citations').remove_tag(opts.args ~= '' and opts.args or nil)
-  end, { nargs = '?', desc = 'Remove a tag from current buffer frontmatter (no disk write)' })
+    if opts.args ~= '' then
+      require('pkm.citations').remove_tag(opts.args)
+    else
+      require('pkm.ui').open_tag_panel('remove')
+    end
+  end, { nargs = '?', desc = 'Remove a tag via the tag panel, or directly if an argument is given (no disk write)' })
 
   -- ---------------------------------------------------------------------------
   -- Navigation and linking

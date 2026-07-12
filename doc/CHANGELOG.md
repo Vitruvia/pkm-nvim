@@ -84,6 +84,14 @@
 
 ## [1.5.9] — 2026-7-10
 
+### Added
+- **`test/min_init.lua`** — the isolated headless-test harness referenced by
+  the Standing Verification Protocol since before this version but never
+  actually created. Self-locating (resolves repo root from its own path,
+  independent of CWD); disables ShaDa entirely (`shadafile = 'NONE'`) to
+  prevent `E138` from repeated rapid headless test runs; uses a disposable
+  `vim.fn.tempname()` scratch root.
+
 ### Fixed
 
 - **`((...))` meta-comments couldn't span multiple lines** — `PKMMetaComment`
@@ -100,6 +108,15 @@
   single-line, `matchadd()` remains the right tool there.
   PKMMode-exclusive by decision, matching `PKMCitation`'s existing scope;
   `after/syntax/markdown.vim` (the non-PKMMode fallback) is untouched.
+- **`:Ex`/`:Explore` from the sidebar or buffer panel silently hijacked the
+  panel window** — `winfixbuf` blocks ordinary buffer switches but not
+  netrw's initial takeover of an unmodified window; a `FileType netrw` guard
+  in `keymaps.lua` (`PKMNetrwFixes`) now detects this via window-local
+  option signature and reverts + reopens the panel, deferred via
+  `vim.schedule` to avoid mutating the window while netrw's own command is
+  still executing (an earlier synchronous version corrupted netrw's setup
+  and intermittently reintroduced the buffer-panel sole-window bug as a
+  side effect).
 
 ### Investigated, no change needed
 

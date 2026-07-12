@@ -1,42 +1,37 @@
 -- =============================================================================
 -- pkm.ui — Fallback UI components (no Telescope dependency)
 -- =============================================================================
--- Dependencies : pkm.yaml, pkm.utils, pkm.citations (lazy), pkm.index (lazy),
---                pkm.views (lazy)
+-- Dependencies : pkm.yaml, pkm.utils, pkm.panel, pkm.citations (lazy),
+--                pkm.index (lazy), pkm.views (lazy)
 -- Consumed by  : pkm.commands, pkm.telescope (fallback)
 --
+-- Buffer panel and tag panel are both built on pkm.panel.create() (v1.6.0
+-- Phase 1). This module owns each panel's build_lines/keymaps/mode-specific
+-- logic; panel.lua owns the shared window/buffer/augroup lifecycle.
+--
 -- Public API:
---   setup(user_config)       → Initialize with resolved PKM config
---   browse_tags()            → Two-level tag → file picker
---   browse(filter_expr?)     → Prompt for filter expression, eval, vim.ui.select results
+--   setup(user_config)        → Initialize with resolved PKM config
+--   browse_tags()              → Two-level tag → file picker
+--   browse(filter_expr?)       → Prompt for filter expression, eval, vim.ui.select results
 --   browse_paths(title, paths) → Show scoped path list via vim.ui.select (sorted)
---   browse_recent(n?)         → n most-recently-modified notes via vim.ui.select
---   insert_citation_ui()     → Context-aware citation picker fallback (no Telescope);
---                               sorted by view membership and shared tags
---   merge_tags_ui()          → Interactive tag merge (fallback for PKMMergeTags)
---   show_stats()             → Show note counts via vim.notify
---   get_display_mode()    → 'filename' | 'title'
---   toggle_display_mode() → toggle and return new mode
---   refresh_bufpanel()    → refresh panel from outside
---   toggle_bufpanel()  → toggle the persistent bottom buffer-list panel (per-tabpage)
---   is_bufpanel_open()   → boolean, whether buffer panel is open in current tabpage
+--   browse_recent(n?)          → n most-recently-modified notes via vim.ui.select
+--   insert_citation_ui()       → Context-aware citation picker fallback (no Telescope);
+--                                 sorted by view membership and shared tags
+--   merge_tags_ui()            → Interactive tag merge (fallback for PKMMergeTags)
+--   show_stats()               → Show note counts via vim.notify
+--   get_display_mode()         → 'filename' | 'title'
+--   toggle_display_mode()      → toggle and return new mode
+--   refresh_bufpanel()         → refresh panel from outside
+--   toggle_bufpanel()          → toggle the persistent bottom buffer-list panel (per-tabpage)
+--   is_bufpanel_open()         → boolean, whether buffer panel is open in current tabpage
+--   open_tag_panel(mode)       → open searchable add/remove tag panel ('add'|'remove')
 -- =============================================================================
 local M = {}
 
 local utils = require('pkm.utils')
+local panel = require('pkm.panel')
 local config = {}
 local _display_mode = 'filename'  -- 'filename' | 'title'
-
--- Per-tabpage bufpanel state. Keyed by nvim_get_current_tabpage().
-local _tabs = {}
-
-local function get_tab()
-  local id = vim.api.nvim_get_current_tabpage()
-  if not _tabs[id] then
-    _tabs[id] = { win = nil, buf = nil, augroup = nil, map = {} }
-  end
-  return _tabs[id]
-end
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 local _TYPE_ABBREV = {
@@ -67,13 +62,14 @@ end
 -- =============================================================================
 
 --- Build buffer panel display lines.
+---@param state table  This panel's per-tab state (from pkm.panel)
 ---@return string[], table  lines, buf_map (1-based line → bufnr)
-local function bufpanel_build_lines()
+local function bufpanel_build_lines(state)
   local index  = require('pkm.index')
   local listed = {}
 
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if bufnr ~= get_tab().buf
+    if bufnr ~= state.buf
     and vim.api.nvim_buf_is_valid(bufnr)
     and vim.bo[bufnr].buflisted
     and vim.bo[bufnr].buftype == ''
@@ -84,7 +80,6 @@ local function bufpanel_build_lines()
     end
   end
 
-  -- Sort by mtime — most recently modified buffer first.
   table.sort(listed, function(a, b)
     local na = vim.api.nvim_buf_get_name(a)
     local nb = vim.api.nvim_buf_get_name(b)
@@ -141,51 +136,16 @@ local function bufpanel_build_lines()
   return lines, buf_map
 end
 
---- Refresh buffer panel content in place.
-local function bufpanel_refresh()
-  local t = get_tab()
-  if not t.buf or not vim.api.nvim_buf_is_valid(t.buf) then return end
-  local lines, buf_map = bufpanel_build_lines()
-  t.map = buf_map
-  vim.api.nvim_set_option_value('modifiable', true,  { buf = t.buf })
-  vim.api.nvim_buf_set_lines(t.buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = t.buf })
-  if t.win and vim.api.nvim_win_is_valid(t.win) then
-    vim.api.nvim_win_set_height(t.win, math.min(#lines + 1, 8))
-  end
-end
-
---- Ensure at least one main editing window exists alongside the buffer panel.
---- Called after bdelete operations to prevent the panel from becoming the sole
---- non-float window, which breaks Neovim's window layout.
-local function ensure_main_window()
-  local t = get_tab()
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if win ~= t.win
-    and vim.api.nvim_win_get_config(win).relative == '' then
-      return
-    end
-  end
-  if t.win and vim.api.nvim_win_is_valid(t.win) then
-    local cur = vim.api.nvim_get_current_win()
-    vim.api.nvim_set_current_win(t.win)
-    vim.cmd('noautocmd aboveleft new')
-    vim.bo.bufhidden = 'wipe'
-    if vim.api.nvim_win_is_valid(cur) then
-      vim.api.nvim_set_current_win(cur)
-    end
-  end
-end
-
 --- Switch all non-panel, non-float windows in the current tabpage that
 --- are showing bufnr away from it before a bdelete call.
 --- Prefers the window's alternate buffer; falls back to any other listed
 --- buffer; last resort is a new empty buffer. Prevents bdelete from
 --- closing windows unintentionally.
-local function detach_buf_from_wins(bufnr)
-  local ct = get_tab()
+---@param bufnr integer
+---@param panel_win integer  the buffer panel's own window, to exclude
+local function detach_buf_from_wins(bufnr, panel_win)
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if win ~= ct.win
+    if win ~= panel_win
     and vim.api.nvim_win_get_config(win).relative == ''
     and vim.api.nvim_win_get_buf(win) == bufnr then
       vim.api.nvim_win_call(win, function()
@@ -211,6 +171,127 @@ local function detach_buf_from_wins(bufnr)
   end
 end
 
+local _bufpanel = panel.create({
+  name           = 'bufpanel',
+  split_cmd      = 'noautocmd botright split',
+  win_opts       = { winfixheight = true, colorcolumn = '' },
+  refresh_events = { 'BufAdd', 'BufDelete', 'BufWipeout', 'BufModifiedSet', 'BufEnter' },
+  focus_on_open  = false,  -- glanceable, not modal — matches pre-port behaviour
+  build_lines    = bufpanel_build_lines,
+  resize = function(state, lines)
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 8))
+    end
+  end,
+  keymaps = {
+    ['<CR>'] = function(state)
+      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+
+      local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
+      local target
+      local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
+      if alt_id ~= 0 and alt_id ~= state.win
+      and vim.api.nvim_win_is_valid(alt_id)
+      and vim.api.nvim_win_get_config(alt_id).relative == '' then
+        if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(alt_id)].filetype] then
+          target = alt_id
+        end
+      end
+      if not target then
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          if win ~= state.win
+          and vim.api.nvim_win_get_config(win).relative == '' then
+            if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+              target = win; break
+            end
+          end
+        end
+      end
+      if target then
+        vim.api.nvim_set_current_win(target)
+        vim.api.nvim_set_current_buf(bufnr)
+      else
+        vim.api.nvim_set_current_win(state.win)
+        vim.cmd('aboveleft new')
+        vim.bo.bufhidden = 'wipe'
+        vim.api.nvim_set_current_buf(bufnr)
+      end
+    end,
+
+    ['d'] = function(state, helpers)
+      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+
+      if vim.bo[bufnr].modified then
+        local name  = vim.api.nvim_buf_get_name(bufnr)
+        local label = name ~= '' and vim.fn.fnamemodify(name, ':t') or '[No Name]'
+        local choice = vim.fn.confirm(
+          string.format("Save changes to '%s' before closing?", label),
+          '&Yes\n&No\n&Cancel', 1)
+        if choice ~= 1 and choice ~= 2 then
+          return
+        end
+        if choice == 1 then
+          local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function() vim.cmd('write') end)
+          if not ok then
+            vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
+            return
+          end
+        end
+      end
+
+      detach_buf_from_wins(bufnr, state.win)
+      local force = vim.bo[bufnr].modified and '!' or ''
+      local ok, err = pcall(vim.cmd, 'bdelete' .. force .. ' ' .. bufnr)
+      if not ok then
+        vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
+      else
+        helpers.ensure_main_window()
+      end
+    end,
+
+    ['D'] = function(state, helpers)
+      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+      detach_buf_from_wins(bufnr, state.win)
+      local ok, err = pcall(vim.cmd, 'bdelete! ' .. bufnr)
+      if not ok then
+        vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
+      else
+        helpers.ensure_main_window()
+      end
+    end,
+
+    ['w'] = function(state, helpers)
+      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+      local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function()
+        vim.cmd('write')
+      end)
+      if not ok then
+        vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
+        return
+      end
+      detach_buf_from_wins(bufnr, state.win)
+      pcall(vim.cmd, 'bdelete ' .. bufnr)
+      helpers.ensure_main_window()
+    end,
+
+    ['r'] = function(_, helpers)
+      helpers.refresh()
+      vim.notify('[pkm] buffer panel refreshed', vim.log.levels.INFO)
+    end,
+
+    ['T'] = function(_, helpers)
+      local mode = M.toggle_display_mode()
+      helpers.refresh()
+      require('pkm.views').refresh_sidebar_if_open()
+      vim.notify('[pkm] note labels: ' .. mode, vim.log.levels.INFO)
+    end,
+  },
+})
+
 --- Return the current note label display mode.
 ---@return string  'filename' | 'title'
 function M.get_display_mode()
@@ -226,7 +307,7 @@ end
 
 --- Refresh the buffer panel from outside this module.
 function M.refresh_bufpanel()
-  bufpanel_refresh()
+  _bufpanel.refresh()
 end
 
 --- Toggle the persistent bottom buffer-list panel.
@@ -234,244 +315,128 @@ end
 --- <CR> opens buffer in main window. d/D close it. w saves and closes.
 --- r refreshes. q/<Esc> closes the panel.
 function M.toggle_bufpanel()
-  local t = get_tab()
-  local my_tab_id = vim.api.nvim_get_current_tabpage()
-
-  if t.win and not vim.api.nvim_win_is_valid(t.win) then
-    if t.augroup then pcall(vim.api.nvim_del_augroup_by_id, t.augroup) end
-    _tabs[my_tab_id] = nil
-    t = get_tab()
-  end
-
-  if t.win then
-    vim.api.nvim_win_close(t.win, true)
-    return
-  end
-
-  local prev_win = vim.api.nvim_get_current_win()
-
-  vim.cmd('noautocmd botright split')
-  t.win = vim.api.nvim_get_current_win()
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  t.buf = buf
-  vim.api.nvim_win_set_buf(t.win, buf)
-
-  for opt, val in pairs({
-    winfixbuf = true, winfixheight = true, wrap = false,
-    number = false, cursorline = true, signcolumn = 'no',
-  }) do
-    vim.api.nvim_set_option_value(opt, val, { win = t.win })
-  end
-  vim.api.nvim_set_option_value('colorcolumn', '', { win = t.win })  -- ← add
-
-  for opt, val in pairs({
-    bufhidden = 'wipe', buftype = 'nofile', swapfile = false,
-  }) do
-    vim.api.nvim_set_option_value(opt, val, { buf = buf })
-  end
-
-  vim.api.nvim_set_option_value('filetype', 'pkm-bufpanel', { buf = buf })
-
-  local function refresh_bufpanel_sl()
-    vim.schedule(function()
-      if vim.api.nvim_win_is_valid(t.win) then
-        vim.api.nvim_set_option_value(
-          'statusline',
-          '  PKM Buffers  · CR open  · d close  · D force  · w save+close  · r refresh  · T title  · q close',
-          { win = t.win })
-      end
-    end)
-  end
-  refresh_bufpanel_sl()
-  vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
-    buffer   = buf,
-    callback = refresh_bufpanel_sl,
-  })
-
-  local lines, buf_map = bufpanel_build_lines()
-  t.map = buf_map
-  vim.api.nvim_set_option_value('modifiable', true,  { buf = buf })
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-  vim.api.nvim_win_set_height(t.win, math.min(#lines + 1, 8))
-
-  t.augroup = vim.api.nvim_create_augroup(
-    'PKMBufPanel_' .. my_tab_id, { clear = true })
-  for _, event in ipairs({ 'BufAdd', 'BufDelete', 'BufWipeout', 'BufModifiedSet', 'BufEnter' }) do
-    vim.api.nvim_create_autocmd(event, {
-      group    = t.augroup,
-      callback = function() vim.schedule(bufpanel_refresh) end,
-    })
-  end
-
-  -- Safety net: ensure_main_window() already prevents the panel from
-  -- becoming the sole window after the panel's own d/D/w close a buffer.
-  -- This generalizes that to every path — closing the last editing window
-  -- via plain :q, :bd, <C-w>c, etc. typed directly in it, with the panel
-  -- left open, was never covered by those three keymaps and is a
-  -- pre-existing gap, not something introduced by recent changes.
-  vim.api.nvim_create_autocmd('WinClosed', {
-    group    = t.augroup,
-    callback = function()
-      vim.schedule(function()
-        if t.win and vim.api.nvim_win_is_valid(t.win) then
-          ensure_main_window()
-        end
-      end)
-    end,
-  })
-
-  vim.api.nvim_create_autocmd('BufWipeout', {
-    buffer   = buf,
-    once     = true,
-    callback = function()
-      local old_t = _tabs[my_tab_id]
-      if old_t and old_t.augroup then
-        pcall(vim.api.nvim_del_augroup_by_id, old_t.augroup)
-      end
-      _tabs[my_tab_id] = nil
-    end,
-  })
-
-  local ko = { noremap = true, silent = true, buffer = buf }
-
-  vim.keymap.set('n', '<CR>', function()
-    local ct    = get_tab()
-    local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
-    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-
-    local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
-    local target
-    local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
-    if alt_id ~= 0 and alt_id ~= ct.win
-    and vim.api.nvim_win_is_valid(alt_id)
-    and vim.api.nvim_win_get_config(alt_id).relative == '' then
-      if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(alt_id)].filetype] then
-        target = alt_id
-      end
-    end
-    if not target then
-      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if win ~= ct.win
-        and vim.api.nvim_win_get_config(win).relative == '' then
-          if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
-            target = win; break
-          end
-        end
-      end
-    end
-    if target then
-      vim.api.nvim_set_current_win(target)
-      vim.api.nvim_set_current_buf(bufnr)
-    else
-      vim.api.nvim_set_current_win(ct.win)
-      vim.cmd('aboveleft new')
-      vim.bo.bufhidden = 'wipe'
-      vim.api.nvim_set_current_buf(bufnr)
-    end
-  end, ko)
-
-  vim.keymap.set('n', 'd', function()
-    local ct    = get_tab()
-    local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
-    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-
-    if vim.bo[bufnr].modified then
-      local name  = vim.api.nvim_buf_get_name(bufnr)
-      local label = name ~= '' and vim.fn.fnamemodify(name, ':t') or '[No Name]'
-      local choice = vim.fn.confirm(
-        string.format("Save changes to '%s' before closing?", label),
-        '&Yes\n&No\n&Cancel', 1)
-      if choice ~= 1 and choice ~= 2 then
-        -- Cancel, <Esc>, or dialog dismissed: leave the buffer and its
-        -- window exactly as they were.
-        return
-      end
-      if choice == 1 then
-        local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function() vim.cmd('write') end)
-        if not ok then
-          vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
-          return
-        end
-      end
-      -- choice == 2 (No): fall through and force-close below, discarding
-      -- the unsaved changes.
-    end
-
-    -- Only detach the buffer from its window now that we know the close
-    -- will actually succeed — previously this ran unconditionally before
-    -- attempting bdelete, so a modified buffer's window got switched away
-    -- even when the subsequent bdelete then failed, forcing a trip back
-    -- to find the buffer just to save it.
-    detach_buf_from_wins(bufnr)
-    local force = vim.bo[bufnr].modified and '!' or ''
-    local ok, err = pcall(vim.cmd, 'bdelete' .. force .. ' ' .. bufnr)
-    if not ok then
-      vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
-    else
-      ensure_main_window()
-    end
-  end, ko)
-
-  vim.keymap.set('n', 'D', function()
-    local ct    = get_tab()
-    local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
-    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-    detach_buf_from_wins(bufnr)
-    local ok, err = pcall(vim.cmd, 'bdelete! ' .. bufnr)
-    if not ok then
-      vim.notify('[pkm] ' .. (err or 'cannot close buffer'), vim.log.levels.WARN)
-    else
-      ensure_main_window()
-    end
-  end, ko)
-
-  vim.keymap.set('n', 'w', function()
-    local ct    = get_tab()
-    local bufnr = ct.map[vim.api.nvim_win_get_cursor(ct.win)[1]]
-    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-    local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function()
-      vim.cmd('write')
-    end)
-    if not ok then
-      vim.notify('[pkm] write failed: ' .. (err or ''), vim.log.levels.ERROR)
-      return
-    end
-    detach_buf_from_wins(bufnr)
-    pcall(vim.cmd, 'bdelete ' .. bufnr)
-    ensure_main_window()
-  end, ko)
-
-  vim.keymap.set('n', 'r', function()
-    bufpanel_refresh()
-    vim.notify('[pkm] buffer panel refreshed', vim.log.levels.INFO)
-  end, ko)
-
-  vim.keymap.set('n', 'T', function()
-    local mode = M.toggle_display_mode()
-    bufpanel_refresh()
-    require('pkm.views').refresh_sidebar_if_open()
-    vim.notify('[pkm] note labels: ' .. mode, vim.log.levels.INFO)
-  end, ko)
-
-  local function close_panel()
-    local ct = get_tab()
-    if ct.win and vim.api.nvim_win_is_valid(ct.win) then
-      vim.api.nvim_win_close(ct.win, true)
-    end
-  end
-  vim.keymap.set('n', 'q',     close_panel, ko)
-  vim.keymap.set('n', '<Esc>', close_panel, ko)
-
-  vim.api.nvim_set_current_win(prev_win)
+  _bufpanel.toggle()
 end
 
 --- Return true if the buffer panel is currently open in the current tabpage.
 ---@return boolean
 function M.is_bufpanel_open()
-  local t = get_tab()
-  return t.win ~= nil and vim.api.nvim_win_is_valid(t.win)
+  return _bufpanel.is_open()
+end
+
+-- =============================================================================
+-- SECTION: Tag panel
+-- =============================================================================
+
+local _tag_panel = panel.create({
+  name          = 'tagpanel',
+  split_cmd     = 'noautocmd botright split',
+  focus_on_open = true,  -- unlike bufpanel: this is a modal-style picker
+  resize = function(state, lines)
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 12))
+    end
+  end,
+  build_lines = function(state)
+    local all_tags = require('pkm.citations').get_all_tags()
+    local candidates
+
+    if state.mode == 'remove' then
+      candidates = state.buffer_tags or {}
+    else
+      local present = {}
+      for _, t in ipairs(state.buffer_tags or {}) do present[t] = true end
+      candidates = {}
+      for _, t in ipairs(all_tags) do
+        if not present[t] then candidates[#candidates + 1] = t end
+      end
+    end
+
+    if state.filter and state.filter ~= '' then
+      local needle = state.filter:lower()
+      local filtered = {}
+      for _, t in ipairs(candidates) do
+        if t:lower():find(needle, 1, true) then filtered[#filtered + 1] = t end
+      end
+      candidates = filtered
+    end
+
+    local mode_label   = state.mode == 'remove' and 'Remove' or 'Add'
+    local filter_label = (state.filter and state.filter ~= '')
+      and ('  [filter: ' .. state.filter .. ']') or ''
+    local lines = {
+      string.format('  %s Tag  (%d)%s  <CR> select  / search  q close',
+        mode_label, #candidates, filter_label),
+    }
+    local map = {}
+    for _, t in ipairs(candidates) do
+      lines[#lines + 1] = '  ' .. t
+      map[#lines] = t
+    end
+    if #candidates == 0 then
+      lines[#lines + 1] = (state.filter and state.filter ~= '')
+        and '  (no tags match)' or '  (no tags available)'
+    end
+    return lines, map
+  end,
+  keymaps = {
+    ['<CR>'] = function(state, helpers)
+      local tag = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not tag then return end
+      -- Close and restore focus to the original note window BEFORE calling
+      -- into citations.add_tag/remove_tag — both operate on "current
+      -- buffer" (buffer 0), which while this panel is still focused would
+      -- resolve to the panel's own scratch buffer, not the note.
+      -- restore_focus(state): close() wipes this panel's own buffer
+      -- (bufhidden=wipe) synchronously, which clears the _tabs entry before
+      -- close() returns — a bare restore_focus() would call get_tab() fresh
+      -- and get a brand-new empty table, not the one holding prev_win.
+      -- Passing the already-captured `state` sidesteps that.
+      helpers.close()
+      helpers.restore_focus(state)
+      local citations = require('pkm.citations')
+      if state.mode == 'remove' then
+        citations.remove_tag(tag)
+      else
+        citations.add_tag(tag)
+      end
+    end,
+
+    ['/'] = function(state, helpers)
+      vim.fn.inputsave()
+      local query = vim.fn.input('Filter tags: ', state.filter or '')
+      vim.fn.inputrestore()
+      state.filter = (query and query ~= '') and query or nil
+      helpers.refresh()
+    end,
+  },
+})
+
+--- Open the tag panel to add or remove a tag on the current buffer.
+--- Buffer-only mutation via citations.add_tag/remove_tag — no
+--- index.invalidate (matches the existing buffer-only metadata contract;
+--- the underlying citations functions are unchanged by this port).
+---@param mode string 'add'|'remove'
+function M.open_tag_panel(mode)
+  local yaml_m = require('pkm.yaml')
+  local lines  = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local fm     = yaml_m.parse_frontmatter(lines)
+  if not fm then
+    vim.notify('[pkm] no frontmatter found', vim.log.levels.WARN)
+    return
+  end
+
+  local buffer_tags = {}
+  if type(fm.tags) == 'table' then
+    for _, t in ipairs(fm.tags) do buffer_tags[#buffer_tags + 1] = tostring(t) end
+  end
+
+  if mode == 'remove' and #buffer_tags == 0 then
+    vim.notify('[pkm] no tags to remove', vim.log.levels.INFO)
+    return
+  end
+
+  _tag_panel.open({ mode = mode, buffer_tags = buffer_tags, filter = '' })
 end
 
 -- =============================================================================
@@ -481,15 +446,30 @@ end
 function M.setup(user_config)
   config = user_config
   _display_mode = (user_config.display_mode == 'title') and 'title' or 'filename'
-  local augroup = vim.api.nvim_create_augroup('PKMUITabs', { clear = true })
-  vim.api.nvim_create_autocmd('TabClosed', {
-    group    = augroup,
-    callback = function()
-      local live = {}
-      for _, tp in ipairs(vim.api.nvim_list_tabpages()) do live[tp] = true end
-      for id in pairs(_tabs) do
-        if not live[id] then _tabs[id] = nil end
+
+  -- Bufpanel statusline: set once per buffer creation, re-asserted on
+  -- WinEnter/BufWinEnter — mirrors the pre-port behaviour exactly. Mirrors
+  -- the FileType-hook pattern already established for netrw in keymaps.lua
+  -- (PKMNetrwFixes), rather than needing panel.lua to expose an on-open hook.
+  vim.api.nvim_create_autocmd('FileType', {
+    pattern  = 'pkm-bufpanel',
+    callback = function(ev)
+      local function set_sl()
+        vim.schedule(function()
+          local win = vim.fn.bufwinid(ev.buf)
+          if win ~= -1 then
+            vim.api.nvim_set_option_value(
+              'statusline',
+              '  PKM Buffers  · CR open  · d close  · D force  · w save+close  · r refresh  · T title  · q close',
+              { win = win })
+          end
+        end)
       end
+      set_sl()
+      vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
+        buffer   = ev.buf,
+        callback = set_sl,
+      })
     end,
   })
 end
@@ -820,5 +800,9 @@ function M.show_stats()
 
   vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
 end
+
+-- Exposed for test/test_v160_p1.lua only; not part of the module's public API.
+M._bufpanel  = _bufpanel
+M._tag_panel = _tag_panel
 
 return M
