@@ -761,47 +761,77 @@ local function telescope_view_picker(name, paths)
   }):find()
 end
 
---- Scrollable float picker. <CR> opens note at cursor; q/<Esc> closes.
+--- Scrollable float picker. <CR> opens note/subview at cursor; / filters
+--- in place (refreshes the same buffer, does not open a new window —
+--- matches the tag-panel/trash-panel convention); q/<Esc> closes.
 local function float_view_picker(name, paths)
-  local index    = require('pkm.index')
-  local children = get_view_children(name)
-  local sorted   = sort_paths_by_type(paths)
+  local index       = require('pkm.index')
+  local children    = get_view_children(name)
+  local all_sorted  = sort_paths_by_type(paths)
 
-  local header = string.format(
-    '  View: %s  ·  %d note%s  ·  <CR> open  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  q close',
-    name, #sorted + #children, (#sorted + #children) == 1 and '' or 's')
-  local lines       = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
-  local line_paths  = {}    -- 1-based line index → path (notes)
-  local line_subs   = {}    -- 1-based line index → child name (subviews)
+  local buf, win
+  local line_paths, line_subs = {}, {}
+  local filter_query = nil
 
-  -- Subviews first
-  for _, child in ipairs(children) do
-    local c_count = #M.match_all(child)
-    lines[#lines + 1] = string.format('  [v] %s  (%d notes)', child, c_count)
-    line_subs[#lines] = child
+  local function render()
+    local sorted, filtered_children = all_sorted, children
+    if filter_query and filter_query ~= '' then
+      local needle = filter_query:lower()
+      local fc, fp = {}, {}
+      for _, c in ipairs(children) do
+        if c:lower():find(needle, 1, true) then fc[#fc + 1] = c end
+      end
+      for _, p in ipairs(all_sorted) do
+        local e     = index.get(p)
+        local title = (e and e.title or vim.fn.fnamemodify(p, ':t:r')):lower()
+        if title:find(needle, 1, true) then fp[#fp + 1] = p end
+      end
+      filtered_children, sorted = fc, fp
+    end
+
+    local total         = #sorted + #filtered_children
+    local filter_label   = (filter_query and filter_query ~= '')
+      and ('  [filter: ' .. filter_query .. ']') or ''
+    local header = string.format(
+      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / search  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  q close',
+      name, total, total == 1 and '' or 's', filter_label)
+    local lines = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
+    line_paths, line_subs = {}, {}
+
+    for _, child in ipairs(filtered_children) do
+      local c_count = #M.match_all(child)
+      lines[#lines + 1] = string.format('  [v] %s  (%d notes)', child, c_count)
+      line_subs[#lines] = child
+    end
+    if #filtered_children > 0 and #sorted > 0 then
+      lines[#lines + 1] = '  ' .. string.rep('─', 52)
+    end
+    for _, p in ipairs(sorted) do
+      local e         = index.get(p)
+      local note_type = e and e.note_type or 'other'
+      local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
+      lines[#lines + 1] = '  ' .. type_prefix(note_type) .. ' ' .. title
+      line_paths[#lines] = p
+    end
+    if total == 0 then
+      lines[#lines + 1] = (filter_query and filter_query ~= '')
+        and '  (no matches)' or '  (empty)'
+    end
+
+    vim.api.nvim_set_option_value('modifiable', true, { buf = buf })
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+    if #lines >= 3 and vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_set_cursor(win, { 3, 2 })
+    end
   end
 
-  if #children > 0 and #sorted > 0 then
-    lines[#lines + 1] = '  ' .. string.rep('─', 52)
-  end
+  buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = buf })
 
-  -- Notes
-  for _, p in ipairs(sorted) do
-    local e         = index.get(p)
-    local note_type = e and e.note_type or 'other'
-    local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
-    lines[#lines + 1] = '  ' .. type_prefix(note_type) .. ' ' .. title
-    line_paths[#lines] = p
-  end
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
-
-  local width  = math.min(math.max(#header + 4, 60), vim.o.columns - 4)
-  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.7))
-  local win    = vim.api.nvim_open_win(buf, true, {
+  local width  = math.min(math.max(70, #name + 20), vim.o.columns - 4)
+  local height = math.min(#all_sorted + #children + 6, math.floor(vim.o.lines * 0.7))
+  win = vim.api.nvim_open_win(buf, true, {
     relative  = 'editor',
     width     = width,
     height    = height,
@@ -813,7 +843,7 @@ local function float_view_picker(name, paths)
     title_pos = 'center',
   })
 
-  if #lines >= 3 then vim.api.nvim_win_set_cursor(win, { 3, 2 }) end
+  render()
 
   local function close()
     if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
@@ -862,79 +892,22 @@ local function float_view_picker(name, paths)
     end)
   end
 
+  local function do_search()
+    vim.fn.inputsave()
+    local query = vim.fn.input('Filter: ', filter_query or '')
+    vim.fn.inputrestore()
+    filter_query = (query and query ~= '') and query or nil
+    render()
+  end
+
   local ko = { noremap = true, silent = true, buffer = buf }
   vim.keymap.set('n', '<CR>',  open_at_cursor, ko)
+  vim.keymap.set('n', '/',     do_search,      ko)
   vim.keymap.set('n', '<C-b>', go_back,        ko)
   vim.keymap.set('n', '<C-p>', go_parent,      ko)
   vim.keymap.set('n', '<C-s>', go_children,    ko)
   vim.keymap.set('n', 'q',     close,          ko)
   vim.keymap.set('n', '<Esc>', close,          ko)
-end
-
---- Telescope search results, scoped to a view's notes, with a way back to
---- the views tree. telescope.browse_paths (shared, used by unrelated
---- callers like :PKMOrphans) has no such concept.
----@param name  string
----@param paths string[]
-local function telescope_scoped_search_picker(name, paths)
-  local pickers       = require('telescope.pickers')
-  local finders        = require('telescope.finders')
-  local actions         = require('telescope.actions')
-  local action_state    = require('telescope.actions.state')
-  local previewers      = require('telescope.previewers')
-  local sorters          = require('telescope.sorters')
-  local index            = require('pkm.index')
-
-  local sorted  = sort_paths_by_type(paths)
-  local entries = {}
-  for _, p in ipairs(sorted) do
-    local e         = index.get(p)
-    local note_type = e and e.note_type or 'other'
-    local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
-    entries[#entries + 1] = {
-      value = p, display = type_prefix(note_type) .. ' ' .. title,
-      ordinal = string.format('%05d', #entries + 1),
-    }
-  end
-
-  pickers.new({
-    sorting_strategy = 'ascending',
-    layout_config    = { prompt_position = 'top' },
-  }, {
-    prompt_title = string.format(
-      'Search: %s  (%d note%s)  <C-b> back to views',
-      name, #sorted, #sorted == 1 and '' or 's'),
-    finder = finders.new_dynamic({
-      fn = function(prompt)
-        if not prompt or prompt == '' then return entries end
-        local needle = prompt:lower()
-        local filtered = {}
-        for _, e in ipairs(entries) do
-          if e.display:lower():find(needle, 1, true) then
-            filtered[#filtered + 1] = e
-          end
-        end
-        return filtered
-      end,
-      entry_maker = function(e) return e end,
-    }),
-    sorter    = sorters.Sorter:new({ scoring_function = function() return 0 end }),
-    previewer = previewers.vim_buffer_cat.new({}),
-    attach_mappings = function(prompt_bufnr, map)
-      actions.select_default:replace(function()
-        local entry = action_state.get_selected_entry()
-        actions.close(prompt_bufnr)
-        if entry then vim.cmd('edit ' .. vim.fn.fnameescape(entry.value)) end
-      end)
-      local function go_back()
-        actions.close(prompt_bufnr)
-        vim.schedule(function() M.list_views() end)
-      end
-      map('i', '<C-b>', go_back)
-      map('n', '<C-b>', go_back)
-      return true
-    end,
-  }):find()
 end
 
 --- Telescope tree picker over all defined views.
@@ -970,7 +943,7 @@ local function telescope_views_tree_picker()
     sorting_strategy = 'ascending',
     layout_config    = { prompt_position = 'top' },
   }, {
-    prompt_title = 'PKM Views  ·  <C-f> search panel',
+    prompt_title = 'PKM Views',
     finder = finders.new_dynamic {
       fn = function(prompt)
         if not prompt or prompt == '' then return items end
@@ -995,81 +968,9 @@ local function telescope_views_tree_picker()
         if sel then M.open(sel.value) end
       end)
 
-      local function search_current()
-        local sel = action_state.get_selected_entry()
-        if not sel then return end
-        actions.close(prompt_bufnr)
-        vim.schedule(function()
-          telescope_scoped_search_picker(sel.value, M.match_all(sel.value))
-        end)
-      end
-
-      map('i', '<C-f>', search_current)
-      map('n', '<C-f>', search_current)
-
       return true
     end,
   }):find()
-end
-
---- Scrollable float search results, scoped to a view's notes, with a way
---- back to the views tree. The generic ui.browse_paths has no such concept
---- — it's shared by unrelated callers like :PKMOrphans, which have nowhere
---- sensible to go "back" to.
----@param name  string
----@param paths string[]
-local function float_scoped_search(name, paths)
-  local index = require('pkm.index')
-  local header = string.format(
-    '  Search: %s  ·  %d note%s  ·  <CR> open  ·  <C-b> back to views  ·  q/<Esc> close',
-    name, #paths, #paths == 1 and '' or 's')
-  local lines      = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
-  local line_paths = {}
-
-  local sorted = sort_paths_by_type(paths)
-  for _, p in ipairs(sorted) do
-    local e         = index.get(p)
-    local note_type = e and e.note_type or 'other'
-    local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
-    lines[#lines + 1] = '  ' .. type_prefix(note_type) .. ' ' .. title
-    line_paths[#lines] = p
-  end
-  if #sorted == 0 then lines[#lines + 1] = '  (no notes)' end
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
-
-  local width  = math.min(math.max(#header + 4, 60), vim.o.columns - 4)
-  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.7))
-  local win    = vim.api.nvim_open_win(buf, true, {
-    relative  = 'editor', width = width, height = height,
-    col       = math.floor((vim.o.columns - width)  / 2),
-    row       = math.floor((vim.o.lines   - height) / 2),
-    style     = 'minimal', border = 'rounded',
-    title     = ' Search Panel ', title_pos = 'center',
-  })
-  if #lines >= 3 then vim.api.nvim_win_set_cursor(win, { 3, 2 }) end
-
-  local function close()
-    if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
-  end
-
-  local ko = { noremap = true, silent = true, buffer = buf }
-  vim.keymap.set('n', '<CR>', function()
-    local row = vim.api.nvim_win_get_cursor(win)[1]
-    if line_paths[row] then
-      close()
-      vim.cmd('edit ' .. vim.fn.fnameescape(line_paths[row]))
-    end
-  end, ko)
-  vim.keymap.set('n', '<C-b>', function()
-    close()
-    vim.schedule(function() M.list_views() end)
-  end, ko)
-  vim.keymap.set('n', 'q',     close, ko)
-  vim.keymap.set('n', '<Esc>', close, ko)
 end
 
 --- Scrollable float tree picker over all defined views.
@@ -1082,7 +983,7 @@ local function float_views_tree_picker()
     return
   end
 
-  local header = '  PKM Views  ·  <CR> open  ·  <C-f> search panel  ·  q/<Esc> close'
+  local header = '  PKM Views  ·  <CR> open  ·  q/<Esc> close'
   local lines  = { header, '  ' .. string.rep('─', math.max(#header - 2, 20)) }
   local names  = {}  -- line number → view name (only view lines, not header)
 
@@ -1124,15 +1025,6 @@ local function float_views_tree_picker()
   vim.keymap.set('n', '<CR>', function()
     local name = names[vim.api.nvim_win_get_cursor(win)[1]]
     if name then close(); M.open(name) end
-  end, ko)
-
-  vim.keymap.set('n', '<C-f>', function()
-    local name = names[vim.api.nvim_win_get_cursor(win)[1]]
-    if not name then return end
-    close()
-    vim.schedule(function()
-      float_scoped_search(name, M.match_all(name))
-    end)
   end, ko)
 
   vim.keymap.set('n', 'q',     close, ko)

@@ -82,7 +82,7 @@
 
 ---
 
-## [1.6.0] - Phaes 1 - 12/7/2026
+## [1.6.0] - Phase 1 - 12/7/2026
 
 ### Fixed
 
@@ -122,6 +122,15 @@
   cleanup automatically from `panel.lua`.
 - Renamed "search view" → "search panel" in the views tree picker's hint
   text, to avoid reading as a type of saved view.
+- **Views tree picker no longer has a separate "search mode."** Search now
+  happens inside an opened view instead of being a distinct entry point
+  chosen upfront. For Telescope users this changes nothing observable —
+  `M.open(name)`'s picker already filtered live as you type; the tree's
+  `<C-f>` was fully redundant with it. For the float fallback, `/` inside
+  an opened view now prompts and re-filters in place (matching the
+  tag-panel/trash-panel convention), replacing what had briefly been a
+  purely static, unfilterable "search" float — a regression introduced and
+  caught within the same round of work, never shipped.
 
 ### Fixed (caught in review, before reaching a real session)
 - A `filter = nil` table-constructor bug in `open_tag_panel` that would
