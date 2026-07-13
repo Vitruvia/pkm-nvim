@@ -82,7 +82,15 @@
 
 ---
 
-## [1.6.0] - 12/7/2026
+## [1.6.0] - 12/7/2026 to 13/7/2026
+
+### Resolved (Design Questions / Near Goals)
+- Decisions 1–3 (note relationships, meta-note type, exportation) written
+  up as resolved in `doc/ROADMAP.md`; decision 2's `_meta`-subview
+  convention documented in `doc/CONVENTIONS.md`.
+- Two Phase X items closed: "views panel cumbersome" (superseded by Phase
+  3's Telescope integration) and "view creation confirmation" (fixed
+  above).
 
 ### Removed
 - `M.list_views()`, `telescope_views_tree_picker()`,
@@ -179,7 +187,6 @@
   float) now return to the views panel instead of the removed tree
   picker — "browse all views" is one consistent UI regardless of entry
   point.
-
 - **Buffer panel** ported onto `panel.lua` — behavior-preserving; stays
   unfocused on open (glanceable, not modal), matching its pre-port design.
   `ui.lua`'s module-level `_tabs`/`get_tab()` and the `PKMUITabs` augroup
@@ -196,6 +203,25 @@
   tag-panel/trash-panel convention), replacing what had briefly been a
   purely static, unfilterable "search" float — a regression introduced and
   caught within the same round of work, never shipped.
+- **View listings sort case-insensitively, underscore-prefixed first** —
+  `build_tree_entries()`, `get_view_children()`, and `M.list()` all switched
+  from raw `table.sort()` to a `:lower()`-normalized comparator. Previously
+  a mixed-case name (e.g. "Zebra") could sort before an underscore-prefixed
+  one ("_meta") since '_' (0x5F) sits between uppercase and lowercase ASCII
+  ranges — surprising given the `_meta`-subview convention (Design
+  Questions decision 2) specifically wants underscore-prefixed views
+  grouped first. Propagates automatically to every view listing (Telescope
+  tree, panel.lua fallback, sidebar, all pickers), since all of them build
+  on these three functions.
+- **`reparent_view_prompt` orders candidate parents by subview count**
+  (descending), tiebroken by the same case-insensitive order — a view with
+  more existing children sorts first, since it's the more likely home for
+  a new one.
+- **`:PKMViewNew` subproject creation no longer requires typing "yes"** —
+  confirmation removed entirely (not just lightened to a keypress):
+  creating a view/subview is safe and trivially reversible, and
+  confirmation stays reserved for genuinely dangerous actions (deletion),
+  consistent with every other view-mutating flow in this file.
 
 ### Fixed (caught in review, before reaching a real session)
 - A `filter = nil` table-constructor bug in `open_tag_panel` that would

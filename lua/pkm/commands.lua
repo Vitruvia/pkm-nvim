@@ -402,20 +402,10 @@ function M.register()
             }, function(expr)
               if not expr or expr:match('^%s*$') then return end
               expr = expr:match('^%s*(.-)%s*$')
-
-              vim.fn.inputsave()
-              local answer = vim.fn.input(string.format(
-                "Create subproject '%s' under '%s'"
-                  .. " with filter '%s'? (yes/no): ",
-                name, parent, expr))
-              vim.fn.inputrestore()
-
-              if answer:lower() ~= 'yes' then
-                vim.notify('[pkm] subproject creation cancelled',
-                  vim.log.levels.INFO)
-                return
-              end
-
+              -- No confirmation gate: creating a view/subview is safe and
+              -- trivially reversible (delete it, or :PKMViewUpdate to fix a
+              -- wrong parameter) — confirmation stays reserved for actually
+              -- dangerous actions (deletion, everywhere else in this file).
               views.save_subproject(name, parent, expr)
             end)
           end)

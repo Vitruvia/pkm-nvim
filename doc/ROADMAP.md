@@ -684,7 +684,7 @@ chosen, drop `panel.lua`; Phase 1 becomes the tag panel alone and Phases 2–3
 each carry their own skeleton — phase boundaries and commits are otherwise
 unchanged.*
 
-**Phase 1 — panel infrastructure, buffer-panel port, and tag panel.**
+**Phase 1 — panel infrastructure, buffer-panel port, and tag panel.** Shipped in 1.6.0.
 
 | File | Single-pass changes |
 |---|---|
@@ -712,7 +712,7 @@ feat: shared panel infrastructure, buffer-panel port, and tag panel
 - docs: changelog, module map
 ```
 
-**Phase 2 — trash-restore panel.**
+**Phase 2 — trash-restore panel.** Shipped in 1.6.0.
 
 | File | Single-pass changes |
 |---|---|
@@ -738,7 +738,7 @@ feat: trash-restore panel
 - docs: changelog
 ```
 
-**Phase 3 — views panels and sidebar window navigation.**
+**Phase 3 — views panels and sidebar window navigation.** Shipped in 1.6.0.
 
 | File | Single-pass changes |
 |---|---|
@@ -938,44 +938,32 @@ feat: any-level header navigation
 than scheduled work. No implementation until explicitly promoted. These three
 are related: all concern how notes describe and relate to one another.*
 
-1. **Note relationship protocol.** There is no model for rigid relations such as
-   "parent" note: because notes cite each other freely, a "parent" can be cited
-   by a note its "child" cites, so hierarchy is ill-defined and possibly cyclic.
-   A rigid nomenclature is likely unnecessary. A cheap, well-defined alternative
-   is **tag-set relatedness** — notes sharing more tags are more related (e.g. a
-   Jaccard or overlap measure over tag sets), with exact-tag-set matches most
-   related. This is attractive because it is pure, cheap, and feeds directly
-   into the relevance-ranking ideas in Distant Additions 9 (ordering search
-   results and sidebar entries). Recorded as a design framework, not a plan; the
-   "relative note" feature (v1.7.0) already embodies the tag-relatedness view of
-   relationship at creation time.
+Only decision 4 is pending. Summarize the other decisions and fix them at
+the appropriate file/location.
 
-2. **A note type for describing other notes.** Some notes describe the rationale
-   and usage of other notes — the author's markdown consensus is part of the
-   *system*, but a user may want their own consensuses per project/view, or a
-   guide explaining what a "question bank" note type is for. Adding a genuine new
-   frontmatter `type` is a **major conceptual change** (it touches templates, the
-   `type:` filter predicate, `index.note_type`, syntax, and the citation
-   groups), even if the code delta is small. **Recommendation:** do *not* add a
-   new type initially. Model these as an existing type (`note` or `agg`)
-   distinguished by convention — a `role`/`meta`/`guide` tag or a naming
-   convention — and only promote to a real type if the convention proves
-   insufficient in daily use. This keeps the type system minimal (Philosophy §2,
-   §7) and is fully reversible. Discussion-only; no implementation.
+-- NEW:
+1. **Note relationship protocol** — resolved: tag-set relatedness (Jaccard/
+   overlap over tag sets) over rigid parent/child nomenclature, which is
+   ill-defined here since notes cite freely and a "parent" can be cited by
+   a note its "child" cites. Feeds directly into the relevance-ranking
+   ideas in Distant Additions 9; the v1.7.0 "relative note" feature already
+   embodies this view of relationship at creation time.
 
-3.  **Exportation improvements:**
-    -   AI exportation context protocol: A way to ship files that tell an
-        AI/LLM how to interpret a set of notes (the markdown conventions being
-        one example; per-view or ad-hoc directives being others).
-        **Recommendation:** for the per-view case, the author suggests using a
-        subview for "meta files" (e.g. named "_meta"). The user can decide
-        whether to create it or not. All we need to do is ensure that exporting
-        a view also exports all its subviews (which is already expected
-        behavior). The default (general) exportation should also allow the user
-        to select (or write) which views they want to export, which tags, and
-        which titles or title parts, thus allowing for a "composed" export. With this,
-        we only need a specific export command that gives the user the options: "export current note, export
-        current view, customized export".
+2. **A note type for describing other notes** — resolved: no new
+   frontmatter `type` (a major, hard-to-reverse change for what a naming
+   convention solves just as well). Use `_meta` subviews instead — see
+   `doc/CONVENTIONS.md` § Views: Meta/Guide Notes for the convention and the
+   underscore-first sort order that supports it.
+
+3. **Exportation improvements** — resolved, consistent with decision 2: the
+   AI-context-protocol case (shipping a file that tells an AI/LLM how to
+   interpret a set of notes) is just another `_meta` subview; exporting a
+   view already exports its subviews, so no new mechanism is needed there.
+   The default export flow should let the user choose between "export
+   current note," "export current view," or a composed export (arbitrary
+   views/tags/titles) — tracked as the still-open half of this item under
+   Distant Additions § Exportation.
+
 4.  **Command clearup:** several commands are residual, while others exist
     mainly to be called as part of other commands. As of now, typing `:PKM` and
     then pressing `<TAB>` for autocomplete is no longer helpful, since the user
@@ -1080,8 +1068,7 @@ are related: all concern how notes describe and relate to one another.*
     open a navigation panel for the note in the current active window. This panel
     will allow the user to navigate quickly between headers, and can also be used
     to copy the index).
-    3.  Sidebar: Now has a keymap that switches it into the current "bookmark
-        bar" (for the active window). There should be a keymap to do so within
+    3.  Sidebar: There should be a keymap to do so within
         the sidebar and one to do the same without leaving the curren active
         window. The bookmark bar should show the index with
         collapsable/expandable levels, but also allow quick navigation to the
@@ -1108,27 +1095,30 @@ are related: all concern how notes describe and relate to one another.*
         note, like YAML frontmatter, code blocks, headers (no autowrapping
         headers with text that imediately precedes or follows them), tables, lists
         with custom prefixes, etc.;
-4.  **Misc** (currently set to be done in the active development's Phase X, meaning
-the LLM assistant should decide when it is best to implement them):
-    -   Pressing `zE` to expand folds makes the system no longer detect the yaml
-        fold in a note. Saving the note resumes normal behavior. `za` and `zm` do
-        not cause issues (but they are affected until a new save or a note reopen
-        if the fold stops being detected due to `zE`).
-    -   Pressing `gf` on a note citation only follows the link when such citation
-        is the "full citation" (present in the yaml citation block). The
-        "shortened" citation ([note xxxx]) that shows in text does not allow link
-        following. There should be a way to follow a link without having to go up
-        to the metadata manually before doing so.
+4.  **Misc** (currently set to be done in the active development's Phase X,
+    meaning the LLM assistant should decide when it is best to implement them):
+    -   Fix now: Pressing `zE` to expand folds makes the system no longer detect the
+        yaml fold in a note. Saving the note resumes normal behavior. `za` and
+        `zm` do not cause issues (but they are affected until a new save or a
+        note reopen if the fold stops being detected due to `zE`).
+    -   Pressing `gf` on a note citation only follows the link when such
+        citation is the "full citation" (present in the yaml citation block).
+        The "shortened" citation ([note xxxx]) that shows in text does not
+        allow link following. There should be a way to follow a link without
+        having to go up to the metadata manually before doing so.
     
-    -   Pressing `u` on normal mode to undo has been fixed to correctly alter the
+    -   Fix now: Pressing `u` on normal mode to undo has been fixed to correctly alter the
         timestamp while also reverting the modification made. However, the cursor
         ends up on the timestamp, making it hard to follow the changes (that is,
         the user needs to manually search for whatever was undone). The cursor
         should land on the last-undone part (e.g. a text that was regenerated,  an
         empty character/line that was left after undoing an input, and so on).
     
-    -   Being cited by another note while open on a buffer will sometimes create
-        the need for a forced save, even if nothing else has been changed (check if
+    -   Partially fixed: now I get prompted (have to answer with y or n)
+        instead of having to type `w!`. This is an acceptable solution, unless
+        the prompt can be removed (automatically accepted) without risk. Being
+        cited by another note while open on a buffer will sometimes create the
+        need for a forced save, even if nothing else has been changed (check if
         this is mentioned already in some existing version/phase).
     
     -   The files opened in the buffer panel (`<leader>vb`) should display in the following
@@ -1163,15 +1153,7 @@ the LLM assistant should decide when it is best to implement them):
         not be based on the buffer panel, since the buffer panel is meant to be used
         to organize the current session only.
     
-    -   The final confirmation before creating a view/subview is unecessary. We
-        should either remove it or change it to a single keypress (`<CR>`)
-        instead of making the user type `yes`. Leave such multistep processes
-        with confirmations for dangerous tasks (views are safe to create and
-        the process can easily be reverted by deleting the view, if it was
-        created by accident, or by updating it, if it was created with a wrong
-        parameter).
-
-    -   bugfix: syntash highlighting recognizes numbers that start any line as
+    -   Fix now: bugfix - syntax highlighting recognizes numbers that start any line as
         a list prefix, as long as it is in the correct indentation level and
         order (e.g. `2.` will only be recognized if there is a previous item
         with number `1.`). The issue is that it does not differentiate lines

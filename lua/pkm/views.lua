@@ -182,7 +182,7 @@ local function get_view_children(name)
       children[#children + 1] = k
     end
   end
-  table.sort(children)
+  table.sort(children, function(a, b) return a:lower() < b:lower() end)
   return children
 end
 
@@ -204,7 +204,16 @@ local function build_tree_entries()
       children_map[parent][#children_map[parent] + 1] = name
     end
   end
-  for _, children in pairs(children_map) do table.sort(children) end
+
+  -- Case-insensitive: a raw sort puts any uppercase-starting name (e.g.
+  -- "Zebra", byte 0x5A) before an underscore-prefixed one ("_meta", byte
+  -- 0x5F), which reads as wrong once you expect underscore-prefixed
+  -- meta/reference views to sort first (Design Questions decision 2).
+  -- Lowercasing both sides neutralizes case, and '_' (0x5F) already sorts
+  -- before any lowercase letter (0x61+), so this achieves both at once.
+  for _, children in pairs(children_map) do
+    table.sort(children, function(a, b) return a:lower() < b:lower() end)
+  end
 
   local roots = {}
   for name, expr in pairs(projects) do
@@ -213,7 +222,7 @@ local function build_tree_entries()
                        and projects[expr.parent] ~= nil
     if not has_parent then roots[#roots + 1] = name end
   end
-  table.sort(roots)
+  table.sort(roots, function(a, b) return a:lower() < b:lower() end)
 
   local entries = {}
   local function visit(name, depth)
@@ -275,6 +284,74 @@ local function resolve_window_slot(n, available_count)
   if n <= 0 then return nil end
   if n > available_count then return nil end
   return n
+end
+
+--- Pure: decide which window a relative-split picker action should target.
+--- The invocation window is captured (by the caller) at the moment the
+--- picker was opened, before any selection happened.
+---@param direction 'left'|'right'
+---@param invocation_was_sidebar boolean  Was the invocation window pkm-sidebar at capture time?
+---@param invocation_still_valid boolean  Does the invocation window still exist?
+---@return 'invocation'|'rightmost'|nil  Which window to target, or nil for "unavailable, do nothing"
+local function resolve_split_target(direction, invocation_was_sidebar, invocation_still_valid)
+  if direction == 'left' then
+    if invocation_was_sidebar then return nil end
+    if not invocation_still_valid then return nil end
+    return 'invocation'
+  else -- 'right'
+    if invocation_still_valid then return 'invocation' end
+    return 'rightmost'
+  end
+end
+
+--- Open target_path in a vertical split relative to invocation_win, the
+--- window that was current when the picker containing this action was
+--- opened (captured once, before any selection). 'left' is unavailable
+--- when the invocation window was the sidebar (nothing to its left) or no
+--- longer exists; 'right' falls back to the rightmost real editing window
+--- if the invocation window is gone. Explicit leftabove/rightbelow (never
+--- a bare vsplit) so this is deterministic regardless of 'splitright'.
+---@param direction 'left'|'right'
+---@param target_path string
+---@param invocation_win integer|nil
+---@param invocation_was_sidebar boolean
+local function open_relative_split(direction, target_path, invocation_win, invocation_was_sidebar)
+  local invocation_still_valid = invocation_win ~= nil
+    and vim.api.nvim_win_is_valid(invocation_win)
+  local strategy = resolve_split_target(direction, invocation_was_sidebar, invocation_still_valid)
+
+  if strategy == nil then
+    vim.notify('[pkm] no left split available here', vim.log.levels.INFO)
+    return
+  end
+
+  local target_win
+  if strategy == 'invocation' then
+    target_win = invocation_win
+  else -- 'rightmost'
+    local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
+    local candidates = {}
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.api.nvim_win_get_config(win).relative == '' then
+        if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+          candidates[#candidates + 1] = { win = win, col = vim.api.nvim_win_get_position(win)[2] }
+        end
+      end
+    end
+    if #candidates == 0 then
+      vim.cmd('rightbelow vsplit ' .. vim.fn.fnameescape(target_path))
+      return
+    end
+    local sorted = sort_wins_by_col(candidates)
+    target_win = sorted[#sorted].win
+  end
+
+  vim.api.nvim_set_current_win(target_win)
+  if direction == 'left' then
+    vim.cmd('leftabove vsplit ' .. vim.fn.fnameescape(target_path))
+  else
+    vim.cmd('rightbelow vsplit ' .. vim.fn.fnameescape(target_path))
+  end
 end
 
 --- Push current sidebar state onto the navigation history stack.
@@ -526,7 +603,7 @@ end
 ---@return string[]
 function M.list()
   local names = vim.tbl_keys(get_projects())
-  table.sort(names)
+  table.sort(names, function(a, b) return a:lower() < b:lower() end)
   return names
 end
 
@@ -688,7 +765,7 @@ end
 -- =============================================================================
 
 --- Telescope picker over pre-matched note paths. Exact substring prompt.
-local function telescope_view_picker(name, paths)
+local function telescope_view_picker(name, paths, invocation_win, invocation_was_sidebar)
   local pickers      = require('telescope.pickers')
   local finders      = require('telescope.finders')
   local actions      = require('telescope.actions')
@@ -730,7 +807,7 @@ local function telescope_view_picker(name, paths)
     layout_config    = { prompt_position = 'top' },
   }, {
     prompt_title = string.format(
-      'PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs  <C-f> browse all',
+      'PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs  <C-f> browse all  <C-v>/<C-x> split',
       name, total, total == 1 and '' or 's'),
 
     finder = finders.new_dynamic({
@@ -800,6 +877,19 @@ local function telescope_view_picker(name, paths)
         vim.schedule(function() M.open_views_panel('browse') end)
       end
 
+      -- <C-v>/<C-x>: open the selected note in a split right/left of the
+      -- invocation window (the window this picker was opened from). Only
+      -- meaningful for note entries -- selecting a subview opens another
+      -- picker, not a file, so there's nothing to split.
+      local function do_split(direction)
+        local entry = action_state.get_selected_entry()
+        if not entry or entry.is_subview then return end
+        actions.close(prompt_bufnr)
+        vim.schedule(function()
+          open_relative_split(direction, entry.value, invocation_win, invocation_was_sidebar)
+        end)
+      end
+
       map('i', '<C-b>', go_back)
       map('n', '<C-b>', go_back)
       map('i', '<C-p>', go_parent)
@@ -808,6 +898,10 @@ local function telescope_view_picker(name, paths)
       map('n', '<C-s>', go_children)
       map('i', '<C-f>', go_browse)
       map('n', '<C-f>', go_browse)
+      map('i', '<C-v>', function() do_split('right') end)
+      map('n', '<C-v>', function() do_split('right') end)
+      map('i', '<C-x>', function() do_split('left') end)
+      map('n', '<C-x>', function() do_split('left') end)
 
       return true
     end,
@@ -817,7 +911,7 @@ end
 --- Scrollable float picker. <CR> opens note/subview at cursor; / filters
 --- in place (refreshes the same buffer, does not open a new window —
 --- matches the tag-panel/trash-panel convention); q/<Esc> closes.
-local function float_view_picker(name, paths)
+local function float_view_picker(name, paths, invocation_win, invocation_was_sidebar)
   local index       = require('pkm.index')
   local children    = get_view_children(name)
   local all_sorted  = sort_paths_by_type(paths)
@@ -846,7 +940,7 @@ local function float_view_picker(name, paths)
     local filter_label   = (filter_query and filter_query ~= '')
       and ('  [filter: ' .. filter_query .. ']') or ''
     local header = string.format(
-      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / search  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  <C-f> browse all  ·  q close',
+      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / search  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  <C-f> browse all  ·  <C-v>/<C-x> split  ·  q close',
       name, total, total == 1 and '' or 's', filter_label)
     local lines = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
     line_paths, line_subs = {}, {}
@@ -962,6 +1056,22 @@ local function float_view_picker(name, paths)
   vim.keymap.set('n', '<C-f>', function()
     close(); vim.schedule(function() M.open_views_panel('browse') end)
   end, ko)
+  vim.keymap.set('n', '<C-v>', function()
+    local row = vim.api.nvim_win_get_cursor(win)[1]
+    if line_subs[row] then return end
+    local p = line_paths[row]
+    if not p then return end
+    close()
+    vim.schedule(function() open_relative_split('right', p, invocation_win, invocation_was_sidebar) end)
+  end, ko)
+  vim.keymap.set('n', '<C-x>', function()
+    local row = vim.api.nvim_win_get_cursor(win)[1]
+    if line_subs[row] then return end
+    local p = line_paths[row]
+    if not p then return end
+    close()
+    vim.schedule(function() open_relative_split('left', p, invocation_win, invocation_was_sidebar) end)
+  end, ko)
   vim.keymap.set('n', 'q',     close,          ko)
   vim.keymap.set('n', '<Esc>', close,          ko)
 end
@@ -1006,11 +1116,15 @@ function M.open(name)
   end
   _last_view = name
 
+  local invocation_win = vim.api.nvim_get_current_win()
+  local invocation_was_sidebar =
+    vim.bo[vim.api.nvim_win_get_buf(invocation_win)].filetype == 'pkm-sidebar'
+
   local has_telescope = pcall(require, 'telescope')
   if has_telescope then
-    telescope_view_picker(name, paths)
+    telescope_view_picker(name, paths, invocation_win, invocation_was_sidebar)
   else
-    float_view_picker(name, paths)
+    float_view_picker(name, paths, invocation_win, invocation_was_sidebar)
   end
 end
 
@@ -1049,7 +1163,7 @@ end
 --- all notes, unscoped, substring-filtered (never fuzzy, matching this
 --- project's own search convention throughout).
 ---@param mode 'views'|'browse'|nil
-local function telescope_views_tree_picker(mode)
+local function telescope_views_tree_picker(mode, invocation_win, invocation_was_sidebar)
   mode = mode or 'views'
   local pickers      = require('telescope.pickers')
   local finders       = require('telescope.finders')
@@ -1079,7 +1193,7 @@ local function telescope_views_tree_picker(mode)
       sorting_strategy = 'ascending',
       layout_config    = { prompt_position = 'top' },
     }, {
-      prompt_title = string.format('Browse All Notes  (%d)  <C-f> views', #items),
+      prompt_title = string.format('Browse All Notes  (%d)  <C-f> views  <C-v>/<C-x> split', #items),
       finder = finders.new_dynamic({
         fn = function(prompt)
           if not prompt or prompt == '' then return items end
@@ -1104,8 +1218,20 @@ local function telescope_views_tree_picker(mode)
           actions.close(prompt_bufnr)
           vim.schedule(function() M.open_views_panel('views') end)
         end
+        local function do_split(direction)
+          local sel = action_state.get_selected_entry()
+          if not sel then return end
+          actions.close(prompt_bufnr)
+          vim.schedule(function()
+            open_relative_split(direction, sel.value, invocation_win, invocation_was_sidebar)
+          end)
+        end
         map('i', '<C-f>', go_views)
         map('n', '<C-f>', go_views)
+        map('i', '<C-v>', function() do_split('right') end)
+        map('n', '<C-v>', function() do_split('right') end)
+        map('i', '<C-x>', function() do_split('left') end)
+        map('n', '<C-x>', function() do_split('left') end)
         return true
       end,
     }):find()
@@ -1224,7 +1350,7 @@ local _views_panel = panel.create({
       local filter_label = (state.filter and state.filter ~= '')
         and ('  [filter: ' .. state.filter .. ']') or ''
       local lines = {
-        string.format('  Browse All  (%d)%s  <CR> open  <C-f> views  / search  q close',
+        string.format('  Browse All  (%d)%s  <CR> open  <C-f> views  <C-v>/<C-x> split  / search  q close',
           #filtered, filter_label),
       }
       local map = {}
@@ -1284,11 +1410,26 @@ local _views_panel = panel.create({
     end,
     ['<C-f>'] = function(state, helpers)
       state.mode   = (state.mode == 'browse') and 'views' or 'browse'
-      -- Clear the filter across the switch — a query from one mode
-      -- silently carrying over and filtering the other mode's very
-      -- different dataset would be confusing, not convenient.
       state.filter = nil
       helpers.refresh()
+    end,
+    ['<C-v>'] = function(state, helpers)
+      if state.mode ~= 'browse' then return end
+      local target = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not target then return end
+      helpers.close()
+      vim.schedule(function()
+        open_relative_split('right', target, state.invocation_win, state.invocation_was_sidebar)
+      end)
+    end,
+    ['<C-x>'] = function(state, helpers)
+      if state.mode ~= 'browse' then return end
+      local target = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not target then return end
+      helpers.close()
+      vim.schedule(function()
+        open_relative_split('left', target, state.invocation_win, state.invocation_was_sidebar)
+      end)
     end,
     ['n'] = function(state, helpers)
       if state.mode == 'browse' then return end
@@ -1323,11 +1464,18 @@ local _views_panel = panel.create({
 ---@param mode 'views'|'browse'|nil  Initial mode; defaults to 'views'.
 ---@return nil
 function M.open_views_panel(mode)
+  local invocation_win = vim.api.nvim_get_current_win()
+  local invocation_was_sidebar =
+    vim.bo[vim.api.nvim_win_get_buf(invocation_win)].filetype == 'pkm-sidebar'
+
   local has_telescope = pcall(require, 'telescope')
   if has_telescope then
-    telescope_views_tree_picker(mode)
+    telescope_views_tree_picker(mode, invocation_win, invocation_was_sidebar)
   else
-    _views_panel.open({ filter = '', mode = mode or 'views' })
+    _views_panel.open({
+      filter = '', mode = mode or 'views',
+      invocation_win = invocation_win, invocation_was_sidebar = invocation_was_sidebar,
+    })
   end
 end
 
@@ -1630,7 +1778,14 @@ local function reparent_view_prompt(name)
   for k in pairs(projects) do
     if k ~= name then candidates[#candidates + 1] = k end
   end
-  table.sort(candidates)
+  -- Views with more existing subviews sort first — they're the most likely
+  -- home for a new one. Ties (including the common zero-subviews case)
+  -- fall back to the same case-insensitive order used everywhere else.
+  table.sort(candidates, function(a, b)
+    local ca, cb = #get_view_children(a), #get_view_children(b)
+    if ca ~= cb then return ca > cb end
+    return a:lower() < b:lower()
+  end)
 
   if #candidates == 0 then
     vim.notify('[pkm] no other views available as parent', vim.log.levels.WARN)
@@ -2414,5 +2569,6 @@ M._views_panel          = _views_panel
 M._delete_panel         = _delete_panel
 M._sort_wins_by_col     = sort_wins_by_col
 M._resolve_window_slot  = resolve_window_slot
+M._resolve_split_target = resolve_split_target
 
 return M
