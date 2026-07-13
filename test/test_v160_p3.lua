@@ -88,6 +88,7 @@ do
     -- <...> notation so the comparison actually means what it says.
     -- Plain printable keys (below) have no such ambiguity and are checked
     -- against the raw lhs directly.
+    print(vim.fn.keytrans(km.lhs):lower())
     keymap_readable[vim.fn.keytrans(km.lhs):lower()] = true
   end
   check("no 'd' keymap in views panel (deletion lives in the separate panel only)",
