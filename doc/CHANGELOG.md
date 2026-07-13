@@ -82,7 +82,18 @@
 
 ---
 
-## [1.6.0] - Phase 1 - 12/7/2026
+## [1.6.0] - 12/7/2026
+
+### Removed
+- `M.list_views()`, `telescope_views_tree_picker()`,
+  `float_views_tree_picker()` — fully superseded by the views panel, no
+  longer reachable from anywhere, removed rather than left as dead code.
+
+### Deferred
+- Cross-panel-type switching (sidebar as a swappable "view bar" vs.
+  "buffer bar" vs. a future bookmark bar, reassignable via config) — real
+  scope, explicitly not built here. `_views_panel`'s `mode` field is
+  intended to compose with that later rather than need replacing.
 
 ### Fixed
 
@@ -97,6 +108,36 @@
   the float tree picker at all when Telescope was already confirmed absent.
 
 ### Added
+
+- **Views panel** (`:PKMViews`) — `panel.create()`-based replacement for
+  the old tree picker. `<CR>` opens a view, `n` creates one
+  (`:PKMViewNew`), `u` opens the edit/rename/reparent action picker on the
+  highlighted view (`:PKMViewUpdate`'s flow), `/` filters in place. No
+  deletion key — that's the whole reason it's a separate panel.
+- **`<Tab>` switches the views panel in place to "Browse All"** — every
+  note, unscoped, substring-filtered — and back, without closing the
+  panel and opening a different one. Same window, same buffer, `state.mode`
+  toggled and re-rendered. Deliberately lighter than `:PKMBrowse`: no
+  tag:/title:/text: field-prefix grammar, just substring match on title,
+  filename, and tags. `:PKMBrowse` is unchanged and keeps its own fuller
+  implementation; this is a same-surface convenience, not a replacement.
+- **View-deletion panel** (`:PKMViewDelete` with no argument) — separate
+  from the views panel by design. Browse → `<CR>` → `vim.fn.confirm()`
+  (single keypress, matching the buffer panel's own existing
+  close-with-unsaved-changes convention) → delete. Warns in the prompt if
+  the view has subviews that reference it as parent, since `M.delete()`
+  doesn't touch them (pre-existing limitation, not new — surfacing it
+  here at least makes the consequence visible before it happens).
+- **Optional sidebar key → views panel** (`config.keymaps.view_panel`,
+  default `false`). Wired via a new `views.set_panel_keymap(lhs)`, called
+  from `keymaps.lua` at registration time. Listed in the sidebar's `?`
+  help when set.
+- Two pure helpers, `sort_wins_by_col` and `resolve_window_slot`, backing
+  both `N<CR>` and `<C-v>`'s window-targeting — extracted for testability
+  per the Standing pure-logic-first design rule.
+- `test/test_v160_p3.lua` — the two pure helpers in isolation; both
+  panels' lifecycle, content, and no-destructive-key invariant; browse-mode
+  rendering; a real (non-interactive) delete round-trip.
 
 - **`panel.lua`** — generic panel infrastructure: per-tab state, scoped
   augroup (refresh-on-event, WinClosed→`ensure_main_window()` safety net,
@@ -114,6 +155,30 @@
   either function.
 
 ### Changed
+
+- **`N<CR>` reconsidered: no auto-create on overflow.** The original Phase
+  3 design ("`N` beyond the window count creates the next slot") was
+  dropped in favor of the existing warn-and-stop behavior, kept
+  deliberately rather than replaced. `N<CR>` is a high-frequency action;
+  silently altering the window layout on a miscounted `N` is worse than a
+  no-op with a message. Confirmed already correct as shipped — refactored
+  onto the two new pure helpers for testability, no behavior change.
+- **`<C-v>` fixed** — previously targeted the first non-panel window in
+  creation order with a bare `vsplit` (side depended on `'splitright'`).
+  Now deterministically targets the leftmost editing window and inserts
+  `leftabove` of it, landing immediately right of the sidebar and
+  shifting everything else right regardless of `'splitright'` — the
+  insert-before complement to `N<CR>` the phase actually called for.
+- `:PKMViews` and `:PKMViewDelete` (no-argument) now route through the
+  new panels. `:PKMViewDelete <name>` (direct-argument fast path) now
+  also confirms via `vim.fn.confirm()` — "deletion always confirmed"
+  applies there too, not just to the panel. `focus_main_win()` dropped
+  from `:PKMViews` (panels create their own split regardless of the
+  current window's `winfixbuf` state, so it was never needed).
+- Both `go_back()` callers in the detail-view pickers (Telescope and
+  float) now return to the views panel instead of the removed tree
+  picker — "browse all views" is one consistent UI regardless of entry
+  point.
 
 - **Buffer panel** ported onto `panel.lua` — behavior-preserving; stays
   unfocused on open (glanceable, not modal), matching its pre-port design.

@@ -62,6 +62,10 @@ function M.register(config)
   map(k.view_list, "<cmd>PKMViews<cr>", "List Views")
   map(k.view_buffers, "<cmd>PKMBuffers<cr>", "Buffer Panel")
 
+  if k.view_panel then
+    require('pkm.views').set_panel_keymap(k.view_panel)
+  end
+
   if k.focus_sidebar then
     vim.keymap.set('n', k.focus_sidebar, function()
       local win = require('pkm.views').get_sidebar_win()

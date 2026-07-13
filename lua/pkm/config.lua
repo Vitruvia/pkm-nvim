@@ -150,6 +150,7 @@ local defaults = {
     view_last    = "<leader>vl",
     view_list    = "<leader>va", -- va = view all
     view_sidebar = "<leader>vs",
+    view_panel   = false,   -- sidebar-buffer-local key to pop out into the views panel
     view_buffers = "<leader>vb",
     toggle_file_explorer = "<leader>ts",   -- ts = toggle sidebar
     focus_sidebar = false,   -- jump focus directly to sidebar window

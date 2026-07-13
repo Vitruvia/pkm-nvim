@@ -742,7 +742,13 @@ feat: trash-restore panel
 
 | File | Single-pass changes |
 |---|---|
-| `views.lua` | (1) **Views panel** (extends `:PKMViews`) on `panel.create` with keys to invoke `:PKMViewNew`/`:PKMViewUpdate`; **no deletion key**. (2) **View-deletion panel** (separate by design): browse → select → **confirm before delete**. (3) **Sidebar key** to open the views panel. (4) **`N<CR>`**: count only real editing windows (exclude `pkm-sidebar`/`pkm-bufpanel`/`netrw`/floats), left→right, anchored right of the sidebar; `N ≤ count` opens in that window; `N > count` (including zero) creates **exactly one** new window — the next slot — via `rightbelow` from the rightmost real editing window (never `topleft`). (5) **`<C-v>` repurposed**: insert one new window immediately right of the sidebar, shifting existing windows right — the insert-before complement to `N<CR>`. No `<C-CR>` binding (terminal keycode reliability). |
+| `views.lua` | (1) **Views panel** (extends `:PKMViews`) on `panel.create` with keys to invoke `:PKMViewNew`/`:PKMViewUpdate`; **no deletion key**. (2) **View-deletion panel** (separate by design): browse → select → **confirm before delete**. (3) **Sidebar key** to open the views panel. (4) **`N<CR>`** — ✅ already correct as shipped; no change. Counts only
+real editing windows, left→right, opens in the Nth when it exists. `N`
+beyond the count warns ("no window N, only M") rather than auto-creating —
+deliberately kept over the original auto-create plan: this is a
+high-frequency action, and silently altering the window layout on a
+miscounted N is worse than a no-op with a clear message. `<C-v>` (item 5)
+remains the explicit, deliberate way to add a window.(5) **`<C-v>` repurposed**: insert one new window immediately right of the sidebar, shifting existing windows right — the insert-before complement to `N<CR>`. No `<C-CR>` binding (terminal keycode reliability). |
 | `commands.lua` | Route `:PKMViews`/`:PKMViewDelete` through the panels; retain `:PKMViewNew`/`:PKMViewDelete` as residual optional-arg commands. |
 | `config.lua` | Default keymap for "open views panel in sidebar" (default `false`). |
 | `keymaps.lua` | Wire that keymap when set. |

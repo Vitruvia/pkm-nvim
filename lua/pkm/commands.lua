@@ -346,9 +346,8 @@ function M.register()
   })
 
   vim.api.nvim_create_user_command('PKMViews', function()
-    focus_main_win()
-    require('pkm.views').list_views()
-  end, { desc = 'Browse all defined views in a tree picker' })
+    require('pkm.views').open_views_panel()
+  end, { desc = 'Browse all defined views (panel; <Tab> to browse all notes)' })
 
   vim.api.nvim_create_user_command('PKMViewNew', function()
     local views = require('pkm.views')
@@ -448,17 +447,20 @@ function M.register()
   vim.api.nvim_create_user_command('PKMViewDelete', function(opts)
     local name = opts.args ~= '' and opts.args or nil
     if not name then
-      local views = require('pkm.views')
-      vim.ui.select(views.list(), { prompt = 'Delete view:' }, function(sel)
-        if sel then views.delete(sel) end
-      end)
+      require('pkm.views').open_view_deletion_panel()
       return
     end
-    require('pkm.views').delete(name)
+    -- Direct-argument fast path retains its own confirmation — "deletion
+    -- always confirmed" applies here too, not just to the panel.
+    local choice = vim.fn.confirm(
+      string.format("Delete view '%s'?", name), '&Yes\n&No', 2)
+    if choice == 1 then
+      require('pkm.views').delete(name)
+    end
   end, {
     nargs    = '?',
     complete = function() return require('pkm.views').list() end,
-    desc     = 'Delete a named project view from views.json',
+    desc     = 'Delete a named project view (panel if no argument; confirms either way)',
   })
 
   vim.api.nvim_create_user_command('PKMViewLast', function()

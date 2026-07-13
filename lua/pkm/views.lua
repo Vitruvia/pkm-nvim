@@ -33,7 +33,9 @@
 -- Public API:
 --   setup()             → register BufWritePost autocmd for views.json
 --   list()              → string[]  sorted view names (sidecar + config)
---   list_views()        → open tree picker over all views (Telescope or float)
+--   open_views_panel(mode?)  → browse/create/update views panel (Phase 3)
+--   open_view_deletion_panel() → browse/select/confirm-delete a view (Phase 3)
+--   set_panel_keymap(lhs)    → set the optional sidebar→views-panel key
 --   edit_view(name?)    → action picker: edit filter / rename / reparent; picker if nil
 --   match_all(name)     → string[]  paths matching the named view's filter
 --   open(name?)         → activate a view; prompts for name if nil
@@ -51,6 +53,7 @@
 local M = {}
 
 local utils = require('pkm.utils')
+local panel = require('pkm.panel')
 
 -- =============================================================================
 -- SECTION: State
@@ -59,6 +62,9 @@ local utils = require('pkm.utils')
 local _sidecar_cache = nil   -- table loaded from views.json; nil when stale
 local _tree_cache    = {}    -- name → parsed filter tree
 local _last_view = nil          -- name of last successfully activated view
+local _panel_keymap_lhs = nil   -- sidebar-buffer-local key to open the views
+                                 -- panel; nil until set_panel_keymap() is
+                                 -- called from keymaps.lua (opt-in, see config)
 
 -- Per-tabpage sidebar state. Keyed by nvim_get_current_tabpage().
 -- Each tab carries its own win, buf, mode, name, paths, tree,
@@ -238,6 +244,33 @@ local function sort_paths_by_type(paths)
     return ta_t < tb_t
   end)
   return sorted
+end
+
+--- Pure: sort a list of {win, col} entries by column position, ascending
+--- (left to right). Used by both N<CR> and <C-v> to establish a
+--- consistent left-to-right editing-window order — extracted so both
+--- share one tested implementation rather than duplicating the sort.
+---@param entries {win:integer, col:integer}[]
+---@return {win:integer, col:integer}[]  New sorted array
+local function sort_wins_by_col(entries)
+  local sorted = vim.list_extend({}, entries)
+  table.sort(sorted, function(a, b) return a.col < b.col end)
+  return sorted
+end
+
+--- Pure: resolve a [count]<CR> request against the number of available
+--- editing windows. Returns nil for "do nothing" (n<=0, or n exceeds the
+--- available count) rather than creating a window — see the Phase 3
+--- design note: auto-creating on overflow was reconsidered and dropped,
+--- since N<CR> is a high-frequency action and a miscounted N silently
+--- altering the window layout is worse than a no-op with a message.
+---@param n integer  Requested window number (vim.v.count)
+---@param available_count integer  Number of real editing windows
+---@return integer|nil  1-indexed window number to target, or nil if out of range
+local function resolve_window_slot(n, available_count)
+  if n <= 0 then return nil end
+  if n > available_count then return nil end
+  return n
 end
 
 --- Push current sidebar state onto the navigation history stack.
@@ -548,6 +581,15 @@ function M.get_sidebar_win()
   return nil
 end
 
+--- Set the sidebar-buffer-local key that opens the views panel. Called
+--- once from keymaps.lua during registration; nil/unset means no key is
+--- bound (the sidebar's own overview mode remains the only in-sidebar
+--- view browsing until this is configured).
+---@param lhs string|nil
+function M.set_panel_keymap(lhs)
+  _panel_keymap_lhs = lhs
+end
+
 -- =============================================================================
 -- SECTION: Public API — write
 -- =============================================================================
@@ -719,7 +761,7 @@ local function telescope_view_picker(name, paths)
 
       local function go_back()
         actions.close(prompt_bufnr)
-        vim.schedule(function() M.list_views() end)
+        vim.schedule(function() M.open_views_panel() end)
       end
 
       local function go_parent()
@@ -863,7 +905,7 @@ local function float_view_picker(name, paths)
   end
 
   local function go_back()
-    close(); vim.schedule(function() M.list_views() end)
+    close(); vim.schedule(function() M.open_views_panel() end)
   end
 
   local function go_parent()
@@ -908,127 +950,6 @@ local function float_view_picker(name, paths)
   vim.keymap.set('n', '<C-s>', go_children,    ko)
   vim.keymap.set('n', 'q',     close,          ko)
   vim.keymap.set('n', '<Esc>', close,          ko)
-end
-
---- Telescope tree picker over all defined views.
---- Selecting a view opens it via M.open(). Uses generic_sorter (fzy is
---- appropriate here — we are matching short view names, not structured content).
-local function telescope_views_tree_picker()
-  local pickers      = require('telescope.pickers')
-  local finders      = require('telescope.finders')
-  local sorters      = require('telescope.sorters')
-  local actions      = require('telescope.actions')
-  local action_state = require('telescope.actions.state')
-
-  local tree  = build_tree_entries()
-  local items = {}
-
-  for _, e in ipairs(tree) do
-    local count  = #M.match_all(e.name)
-    local indent = string.rep('  ', e.depth)
-    local marker = e.has_children and '▶ ' or '• '
-    items[#items + 1] = {
-      name    = e.name,
-      display = string.format('%s%s%s  (%d)', indent, marker, e.name, count),
-      ordinal = string.format('%05d', #items + 1),
-    }
-  end
-
-  if #items == 0 then
-    vim.notify('[pkm] no views defined. Use :PKMViewNew to create one.', vim.log.levels.WARN)
-    return
-  end
-
-  pickers.new({
-    sorting_strategy = 'ascending',
-    layout_config    = { prompt_position = 'top' },
-  }, {
-    prompt_title = 'PKM Views',
-    finder = finders.new_dynamic {
-      fn = function(prompt)
-        if not prompt or prompt == '' then return items end
-        local needle = prompt:lower()
-        local out = {}
-        for _, item in ipairs(items) do
-          if item.name:lower():find(needle, 1, true) then
-            out[#out + 1] = item
-          end
-        end
-        return out
-      end,
-      entry_maker = function(item)
-        return { value = item.name, display = item.display, ordinal = item.ordinal }
-      end,
-    },
-    sorter = sorters.empty(),
-    attach_mappings = function(prompt_bufnr, map)
-      actions.select_default:replace(function()
-        actions.close(prompt_bufnr)
-        local sel = action_state.get_selected_entry()
-        if sel then M.open(sel.value) end
-      end)
-
-      return true
-    end,
-  }):find()
-end
-
---- Scrollable float tree picker over all defined views.
---- <CR> opens the view under the cursor; q/<Esc> closes.
-local function float_views_tree_picker()
-  local tree = build_tree_entries()
-
-  if #tree == 0 then
-    vim.notify('[pkm] no views defined. Use :PKMViewNew to create one.', vim.log.levels.WARN)
-    return
-  end
-
-  local header = '  PKM Views  ·  <CR> open  ·  q/<Esc> close'
-  local lines  = { header, '  ' .. string.rep('─', math.max(#header - 2, 20)) }
-  local names  = {}  -- line number → view name (only view lines, not header)
-
-  for _, e in ipairs(tree) do
-    local count  = #M.match_all(e.name)
-    local indent = string.rep('  ', e.depth)
-    local marker = e.has_children and '▶ ' or '• '
-    lines[#lines + 1] = string.format('  %s%s%s  (%d)', indent, marker, e.name, count)
-    names[#lines]     = e.name
-  end
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
-
-  local width  = math.min(72, vim.o.columns - 4)
-  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.7))
-  local win    = vim.api.nvim_open_win(buf, true, {
-    relative  = 'editor',
-    width     = width,
-    height    = height,
-    col       = math.floor((vim.o.columns - width)  / 2),
-    row       = math.floor((vim.o.lines   - height) / 2),
-    style     = 'minimal',
-    border    = 'rounded',
-    title     = ' PKM Views ',
-    title_pos = 'center',
-  })
-
-  if #lines >= 3 then vim.api.nvim_win_set_cursor(win, { 3, 0 }) end
-
-  local function close()
-    if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
-  end
-
-  local ko = { noremap = true, silent = true, buffer = buf }
-
-  vim.keymap.set('n', '<CR>', function()
-    local name = names[vim.api.nvim_win_get_cursor(win)[1]]
-    if name then close(); M.open(name) end
-  end, ko)
-
-  vim.keymap.set('n', 'q',     close, ko)
-  vim.keymap.set('n', '<Esc>', close, ko)
 end
 
 --- Prompt the user to choose a view from all defined views.
@@ -1090,17 +1011,247 @@ function M.open_last()
   M.open(_last_view)
 end
 
---- Open the views tree picker showing all views in parent-child hierarchy.
---- Telescope picker when available; scrollable float otherwise.
---- Selecting a view opens it via M.open().
+-- =============================================================================
+-- SECTION: Views panel and view-deletion panel (v1.6.0 Phase 3)
+-- =============================================================================
+-- Replaces the former tree-picker M.list_views() (both go_back() callers
+-- below now point here instead, so "browse all views" is one consistent
+-- panel-based UI regardless of entry point, not two different UIs
+-- depending on how you got there).
+--
+-- Deliberately two separate panels, not one with a delete key: the views
+-- panel below has no way to delete a view at all — that's the whole point
+-- of splitting it out, matching the trash-restore panel's own precedent of
+-- keeping destructive actions out of a panel meant for casual browsing.
+
+local _views_panel = panel.create({
+  name          = 'viewspanel',
+  split_cmd     = 'noautocmd botright split',
+  focus_on_open = true,
+  resize = function(state, lines)
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 16))
+    end
+  end,
+  -- 'views' (default) shows the view tree; 'browse' shows all notes,
+  -- unscoped, toggled in place with <Tab> — same window and buffer, no
+  -- closing one popup and opening another. Browse mode here is a light
+  -- substring-only convenience, NOT a replacement for :PKMBrowse's own
+  -- full tag:/title:/text: field-prefix grammar — that command keeps its
+  -- own richer implementation; this is just a quick peek reachable
+  -- without leaving the views panel.
+  build_lines = function(state)
+    state.mode = state.mode or 'views'
+
+    if state.mode == 'browse' then
+      local index    = require('pkm.index')
+      local entries  = index.get_all()
+      local filtered = entries
+      if state.filter and state.filter ~= '' then
+        local needle = state.filter:lower()
+        local f = {}
+        for _, e in ipairs(entries) do
+          local title = (e.title or ''):lower()
+          local fname = (e.filename or ''):lower()
+          local tags  = table.concat(e.tags or {}, ' '):lower()
+          if title:find(needle, 1, true)
+          or fname:find(needle, 1, true)
+          or tags:find(needle, 1, true) then
+            f[#f + 1] = e
+          end
+        end
+        filtered = f
+      end
+      table.sort(filtered, function(a, b)
+        local ta = _TYPE_ORDER[a.note_type] or 6
+        local tb = _TYPE_ORDER[b.note_type] or 6
+        if ta ~= tb then return ta < tb end
+        return (a.title or a.filename or ''):lower() < (b.title or b.filename or ''):lower()
+      end)
+
+      local filter_label = (state.filter and state.filter ~= '')
+        and ('  [filter: ' .. state.filter .. ']') or ''
+      local lines = {
+        string.format('  Browse All  (%d)%s  <CR> open  <Tab> views  / search  q close',
+          #filtered, filter_label),
+      }
+      local map = {}
+      for _, e in ipairs(filtered) do
+        lines[#lines + 1] = string.format('  %s %s',
+          type_prefix(e.note_type), e.title or e.filename or '?')
+        map[#lines] = e.path
+      end
+      if #filtered == 0 then
+        lines[#lines + 1] = '  (no notes match)'
+      end
+      return lines, map
+    end
+
+    local tree = build_tree_entries()
+    local filtered = tree
+    if state.filter and state.filter ~= '' then
+      local needle = state.filter:lower()
+      local f = {}
+      for _, e in ipairs(tree) do
+        if e.name:lower():find(needle, 1, true) then f[#f + 1] = e end
+      end
+      filtered = f
+    end
+
+    local filter_label = (state.filter and state.filter ~= '')
+      and ('  [filter: ' .. state.filter .. ']') or ''
+    local lines = {
+      string.format('  Views  (%d)%s  <CR> open  n new  u update  <Tab> browse all  / search  q close',
+        #filtered, filter_label),
+    }
+    local map = {}
+    for _, e in ipairs(filtered) do
+      local count  = #M.match_all(e.name)
+      local indent = string.rep('  ', e.depth)
+      local marker = e.has_children and '▶ ' or '• '
+      lines[#lines + 1] = string.format('  %s%s%s  (%d)', indent, marker, e.name, count)
+      map[#lines] = e.name
+    end
+    if #filtered == 0 then
+      lines[#lines + 1] = (state.filter and state.filter ~= '')
+        and '  (no views match)' or '  (no views defined — press n to create one)'
+    end
+    return lines, map
+  end,
+  -- Deliberately no delete key — see M.open_view_deletion_panel() below.
+  keymaps = {
+    ['<CR>'] = function(state, helpers)
+      local target = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not target then return end
+      helpers.close()
+      if state.mode == 'browse' then
+        vim.schedule(function() vim.cmd('edit ' .. vim.fn.fnameescape(target)) end)
+      else
+        vim.schedule(function() M.open(target) end)
+      end
+    end,
+    ['<Tab>'] = function(state, helpers)
+      state.mode   = (state.mode == 'browse') and 'views' or 'browse'
+      -- Clear the filter across the switch — a query from one mode
+      -- silently carrying over and filtering the other mode's very
+      -- different dataset would be confusing, not convenient.
+      state.filter = nil
+      helpers.refresh()
+    end,
+    ['n'] = function(state, helpers)
+      if state.mode == 'browse' then return end
+      helpers.close()
+      vim.schedule(function() vim.cmd('PKMViewNew') end)
+    end,
+    ['u'] = function(state, helpers)
+      if state.mode == 'browse' then return end
+      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not name then return end
+      helpers.close()
+      vim.schedule(function() M.edit_view(name) end)
+    end,
+    ['/'] = function(state, helpers)
+      vim.fn.inputsave()
+      local query = vim.fn.input('Filter: ', state.filter or '')
+      vim.fn.inputrestore()
+      state.filter = (query and query ~= '') and query or nil
+      helpers.refresh()
+    end,
+  },
+})
+
+--- Open the views panel: browse the view tree, open a view (<CR>), create
+--- one (n), or edit/rename/reparent one (u). <Tab> switches in place to a
+--- lightweight all-notes browse mode and back — no closing this panel to
+--- open a separate one. No deletion key by design — see
+--- M.open_view_deletion_panel().
+---@param mode 'views'|'browse'|nil  Initial mode; defaults to 'views'.
 ---@return nil
-function M.list_views()
-  local has_telescope = pcall(require, 'telescope')
-  if has_telescope then
-    telescope_views_tree_picker()
-  else
-    float_views_tree_picker()
-  end
+function M.open_views_panel(mode)
+  _views_panel.open({ filter = '', mode = mode or 'views' })
+end
+
+local _delete_panel = panel.create({
+  name          = 'viewdeletepanel',
+  split_cmd     = 'noautocmd botright split',
+  focus_on_open = true,
+  resize = function(state, lines)
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 16))
+    end
+  end,
+  build_lines = function(state)
+    local tree = build_tree_entries()
+    local filtered = tree
+    if state.filter and state.filter ~= '' then
+      local needle = state.filter:lower()
+      local f = {}
+      for _, e in ipairs(tree) do
+        if e.name:lower():find(needle, 1, true) then f[#f + 1] = e end
+      end
+      filtered = f
+    end
+
+    local filter_label = (state.filter and state.filter ~= '')
+      and ('  [filter: ' .. state.filter .. ']') or ''
+    local lines = {
+      string.format('  Delete View  (%d)%s  <CR> select (confirms)  / search  q close',
+        #filtered, filter_label),
+    }
+    local map = {}
+    for _, e in ipairs(filtered) do
+      local count  = #M.match_all(e.name)
+      local indent = string.rep('  ', e.depth)
+      local marker = e.has_children and '▶ ' or '• '
+      lines[#lines + 1] = string.format('  %s%s%s  (%d)', indent, marker, e.name, count)
+      map[#lines] = e.name
+    end
+    if #filtered == 0 then
+      lines[#lines + 1] = (state.filter and state.filter ~= '')
+        and '  (no views match)' or '  (no views defined)'
+    end
+    return lines, map
+  end,
+  keymaps = {
+    ['<CR>'] = function(state, helpers)
+      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not name then return end
+      -- Warn about orphaned children: M.delete() only removes this
+      -- entry, it does not touch any subproject whose parent field
+      -- pointed here (a pre-existing, out-of-scope-for-this-phase
+      -- limitation) — surfacing it in the confirm prompt at least makes
+      -- the consequence visible before it happens, not only after.
+      local children = get_view_children(name)
+      local msg = string.format("Delete view '%s'?", name)
+      if #children > 0 then
+        msg = msg .. string.format(
+          '\n(%d subview%s reference this as parent and will be orphaned)',
+          #children, #children == 1 and '' or 's')
+      end
+      local choice = vim.fn.confirm(msg, '&Yes\n&No', 2)
+      if choice == 1 then
+        M.delete(name)
+        helpers.refresh()
+      end
+    end,
+    ['/'] = function(state, helpers)
+      vim.fn.inputsave()
+      local query = vim.fn.input('Filter: ', state.filter or '')
+      vim.fn.inputrestore()
+      state.filter = (query and query ~= '') and query or nil
+      helpers.refresh()
+    end,
+  },
+})
+
+--- Open the view-deletion panel: browse → select → confirm before delete
+--- (vim.fn.confirm, single keypress — matches the existing convention used
+--- by the buffer panel's own "close with unsaved changes" prompt, not a
+--- typed "yes"/"no" like :PKMEmptyTrash's heavier confirmation, since
+--- deleting a view only removes a saved filter, never any note content).
+---@return nil
+function M.open_view_deletion_panel()
+  _delete_panel.open({ filter = '' })
 end
 
 -- =============================================================================
@@ -1606,11 +1757,16 @@ local function sidebar_show_help()
     '  b        back (pop history)',
     '  <BS>     same as b',
     '  <C-b>    jump to overview',
+  }
+  if _panel_keymap_lhs then
+    lines[#lines + 1] = string.format('  %-9s open views panel', _panel_keymap_lhs)
+  end
+  vim.list_extend(lines, {
     '  /        search (opens in main window)',
     '  r        refresh',
     '  q        close sidebar',
     '  ?        this help',
-  }
+  })
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -1771,21 +1927,19 @@ function M.open_sidebar(name)
     -- [count]<CR>: open in the Nth editing window (1 = leftmost), sorted left→right.
     local count = vim.v.count
     if count > 0 then
-      local editing_wins = {}
+      local candidates = {}
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if win ~= ct.win
         and vim.api.nvim_win_get_config(win).relative == '' then
           if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
-            editing_wins[#editing_wins + 1] = win
+            candidates[#candidates + 1] = { win = win, col = vim.api.nvim_win_get_position(win)[2] }
           end
         end
       end
-      table.sort(editing_wins, function(a, b)
-        return vim.api.nvim_win_get_position(a)[2]
-             < vim.api.nvim_win_get_position(b)[2]
-      end)
-      if count <= #editing_wins then
-        vim.api.nvim_set_current_win(editing_wins[count])
+      local editing_wins = sort_wins_by_col(candidates)
+      local slot = resolve_window_slot(count, #editing_wins)
+      if slot then
+        vim.api.nvim_set_current_win(editing_wins[slot].win)
         vim.cmd('edit ' .. vim.fn.fnameescape(path))
       else
         vim.notify(string.format('[pkm] no window %d (only %d editing window%s)',
@@ -1846,6 +2000,12 @@ function M.open_sidebar(name)
       sidebar_switch_to_overview()
     end
   end, ko)
+
+  if _panel_keymap_lhs then
+    vim.keymap.set('n', _panel_keymap_lhs, function()
+      M.open_views_panel()
+    end, ko)
+  end
 
   -- b: reliable alternative to <BS> on all terminals
   vim.keymap.set('n', 'b', function()
@@ -1910,21 +2070,28 @@ function M.open_sidebar(name)
       return
     end
     local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
-    local target
+    local candidates = {}
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
       if win ~= ct.win
       and vim.api.nvim_win_get_config(win).relative == '' then
         if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
-          target = win; break
+          candidates[#candidates + 1] = { win = win, col = vim.api.nvim_win_get_position(win)[2] }
         end
       end
     end
-    if target then
-      vim.api.nvim_set_current_win(target)
-      vim.cmd('vsplit ' .. vim.fn.fnameescape(path))
-    else
+    local editing_wins = sort_wins_by_col(candidates)
+    if #editing_wins == 0 then
+      -- No editing windows yet — same fallback as N<CR>'s zero-window case.
       vim.cmd('rightbelow vsplit ' .. vim.fn.fnameescape(path))
+      return
     end
+    -- Insert immediately right of the sidebar: leftabove of the current
+    -- leftmost editing window, so the new window becomes leftmost,
+    -- shifting everything else right — the insert-before complement to
+    -- N<CR>. Explicit leftabove (not a bare vsplit) so this is
+    -- deterministic regardless of the user's 'splitright' setting.
+    vim.api.nvim_set_current_win(editing_wins[1].win)
+    vim.cmd('leftabove vsplit ' .. vim.fn.fnameescape(path))
   end, ko)
 
   -- <C-s>: no-op — prevents global split keymaps from acting on the sidebar.
@@ -2081,5 +2248,11 @@ function M.refresh_sidebar_if_open()
     end
   end
 end
+
+-- Exposed for test/test_v160_p3.lua only; not part of the module's public API.
+M._views_panel          = _views_panel
+M._delete_panel         = _delete_panel
+M._sort_wins_by_col     = sort_wins_by_col
+M._resolve_window_slot  = resolve_window_slot
 
 return M
