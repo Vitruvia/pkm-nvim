@@ -33,7 +33,11 @@
 -- Public API:
 --   setup()             → register BufWritePost autocmd for views.json
 --   list()              → string[]  sorted view names (sidecar + config)
---   open_views_panel(mode?)  → browse/create/update views panel (Phase 3)
+--   open_views_panel(mode?)  → browse/create/update views; Telescope when
+--                               available (live search), panel.lua fallback
+--                               otherwise. <C-f> jumps to browse-all-notes
+--                               from either backend, either level (tree or
+--                               a specific view's detail).
 --   open_view_deletion_panel() → browse/select/confirm-delete a view (Phase 3)
 --   set_panel_keymap(lhs)    → set the optional sidebar→views-panel key
 --   edit_view(name?)    → action picker: edit filter / rename / reparent; picker if nil
@@ -726,7 +730,7 @@ local function telescope_view_picker(name, paths)
     layout_config    = { prompt_position = 'top' },
   }, {
     prompt_title = string.format(
-      'PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs',
+      'PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs  <C-f> browse all',
       name, total, total == 1 and '' or 's'),
 
     finder = finders.new_dynamic({
@@ -791,12 +795,19 @@ local function telescope_view_picker(name, paths)
         end)
       end
 
+      local function go_browse()
+        actions.close(prompt_bufnr)
+        vim.schedule(function() M.open_views_panel('browse') end)
+      end
+
       map('i', '<C-b>', go_back)
       map('n', '<C-b>', go_back)
       map('i', '<C-p>', go_parent)
       map('n', '<C-p>', go_parent)
       map('i', '<C-s>', go_children)
       map('n', '<C-s>', go_children)
+      map('i', '<C-f>', go_browse)
+      map('n', '<C-f>', go_browse)
 
       return true
     end,
@@ -835,7 +846,7 @@ local function float_view_picker(name, paths)
     local filter_label   = (filter_query and filter_query ~= '')
       and ('  [filter: ' .. filter_query .. ']') or ''
     local header = string.format(
-      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / search  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  q close',
+      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / search  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  <C-f> browse all  ·  q close',
       name, total, total == 1 and '' or 's', filter_label)
     local lines = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
     line_paths, line_subs = {}, {}
@@ -948,6 +959,9 @@ local function float_view_picker(name, paths)
   vim.keymap.set('n', '<C-b>', go_back,        ko)
   vim.keymap.set('n', '<C-p>', go_parent,      ko)
   vim.keymap.set('n', '<C-s>', go_children,    ko)
+  vim.keymap.set('n', '<C-f>', function()
+    close(); vim.schedule(function() M.open_views_panel('browse') end)
+  end, ko)
   vim.keymap.set('n', 'q',     close,          ko)
   vim.keymap.set('n', '<Esc>', close,          ko)
 end
@@ -1012,7 +1026,7 @@ function M.open_last()
 end
 
 -- =============================================================================
--- SECTION: Views panel and view-deletion panel (v1.6.0 Phase 3)
+-- SECTION: Views panel and view-deletion panel
 -- =============================================================================
 -- Replaces the former tree-picker M.list_views() (both go_back() callers
 -- below now point here instead, so "browse all views" is one consistent
@@ -1024,6 +1038,143 @@ end
 -- of splitting it out, matching the trash-restore panel's own precedent of
 -- keeping destructive actions out of a panel meant for casual browsing.
 
+--- Telescope tree/browse picker, restored to give Telescope users live
+--- search-as-you-type — the panel.lua fallback below (_views_panel) can
+--- only ever do prompt-then-refilter, since it isn't backed by a Telescope
+--- prompt buffer. mode='views' (default) shows the view hierarchy with
+--- n/new and u/update bound in normal mode only (letter keys can't be
+--- insert-mode-bound without eating literal typed characters in the
+--- prompt — <Esc> out of the prompt first, matching how Telescope's own
+--- normal-mode-only actions already work elsewhere). mode='browse' shows
+--- all notes, unscoped, substring-filtered (never fuzzy, matching this
+--- project's own search convention throughout).
+---@param mode 'views'|'browse'|nil
+local function telescope_views_tree_picker(mode)
+  mode = mode or 'views'
+  local pickers      = require('telescope.pickers')
+  local finders       = require('telescope.finders')
+  local sorters       = require('telescope.sorters')
+  local actions       = require('telescope.actions')
+  local action_state  = require('telescope.actions.state')
+  local previewers    = require('telescope.previewers')
+
+  if mode == 'browse' then
+    local index   = require('pkm.index')
+    local entries = index.get_all()
+    table.sort(entries, function(a, b)
+      local ta = _TYPE_ORDER[a.note_type] or 6
+      local tb = _TYPE_ORDER[b.note_type] or 6
+      if ta ~= tb then return ta < tb end
+      return (a.title or a.filename or ''):lower() < (b.title or b.filename or ''):lower()
+    end)
+    local items = {}
+    for _, e in ipairs(entries) do
+      items[#items + 1] = {
+        value   = e.path,
+        display = type_prefix(e.note_type) .. ' ' .. (e.title or e.filename or '?'),
+      }
+    end
+
+    pickers.new({
+      sorting_strategy = 'ascending',
+      layout_config    = { prompt_position = 'top' },
+    }, {
+      prompt_title = string.format('Browse All Notes  (%d)  <C-f> views', #items),
+      finder = finders.new_dynamic({
+        fn = function(prompt)
+          if not prompt or prompt == '' then return items end
+          local needle = prompt:lower()
+          local out = {}
+          for _, item in ipairs(items) do
+            if item.display:lower():find(needle, 1, true) then out[#out + 1] = item end
+          end
+          return out
+        end,
+        entry_maker = function(item) return item end,
+      }),
+      sorter    = sorters.empty(),
+      previewer = previewers.vim_buffer_cat.new({}),
+      attach_mappings = function(prompt_bufnr, map)
+        actions.select_default:replace(function()
+          local sel = action_state.get_selected_entry()
+          actions.close(prompt_bufnr)
+          if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.value)) end
+        end)
+        local function go_views()
+          actions.close(prompt_bufnr)
+          vim.schedule(function() M.open_views_panel('views') end)
+        end
+        map('i', '<C-f>', go_views)
+        map('n', '<C-f>', go_views)
+        return true
+      end,
+    }):find()
+    return
+  end
+
+  local tree  = build_tree_entries()
+  local items = {}
+  for _, e in ipairs(tree) do
+    local count  = #M.match_all(e.name)
+    local indent = string.rep('  ', e.depth)
+    local marker = e.has_children and '▶ ' or '• '
+    items[#items + 1] = {
+      name    = e.name,
+      display = string.format('%s%s%s  (%d)', indent, marker, e.name, count),
+    }
+  end
+
+  pickers.new({
+    sorting_strategy = 'ascending',
+    layout_config    = { prompt_position = 'top' },
+  }, {
+    prompt_title = 'PKM Views  ·  <C-f> browse all  ·  n new  ·  u update',
+    finder = finders.new_dynamic({
+      fn = function(prompt)
+        if not prompt or prompt == '' then return items end
+        local needle = prompt:lower()
+        local out = {}
+        for _, item in ipairs(items) do
+          if item.name:lower():find(needle, 1, true) then out[#out + 1] = item end
+        end
+        return out
+      end,
+      entry_maker = function(item)
+        return { value = item.name, display = item.display, ordinal = item.name }
+      end,
+    }),
+    sorter = sorters.empty(),
+    attach_mappings = function(prompt_bufnr, map)
+      actions.select_default:replace(function()
+        actions.close(prompt_bufnr)
+        local sel = action_state.get_selected_entry()
+        if sel then M.open(sel.value) end
+      end)
+
+      local function go_browse()
+        actions.close(prompt_bufnr)
+        vim.schedule(function() M.open_views_panel('browse') end)
+      end
+      local function do_new()
+        actions.close(prompt_bufnr)
+        vim.schedule(function() vim.cmd('PKMViewNew') end)
+      end
+      local function do_update()
+        local sel = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        if sel then vim.schedule(function() M.edit_view(sel.value) end) end
+      end
+
+      map('i', '<C-f>', go_browse)
+      map('n', '<C-f>', go_browse)
+      map('n', 'n', do_new)
+      map('n', 'u', do_update)
+
+      return true
+    end,
+  }):find()
+end
+
 local _views_panel = panel.create({
   name          = 'viewspanel',
   split_cmd     = 'noautocmd botright split',
@@ -1034,12 +1185,13 @@ local _views_panel = panel.create({
     end
   end,
   -- 'views' (default) shows the view tree; 'browse' shows all notes,
-  -- unscoped, toggled in place with <Tab> — same window and buffer, no
-  -- closing one popup and opening another. Browse mode here is a light
-  -- substring-only convenience, NOT a replacement for :PKMBrowse's own
-  -- full tag:/title:/text: field-prefix grammar — that command keeps its
-  -- own richer implementation; this is just a quick peek reachable
-  -- without leaving the views panel.
+  -- unscoped, toggled in place with <C-f> — same window and buffer, no
+  -- closing one popup and opening another. Only reached when Telescope
+  -- isn't installed (see telescope_views_tree_picker above for that path).
+  -- Browse mode here is a light substring-only convenience, NOT a
+  -- replacement for :PKMBrowse's own full tag:/title:/text: field-prefix
+  -- grammar — that command keeps its own richer implementation; this is
+  -- just a quick peek reachable without leaving the views panel.
   build_lines = function(state)
     state.mode = state.mode or 'views'
 
@@ -1072,7 +1224,7 @@ local _views_panel = panel.create({
       local filter_label = (state.filter and state.filter ~= '')
         and ('  [filter: ' .. state.filter .. ']') or ''
       local lines = {
-        string.format('  Browse All  (%d)%s  <CR> open  <Tab> views  / search  q close',
+        string.format('  Browse All  (%d)%s  <CR> open  <C-f> views  / search  q close',
           #filtered, filter_label),
       }
       local map = {}
@@ -1101,7 +1253,7 @@ local _views_panel = panel.create({
     local filter_label = (state.filter and state.filter ~= '')
       and ('  [filter: ' .. state.filter .. ']') or ''
     local lines = {
-      string.format('  Views  (%d)%s  <CR> open  n new  u update  <Tab> browse all  / search  q close',
+      string.format('  Views  (%d)%s  <CR> open  n new  u update  <C-f> browse all  / search  q close',
         #filtered, filter_label),
     }
     local map = {}
@@ -1130,7 +1282,7 @@ local _views_panel = panel.create({
         vim.schedule(function() M.open(target) end)
       end
     end,
-    ['<Tab>'] = function(state, helpers)
+    ['<C-f>'] = function(state, helpers)
       state.mode   = (state.mode == 'browse') and 'views' or 'browse'
       -- Clear the filter across the switch — a query from one mode
       -- silently carrying over and filtering the other mode's very
@@ -1161,14 +1313,22 @@ local _views_panel = panel.create({
 })
 
 --- Open the views panel: browse the view tree, open a view (<CR>), create
---- one (n), or edit/rename/reparent one (u). <Tab> switches in place to a
---- lightweight all-notes browse mode and back — no closing this panel to
---- open a separate one. No deletion key by design — see
+--- one (n), or edit/rename/reparent one (u). Dispatches to Telescope when
+--- available (telescope_views_tree_picker — live search) and to the
+--- panel.lua fallback otherwise (_views_panel), matching M.open()'s own
+--- has_telescope convention. <C-f> switches to a lightweight all-notes
+--- browse mode and back on either backend — no closing this panel to open
+--- a separate one. No deletion key by design — see
 --- M.open_view_deletion_panel().
 ---@param mode 'views'|'browse'|nil  Initial mode; defaults to 'views'.
 ---@return nil
 function M.open_views_panel(mode)
-  _views_panel.open({ filter = '', mode = mode or 'views' })
+  local has_telescope = pcall(require, 'telescope')
+  if has_telescope then
+    telescope_views_tree_picker(mode)
+  else
+    _views_panel.open({ filter = '', mode = mode or 'views' })
+  end
 end
 
 local _delete_panel = panel.create({
