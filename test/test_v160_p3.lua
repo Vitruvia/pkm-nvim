@@ -80,21 +80,20 @@ do
   check("header mentions the C-f-to-browse hint", header_ok)
   check("scratch view appears in the panel", found_view)
 
-  local keymap_lhs, keymap_readable = {}, {}
+  local keymap_lhs, keymap_lower = {}, {}
   for _, km in ipairs(vim.api.nvim_buf_get_keymap(buf, 'n')) do
     keymap_lhs[km.lhs] = true
-    -- Control-key combos come back as their raw byte (Ctrl-F is 0x06), not
-    -- the '<C-f>' string — keytrans() converts back to the canonical
-    -- <...> notation so the comparison actually means what it says.
-    -- Plain printable keys (below) have no such ambiguity and are checked
-    -- against the raw lhs directly.
-    print(vim.fn.keytrans(km.lhs):lower())
-    keymap_readable[vim.fn.keytrans(km.lhs):lower()] = true
+    -- nvim_buf_get_keymap already returns bracketed keys like '<C-f>' as
+    -- '<c-f>' (lowercased inside the brackets, regardless of how it was
+    -- registered) — a plain string compare against '<C-f>' silently
+    -- never matches. Plain single-character keys (d/D/n/u below) have no
+    -- such case-folding and are checked against the exact, unmodified lhs.
+    keymap_lower[km.lhs:lower()] = true
   end
   check("no 'd' keymap in views panel (deletion lives in the separate panel only)",
     keymap_lhs['d'] == nil)
   check("no 'D' keymap in views panel", keymap_lhs['D'] == nil)
-  check("'<C-f>' is bound (mode switch)", keymap_readable['<c-f>'] ~= nil)
+  check("'<C-f>' is bound (mode switch)", keymap_lower['<c-f>'] ~= nil)
   check("'n' is bound (new view)", keymap_lhs['n'] ~= nil)
   check("'u' is bound (update view)", keymap_lhs['u'] ~= nil)
 
