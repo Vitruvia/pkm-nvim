@@ -999,7 +999,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     local filter_label   = (filter_query and filter_query ~= '')
       and ('  [filter: ' .. filter_query .. ']') or ''
     local header = string.format(
-      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / search  ·  <C-b> views  ·  <C-p> parent  ·  <C-s> subs  ·  <C-f> browse all  ·  <C-v>/<C-x> split  ·  q close',
+      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / search  ·  ? help  ·  q close',
       name, total, total == 1 and '' or 's', filter_label)
     local lines = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
     line_paths, line_subs = {}, {}
@@ -1130,6 +1130,20 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     if not p then return end
     close()
     vim.schedule(function() open_relative_split('left', p, invocation_win, invocation_was_sidebar) end)
+  end, ko)
+  vim.keymap.set('n', '?', function()
+    show_keymap_help(' PKMView Keymaps ', {
+      '  <CR>     open note / enter subview',
+      '  <C-b>    back to views panel',
+      '  <C-p>    go to parent view',
+      '  <C-s>    go to subviews',
+      '  <C-f>    browse all notes',
+      '  <C-v>    open note: split right',
+      '  <C-x>    open note: split left',
+      '  /        search',
+      '  q        close',
+      '  ?        this help',
+    })
   end, ko)
   vim.keymap.set('n', 'q',     close,          ko)
   vim.keymap.set('n', '<Esc>', close,          ko)
@@ -1430,7 +1444,7 @@ local _views_panel = panel.create({
       local filter_label = (state.filter and state.filter ~= '')
         and ('  [filter: ' .. state.filter .. ']') or ''
       local lines = {
-        string.format('  Browse All  (%d)%s  <CR> open  <C-f> views  <C-v>/<C-x> split  / search  q close',
+        string.format('  Browse All  (%d)%s  <CR> open  / search  ? help',
           #filtered, filter_label),
       }
       local map = {}
@@ -1459,7 +1473,7 @@ local _views_panel = panel.create({
     local filter_label = (state.filter and state.filter ~= '')
       and ('  [filter: ' .. state.filter .. ']') or ''
     local lines = {
-      string.format('  Views  (%d)%s  <CR> open  n new  u update  <C-f> browse all  / search  q close',
+      string.format('  Views  (%d)%s  <CR> open  / search  ? help',
         #filtered, filter_label),
     }
     local map = {}
@@ -1529,6 +1543,29 @@ local _views_panel = panel.create({
       vim.fn.inputrestore()
       state.filter = (query and query ~= '') and query or nil
       helpers.refresh()
+    end,
+    ['?'] = function(state)
+      if state.mode == 'browse' then
+        show_keymap_help(' Browse All Notes Keymaps ', {
+          '  <CR>     open note',
+          '  <C-v>    open note: split right',
+          '  <C-x>    open note: split left',
+          '  <C-f>    back to views',
+          '  /        search',
+          '  q        close',
+          '  ?        this help',
+        })
+      else
+        show_keymap_help(' PKM Views Keymaps ', {
+          '  <CR>     open view',
+          '  n        new view',
+          '  u        update view (rename/reparent/edit filter)',
+          '  <C-f>    browse all notes',
+          '  /        search',
+          '  q        close',
+          '  ?        this help',
+        })
+      end
     end,
   },
 })
@@ -2162,35 +2199,7 @@ local function sidebar_show_help()
     '  q        close sidebar',
     '  ?        this help',
   })
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
-
-  local width  = 50
-  local height = #lines + 2
-  local win    = vim.api.nvim_open_win(buf, true, {
-    relative  = 'editor',
-    width     = width,
-    height    = height,
-    col       = math.floor((vim.o.columns - width) / 2),
-    row       = math.floor((vim.o.lines   - height) / 2),
-    style     = 'minimal',
-    border    = 'rounded',
-    title     = ' Sidebar Keymaps ',
-    title_pos = 'center',
-  })
-
-  local function close()
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
-    end
-  end
-  local ko = { noremap = true, silent = true, buffer = buf }
-  vim.keymap.set('n', 'q',     close, ko)
-  vim.keymap.set('n', '<Esc>', close, ko)
-  vim.keymap.set('n', '?',     close, ko)
+  show_keymap_help(' Sidebar Keymaps ', lines)
 end
 
 --- Open or toggle the persistent view sidebar.

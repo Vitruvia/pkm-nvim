@@ -111,6 +111,22 @@
 
 ### Fixed
 
+- **Browse-mode Telescope picker showed no notes, before or after
+  typing** — `telescope_views_tree_picker`'s browse-mode `items` table
+  never set an `ordinal` field, and its `entry_maker` passed items through
+  unchanged (`function(item) return item end`), so every resulting
+  Telescope entry had `ordinal = nil`. Telescope's entry manager needs a
+  non-nil `ordinal` for internal bookkeeping even with a no-op sorter
+  (`sorters.empty()`, correct here since `finders.new_dynamic`'s own `fn`
+  already does the filtering) — without it entries silently fail to
+  register. Fixed by setting `ordinal = e.title or e.filename or e.path`
+  at construction, matching the working pattern already used by the
+  sibling "views" tree mode in the same function. Pre-existing since the
+  original views/browse redesign; not something this round introduced,
+  and not something any existing test could have caught (nothing in
+  `test_v160_p3.lua`/`test_v160_p4.lua` populates a live Telescope picker
+  and checks rendered entries — a real blind spot in this project's test
+  coverage worth remembering generally, not just for this bug).
 - **`<C-f>` search from the views tree picker had no way back** — it
   closed the tree picker before opening results, and the shared
   `browse_paths` utility (also used by unrelated callers like `:PKMOrphans`)
@@ -123,6 +139,33 @@
 
 ### Added
 
+- **Relative-split picker actions (`<C-v>`/`<C-x>`)** — from any note-listing
+  picker or panel, highlighting a note and pressing `<C-v>` opens it in a
+  vertical split to the right of the invocation window (the window that
+  was current when the picker was opened); `<C-x>` opens it to the left.
+  Direction-only, single keypress. New pure decision function
+  `resolve_split_target()`, unit-tested in `test/test_v160_p4.lua`
+  (8 cases): `left` unavailable when the invocation window was the sidebar
+  or has since closed; `right` falls back to the rightmost real editing
+  window if the invocation window is gone. New wrapper
+  `open_relative_split()` performs the actual split via explicit
+  `leftabove`/`rightbelow vsplit` (deterministic regardless of
+  `'splitright'`). Guarded to note entries only everywhere — selecting a
+  subview and pressing `<C-v>`/`<C-x>` is a no-op.
+- **Curated `?` keymap help** — new shared `show_keymap_help(title, lines)`
+  float, bound to `?` (normal mode only, so a literal `?` typed into a
+  search prompt is unaffected) across every views.lua picker/panel:
+  `telescope_view_picker`, `float_view_picker`, both modes of
+  `telescope_views_tree_picker`, both modes of `_views_panel`. For the
+  Telescope-backed pickers this *replaces* Telescope's own built-in `?`
+  which-key float — which listed every custom `map()` binding as
+  "anonymous", since none had a description — with one scoped to this
+  plugin's actual keys. Every previously-crowded prompt-title/header
+  collapsed to a single `? help` pointer, full list moved into the float.
+  `sidebar_show_help` refactored onto the same shared helper.
+- **Config**: new default `keymaps.focus_sidebar = "<C-,>"` — jumps focus
+  directly to the sidebar window from anywhere, regardless of split
+  layout, without stepping through intermediate windows.
 - **Relative-split picker actions (`<C-v>`/`<C-x>`)** — from any note-listing
   picker or panel (`telescope_view_picker`, `float_view_picker`,
   `telescope_views_tree_picker`'s browse mode, and `_views_panel`'s browse
