@@ -1186,6 +1186,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
       items[#items + 1] = {
         value   = e.path,
         display = type_prefix(e.note_type) .. ' ' .. (e.title or e.filename or '?'),
+        ordinal = e.title or e.filename or e.path,
       }
     end
 

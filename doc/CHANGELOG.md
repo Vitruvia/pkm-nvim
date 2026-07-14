@@ -91,6 +91,12 @@
 - Two Phase X items closed: "views panel cumbersome" (superseded by Phase
   3's Telescope integration) and "view creation confirmation" (fixed
   above).
+- **Views/Browse console flash** — confirmed gone by direct reproduction
+  attempt (both the new `<C-f>` in-panel toggle and the old direct
+  `:PKMViews` → `:PKMBrowse` command sequence were tried; neither flashes).
+  No code change was needed; superseded by Phase 3's panel/picker rework.
+  Phase 4 in `ROADMAP.md` can be marked shipped once the config default
+  for `focus_sidebar` (still pending your key choice) lands
 
 ### Removed
 - `M.list_views()`, `telescope_views_tree_picker()`,
@@ -117,6 +123,31 @@
 
 ### Added
 
+- **Relative-split picker actions (`<C-v>`/`<C-x>`)** — from any note-listing
+  picker or panel (`telescope_view_picker`, `float_view_picker`,
+  `telescope_views_tree_picker`'s browse mode, and `_views_panel`'s browse
+  mode), highlighting a note and pressing `<C-v>` opens it in a vertical
+  split to the right of the *invocation window* (the window that was
+  current when the picker was opened); `<C-x>` opens it to the left.
+  Direction-only, single keypress — not a window-choice prompt.
+  - New pure decision function `resolve_split_target(direction,
+    invocation_was_sidebar, invocation_still_valid)` in `views.lua`,
+    unit-tested in `test/test_v160_p4.lua`: `left` is unavailable when the
+    invocation window was the sidebar (nothing to its left) or has since
+    closed (no sensible fallback); `right` falls back to the rightmost
+    real editing window if the invocation window is gone.
+  - New wrapper `open_relative_split(direction, target_path,
+    invocation_win, invocation_was_sidebar)` performs the actual
+    `nvim_set_current_win` + explicit `leftabove`/`rightbelow vsplit`
+    (never a bare `vsplit`, so behavior is deterministic regardless of
+    `'splitright'`).
+  - Guarded to note entries only in every picker/panel — selecting a
+    subview and pressing `<C-v>`/`<C-x>` is a no-op, since a subview opens
+    another picker, not a file.
+  - `M.open()` and `M.open_views_panel()` both now capture the invocation
+    window (and whether it was the sidebar) before dispatching to either
+    backend, threading it through to whichever picker/panel opens.
+  - `M._resolve_split_target` exposed for `test/test_v160_p4.lua` only.
 - **Views panel** (`:PKMViews`) — `panel.create()`-based replacement for
   the old tree picker. `<CR>` opens a view, `n` creates one
   (`:PKMViewNew`), `u` opens the edit/rename/reparent action picker on the
