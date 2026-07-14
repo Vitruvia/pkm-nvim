@@ -764,6 +764,51 @@ end
 -- SECTION: Pickers
 -- =============================================================================
 
+--- Show a small floating window listing keymap hints, one per line. Shared
+--- by every Telescope-backed picker in this file so prompt titles can stay
+--- short (a single "? help" pointer) instead of cramming every key into
+--- the title. Bound to '?' in normal mode only -- '?' is a valid character
+--- inside a search prompt, so binding it in insert mode would swallow a
+--- literal '?' the user meant to type. This *replaces* Telescope's own
+--- built-in '?' which-key float (which shows every custom map() binding as
+--- "anonymous", since none of them were given a description) with a
+--- curated list instead.
+---@param title string
+---@param lines string[]  Already-formatted "  <key>   description" lines
+local function show_keymap_help(title, lines)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
+
+  local width = 20
+  for _, l in ipairs(lines) do width = math.max(width, #l + 4) end
+  width = math.min(width, 60)
+  local height = #lines + 2
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative  = 'editor',
+    width     = width,
+    height    = height,
+    col       = math.floor((vim.o.columns - width) / 2),
+    row       = math.floor((vim.o.lines   - height) / 2),
+    style     = 'minimal',
+    border    = 'rounded',
+    title     = title,
+    title_pos = 'center',
+  })
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end
+  local ko = { noremap = true, silent = true, buffer = buf }
+  vim.keymap.set('n', 'q',     close, ko)
+  vim.keymap.set('n', '<Esc>', close, ko)
+  vim.keymap.set('n', '?',     close, ko)
+end
+
 --- Telescope picker over pre-matched note paths. Exact substring prompt.
 local function telescope_view_picker(name, paths, invocation_win, invocation_was_sidebar)
   local pickers      = require('telescope.pickers')
@@ -807,7 +852,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
     layout_config    = { prompt_position = 'top' },
   }, {
     prompt_title = string.format(
-      'PKMView: %s  (%d note%s)  <C-b> views  <C-p> parent  <C-s> subs  <C-f> browse all  <C-v>/<C-x> split',
+      'PKMView: %s  (%d note%s)  ?  help',
       name, total, total == 1 and '' or 's'),
 
     finder = finders.new_dynamic({
@@ -890,6 +935,19 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
         end)
       end
 
+      local function do_help()
+        show_keymap_help(' PKMView Keymaps ', {
+          '  <CR>     open note / enter subview',
+          '  <C-b>    back to views panel',
+          '  <C-p>    go to parent view',
+          '  <C-s>    go to subviews',
+          '  <C-f>    browse all notes',
+          '  <C-v>    open note: split right',
+          '  <C-x>    open note: split left',
+          '  ?        this help',
+        })
+      end
+
       map('i', '<C-b>', go_back)
       map('n', '<C-b>', go_back)
       map('i', '<C-p>', go_parent)
@@ -902,6 +960,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
       map('n', '<C-v>', function() do_split('right') end)
       map('i', '<C-x>', function() do_split('left') end)
       map('n', '<C-x>', function() do_split('left') end)
+      map('n', '?', do_help)
 
       return true
     end,
@@ -1194,7 +1253,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
       sorting_strategy = 'ascending',
       layout_config    = { prompt_position = 'top' },
     }, {
-      prompt_title = string.format('Browse All Notes  (%d)  <C-f> views  <C-v>/<C-x> split', #items),
+      prompt_title = string.format('Browse All Notes  (%d)  ?  help', #items),
       finder = finders.new_dynamic({
         fn = function(prompt)
           if not prompt or prompt == '' then return items end
@@ -1227,12 +1286,22 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
             open_relative_split(direction, sel.value, invocation_win, invocation_was_sidebar)
           end)
         end
+        local function do_help()
+          show_keymap_help(' Browse All Notes Keymaps ', {
+            '  <CR>     open note',
+            '  <C-f>    back to views',
+            '  <C-v>    open note: split right',
+            '  <C-x>    open note: split left',
+            '  ?        this help',
+          })
+        end
         map('i', '<C-f>', go_views)
         map('n', '<C-f>', go_views)
         map('i', '<C-v>', function() do_split('right') end)
         map('n', '<C-v>', function() do_split('right') end)
         map('i', '<C-x>', function() do_split('left') end)
         map('n', '<C-x>', function() do_split('left') end)
+        map('n', '?', do_help)
         return true
       end,
     }):find()
@@ -1255,7 +1324,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
     sorting_strategy = 'ascending',
     layout_config    = { prompt_position = 'top' },
   }, {
-    prompt_title = 'PKM Views  ·  <C-f> browse all  ·  n new  ·  u update',
+    prompt_title = 'PKM Views  ·  ?  help',
     finder = finders.new_dynamic({
       fn = function(prompt)
         if not prompt or prompt == '' then return items end
@@ -1291,11 +1360,21 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
         actions.close(prompt_bufnr)
         if sel then vim.schedule(function() M.edit_view(sel.value) end) end
       end
+      local function do_help()
+        show_keymap_help(' PKM Views Keymaps ', {
+          '  <CR>     open view',
+          '  <C-f>    browse all notes',
+          '  n        new view',
+          '  u        update view (rename/reparent/edit filter)',
+          '  ?        this help',
+        })
+      end
 
       map('i', '<C-f>', go_browse)
       map('n', '<C-f>', go_browse)
       map('n', 'n', do_new)
       map('n', 'u', do_update)
+      map('n', '?', do_help)
 
       return true
     end,
