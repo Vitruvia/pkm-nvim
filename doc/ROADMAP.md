@@ -778,7 +778,7 @@ feat: views panels and sidebar window navigation
 - docs: changelog
 ```
 
-**Phase 4 — picker polish.**
+**Phase 4 — picker polish.** Shipped in 1.6.0
 
 | File | Single-pass changes |
 |---|---|
