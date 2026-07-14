@@ -153,7 +153,7 @@ local defaults = {
     view_panel   = false,   -- sidebar-buffer-local key to pop out into the views panel
     view_buffers = "<leader>vb",
     toggle_file_explorer = "<leader>ts",   -- ts = toggle sidebar
-    focus_sidebar = "<C-[>",   -- jump focus directly to sidebar window
+    focus_sidebar = "gb",   -- jump focus directly to sidebar window
     -- PKMMode
     toggle_mode   = false,   -- :PKMMode toggle
     -- Search and browsing
