@@ -20,6 +20,7 @@ local M = {}
 ---@param config table Resolved PKM config (needs config.keymaps)
 function M.register(config)
   local k = config.keymaps
+  vim.notify('[pkm debug] focus_sidebar = ' .. vim.inspect(k.focus_sidebar), vim.log.levels.WARN)
 
   -- --------------------------------------------------------------------------
   -- KEYMAPS: note operations
