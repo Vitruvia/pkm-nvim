@@ -1095,6 +1095,9 @@ the appropriate file/location.
         note, like YAML frontmatter, code blocks, headers (no autowrapping
         headers with text that imediately precedes or follows them), tables, lists
         with custom prefixes, etc.;
+    3.  Create a way to batch add/modify tags.
+
+        
 4.  **Misc** (currently set to be done in the active development's Phase X,
     meaning the LLM assistant should decide when it is best to implement them):
     -   Fix now: Pressing `zE` to expand folds makes the system no longer detect the
