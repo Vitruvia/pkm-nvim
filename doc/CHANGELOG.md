@@ -82,6 +82,54 @@
 
 ---
 
+
+## [1.6.1] - 17/7/2026
+
+### Fixed
+
+- **`zE` destroyed the frontmatter fold with no way to recover except
+  saving** — `zE` has no corresponding autocmd event, so nothing observed
+  the fold being torn down. Now remapped (buffer-local, torn down in
+  `disable()`) to run natively then immediately rebuild the fold.
+- **`gf` never followed shortened citations (`note[0042]` in body text)**
+  — only recognized `[[wiki-link]]` syntax; the "full citation" that
+  appeared to work was actually the YAML `link:` field's `[[...]]` text,
+  not the citation token itself. `follow_link()` now falls through to
+  `goto_citation()`'s own lookup when no wiki-link is found under the
+  cursor, so `gf` follows either link type. `goto_citation()` gained a
+  `silent` param so this fallback doesn't double up on error messages.
+- **Undo after a save landed the cursor on the timestamp, not the user's
+  actual edit** — `last_updated_on`'s frontmatter rewrite is merged into
+  the same undo step as the user's edit (via `undojoin`) but runs after
+  it, so undo restored the cursor to wherever that rewrite last touched
+  the buffer. `BufWritePre` now captures the cursor before the rewrite
+  and restores it after, so the merged undo step seals the right position.
+- **Buffer panel sorted purely by file mtime** — reordered to match the
+  requested behavior: buffers currently in a window first (left-to-right
+  by column), then buffers not in any window, most-recently-opened first.
+  New session-scoped `_open_order` tracked via a single `BufEnter` hook
+  registered once in `M.setup` — covers `<CR>` in the panel itself and
+  any other way a buffer gets focused, no per-call-site bookkeeping needed.
+- **`toggle_file_explorer` (`<leader>ts`) and `view_sidebar` (`<leader>vs`)
+  bound to functionally-identical actions** in the common (non-netrw)
+  case — `toggle_file_explorer` disabled by default (`false`); its
+  netrw-swap behavior is superseded by the sidebar's own `T` filename/title
+  toggle for the "peek at raw filenames" use case, per user's own
+  reasoning. `view_sidebar` remains the sole default sidebar-toggle keymap.
+- **Sidebar's `<Esc>` doubled as a close key**, inconsistent with the
+  Lazy.nvim/Vim-help convention this project otherwise follows (`q` only).
+  Removed; `q` is now the sidebar's sole close key.
+
+### Config
+- `focus_sidebar` confirmed at its default (`<leader>s`) after evaluating
+  and rejecting several `<C-*>` alternatives — `<C-,>` collides with
+  Windows Terminal's Settings shortcut, `<C-[>` is byte-identical to
+  `<Esc>` in a terminal (was firing on every incidental Escape press),
+  and punctuation-based candidates (`<C-\>`) were ergonomically awkward
+  on ABNT2. `<leader>s` has no such conflicts.
+
+---
+
 ## [1.6.0] - 12/7/2026 to 13/7/2026
 
 ### Resolved (Design Questions / Near Goals)

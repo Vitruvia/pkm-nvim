@@ -393,6 +393,46 @@ end
 -- =============================================================================
 -- SECTION: Saving
 -- =============================================================================
+
+--- Write lines to filepath with a few short retries on transient failure.
+--- Addresses an intermittent E482 "can't open file for writing" seen on
+--- Windows against a cloud-sync-backed drive (P:\, per this project's own
+--- documented Google Drive sync history) -- the most likely cause is a
+--- sync client transiently locking the file the instant this plugin's own
+--- BufWritePost sequence writes to the same path multiple times in quick
+--- succession. vim.fn.writefile throws (not returns an error code) on
+--- failure, hence pcall. Never silent either way: a WARN if a retry was
+--- needed (so an intermittent lock is visible even when recovered from,
+--- rather than looking like nothing happened) and an ERROR only if every
+--- attempt is exhausted (so a genuine failure is never swallowed).
+--- Does not touch parse_yaml/generate_yaml or any parsing logic.
+---@param lines string[]
+---@param filepath string
+---@return boolean success
+local function writefile_with_retry(lines, filepath)
+  local delays_ms = { 50, 100, 200 }  -- up to ~350ms total across 4 attempts
+  for attempt = 1, #delays_ms + 1 do
+    local ok, err = pcall(vim.fn.writefile, lines, filepath)
+    if ok then
+      if attempt > 1 then
+        vim.notify(string.format(
+          '[pkm] write succeeded on retry %d (file was transiently locked): %s',
+          attempt, vim.fn.fnamemodify(filepath, ':t')), vim.log.levels.WARN)
+      end
+      return true
+    end
+    if attempt <= #delays_ms then
+      vim.wait(delays_ms[attempt])
+    else
+      vim.notify(string.format(
+        '[pkm] write FAILED after %d attempts: %s — %s',
+        attempt, vim.fn.fnamemodify(filepath, ':t'), tostring(err)),
+        vim.log.levels.ERROR)
+    end
+  end
+  return false
+end
+
 --- Write updated frontmatter back to the current buffer (Case A) or a file
 --- (Case B).
 --- Case A (filepath nil): replaces lines 0..content_start-1 in the current buffer.
@@ -455,7 +495,7 @@ function M.save_frontmatter(frontmatter, content_start, filepath)
     end
     
     -- Write the entire reconstructed content back to the file
-    vim.fn.writefile(final_content, filepath)
+    writefile_with_retry(final_content, filepath)
   end
 end
 

@@ -434,6 +434,16 @@ function M.enable(bufnr)
 
   local ag = get_augroup()
 
+  -- zE ("eliminate all folds") destroys the PKM-managed frontmatter fold
+  -- and nothing else observes it -- there is no autocmd for fold-state
+  -- changes. Without this remap the fold stays gone until the next
+  -- BufWinEnter/BufWritePost (why saving "fixes" it). Torn down in
+  -- disable() to restore native zE for non-PKM use.
+  vim.keymap.set('n', 'zE', function()
+    vim.cmd('normal! zE')
+    setup_win_opts(vim.api.nvim_get_current_win())
+  end, { buffer = bufnr, noremap = true, silent = true })
+
   vim.api.nvim_create_autocmd('BufWinEnter', {
     group    = ag,
     buffer   = bufnr,
@@ -501,6 +511,7 @@ function M.disable(bufnr)
     teardown_win_matches(win_id)
     teardown_win_opts(win_id)
   end
+  pcall(vim.keymap.del, 'n', 'zE', { buffer = bufnr })
 
   local timer = _meta_comment_timers[bufnr]
   if timer then

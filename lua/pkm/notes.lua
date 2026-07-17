@@ -1007,6 +1007,10 @@ function M.follow_link()
   end
   
   if not link_target then
+    -- No wiki-link under cursor -- try a citation token (note[0042] etc.)
+    -- next, so gf follows either link type instead of only [[wiki-links]].
+    -- Delegates to goto_citation()'s own lookup so the two never diverge.
+    if require('pkm.citations').goto_citation(true) then return end
     vim.notify("No link under cursor", vim.log.levels.WARN)
     return
   end

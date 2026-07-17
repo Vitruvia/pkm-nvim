@@ -33,6 +33,14 @@ local panel = require('pkm.panel')
 local config = {}
 local _display_mode = 'filename'  -- 'filename' | 'title'
 
+-- Session-scoped "last opened" order, used only for buffers not currently
+-- shown in any editing window. Incremented on every BufEnter into a real,
+-- listed buffer; higher = more recently opened. Per-session by design --
+-- never persisted, matching the buffer panel's own scope (organizing only
+-- the current session, not history across restarts).
+local _open_order   = {}
+local _open_counter = 0
+
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 local _TYPE_ABBREV = {
   note    = 'n',
@@ -80,32 +88,45 @@ local function bufpanel_build_lines(state)
     end
   end
 
-  table.sort(listed, function(a, b)
-    local na = vim.api.nvim_buf_get_name(a)
-    local nb = vim.api.nvim_buf_get_name(b)
-    local ea = index.get(na)
-    local eb = index.get(nb)
-    local ma = ea and ea.mtime or vim.fn.getftime(na)
-    local mb = eb and eb.mtime or vim.fn.getftime(nb)
-    return ma > mb
-  end)
-
-  local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  D force  w save+close  r refresh  T title  q close' }
-  local buf_map = {}
-
-  local win_labels = {}
-  local win_num    = 0
+  -- Window labels + leftmost column per buffer, from one walk: a buffer
+  -- showing in more than one window uses its leftmost window's column for
+  -- ordering. nvim_tabpage_list_wins' own order isn't guaranteed to be
+  -- column order for mixed horizontal/vertical layouts, so window numbers
+  -- are assigned after an explicit left-to-right sort -- same convention
+  -- views.lua's sort_wins_by_col established for N<CR>/<C-v>.
+  local win_labels  = {}
+  local win_col     = {}   -- bufnr -> leftmost column among its windows
+  local win_entries = {}   -- {win, col, bufnr}[]
   local _PANEL_FT  = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_get_config(win).relative == '' then
       if not _PANEL_FT[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
-        win_num = win_num + 1
         local wbuf = vim.api.nvim_win_get_buf(win)
-        if not win_labels[wbuf] then win_labels[wbuf] = {} end
-        table.insert(win_labels[wbuf], '<- w' .. win_num)
+        local col  = vim.api.nvim_win_get_position(win)[2]
+        win_entries[#win_entries + 1] = { win = win, col = col, bufnr = wbuf }
+        if not win_col[wbuf] or col < win_col[wbuf] then win_col[wbuf] = col end
       end
     end
   end
+  table.sort(win_entries, function(a, b) return a.col < b.col end)
+  for i, e in ipairs(win_entries) do
+    if not win_labels[e.bufnr] then win_labels[e.bufnr] = {} end
+    table.insert(win_labels[e.bufnr], '<- w' .. i)
+  end
+
+  -- Order: buffers currently in a window first (leftmost window first),
+  -- then buffers not in any window, most-recently-opened first. Per
+  -- session only -- _open_order is never persisted.
+  table.sort(listed, function(a, b)
+    local ca, cb = win_col[a], win_col[b]
+    if ca and cb then return ca < cb end
+    if ca and not cb then return true end
+    if cb and not ca then return false end
+    return (_open_order[a] or 0) > (_open_order[b] or 0)
+  end)
+
+  local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  D force  w save+close  r refresh  T title  q close' }
+  local buf_map = {}
 
   for _, bufnr in ipairs(listed) do
     local name     = vim.api.nvim_buf_get_name(bufnr)
@@ -446,6 +467,19 @@ end
 function M.setup(user_config)
   config = user_config
   _display_mode = (user_config.display_mode == 'title') and 'title' or 'filename'
+
+  -- Track "last opened" order for the buffer panel's MRU sort. Fires on
+  -- every BufEnter into a real, listed buffer -- covers <CR> in the panel
+  -- itself (nvim_set_current_buf fires BufEnter) and any other way a
+  -- buffer gets focused, with no extra code needed at each call site.
+  vim.api.nvim_create_autocmd('BufEnter', {
+    callback = function(ev)
+      if vim.bo[ev.buf].buflisted and vim.bo[ev.buf].buftype == '' then
+        _open_counter = _open_counter + 1
+        _open_order[ev.buf] = _open_counter
+      end
+    end,
+  })
 
   -- Bufpanel statusline: set once per buffer creation, re-asserted on
   -- WinEnter/BufWinEnter — mirrors the pre-port behaviour exactly. Mirrors

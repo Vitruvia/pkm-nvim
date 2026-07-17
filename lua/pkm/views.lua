@@ -2567,7 +2567,6 @@ function M.open_sidebar(name)
     end
   end
   vim.keymap.set('n', 'q',     close_sidebar, ko)
-  vim.keymap.set('n', '<Esc>', close_sidebar, ko)
 
   -- Statusline infobar: show the full filename of the note under the cursor.
   -- In overview mode the statusline is cleared. Fires on every cursor move

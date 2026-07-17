@@ -100,12 +100,24 @@ function M.setup_sync_autocmds()
       if frontmatter.cites and type(frontmatter.cites) ~= "table" then return end
 
       frontmatter.last_updated_on = timestamp_m.to_iso8601()
+      -- Capture the cursor position before the frontmatter rewrite below.
+      -- Undo restores the cursor to wherever the LAST buffer mutation in
+      -- the merged undo step happened -- since save_frontmatter() runs
+      -- after the user's own edit (below), an unguarded undo would land
+      -- on the timestamp instead of what the user actually changed.
+      local cursor_before = vim.api.nvim_win_get_cursor(0)
       -- Merge into the same undo block as the user's last edit so `u` doesn't
       -- need an extra press to reach it. pcall guards E790 (undojoin not allowed
       -- right after undo/redo) and the case where there's no prior change to
       -- join (e.g. :w immediately after opening the file, no edits yet).
       pcall(vim.cmd, 'undojoin')
       yaml_m.save_frontmatter(frontmatter, content_start)  -- Case A: buffer update, no disk write
+      -- Restore the cursor to the user's edit location so a later undo
+      -- seals that position, not wherever the frontmatter rewrite left it.
+      -- Clamped: the frontmatter block's own line count can change.
+      local last_line = vim.api.nvim_buf_line_count(0)
+      pcall(vim.api.nvim_win_set_cursor, 0,
+        { math.min(cursor_before[1], last_line), cursor_before[2] })
     end,
   })
 

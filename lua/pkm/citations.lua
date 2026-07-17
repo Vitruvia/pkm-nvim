@@ -697,44 +697,51 @@ end
 --- Jump to the note referenced by the citation token under the cursor.
 --- Reads the word under cursor, resolves it through the citable items map,
 --- and opens the target file with :edit.
-function M.goto_citation()
+---@param silent boolean|nil  If true, suppress the "no citation"/"not found"
+---  notifications -- used by notes.follow_link()'s fallback, which shows
+---  its own unified "No link under cursor" message instead.
+---@return boolean found  Whether a citation was found and opened
+function M.goto_citation(silent)
   local line = vim.api.nvim_get_current_line()
   local col = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1-based column
-  
+
   local citation_match = nil
   local current_idx = 1
-  
+
   -- Robust loop to find the exact citation under cursor
   while true do
     -- Find next pattern match
     local start_pos, end_pos, type_match, id_match = line:find("(%w+)%[([%w%-_]+)%]", current_idx)
-    
+
     if not start_pos then break end
-    
+
     -- Check if cursor is within this match
     if col >= start_pos and col <= end_pos then
       citation_match = {type = type_match, id = id_match}
       break
     end
-    
+
     -- Move search forward
     current_idx = end_pos + 1
   end
-  
+
   if not citation_match then
-    vim.notify("No citation under cursor", vim.log.levels.WARN)
-    return
+    if not silent then vim.notify("No citation under cursor", vim.log.levels.WARN) end
+    return false
   end
-  
+
   local items = M.get_citable_items_for_picker()
   for _, item in ipairs(items) do
     if item.type == citation_match.type and item.short_id == citation_match.id then
       vim.cmd("edit " .. vim.fn.fnameescape(item.path))
-      return
+      return true
     end
   end
-  
-  vim.notify("Citation target not found in library: " .. citation_match.type .. "[" .. citation_match.id .. "]", vim.log.levels.ERROR)
+
+  if not silent then
+    vim.notify("Citation target not found in library: " .. citation_match.type .. "[" .. citation_match.id .. "]", vim.log.levels.ERROR)
+  end
+  return false
 end
 
 --- Propagate a note rename or deletion across all files in the wiki.

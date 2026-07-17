@@ -152,8 +152,8 @@ local defaults = {
     view_sidebar = "<leader>vs",
     view_panel   = false,   -- sidebar-buffer-local key to pop out into the views panel
     view_buffers = "<leader>vb",
-    toggle_file_explorer = "<leader>ts",   -- ts = toggle sidebar
-    focus_sidebar = "<C-[>",   -- jump focus directly to sidebar window
+    toggle_file_explorer = false,   -- superseded by view_sidebar + T (filename/title toggle)
+    focus_sidebar = "<leader>s",   -- jump focus directly to sidebar window
     -- PKMMode
     toggle_mode   = false,   -- :PKMMode toggle
     -- Search and browsing

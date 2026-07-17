@@ -1095,7 +1095,19 @@ the appropriate file/location.
         note, like YAML frontmatter, code blocks, headers (no autowrapping
         headers with text that imediately precedes or follows them), tables, lists
         with custom prefixes, etc.;
-    3.  Create a way to batch add/modify tags.
+    3.  A way to batch add/modify tags.
+    4.  A way to "add" or "remove" file into a view (tag only). This feature is
+    meant to grab all sets of tags (separated by an OR) that a view accepts. If
+    only one is available, it is added to the file (no duplicates allowed). If
+    more than one are available, the user is shown a panel with the options.
+    e.g: if a view has a filter: "tag:a AND tag:b OR tag:c", then the two
+    tag sets are {1: [a, b], 2: [c]} (chosing the first set will add both tags
+    a and b, because they are part of the same set). Removing a note from a file
+    from a view, on the other hand, removes either all tags or the minimal
+    sets, presenting choices if more than one is available. e.g.: in the
+    previous example, the user would have two initial choices: {1: "remove all (this
+    removes a, b, and c)", 2: "minimal" (presents choices: {1: [a, c], 2: [b, c]}).
+    [b,c]}
 
         
 4.  **Misc** (currently set to be done in the active development's Phase X,

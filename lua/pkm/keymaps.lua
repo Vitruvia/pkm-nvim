@@ -71,9 +71,10 @@ function M.register(config)
       local win = require('pkm.views').get_sidebar_win()
       if win then
         vim.api.nvim_set_current_win(win)
-      else
-        vim.notify('[pkm] sidebar is not open', vim.log.levels.INFO)
       end
+      -- Silent no-op otherwise: <C-[> is byte-identical to <Esc> in a
+      -- terminal, so this fires on every plain <Esc> press, not just
+      -- deliberate ones -- a notification here would be constant noise.
     end, { desc = 'PKM: focus sidebar', silent = true })
   end
 
