@@ -26,7 +26,7 @@ The note namespace is intentionally **flat and global** — all notes share a si
 
 ## Current State
 
-**Current version:** v1.5.9. There is no separate release/dev split — all
+**Current version:** v1.6.0. There is no separate release/dev split — all
 work happens directly on `dev`; `main` holds periodic stable backups of
 `dev`, not an independently maintained release line. The upcoming work is
 organised under **Release Plan** below.
@@ -445,7 +445,10 @@ v1.6.0  MINOR  Panels & navigation                     │
           ├─→ Ph2 trash-restore panel                  │
           └─→ Ph3 views panels + sidebar nav           │
               Ph4 picker polish                         │
-v1.6.1  PATCH  :PKMViews open-latency (bench-driven) ───┘  (after v1.6.0)
+v1.6.1  PATCH  Correctness batch + :PKMViews latency ───┘  (after v1.6.0)
+        Ph1 fix-now batch (7 files, verified, unpushed)
+          Ph2 yaml.lua write-retry (standalone)
+            Ph3 :PKMViews open-latency (bench-driven, not started)
 v1.7.0  MINOR  Exportation, note creation & header nav     (no deps)
         Ph1 deep export   Ph2 relative note   Ph3 header navigation
 ```
@@ -806,13 +809,118 @@ feat: relative-split picker actions and smoother picker handoff
 
 ---
 
-#### v1.6.1 (PATCH) — `:PKMViews` open latency
+#### v1.6.1 (PATCH) — Correctness batch + `:PKMViews` open latency
 
-*Former Next Steps 6. Bench-gated performance fix, placed after v1.6.0 so it
-tunes the reworked `:PKMViews` rather than code about to be replaced. If
-diagnosis reveals a root cause independent of the views picker (e.g. a cold
-index build on first activation), the fix may be pulled forward as a standalone
-patch instead.*
+*Three phases: two completed fix-now batches from Near Goals § 4 Misc, plus
+the original bench-gated `:PKMViews` latency work (former Next Steps 6),
+placed last since it tunes the reworked `:PKMViews` rather than code about
+to be replaced. All three treated as PATCH — no new user-facing feature,
+correctness and robustness only, consistent with the v1.5.7–v1.5.9 pattern.*
+
+**Phase 1 — fix-now batch: folds, citation-following, undo cursor, buffer
+panel ordering, keymap redundancy.** Diffs delivered and verified (`luac5.3`
+compilation on every file; isolated pure-Lua tests for the retry/ordering/
+cursor-clamp logic; function-count checks against each file's own Public
+API); **not yet committed**. No dedicated `test/test_v161_p1.lua` was
+created — deviates from the standing protocol's step 2; verification depth
+was compile + isolated logic checks only, not a live headless Neovim run.
+
+| File | Single-pass changes |
+|---|---|
+| `config.lua` | (1) `toggle_file_explorer` default changed from `"<leader>ts"` to `false` — its netrw-swap behavior is superseded by the sidebar's own `T` filename/title toggle for the "peek at raw filenames" case in the common (non-netrw) path; still available as opt-in. **Config change** (see note below). (2) `focus_sidebar` confirmed at its default (`"<leader>s"`) after evaluating and rejecting several `<C-*>` alternatives — `<C-,>` collides with Windows Terminal's Settings shortcut, `<C-[>` is byte-identical to `<Esc>` in a terminal (was firing on every incidental Escape press), punctuation-based candidates were ergonomically awkward on ABNT2. |
+| `views.lua` | Sidebar's own close binding is now `q`-only; `<Esc>` removed, matching the Lazy.nvim/Vim-help convention this project otherwise follows. |
+| `syntax.lua` | `zE` destroyed the PKM-managed frontmatter fold with no autocmd able to observe it (no fold-state-change event exists) — `zE` now remapped (buffer-local, torn down in `disable()`) to run natively then immediately rebuild the fold. |
+| `notes.lua`, `citations.lua` | `gf` (`follow_link`) never followed shortened citation tokens (`note[0042]` in body text), only `[[wiki-link]]` syntax — the "full citation" that appeared to work was actually the YAML `link:` field's `[[...]]` text, a different mechanism entirely. `follow_link()` now falls through to `goto_citation()`'s own lookup when no wiki-link is under the cursor; `goto_citation()` gained a `silent` param so the fallback doesn't double up on error messages. |
+| `init.lua` | Undo after a save landed the cursor on the timestamp, not the user's actual edit — `last_updated_on`'s rewrite is merged into the same undo step as the user's edit (`undojoin`) but runs after it, so undo restored the cursor to wherever that rewrite last touched the buffer. `BufWritePre` now captures the cursor before the rewrite and restores it after, so the merged undo step seals the right position. |
+| `ui.lua` | Buffer panel resorted from pure-mtime to: buffers currently in a window first (left-to-right by column), then buffers not in any window, most-recently-opened first. New session-scoped `_open_order`, tracked via one `BufEnter` hook registered once in `M.setup` — covers `<CR>` in the panel and any other way a buffer gets focused, no per-call-site bookkeeping. |
+| docs | `CHANGELOG` (Fixed + Config changes). |
+
+**Config changes:** `toggle_file_explorer` no longer bound by default. Any
+config that relied on the shipped default for this key must set it
+explicitly to restore the old binding.
+
+Verification: `luac5.3 -p` on all 6 changed Lua files; isolated Lua
+control-flow tests for `writefile`-adjacent retry logic (n/a here — see
+Phase 2), the buffer-panel sort (windowed-first / MRU-fallback / missing-order
+edge cases), and the `BufWritePre` cursor-clamp math; function counts on
+`yaml.lua`/`syntax.lua`/`citations.lua`/`init.lua`/`ui.lua` cross-checked
+against each file's own documented Public API. **Not yet run**: the
+standing protocol's headless Neovim smoke test — requires manual
+verification in real Neovim: `zE` then confirm the fold rebuilds; `gf` on a
+body citation token; undo immediately after a save lands on the edit, not
+the timestamp; buffer panel ordering with 2+ windows and some
+not-in-any-window buffers.
+
+Invariants: `index.invalidate` still never called from buffer-only metadata
+paths; sidebar leftmost invariant untouched; `zE`/`<Esc>` remaps are
+buffer-local and symmetric (set in `enable`/`open_sidebar`, torn down in
+`disable`/on close).
+
+Commit:
+
+```
+
+fix: zE fold loss, gf on shortened citations, undo cursor, bufpanel MRU order
+
+syntax: zE remapped to rebuild the frontmatter fold it destroys (no
+autocmd exists for fold-state changes); torn down in disable()
+notes/citations: follow_link() falls through to goto_citation() when no
+[[wiki-link]] is under the cursor, so gf follows citation tokens too;
+goto_citation() gained a silent param to avoid double error messages
+init: BufWritePre captures/restores cursor position around the
+last_updated_on rewrite so a later undo seals the user's edit location,
+not the timestamp's
+ui: buffer panel now sorts windowed buffers first (left-to-right by
+column), then non-windowed buffers by most-recently-opened; new
+session-scoped _open_order tracked via one BufEnter hook
+config/keymaps: toggle_file_explorer disabled by default (redundant
+with view_sidebar + the sidebar's own T toggle in the common case)
+views: sidebar close is now q-only, matching Lazy.nvim/help convention
+config: focus_sidebar confirmed at <leader>s after ruling out several
+<C-*> alternatives (terminal conflicts, Esc collision, ergonomics)
+
+```
+
+**Phase 2 — write-failure retry.** Diff delivered and verified (`luac5.3`
+compilation; isolated retry-loop logic tested against three cases: recovers
+on retry, genuine permanent failure, normal single-attempt success); **not
+yet committed**. Kept as its own phase/commit rather than folded into Phase
+1, given `yaml.lua`'s own header explicitly warns against casual
+modification — worth its own isolated history entry regardless of PATCH
+grouping.
+
+| File | Single-pass changes |
+|---|---|
+| `yaml.lua` | Intermittent `E482: Can't open file for writing` on save — most likely a transient lock from cloud-sync software (`P:\`, per this project's own documented Google Drive history) racing against this plugin's own `BufWritePost` sequence, which writes to the same file multiple times within one `vim.schedule` tick. Added a minimal, additive retry wrapper (`writefile_with_retry`) around the single `writefile` call in `save_frontmatter`'s Case B (disk writes only) — up to 4 attempts, increasing backoff (50/100/200ms). Does not touch `parse_yaml`/`generate_yaml` or any parsing logic. Silent when nothing's wrong; `WARN`s if a retry was needed; `ERROR`s only if every attempt is exhausted. |
+| docs | `CHANGELOG` (Fixed). |
+
+Verification: same caveat as Phase 1 — compile + isolated logic checks only,
+no live headless run yet. Smoke (user, pending): save the specific file that
+previously triggered `E482`; watch for a `WARN` (confirms a retry recovered
+a real transient lock) versus silence (confirms nothing's wrong) versus a
+sustained `ERROR` (would mean the retry window isn't long enough, or the
+root cause isn't a transient lock at all).
+
+Invariants: `save_frontmatter`'s signature and behavior unchanged for every
+caller; Case A (buffer-only, no disk write) untouched.
+
+Commit:
+
+```
+
+fix: retry transient write failures in yaml.save_frontmatter
+Addresses intermittent E482 'can't open file for writing' on save,
+likely a cloud-sync lock race against this plugin's own multi-write
+BufWritePost sequence. Minimal, additive: one retry-wrapped writefile
+call, nothing else in yaml.lua touched. Silent when nothing's wrong;
+WARNs on recovered retry, ERRORs only on genuine exhaustion -- never
+silent about a real failure.
+
+```
+
+**Phase 3 — `:PKMViews` open latency.** *Not started.* Unchanged from the
+original plan below — bench-gated, requires `bench.baseline()` measurement
+before any code change.
 
 | File | Single-pass changes |
 |---|---|
@@ -820,10 +928,10 @@ patch instead.*
 | `views.lua` **or** `index.lua` | The fix, chosen **after** measurement. Candidates: pre-warm/reuse the index so the first `:PKMViews` does not pay a cold build; memoise `match_all` per view within an open (the `_match_cache` idea, Distant Additions 4) if the bench attributes the cost there. Exactly one of these files is touched, per the diagnosis. |
 | docs | `CHANGELOG` (Fixed/Changed) with the measured before/after; `bench.baseline()` numbers recorded. |
 
-Verification: run `bench.baseline()` and the views-open bench on the real corpus
-**before** any edit (mandatory — never optimize blind), then again after, and
-record both. Smoke: open `:PKMViews`/`<leader>va` on the ~600-note corpus and
-confirm sub-perceptible latency.
+Verification: run `bench.baseline()` and the views-open bench on the real
+corpus **before** any edit (mandatory — never optimize blind), then again
+after, and record both. Smoke: open `:PKMViews`/`<leader>va` on the
+~600-note corpus and confirm sub-perceptible latency.
 
 Invariants: no correctness change to view results; measurement precedes
 optimization.
@@ -831,11 +939,13 @@ optimization.
 Commit:
 
 ```
+
 perf: eliminate :PKMViews first-open latency
 
-- bench: measured the views-open path on the real corpus (before/after recorded)
-- <views|index>: <the diagnosed fix — pre-warm index / memoise match_all>
-- docs: changelog with benchmark numbers
+bench: measured the views-open path on the real corpus (before/after recorded)
+<views|index>: <the diagnosed fix — pre-warm index / memoise match_all>
+docs: changelog with benchmark numbers
+
 ```
 
 ---
@@ -1112,61 +1222,12 @@ the appropriate file/location.
         
 4.  **Misc** (currently set to be done in the active development's Phase X,
     meaning the LLM assistant should decide when it is best to implement them):
-    -   Fix now: Pressing `zE` to expand folds makes the system no longer detect the
-        yaml fold in a note. Saving the note resumes normal behavior. `za` and
-        `zm` do not cause issues (but they are affected until a new save or a
-        note reopen if the fold stops being detected due to `zE`).
-    -   Pressing `gf` on a note citation only follows the link when such
-        citation is the "full citation" (present in the yaml citation block).
-        The "shortened" citation ([note xxxx]) that shows in text does not
-        allow link following. There should be a way to follow a link without
-        having to go up to the metadata manually before doing so.
-    
-    -   Fix now: Pressing `u` on normal mode to undo has been fixed to correctly alter the
-        timestamp while also reverting the modification made. However, the cursor
-        ends up on the timestamp, making it hard to follow the changes (that is,
-        the user needs to manually search for whatever was undone). The cursor
-        should land on the last-undone part (e.g. a text that was regenerated,  an
-        empty character/line that was left after undoing an input, and so on).
-    
     -   Partially fixed: now I get prompted (have to answer with y or n)
         instead of having to type `w!`. This is an acceptable solution, unless
         the prompt can be removed (automatically accepted) without risk. Being
         cited by another note while open on a buffer will sometimes create the
         need for a forced save, even if nothing else has been changed (check if
         this is mentioned already in some existing version/phase).
-    
-    -   The files opened in the buffer panel (`<leader>vb`) should display in the following
-    order:
-        1. First, the files currently open on the lowest-numbered window (w1 on top, then w2, etc.).
-        2. As for the rest, the last-opened files. An example of the expecte
-           behavior is that opening the first file on w1 will put it on top, then
-           opening a second file on w2 will put it on the second place, then
-           opening a third file on w1 will put it on top and make the previous
-           top-place occupant ("file 1", previously opened on w1) go to the third
-           place (which is the first place among the "recently opened, but not
-           currently opened in any window"). Then, opening a fourth file on w1 will
-           put that on top and cause "file 3", which had been placed at w1, to go
-           to the third place, and the previous occupant of the third place ("file
-           1") to move to the fourth place (this is the second place among
-           "recently opened, but not currently opened in any window) since "file 1"
-           was the first file to be opened, meaning "file 3" was opened more
-           recently than it.
-        3. Reopening any files (by pressing `<CR>` on their buffers or any other
-           means) should reorder them accordingly.
-        
-        The final result is a sequence of opened buffers per window, followed by a
-        sequence of opened buffers that are not on any window, ordered from the
-        most recently opened to the last recently opened, with a dynamic behavior
-        that will change the list as the user interacts with those files. This idea
-        is meant to improve user experience, since the more relevant (currently / recently opened)
-        files will be on top, and since the user will know to look for files that have
-        not been recently opened at the bottom of the list.
-    
-        This is a per-session behavior. It is not meant to store "recently opened" across
-        sessions. Such behavior is more complex and, if we decide to implement it, it will
-        not be based on the buffer panel, since the buffer panel is meant to be used
-        to organize the current session only.
     
     -   Fix now: bugfix - syntax highlighting recognizes numbers that start any line as
         a list prefix, as long as it is in the correct indentation level and
