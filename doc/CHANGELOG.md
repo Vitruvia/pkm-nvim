@@ -87,6 +87,17 @@
 
 ### Fixed
 
+- **Intermittent `E482: Can't open file for writing` on save** — an
+  OS-level file-open refusal, most likely a transient lock from cloud-sync
+  software (`P:\` per this project's own documented Google Drive history)
+  racing against this plugin's own `BufWritePost` sequence, which writes
+  to the same file multiple times within one `vim.schedule` tick. Fixed
+  with a minimal, additive retry wrapper around the single `writefile`
+  call in `yaml.lua`'s `save_frontmatter` (Case B, disk writes only) — up
+  to 4 attempts with increasing backoff (50/100/200ms). Does not touch
+  `parse_yaml`/`generate_yaml` or any parsing logic. Silent in the normal
+  case; `WARN`s if a retry was needed (confirms the save did eventually
+  succeed); `ERROR`s only if every attempt is exhausted.
 - **`zE` destroyed the frontmatter fold with no way to recover except
   saving** — `zE` has no corresponding autocmd event, so nothing observed
   the fold being torn down. Now remapped (buffer-local, torn down in
