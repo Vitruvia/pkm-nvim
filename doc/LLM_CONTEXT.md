@@ -1,27 +1,27 @@
 # PKM.nvim — LLM Session Context
 
-Read this first. It is the fast-read brief. Read ROADMAP.md for architecture detail.
+Read this first. It is the fast-read brief. Read `doc/ARCHITECTURE.md` for the
+architecture reference (layout, module responsibilities, config shape).
 Read `doc/PHILOSOPHY.md` before proposing features or design changes. Its principles
 are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.5.7**. 
+## Current version: **v1.6.1**
 
-The next planned increments are **v1.5.8** and
-**v1.5.9** (patch — remaining phases of the correctness-and-robustness work),
-**v1.6.0** (minor), **v1.6.1** (patch), and **v1.7.0** (minor). See
-**Release Plan** below for the phase-by-phase breakdown.
+The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
+mirrors it. Upcoming work — the `:PKMViews` open-latency optimization and **v1.7.0**
+(minor) — is tracked in `doc/ROADMAP.md` § **Release Plan**.
 
 ---
 
 ## Module Map
 
 Full module-by-module detail (role, key functions, invariants) is owned by
-`doc/ROADMAP.md` § **Module Responsibilities** — read there for anything beyond
+`doc/ARCHITECTURE.md` § **Module Responsibilities** — read there for anything beyond
 quick orientation. Module list: `init, config, utils, commands, keymaps, yaml,
 timestamp, citations, notes, journal, ui, telescope, templates, export, filter,
-index, views, mode, syntax, trash, markdown, bench`.
+index, views, panel, mode, syntax, trash, markdown, bench`.
 
 ---
 
@@ -170,7 +170,7 @@ cited_by:
 | Plugin path | `P:/Active/pkm-nvim/` (Windows) · `/mnt/p/Active/pkm-nvim/` (WSL) |
 | Notes path | `P:/Notes` (Windows) · `/mnt/p/Notes` (WSL) |
 | Config path | `~/AppData/Local/nvim/` (Windows) · `~/.config/nvim/` (WSL) |
-| Git | `git gc` is disabled on this repo (Google Drive sync conflict); `gc.auto 0` |
+| Git | Google Drive sync — object-DB rewrites forbidden (see Non-Negotiable Rules + Git Conventions) |
 
 ---
 
@@ -198,7 +198,9 @@ Neovim → Standing Verification Protocol → only then tag → push tags.
 ```
 Types: `feat` `fix` `docs` `refactor` `test` `chore` `perf`
 
-**Branches:** `feat/<name>`, `fix/<name>`
+**Branches:** `dev` is the active development branch; `main` holds periodic stable
+snapshots merged from `dev` via the `pkm-merge` alias — it is **not** an independently
+maintained release line. Feature/fix work uses `feat/<name>` / `fix/<name>`.
 
 **Versioning & tags:** see `doc/ROADMAP.md` § **Versioning Policy** — tags
 (`git tag -a vX.Y.Z`) are applied only after every phase of a version has

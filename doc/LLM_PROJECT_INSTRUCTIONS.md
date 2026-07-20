@@ -22,8 +22,10 @@ source. The key files are:
   established patterns, and environment details
 - `doc/CHANGELOG.md` — version history, known bugs, dead code, suspended
   functions, and pending decisions
-- `doc/ROADMAP.md` — module map, architecture overview, and future plans
-  including ideas not yet in scope
+- `doc/ARCHITECTURE.md` — codebase layout, module responsibilities, and config
+  shape
+- `doc/ROADMAP.md` — forward plan (phases, release plan) and future ideas not yet
+  in scope
 
 Always search the project knowledge base before answering questions about the
 codebase. Do not rely on memory or training data for project-specific details.

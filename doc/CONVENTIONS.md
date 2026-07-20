@@ -4,8 +4,9 @@ This document defines the standard formats for note content. These conventions
 are designed to reduce cognitive load during note-taking, improve human
 readability, and support AI/RAG tooling that processes the notes.
 
-These are the STABLE conventions. Implementation in syntax highlighting,
-autocmds, and templates is tracked in ROADMAP.md §9.
+These are the STABLE conventions. Their implementation in syntax highlighting,
+autocmds, and templates is tracked in `doc/ROADMAP.md` (the markdown-conventions
+items under Near/Distant goals).
 
 ---
 

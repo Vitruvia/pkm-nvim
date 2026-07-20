@@ -36,6 +36,9 @@ Consolidated subtypes: `note`, `bib` (bibliography), `agg` (aggregate/collection
 
 ## Commands
 
+The most-used commands are grouped below. See `:help pkm-commands` for the
+complete reference.
+
 ### Notes
 
 | Command | Description |
@@ -43,31 +46,47 @@ Consolidated subtypes: `note`, `bib` (bibliography), `agg` (aggregate/collection
 | `:PKMNewNote` | Create a consolidated note |
 | `:PKMNewJournal` | Create a journal entry |
 | `:PKMNewScratchpad` | Create a scratchpad note |
-| `:PKMRenameNote` | Rename current note with citation propagation |
-| `:PKMDeleteNote` | Delete current note and remove all citations |
-| `:PKMPromote` | Promote scratchpad to consolidated or journal |
-| `:PKMConvertNote` | Normalize current note to its folder's format |
-| `:PKMImport` | Import an external file into the PKM structure |
+| `:PKMRenameNote` | Rename current consolidated note (citations propagate) |
+| `:PKMDeleteNote` | Delete current note (moves to trash) |
+| `:PKMPromote` | Promote scratchpad to consolidated note or journal |
+| `:PKMConvertNote` | Convert current note to a different type |
+| `:PKMChangeType` | Change a consolidated note's type (`note`/`agg`/`bib`) |
+| `:PKMTranspose` | Move note to a different PKM folder and convert it |
+| `:PKMImport` | Import the current file into the PKM system |
+| `:PKMSetTitle` | Set the title frontmatter field (buffer only) |
 
-### Browse and Search
+### Tags and Metadata
 
 | Command | Description |
 |---|---|
-| `:PKMBrowse [expr]` | Browse notes with optional filter expression |
-| `:PKMTags` | Browse notes by tag |
-| `:PKMSearch` | Full-text search via ripgrep (requires `rg`) |
+| `:PKMAddTag [tag]` | Append a tag (tag panel, or directly with an argument) |
+| `:PKMRemoveTag [tag]` | Remove a tag (tag panel, or directly with an argument) |
+| `:PKMMergeTags` | Merge one or more tags into a target tag |
+| `:PKMUpdateReferences` | Rebuild citation frontmatter for the current buffer |
+| `:PKMToggleAutoSync` | Toggle automatic reference synchronization |
 
-Filter examples: `tag:math AND title:fourier`, `tag:physics OR tag:math`, `filename:0042`, `NOT tag:draft`.
-
-### Citations
+### Citations and Links
 
 | Command | Description |
 |---|---|
 | `:PKMInsertCitation` | Insert a citation at the cursor |
 | `:PKMGotoCitation` | Jump to the note under the cursor |
-| `:PKMUpdateReferences` | Rebuild citation frontmatter for the current buffer |
+| `:PKMLinkNote` | Insert a link to another note |
+| `:PKMFollowLink` | Follow the link/citation under the cursor |
+| `:PKMBacklinks` | Show notes that cite the current one |
 
 Inserting a citation automatically updates `cites` in the current note and `cited_by` in the cited note. The picker scores notes by active view and shared tags, prefixing contextually relevant results with `~`. In Telescope, `<C-v>` toggles a view-only mode.
+
+### Browse and Search
+
+| Command | Description |
+|---|---|
+| `:PKMBrowse [expr]` | Browse notes with an optional filter expression |
+| `:PKMTags` | Browse notes by tag |
+| `:PKMBrowseRecent` | Browse recently modified notes |
+| `:PKMOrphans` | Show notes with no tags, no citations, and no matching view |
+
+Filter examples: `tag:math AND title:fourier`, `tag:physics OR tag:math`, `filename:0042`, `NOT tag:draft`.
 
 ### Views
 
@@ -77,8 +96,8 @@ Views are named filter expressions stored in `views.json` at your notes root. Th
 |---|---|
 | `:PKMViews` | Browse all views in a tree picker |
 | `:PKMView [name]` | Open a named view |
-| `:PKMViewNew` | Create or update a view |
-| `:PKMViewNewSub` | Create a subproject view under a parent |
+| `:PKMViewNew` | Create a view — prompts for a simple view or a subproject |
+| `:PKMViewUpdate [name]` | Edit, rename, or reparent a view |
 | `:PKMViewLast` | Reopen the last activated view |
 | `:PKMViewSidebar [name]` | Toggle the persistent sidebar |
 | `:PKMViewEdit` | Open `views.json` directly |
@@ -94,13 +113,25 @@ Views are named filter expressions stored in `views.json` at your notes root. Th
 | `:PKMExport` | Interactive: filter form → picker → destination |
 | `:PKMExportView [name]` | Export a named view directly (no filter form) |
 
-### Utilities
+### Markdown Editing
 
 | Command | Description |
 |---|---|
+| `:PKMNextHeader` | Duplicate current header with its counter incremented, append at EOF |
+| `:PKMHeaderLevelUp` / `:PKMHeaderLevelDown` | Shift header level in range (default: whole buffer) |
+| `:PKMRenumberList` | Renumber an ordered sequence in range or current paragraph |
+| `:PKMConvertList` | Convert list style in range or current paragraph |
+
+### Explorer, Trash and Utilities
+
+| Command | Description |
+|---|---|
+| `:PKMExplorer` | Toggle the explorer (sidebar + buffer panel) |
+| `:PKMMode` | Toggle PKM mode (explorer + index + syntax) |
 | `:PKMBuffers` | Toggle a persistent bottom panel listing open buffers |
-| `:PKMStats` | Show note counts per folder |
-| `:PKMMergeTags` | Merge one or more tags into a target tag |
+| `:PKMRestoreNote` | Browse and restore notes from the trash |
+| `:PKMEmptyTrash` | Permanently delete all trashed notes |
+| `:PKMStats` | Show note statistics |
 
 ## Configuration
 
@@ -120,11 +151,15 @@ require('pkm').setup({
     auto_sync_on_save = true,
   },
 
-  sidebar_width = 40,
+  sidebar_width = 30,
+  display_mode  = 'title',   -- 'title' | 'filename': default label in panels/sidebar
 
-  -- Symbol abbreviations and insert-mode keymaps, registered per buffer
+  -- Symbol expansions registered per PKM buffer (defaults shown).
+  -- `key` is an optional insert-mode mapping; `expansion` is required.
+  -- See :help pkm-configuration for the trigger scheme.
   symbols = {
-    { trigger = 'emdash', key = '<M-->', expansion = '—' },
+    { trigger = '^-', key = '', expansion = '—' },
+    { trigger = '^$', key = '', expansion = '§' },
   },
 
   keymaps = {
@@ -135,10 +170,10 @@ require('pkm').setup({
     delete_note     = '<leader>nd',
     insert_citation = '<leader>nc',
     goto_citation   = '<leader>ng',
-    search          = '<leader>nf',
+    browse          = '<leader>nf',
     browse_tags     = '<leader>nt',
-    view_last       = '<leader>nV',
-    view_sidebar    = '<leader>nS',
+    view_last       = '<leader>vl',
+    view_sidebar    = '<leader>vs',
     -- see :help pkm-keymaps for the full list
   },
 })
@@ -148,12 +183,14 @@ require('pkm').setup({
 
 ~~~
 :PKMViewNew
+" View type: Simple view
 " Name: physics
 " Filter: tag:physics AND NOT tag:draft
 
 :PKMView physics
 
-:PKMViewNewSub
+:PKMViewNew
+" View type: Subproject
 " Name: physics-problems
 " Parent: physics
 " Filter: tag:problem
@@ -166,9 +203,9 @@ Views are stored in `views.json` alongside your notes and can be version-control
 ## Help
 
 ~~~
-:help pkm
+:help pkm.txt
 :help pkm-commands
-:help pkm-views
+:help pkm-sidebar
 :help pkm-citations
 :help pkm-export
 ~~~
