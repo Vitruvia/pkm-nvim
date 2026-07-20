@@ -98,15 +98,6 @@ end
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5,
 other = 6 }
 
-local _TYPE_ABBREV = {
-  note    = 'n',
-  agg     = 'a',
-  bib     = 'b',
-  journal = 'j',
-  scratch = 's',
-  other   = 'o',
-}
-
 -- =============================================================================
 -- SECTION: Internal helpers — config and sidecar
 -- =============================================================================
@@ -373,29 +364,7 @@ local function sidebar_pop_history()
   return state
 end
 
---- Format a note type as a fixed-width bracket label for display alignment.
----@param note_type string
----@return string  e.g. "[note   ]" or "[journal]"
-local function type_prefix(note_type)
-  return '[' .. (_TYPE_ABBREV[note_type or 'other'] or 'o') .. ']'
-end
-
---- Strip the leading note-number and type prefix from a filename stem.
---- "0042_note_Title_Words"      → "Title_Words"
---- "journal_2026-06-17_10-30"  → "2026-06-17_10-30"
---- "scratch_2026-06-17_10-30"  → "2026-06-17_10-30"
---- Unknown conventions: returned unchanged.
----@param filename  string  Index `filename` field (stem, no extension)
----@param note_type string
----@return string
-local function strip_display_prefix(filename, note_type)
-  if note_type == 'journal' or note_type == 'scratch' then
-    return filename:match('^%a+_(.+)$') or filename
-  elseif note_type == 'note' or note_type == 'agg' or note_type == 'bib' then
-    return filename:match('^%d+_%a+_(.+)$') or filename
-  end
-  return filename
-end
+-- type_prefix / strip_display_prefix live in pkm.utils (shared with ui.lua).
 
 --- Sort a path list by modification time, most recent first.
 ---@param paths string[]
@@ -841,7 +810,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
     local title     = e and e.title or vim.fn.fnamemodify(path, ':t:r')
     entries[#entries + 1] = {
       value   = path,
-      display = type_prefix(note_type) .. ' ' .. title,
+      display = utils.type_prefix(note_type) .. ' ' .. title,
       ordinal = string.format('%05d', #entries + 1),
     }
   end
@@ -1016,7 +985,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       local e         = index.get(p)
       local note_type = e and e.note_type or 'other'
       local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
-      lines[#lines + 1] = '  ' .. type_prefix(note_type) .. ' ' .. title
+      lines[#lines + 1] = '  ' .. utils.type_prefix(note_type) .. ' ' .. title
       line_paths[#lines] = p
     end
     if total == 0 then
@@ -1258,7 +1227,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
     for _, e in ipairs(entries) do
       items[#items + 1] = {
         value   = e.path,
-        display = type_prefix(e.note_type) .. ' ' .. (e.title or e.filename or '?'),
+        display = utils.type_prefix(e.note_type) .. ' ' .. (e.title or e.filename or '?'),
         ordinal = e.title or e.filename or e.path,
       }
     end
@@ -1450,7 +1419,7 @@ local _views_panel = panel.create({
       local map = {}
       for _, e in ipairs(filtered) do
         lines[#lines + 1] = string.format('  %s %s',
-          type_prefix(e.note_type), e.title or e.filename or '?')
+          utils.type_prefix(e.note_type), e.title or e.filename or '?')
         map[#lines] = e.path
       end
       if #filtered == 0 then
@@ -2106,12 +2075,12 @@ local function sidebar_build_lines(name, paths, total_count)
       if dm == 'title' and entry.title and entry.title ~= '' then
         label = entry.title
       else
-        label = strip_display_prefix(entry.filename, note_type)
+        label = utils.strip_display_prefix(entry.filename, note_type)
       end
     else
       label = vim.fn.fnamemodify(path, ':t:r')
     end
-    lines[#lines + 1] = string.format('  %s %s', type_prefix(note_type), label)
+    lines[#lines + 1] = string.format('  %s %s', utils.type_prefix(note_type), label)
   end
 
   if #sorted == 0 then
@@ -2588,7 +2557,7 @@ function M.open_sidebar(name)
             winbar = ' ' .. e.title
           else
             local stem = vim.fn.fnamemodify(ct.paths[idx], ':t:r')
-            winbar = ' ' .. (e and strip_display_prefix(stem, e.note_type) or stem)
+            winbar = ' ' .. (e and utils.strip_display_prefix(stem, e.note_type) or stem)
           end
         else
           local filter_label = ct.type_filter and ('  [' .. ct.type_filter .. ']') or ''

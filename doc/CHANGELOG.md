@@ -6,6 +6,12 @@
 
 ### Changed
 -   PKM Mode's default layout now starts with `sidebar = false`.
+-   Internal: `type_prefix` / `strip_display_prefix` (and their note-type
+    abbreviation table) are now shared from `pkm.utils` instead of being
+    duplicated in `ui.lua` and `views.lua`; `telescope.lua` keeps its distinct
+    padded-label format. `utils.notify` now emits the `[pkm]` prefix (was
+    `[PKM]`), matching the notifications used everywhere else. No behavioural
+    change to displayed labels.
 
 ### Known Bugs (queued)
 
@@ -47,6 +53,15 @@
     function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
 
     ```
+
+-   `test/test_v160_p3.lua` — the "header mentions the C-f-to-browse hint"
+    assertion fails. Test drift, not a code defect: the check (line 77) requires
+    a single header line containing both `Views` and `browse all`, but the views
+    panel renders the `<C-f>  browse all notes` hint on its own line, separate
+    from the title. The hint is present and functional (`views.lua` ~L913).
+    Fix: relax the test to check the hint line independently of the title.
+    (Pre-existing; confirmed present on `be0ccd8` before the v1.6.x helper
+    dedup, so unrelated to it.)
 
 ### Known limitations
 

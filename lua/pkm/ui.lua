@@ -42,28 +42,7 @@ local _open_order   = {}
 local _open_counter = 0
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
-local _TYPE_ABBREV = {
-  note    = 'n',
-  agg     = 'a',
-  bib     = 'b',
-  journal = 'j',
-  scratch = 's',
-  other   = 'o',
-  file    = 'f',
-}
-
-local function type_prefix(note_type)
-  return '[' .. (_TYPE_ABBREV[note_type or 'other'] or 'o') .. ']'
-end
-
-local function strip_display_prefix(filename, note_type)
-  if note_type == 'journal' or note_type == 'scratch' then
-    return filename:match('^%a+_(.+)$') or filename
-  elseif note_type == 'note' or note_type == 'agg' or note_type == 'bib' then
-    return filename:match('^%d+_%a+_(.+)$') or filename
-  end
-  return filename
-end
+-- type_prefix / strip_display_prefix live in pkm.utils (shared with views.lua).
 
 -- =============================================================================
 -- SECTION: Buffer panel
@@ -141,13 +120,13 @@ local function bufpanel_build_lines(state)
       if _display_mode == 'title' and entry.title and entry.title ~= '' then
         label = entry.title
       else
-        label = strip_display_prefix(entry.filename, entry.note_type)
+        label = utils.strip_display_prefix(entry.filename, entry.note_type)
       end
       display = string.format('  %s %s%s%s',
-        type_prefix(entry.note_type), label, wlabel, modified)
+        utils.type_prefix(entry.note_type), label, wlabel, modified)
     else
       display = string.format('  %s %s%s%s',
-        type_prefix('file'), vim.fn.fnamemodify(name, ':t'), wlabel, modified)
+        utils.type_prefix('file'), vim.fn.fnamemodify(name, ':t'), wlabel, modified)
     end
     lines[#lines + 1] = display
     buf_map[#lines]   = bufnr
@@ -559,7 +538,7 @@ function M.browse(filter_expr)
   vim.ui.select(entries, {
     prompt      = (expr and expr ~= '') and ('Browse: ' .. expr) or 'Browse Notes',
     format_item = function(e)
-      return type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
+      return utils.type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
     end,
   }, function(sel)
     if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
@@ -599,7 +578,7 @@ function M.browse_paths(title, paths)
   vim.ui.select(entries, {
     prompt      = title,
     format_item = function(e)
-      return type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
+      return utils.type_prefix(e.note_type) .. ' ' .. e.title .. '  (' .. e.filename .. ')'
     end,
   }, function(sel)
     if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
@@ -626,7 +605,7 @@ function M.browse_recent(n)
     prompt      = string.format('Recent (%d)', #entries),
     format_item = function(e)
       local dt = e.mtime and os.date('%Y-%m-%d', e.mtime) or '?'
-      return type_prefix(e.note_type) .. ' ' .. e.title
+      return utils.type_prefix(e.note_type) .. ' ' .. e.title
            .. '  (' .. e.filename .. ')  ' .. dt
     end,
   }, function(sel)

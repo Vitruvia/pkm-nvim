@@ -70,8 +70,10 @@ BufWritePost for citation sync + silent reload + TS restart).
 effects. This is the **canonical source of every config default** (see Configuration below).
 
 **utils.lua** — `utils.join(...)`, `utils.sep`, `utils.normalize(path)`,
-`utils.ensure_dir(path)`, `utils.notify(msg, level?)`, `utils.is_windows`, `utils.is_wsl`.
-No `pkm.*` dependencies — safe to require from anywhere.
+`utils.ensure_dir(path)`, `utils.notify(msg, level?)` (emits `[pkm]`),
+`utils.type_prefix(note_type)` / `utils.strip_display_prefix(filename, note_type)`
+(shared display helpers used by `ui.lua` and `views.lua`), `utils.is_windows`,
+`utils.is_wsl`. No `pkm.*` dependencies — safe to require from anywhere.
 
 **commands.lua** — registers all `:PKM*` commands. Handlers use lazy `require`.
 Contains `browse_complete` (filter DSL autocomplete for `:PKMBrowse`).
