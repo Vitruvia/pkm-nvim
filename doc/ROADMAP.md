@@ -1244,7 +1244,6 @@ the appropriate file/location.
         in `note[0205]`. Removing hard-wrapping is an option, but probably not
         a good one, so evaluate alternatives.
 
-
 ### Distant goals (mid-term to long-term)
 
 1.  **Markdown improvements (distant):**
