@@ -1,6 +1,8 @@
 # PKM.nvim — Project Roadmap for LLM Assistants
 
-**Purpose:** Comprehensive guide for AI assistants continuing development across sessions. Read this before touching any code.
+**Purpose:** The forward plan (versions, phases, goals) and the protocols for
+executing it. For codebase architecture see `doc/ARCHITECTURE.md`; for code rules,
+patterns, and environment see `doc/LLM_CONTEXT.md`.
 
 ---
 
@@ -26,10 +28,10 @@ The note namespace is intentionally **flat and global** — all notes share a si
 
 ## Current State
 
-**Current version:** v1.6.0. There is no separate release/dev split — all
-work happens directly on `dev`; `main` holds periodic stable backups of
-`dev`, not an independently maintained release line. The upcoming work is
-organised under **Release Plan** below.
+**Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical).
+All work happens directly on `dev`; `main` holds periodic stable backups of `dev`,
+not an independently maintained release line. Upcoming work is organised under
+**Release Plan** below.
 
 **Working features:**
 
@@ -64,7 +66,6 @@ organised under **Release Plan** below.
 - ✅ `:PKMExplorer` — toggle sidebar + buffer panel as a unit
 - ✅ Tree-sitter syntax highlighting (PKMMode): frontmatter folding/foldtext,
      citation highlighting (`PKMCitation`), meta-comment highlighting (`PKMMetaComment`)
-- ✅ `after/syntax/markdown.vim` — Vimscript fallback active when PKMMode is off
 - ✅ Metadata commands (buffer-only, no disk write): `:PKMSetTitle`, `:PKMAddTag`,
      `:PKMRemoveTag`
 
@@ -117,281 +118,12 @@ organised under **Release Plan** below.
 
 ---
 
-## File Structure
 
-```
-pkm.nvim/
-├── lua/pkm/
-│   ├── init.lua        # Orchestration: setup, delete_note_safely, sync autocmds
-│   ├── config.lua      # Default config table and resolution logic (pure data)
-│   ├── utils.lua       # Shared cross-platform utilities: path join, OS flags
-│   ├── commands.lua    # All :PKM* command registration (handlers lazy-require)
-│   ├── keymaps.lua     # All keymap wiring (receives resolved config)
-│   ├── yaml.lua        # YAML frontmatter parsing and generation — handle carefully
-│   ├── timestamp.lua   # Timestamp creation, parsing, formatting
-│   ├── citations.lua   # Bidirectional citation engine, tag indexing, add/remove tag
-│   ├── notes.lua       # Note CRUD, conversion, promotion, linking; set_title
-│   ├── journal.lua     # Journal entry creation, filename sync
-│   ├── ui.lua          # Fallback UI (no Telescope): browse, tags, bufpanel
-│   ├── telescope.lua   # Telescope pickers: browse, tags, citations, tag merge
-│   ├── templates.lua   # Template application to notes
-│   ├── export.lua      # Note filtering and copy utility (read-only, no setup)
-│   ├── filter.lua      # Filter DSL parser and evaluator (pure logic, no I/O)
-│   ├── index.lua       # In-memory note index with incremental invalidation
-│   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
-│   ├── mode.lua        # PKMMode: session context toggle, syntax enable/disable
-│   ├── syntax.lua      # Tree-sitter syntax management: highlights, folding, matches
-│   ├── trash.lua       # Soft-delete: manifest, trash/restore/empty/purge_old
-│   ├── markdown.lua    # Markdown editing: headers, renumber, convert_list, symbols
-│   └── bench.lua       # Benchmarking utilities (developer, not user-facing)
-├── queries/markdown/
-│   ├── highlights.scm  # PKM tree-sitter captures: indented code, list markers
-│   └── injections.scm  # YAML injection into frontmatter (minus_metadata nodes)
-├── after/syntax/
-│   └── markdown.vim    # Vimscript fallback syntax (non-PKMMode); two rules retained
-├── plugin/pkm.lua      # Auto-load marker
-├── doc/
-│   ├── pkm.txt         # Vim help documentation
-│   ├── ROADMAP.md  # This file
-│   ├── LLM_CONTEXT.md  # Fast-read session brief for LLMs
-│   ├── PHILOSOPHY.md   # Design principles (non-negotiable constraints)
-│   └── CHANGELOG.md    # Version history
-├── test/               # Test files
-└── README.md
-```
+## Architecture Reference
 
-> Planned new module `lua/pkm/panel.lua` (generic panel infrastructure) is
-> introduced in v1.6.0; it is not present yet and so is absent from the tree
-> above. Planned new doc `doc/CONVENTIONS.md` is tracked under Distant
-> Additions 1.1.
-
----
-
-## Module Responsibilities
-
-**init.lua** — pure orchestration. Calls `setup()` on every module, registers commands
-and keymaps, sets up sync autocmds. Holds `delete_note_safely()` (uses trash if enabled,
-permanent delete otherwise) and `setup_sync_autocmds()` (BufWritePre for `last_updated_on`,
-BufWritePost for citation sync + silent reload + TS restart).
-
-**config.lua** — pure data. Default config table and `resolve(user_config)`. Contains
-`projects`, `pkm_mode`, `trash`, all keymap defaults. No side effects.
-
-**utils.lua** — `utils.join(...)`, `utils.sep`, `utils.normalize(path)`,
-`utils.ensure_dir(path)`, `utils.is_windows`, `utils.is_wsl`.
-
-**commands.lua** — registers all `:PKM*` commands. Handlers use lazy `require`.
-Contains `browse_complete` (filter DSL autocomplete for `:PKMBrowse`).
-
-**keymaps.lua** — `register(config)`. Receives resolved config; keymap strings
-needed at registration time. Registers both normal and visual mode bindings for
-range commands (`renumber_list`, `convert_list`, header level shift).
-
-**yaml.lua** — YAML frontmatter parse and generation. **Do not modify without
-strong justification.** Contains the non-trivial nested-empty-structure parser.
-
-**timestamp.lua** — timestamps in multiple formats; creates filenames; parses timestamps.
-
-**citations.lua** — bidirectional citation sync (`manage_backlink`, `update_references`,
-`update_references_on_rename`, `cleanup_deleted_note`); `get_all_tags()`,
-`get_citable_items_map()`; `merge_tags(sources, target)`;
-`add_tag(tag?)` / `remove_tag(tag?)` — buffer-only frontmatter mutation.
-
-**notes.lua** — note CRUD: `create_new_note`, `create_scratchpad`, `promote_note`,
-`do_convert`, `convert_note`, `change_note_type`, `transpose_note`, `rename_note`,
-`link_to_note`, `follow_link`, `show_backlinks`, `import_note`.
-`set_title()` — buffer-only title mutation (no `index.invalidate`).
-`get_next_note_number()` — checks both consolidated folder AND trash manifest.
-
-**journal.lua** — journal creation (auto-timestamped); `sync_filename_on_save`.
-
-**ui.lua** — fallback UI (no Telescope): `browse`, `browse_paths`, `browse_recent`,
-`browse_tags`, `insert_citation_ui`, `merge_tags_ui`, `show_stats`.
-`toggle_bufpanel()` — per-tabpage bottom buffer-list panel.
-`is_bufpanel_open()`.
-
-**telescope.lua** — all Telescope pickers. Checked at call time via `pcall`.
-`browse`, `browse_paths`, `browse_recent`, `browse_tags`, `insert_citation_picker`,
-`merge_tags_picker`.
-
-**export.lua** — filter + copy notes. No setup. Read-only. Delegates to filter.lua
-and index.lua. `export_direct(label, paths)` skips the filter form.
-
-**filter.lua** — pure logic, no I/O. Grammar:
-`field = tag | title | text | filename | type | any`.
-`any`: bare words and unknown-field tokens; case-insensitive substring over all fields.
-`type`: exact match against `entry.note_type`. `tag`: exact (case-insensitive).
-`from_legacy(tbl)` converts `{tags_any, tags_all, title, text}`.
-
-**index.lua** — in-memory note index. Entry shape:
-`{path, filename, note_type, title, tags, body, mtime, has_citations}`.
-`note_type`: `note|agg|bib|journal|scratch|other`. `has_citations`: true when
-any cites/cited_by group is non-empty.
-Lazy build on first `get_all()`. Incremental invalidation via BufWritePost autocmd
-and explicit `invalidate(path)` after every programmatic write or delete.
-**Must NOT be called from buffer-only metadata commands** — no disk write occurred.
-
-**views.lua** — named project views. Sidecar `views.json` + `config.projects`.
-Two-mode sidebar (overview + detail); per-tabpage `_tabs` state including `type_filter`.
-`sidebar_build_lines(name, paths, total_count)` — builds detail lines; callers
-pre-filter by type and pass `#all_paths` as total for "N of M" display.
-`refresh_sidebar_if_open()` — iterates all tabpages, applies per-tab type filter.
-`edit_view(name?)` — action picker: edit filter / rename / reparent.
-
-**mode.lua** — `M.activate()`, `M.deactivate()`, `M.toggle()`, `M.set(arg)`,
-`M.is_active()`. Manages PKMMode session state: triggers index prebuild, opens
-sidebar + bufpanel, enables syntax on all PKM buffers. `setup(config)` registers
-BufReadPost (open_note trigger) and DirChanged (enter_dir trigger) autocmds.
-Idempotent in both directions.
-
-**syntax.lua** — per-buffer tree-sitter activation. `M.enable(bufnr)`: starts
-markdown TS parser, defines HL groups, registers per-window matchadd highlights
-(PKMCitation, PKMMetaComment) and window opts (foldmethod=expr, foldtext).
-`M.disable(bufnr)`: stops TS, clears matches, restores opts, runs `syntax on`.
-`M.foldexpr(lnum)`, `M.foldtext()`.
-**UndoPost does not exist in Neovim ≤ 0.11.x** — do not register it.
-
-**trash.lua** — soft-delete system. Trash folder: `{root}/.pkm-trash/`.
-Manifest: `manifest.json` array of `{filename, original_path, title, deleted_at,
-deleted_timestamp}`. `trash_note(filepath)` — moves file, does NOT strip backlinks.
-`restore_note(entry)` — moves back, re-indexes; backlinks intact, no reconstruction.
-`empty()` — permanent delete + `cleanup_deleted_note` for each entry.
-`purge_old()` — auto-purge entries older than `max_age_days`.
-`setup(cfg)` — stores config, schedules `purge_old()` via `vim.defer_fn(fn, 5000)`.
-
-**markdown.lua** — `append_next_header`, `shift_header_level`, `setup_symbols`,
-`renumber_sequence` (per-level counter stack; list/list_emph/list_bold_line/
-hdr_prefix/hdr_suffix families; blockquote-aware),
-`renumber_at_cursor`, `convert_list(start, end, direction?)`,
-`convert_list_at_cursor(direction?)`.
-
-**bench.lua** — developer benchmarking. Not user-facing. Four-phase suite: raw scan,
-index build, index query, filter eval. `views_suite(opts?)` — scaling bench for
-O(V × N) sidebar path. Self-cleaning; `baseline()` times real corpus read-only.
-
----
-
-## Configuration Reference
-
-```lua
-require('pkm').setup({
-  root_path = vim.fn.expand('~/Notes'),  -- required; defaults to ~/Notes
-
-  folders = {
-    scratchpad   = "01-Scratchpad",
-    journal      = "02-Journal",
-    consolidated = "03-Consolidated",
-    templates    = "templates",
-  },
-
-  sync = {
-    enabled           = true,
-    auto_sync_on_save = true,
-  },
-
-  timestamp = {
-    default_format = "full",  -- "full" | "date_time" | "date_only"
-    auto_timestamp = true,
-  },
-
-  user = {
-    name  = "",
-    email = "",
-  },
-
-  -- Named project views (declarative). Sidecar views.json wins on collision.
-  -- Views defined here CANNOT be renamed or deleted through PKM's own commands
-  -- (:PKMViewUpdate's Rename, :PKMViewDelete) — the plugin cannot safely rewrite
-  -- this file's Lua source. Use :PKMViewNew / views.json for any view you intend
-  -- to manage through PKM's commands; reserve config.lua for views you commit to
-  -- maintaining by hand. Subprojects (entries with a `parent` field) are NOT
-  -- recommended here even for hand-maintained views: if the parent lives in the
-  -- sidecar and is renamed through the UI, this entry's `parent` goes silently
-  -- stale (from v1.5.4 the rename emits an advisory warning, but cannot fix it).
-  projects = {
-    clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
-    -- Subproject example (discouraged here — see note above):
-    -- ringforge = 'tag:ringforge',
-    -- ["ringforge-mechanics"] = { parent = "ringforge", filter = "tag:mechanics" },
-  },
-
-  sidebar_width = 40,
-
-  -- Buffer-local insert-mode keymaps registered on BufReadPost for PKM notes.
-  -- trigger and key are both optional; expansion is required.
-  symbols = {
-    { trigger = 'emdash', key = '<M-->', expansion = '—' },
-    { trigger = 'sect',   key = '<M-s>', expansion = '§' },
-    { trigger = 'ordm',   key = '<M-o>', expansion = 'º' },
-  },
-
-  -- PKM Mode behaviour
-  pkm_mode = {
-    triggers = {
-      open_note = true,   -- activate on BufReadPost for any PKM file
-      enter_dir = false,  -- activate on DirChanged to/from PKM root
-    },
-    layout = {
-      sidebar  = false,    -- open sidebar on activation
-      bufpanel = true,    -- open buffer panel on activation
-    },
-    index = {
-      prebuild = true,    -- eagerly rebuild index on first activation
-    },
-    syntax = {
-      enabled = true,     -- enable tree-sitter syntax highlighting
-    },
-  },
-
-  -- Soft-delete trash
-  trash = {
-    enabled      = true,   -- true = trash; false = permanent delete (old behaviour)
-    max_age_days = 60,     -- auto-purge after N days on startup; 0 = disable
-  },
-
-  
-  keymaps = {
-    -- Note operations
-    new_note         = "<leader>nn",
-    new_journal      = "<leader>nj",
-    new_scratchpad   = "<leader>ns",
-    rename_note      = "<leader>nr",
-    insert_citation  = "<leader>nc",
-    goto_citation    = "<leader>ng",
-    delete_note      = "<leader>nd",
-    link_note        = "<leader>nl",
-    follow_link      = "gf",
-    backlinks        = "<leader>nb",
-    import_note      = "<leader>ni",
-    convert_note     = "<leader>nx",
-    promote_note     = "<leader>np",
-    transpose_note   = "<leader>nT",
-    change_note_type = "<leader>nC",
-    set_title        = false,
-    add_tag          = false,
-    remove_tag       = false,
-    -- Navigation
-    view_last    = "<leader>vl",
-    view_list    = "<leader>va", -- va = view all
-    view_sidebar = "<leader>vs",
-    view_buffers = "<leader>vb",
-    toggle_file_explorer = "<leader>ts",   -- ts = toggle sidebar
-    focus_sidebar = false,   -- jump focus directly to sidebar window
-    -- PKMMode
-    toggle_mode   = false,   -- :PKMMode toggle
-    -- Search and browsing
-    browse          = "<leader>nf",
-    browse_tags     = "<leader>nt",
-    -- Markdown editing
-    ---- Headers ----
-    next_header        = "<leader>Mh",
-    header_level_up    = "<leader>M^",
-    header_level_down  = "<leader>M_",
-    renumber_list      = "<leader>Mr",
-    convert_list = false,   -- :PKMConvertList (range or paragraph at cursor)
-  },
-})
-```
+Codebase layout, per-module responsibilities, and configuration shape live in
+`doc/ARCHITECTURE.md` (single owner). `config.lua` is the canonical source of
+configuration defaults.
 
 ---
 
@@ -430,13 +162,11 @@ form of [Semantic Versioning](https://semver.org/):
 
 ### Release Plan
 
-*This replaces the former single-version "v1.6.0 Implementation Plan". The
-reorganised Next Steps are partitioned into the versions below. Discussion-only
-items were moved to **Design Questions**; genuinely long-horizon items remain in
-**Distant Additions**.*
+*Work is partitioned into the versions below. Discussion-only items live under
+**Design Questions**; long-horizon items under **Distant goals**. Shipped versions
+are summarised compactly — see `doc/CHANGELOG.md` for their full detail.*
 
 ```
--- NEW:
 v1.5.7  PATCH  Correctness & robustness — Ph1  ✅ shipped
 v1.5.8  PATCH  Correctness & robustness — Ph2  ────────┐  (no deps)
 v1.5.9  PATCH  Correctness & robustness — Ph3          │
@@ -446,8 +176,8 @@ v1.6.0  MINOR  Panels & navigation                     │
           └─→ Ph3 views panels + sidebar nav           │
               Ph4 picker polish                         │
 v1.6.1  PATCH  Correctness batch + :PKMViews latency ───┘  (after v1.6.0)
-        Ph1 fix-now batch (7 files, verified, unpushed)
-          Ph2 yaml.lua write-retry (standalone)
+        Ph1 fix-now batch  ✅ shipped
+          Ph2 yaml.lua write-retry  ✅ shipped
             Ph3 :PKMViews open-latency (bench-driven, not started)
 v1.7.0  MINOR  Exportation, note creation & header nav     (no deps)
         Ph1 deep export   Ph2 relative note   Ph3 header navigation
@@ -459,7 +189,7 @@ everything else floats and may be reordered.
 
 ---
 
-#### Operating principles (apply to every version and phase)
+#### Operating Principles (apply to every version and phase)
 
 1. **One pass per file per phase.** A phase may touch many files, but never the
    same file twice within that phase. All edits to a given file in a phase must
@@ -509,7 +239,7 @@ everything else floats and may be reordered.
 
 ---
 
-#### Standing verification protocol
+#### Standing Verification Protocol
 
 Every phase is verified in this order before its commit:
 
@@ -544,379 +274,13 @@ are reported with root cause before any follow-up edit.
 
 ---
 
-#### Correctness & robustness (v1.5.7 – v1.5.9+)
-
-*All bug/completeness fixes from the former Next Steps 4 and 5, plus the view
-autorefresh (former Next Steps 2). No new user-facing features. Done first so
-later feature work builds on corrected behaviour. Each phase ships as its own
-patch version rather than being grouped under one version number; disjoint
-file sets per phase still hold — no file is re-touched even across phases.*
-
-**Phase 1 — rename & citation-metadata correctness.** ✅ **Shipped in v1.5.7**
-— see `CHANGELOG.md` for the fix descriptions.
-
-| File | Single-pass changes |
-|---|---|
-| `notes.lua` | (1) `rename_note()`: permit case-only renames — when `filereadable(new)==1`, treat as the same file (not a collision) iff `new` and `old` are the same on-disk object (`vim.loop.fs_stat` `dev`+`ino`; fall back to `utils.normalize`-lowercased equality only on case-insensitive filesystems). (2) Fix the `E13: File exists` forced-write prompt in `rename_note()` and `change_note_type()` when no other edits were made: re-point the buffer to its new name without a colliding `:saveas`/`:write` (e.g. `nvim_buf_set_name` + `writefile` of current lines, then delete the old file), so an otherwise-unmodified rename never prompts. |
-| `citations.lua` | Add `propagate_title(note_path)` — pure-ish: rewrite the `title` field of every entry referencing `note_path` in other notes' `cites`/`cited_by` (all four groups), **idempotently** (rewrite a file only when its stored title differs from the current one). Reuses `get_note_type_and_id`, `get_note_title`, `get_citable_items_map`, and the existing per-file write path used by `update_references_on_rename`. |
-| `init.lua` | In `setup_sync_autocmds` BufWritePost, after the existing `update_references`, call `citations.propagate_title(current_path)` so a title change reaches citing/cited notes on save — regardless of whether the target notes are open in buffers (the existing modified-buffer-aware write path handles the open case). |
-| docs | `CHANGELOG` (Fixed): case-rename, E13 prompt, title cross-update. |
-
-Verification: `test/test_v154_p1.lua` unit-tests the rename identity predicate
-(same-inode → allow; distinct file same-case-fold → block; exact equal → no-op)
-and the title-propagation diff (no write when unchanged; correct rewrite when
-changed). Smoke: rename `prazos`→`Prazos`; rename/change-type a note with no
-other edits and confirm no `E13`; change a note's title, `:w`, and confirm
-citing notes' metadata now shows the new title.
-
-Invariants: `set_title()` stays buffer-only (no `index.invalidate`); title
-propagation writes *other* files (like citation sync), never re-points the
-current buffer's index outside the normal BufWritePost path; paths via
-`utils.normalize`/`utils.join`.
-
-Commit:
-
-```
-fix: case-only rename, E13 write prompt, and title cross-update
-
-- notes: allow case-only renames via same-object identity check; eliminate the
-  spurious E13 forced-write on unmodified rename / change-type
-- citations: propagate_title() rewrites the title field in referencing notes,
-  idempotently; runs on BufWritePost so title edits reach cites/cited_by
-- init: trigger title propagation in the save-sync autocmd
-- docs: changelog
-```
-
-**Phase 2 — panel window safety & view-layer completeness.** ✅ **Shipped
-in v1.5.8** — see `CHANGELOG.md` for the fix descriptions.
-
-| File | Single-pass changes |
-|---|---|
-| `views.lua` | (1) `open_sidebar`: set `winfixbuf = true` on the sidebar window after `nvim_win_set_buf`, alongside the existing `winfixwidth` block. (2) After successful view creation (`M.save`/`M.save_subproject` success path and/or the `:PKMViewNew` handler completion) call `M.refresh_sidebar_if_open()`, then restore focus to the window active before the command. (3) In `rename_view_prompt` and `reparent_view_prompt`, scan `config.projects` for any entry whose `parent == old_name`; if found, emit an advisory `WARN` (never block) — closes the "consistent view renaming" gap the plugin cannot otherwise fix (config.lua is not safely rewritable). (4) Help-float/`?` and header-hint audit: add every registered-but-undocumented key, at minimum `T` (filename/title toggle). (5) Verify whether residual flat `_sidebar_*` globals coexist with the per-tab `_tabs` state; remove if confirmed dead (clean removal over latent code). |
-| `ui.lua` | (1) `toggle_bufpanel`: set `winfixbuf = true` after the panel buffer is assigned. (2) Header-hint audit: buffer panel's own header line is missing `D`/`r`/`T` (all three are live keymaps); extend to `Dforce Wclose Ttoggle` or similar. Also audit the fallback browse/recent/orphans panels. |
-| `commands.lua` | Complete `focus_main_win()` coverage on every PKM open/create command registered here; the `winfixbuf` net covers un-guardable cases (`:Ex`). |
-| docs | `CHANGELOG` (Fixed + Changed): panel hijack; view autorefresh; view-rename config warning; helpline audit. |
-
-Verification: `test/test_v154_p2.lua` asserts the view-rename config-scan
-detects a stale `parent` and warns without blocking. Smoke: from the sidebar
-run `:Ex`/`:PKMViewEdit` and confirm a harmless error (not a hijack); create a
-view and confirm the sidebar refreshes with focus returned; confirm `T` in `?`
-help.
-
-Invariants: `winfixbuf` set after `nvim_win_set_buf`; sidebar leftmost invariant
-untouched.
-
-Commit:
-
-```
-fix: panel buffer hijack, view-create refresh, and rename consistency
-
-- views: winfixbuf on sidebar; autorefresh + focus restore on view creation;
-  advisory warning when a config.lua subproject's parent is renamed/reparented;
-  helpline audit (T toggle et al.); drop residual global sidebar state if dead
-- ui: winfixbuf on buffer panel; fallback-panel hint audit
-- commands: complete focus_main_win coverage on panel-invoked open commands
-- docs: changelog
-```
-
-**Phase 3 — multi-line highlighting.** ✅ **Shipped in v1.5.9**
-
-| File | Single-pass changes |
-|---|---|
-| `syntax.lua` | `PKMMetaComment` migrated from `matchadd()` (window-scoped, hard single-line limitation — not a regex problem, a Vim/Neovim platform constraint) to buffer-scoped extmarks (`nvim_buf_set_extmark`, natively multi-line via `end_row`/`end_col`). Pure-logic scanner (`find_meta_comments`) finds `((...))` spans — including across line breaks, via Lua string patterns' `.` matching newline — with a `MAX_META_COMMENT_LINES = 50` cap bounding the blast radius of a stray unmatched `((`. Rescanned on `enable()`, on `BufWritePost`, and (debounced, 150ms) on `TextChanged`/`TextChangedI`. `PKMCitation` unchanged — inherently single-line, `matchadd()` remains correct and simpler there. |
-| `keymaps.lua` | `PKMNetrwFixes` augroup (pre-existing, v1.5.1): added a `FileType netrw` guard detecting netrw loading into a `winfixbuf`-protected PKM panel window (sidebar/buffer panel) via the `winfixbuf`+`winfixwidth`/`winfixheight` option signature — `winfixbuf` alone doesn't block netrw's initial takeover of an unmodified buffer's window (confirmed via netrw's own docs: "the browsing window will take over that window" when unmodified), only its *subsequent* internal navigation, which is too late. Correction is deferred via `vim.schedule` rather than run synchronously, since the guard fires nested inside netrw's own still-executing command — synchronous mutation there was corrupting netrw's in-flight setup (empty listings) and, as a downstream consequence, briefly resurfacing the buffer-panel sole-window bug. |
-| docs | `CHANGELOG` (Fixed). |
-
-Not applicable, contrary to original plan:
-- `queries/markdown/highlights.scm` — meta-comment highlighting was never
-  tree-sitter-query-based; it's pure Lua/API. No query changes needed.
-- ATX/setext headers — already correctly span multiple lines natively, since
-  tree-sitter node spans were never subject to `matchadd()`'s single-line
-  limitation in the first place (confirmed via the file's own pre-existing
-  "Known behaviour" comment on setext headings). No fix was ever needed here.
-- `after/syntax/markdown.vim` — multi-line meta-comments are PKMMode-only by
-  decision (matching citations, which were also always PKMMode-only); the
-  Vimscript fallback's two existing rules (parenthesis-list markers, indented
-  blockquotes) are unrelated and untouched.
-
-Verification: pure-logic scanner tested standalone (single-line match,
-two-line span, three-line span ending exactly at end-of-line, two separate
-comments, no-comment case, unmatched-`((`-capped-by-MAX_LINES, within-cap
-multi-line still matches — 7/7 passing). Smoke: open a note with a
-multi-line `((...))` comment under PKMMode and confirm it highlights
-immediately on open (not just after an edit or save); confirm a stray
-unmatched `((` doesn't paint the rest of the document.
-
-Invariants: `PKMCitation`'s `matchadd()` mechanism untouched; tree-sitter
-`parser:parse()` still called synchronously in `TextChanged`/`TextChangedI`
-(the meta-comment rescan added to that same autocmd is separately debounced,
-not synchronous, to avoid the O(n)-per-keystroke cost the injection override
-was written to prevent).
-
-(Also: telescope_scoped_search_picker/float_scoped_search, added as a
-standalone fix before this phase, target M.list_views() directly for their
-back-navigation — repoint or replace once the views panel lands.)
-
-Commit:
-
-```
-fix: multi-line meta-comment highlighting via extmarks
-
-- syntax: PKMMetaComment migrated from window-scoped matchadd() (hard
-  single-line limitation) to buffer-scoped extmarks (natively multi-line);
-  pure-logic scanner with a stray-unmatched-(( blast-radius cap; rescanned
-  on enable/save/debounced-text-change
-- confirmed unnecessary: highlights.scm query changes (mechanism was never
-  query-based), header multi-line support (already correct natively via
-  tree-sitter node spans), after/syntax/markdown.vim changes (meta-comments
-  are PKMMode-only by decision, matching citations)
-- test: pure-logic scanner, 7 cases including multi-line boundary and
-  blast-radius cap
-- docs: changelog
-```
-
----
-
-#### v1.6.0 (MINOR) — Panels & navigation
-
-*The interface overhaul from the former Next Steps 1. Introduces the shared
-panel infrastructure and every panel/sidebar-navigation feature. **Recommended
-Option A** — a shared `panel.lua`, validated by porting the existing buffer
-panel onto it before new panels are built. If Option B (per-panel copies) is
-chosen, drop `panel.lua`; Phase 1 becomes the tag panel alone and Phases 2–3
-each carry their own skeleton — phase boundaries and commits are otherwise
-unchanged.*
-
-**Phase 1 — panel infrastructure, buffer-panel port, and tag panel.** Shipped in 1.6.0.
-
-| File | Single-pass changes |
-|---|---|
-| `panel.lua` *(new)* | `panel.create({ name, build_lines, keymaps, filetype, … }) → { open, close, toggle, refresh, is_open }`. Encapsulates per-tab state (`_tabs`/`get_tab()`), a scoped augroup, refresh-on-event, buffer-local keymaps, the `ensure_main_window()` layout guard, and `winfixbuf`. Full module header, section separators, LuaDoc per export. |
-| `ui.lua` | Port `toggle_bufpanel` onto `panel.create` (behaviour-preserving). Add the **tag panel**: searchable, scrollable tag list replacing the `vim.ui.select`/`input` flow for `:PKMAddTag`/`:PKMRemoveTag`; selection mutates the current buffer's frontmatter only via `citations.add_tag`/`remove_tag` — **no `index.invalidate`**. |
-| `commands.lua` | Route `:PKMAddTag`/`:PKMRemoveTag` through the tag panel. |
-| docs | `CHANGELOG` (Added). Module map + File Structure gain `panel.lua`. |
-
-Verification: `test/test_v160_p1.lua` asserts buffer-panel parity after the port
-(open/close/toggle/refresh, per-tab isolation) and that tag selection performs a
-buffer-only mutation (index re-read only on next `:w`). Smoke: buffer panel in
-two tabpages; `:PKMAddTag` from a note.
-
-Commit:
-
-```
-feat: shared panel infrastructure, buffer-panel port, and tag panel
-
-- panel: generic create() — per-tab state, scoped augroup, refresh-on-event,
-  buffer-local keymaps, layout guard, winfixbuf
-- ui: port buffer panel onto panel.lua; searchable tag panel (buffer-only
-  frontmatter mutation, no index.invalidate)
-- commands: route :PKMAddTag/:PKMRemoveTag through the tag panel
-- test: buffer-panel parity; tag-panel index contract
-- docs: changelog, module map
-```
-
-**Phase 2 — trash-restore panel.** Shipped in 1.6.0.
-
-| File | Single-pass changes |
-|---|---|
-| `trash.lua` | A `panel.create`-based restore panel over the manifest: browse, search, select, restore. **No deletion key of any kind** — emptying stays exclusive to `:PKMEmptyTrash` (typed confirmation retained). Restore reuses `restore_note` (backlinks intact). |
-| `commands.lua` | Route `:PKMRestoreNote` through the panel. |
-| docs | `CHANGELOG` (Added). |
-
-Verification: `test/test_v160_p2.lua` restores an entry from a scratch manifest
-and asserts the file returns, the manifest shrinks, and no destructive key is
-bound. Smoke: delete then restore a note; confirm backlinks survive.
-
-Invariants: `trash_note()` never strips backlinks.
-
-Commit:
-
-```
-feat: trash-restore panel
-
-- trash: browse/search/restore panel over the manifest; no deletion key
-  (empty stays exclusive to :PKMEmptyTrash with typed confirmation)
-- commands: route :PKMRestoreNote through the panel
-- test: restore round-trip; no destructive key
-- docs: changelog
-```
-
-**Phase 3 — views panels and sidebar window navigation.** Shipped in 1.6.0.
-
-| File | Single-pass changes |
-|---|---|
-| `views.lua` | (1) **Views panel** (extends `:PKMViews`) on `panel.create` with keys to invoke `:PKMViewNew`/`:PKMViewUpdate`; **no deletion key**. (2) **View-deletion panel** (separate by design): browse → select → **confirm before delete**. (3) **Sidebar key** to open the views panel. (4) **`N<CR>`** — ✅ already correct as shipped; no change. Counts only
-real editing windows, left→right, opens in the Nth when it exists. `N`
-beyond the count warns ("no window N, only M") rather than auto-creating —
-deliberately kept over the original auto-create plan: this is a
-high-frequency action, and silently altering the window layout on a
-miscounted N is worse than a no-op with a clear message. `<C-v>` (item 5)
-remains the explicit, deliberate way to add a window.(5) **`<C-v>` repurposed**: insert one new window immediately right of the sidebar, shifting existing windows right — the insert-before complement to `N<CR>`. No `<C-CR>` binding (terminal keycode reliability). |
-| `commands.lua` | Route `:PKMViews`/`:PKMViewDelete` through the panels; retain `:PKMViewNew`/`:PKMViewDelete` as residual optional-arg commands. |
-| `config.lua` | Default keymap for "open views panel in sidebar" (default `false`). |
-| `keymaps.lua` | Wire that keymap when set. |
-| docs | `CHANGELOG` (Added). |
-
-Verification: `test/test_v160_p3.lua` unit-tests the window-slot arithmetic (the
-"`9<CR>` with one window behaves like `2<CR>`" case; zero-windows; exclude-panels
-filter). Smoke: from the sidebar, `2<CR>` then `9<CR>` (no window explosion);
-`<C-v>` inserts left-adjacent to editors with the sidebar still leftmost; use the
-views and deletion panels (confirm the delete prompt).
-
-Invariants: never `topleft` for the second split; sidebar leftmost; deletion
-always confirmed.
-
-Commit:
-
-```
-feat: views panels and sidebar window navigation
-
-- views: views panel (create/update keys, no delete key); separate
-  view-deletion panel with confirm-before-delete; sidebar key to open it;
-  N<CR> opens or creates exactly the Nth editing window (rightbelow, never
-  topleft); <C-v> inserts a window right of the sidebar
-- commands: route :PKMViews/:PKMViewDelete through panels; residual commands kept
-- config/keymaps: opt-in sidebar→views-panel key
-- test: window-slot arithmetic; panel lifecycle
-- docs: changelog
-```
-
-**Phase 4 — picker polish.** Shipped in 1.6.0
-
-| File | Single-pass changes |
-|---|---|
-| `telescope.lua` | (1) Relative-split actions for `browse` and the views pickers via `attach_mappings` (matching the existing `<C-v>`/`<C-x>`/`<C-t>` convention): open the selection in a split right or left of the invocation window. Capture `nvim_get_current_win()` **before** opening the picker; if it is `pkm-sidebar`, disable "left"; if it no longer exists at selection, "right" falls back to the rightmost real editing window and "left" stays unavailable. Plain Ctrl+letter bindings only (avoid `<C-h>`/`<C-l>` and Shift+Ctrl). (2) Diagnose and fix the `:PKMViews`→`:PKMBrowse` console flash (reproduce live first). |
-| `ui.lua` | `vim.ui.select` fallback for the relative-split actions (a one-line follow-up prompt after selection). |
-| docs | `CHANGELOG` (Added + Fixed). |
-
-Verification: `test/test_v160_p4.lua` unit-tests invocation-window capture and
-fallback (sidebar → left disabled; vanished window → right-fallback). Smoke:
-split-right and split-left a `:PKMBrowse` selection from a note window and from
-the sidebar; toggle `:PKMViews`→`:PKMBrowse` and confirm no flash.
-
-Commit:
-
-```
-feat: relative-split picker actions and smoother picker handoff
-
-- telescope: open selection in a split left/right of the invocation window
-  (sidebar disables left; vanished-window fallback for right); fix the
-  :PKMViews->:PKMBrowse console flash
-- ui: vim.ui.select fallback split mechanism
-- test: invocation-window capture and fallback logic
-- docs: changelog
-```
-
----
 
 #### v1.6.1 (PATCH) — Correctness batch + `:PKMViews` open latency
 
-*Three phases: two completed fix-now batches from Near Goals § 4 Misc, plus
-the original bench-gated `:PKMViews` latency work (former Next Steps 6),
-placed last since it tunes the reworked `:PKMViews` rather than code about
-to be replaced. All three treated as PATCH — no new user-facing feature,
-correctness and robustness only, consistent with the v1.5.7–v1.5.9 pattern.*
+*The two earlier correctness fix-batches of v1.6.1 have shipped (see
+`doc/CHANGELOG.md`); only the bench-gated `:PKMViews` open-latency phase below
+remains. PATCH — correctness/perf only, no new user-facing feature.*
 
-**Phase 1 — fix-now batch: folds, citation-following, undo cursor, buffer
-panel ordering, keymap redundancy.** Diffs delivered and verified (`luac5.3`
-compilation on every file; isolated pure-Lua tests for the retry/ordering/
-cursor-clamp logic; function-count checks against each file's own Public
-API); **not yet committed**. No dedicated `test/test_v161_p1.lua` was
-created — deviates from the standing protocol's step 2; verification depth
-was compile + isolated logic checks only, not a live headless Neovim run.
-
-| File | Single-pass changes |
-|---|---|
-| `config.lua` | (1) `toggle_file_explorer` default changed from `"<leader>ts"` to `false` — its netrw-swap behavior is superseded by the sidebar's own `T` filename/title toggle for the "peek at raw filenames" case in the common (non-netrw) path; still available as opt-in. **Config change** (see note below). (2) `focus_sidebar` confirmed at its default (`"<leader>s"`) after evaluating and rejecting several `<C-*>` alternatives — `<C-,>` collides with Windows Terminal's Settings shortcut, `<C-[>` is byte-identical to `<Esc>` in a terminal (was firing on every incidental Escape press), punctuation-based candidates were ergonomically awkward on ABNT2. |
-| `views.lua` | Sidebar's own close binding is now `q`-only; `<Esc>` removed, matching the Lazy.nvim/Vim-help convention this project otherwise follows. |
-| `syntax.lua` | `zE` destroyed the PKM-managed frontmatter fold with no autocmd able to observe it (no fold-state-change event exists) — `zE` now remapped (buffer-local, torn down in `disable()`) to run natively then immediately rebuild the fold. |
-| `notes.lua`, `citations.lua` | `gf` (`follow_link`) never followed shortened citation tokens (`note[0042]` in body text), only `[[wiki-link]]` syntax — the "full citation" that appeared to work was actually the YAML `link:` field's `[[...]]` text, a different mechanism entirely. `follow_link()` now falls through to `goto_citation()`'s own lookup when no wiki-link is under the cursor; `goto_citation()` gained a `silent` param so the fallback doesn't double up on error messages. |
-| `init.lua` | Undo after a save landed the cursor on the timestamp, not the user's actual edit — `last_updated_on`'s rewrite is merged into the same undo step as the user's edit (`undojoin`) but runs after it, so undo restored the cursor to wherever that rewrite last touched the buffer. `BufWritePre` now captures the cursor before the rewrite and restores it after, so the merged undo step seals the right position. |
-| `ui.lua` | Buffer panel resorted from pure-mtime to: buffers currently in a window first (left-to-right by column), then buffers not in any window, most-recently-opened first. New session-scoped `_open_order`, tracked via one `BufEnter` hook registered once in `M.setup` — covers `<CR>` in the panel and any other way a buffer gets focused, no per-call-site bookkeeping. |
-| docs | `CHANGELOG` (Fixed + Config changes). |
-
-**Config changes:** `toggle_file_explorer` no longer bound by default. Any
-config that relied on the shipped default for this key must set it
-explicitly to restore the old binding.
-
-Verification: `luac5.3 -p` on all 6 changed Lua files; isolated Lua
-control-flow tests for `writefile`-adjacent retry logic (n/a here — see
-Phase 2), the buffer-panel sort (windowed-first / MRU-fallback / missing-order
-edge cases), and the `BufWritePre` cursor-clamp math; function counts on
-`yaml.lua`/`syntax.lua`/`citations.lua`/`init.lua`/`ui.lua` cross-checked
-against each file's own documented Public API. **Not yet run**: the
-standing protocol's headless Neovim smoke test — requires manual
-verification in real Neovim: `zE` then confirm the fold rebuilds; `gf` on a
-body citation token; undo immediately after a save lands on the edit, not
-the timestamp; buffer panel ordering with 2+ windows and some
-not-in-any-window buffers.
-
-Invariants: `index.invalidate` still never called from buffer-only metadata
-paths; sidebar leftmost invariant untouched; `zE`/`<Esc>` remaps are
-buffer-local and symmetric (set in `enable`/`open_sidebar`, torn down in
-`disable`/on close).
-
-Commit:
-
-```
-
-fix: zE fold loss, gf on shortened citations, undo cursor, bufpanel MRU order
-
-syntax: zE remapped to rebuild the frontmatter fold it destroys (no
-autocmd exists for fold-state changes); torn down in disable()
-notes/citations: follow_link() falls through to goto_citation() when no
-[[wiki-link]] is under the cursor, so gf follows citation tokens too;
-goto_citation() gained a silent param to avoid double error messages
-init: BufWritePre captures/restores cursor position around the
-last_updated_on rewrite so a later undo seals the user's edit location,
-not the timestamp's
-ui: buffer panel now sorts windowed buffers first (left-to-right by
-column), then non-windowed buffers by most-recently-opened; new
-session-scoped _open_order tracked via one BufEnter hook
-config/keymaps: toggle_file_explorer disabled by default (redundant
-with view_sidebar + the sidebar's own T toggle in the common case)
-views: sidebar close is now q-only, matching Lazy.nvim/help convention
-config: focus_sidebar confirmed at <leader>s after ruling out several
-<C-*> alternatives (terminal conflicts, Esc collision, ergonomics)
-
-```
-
-**Phase 2 — write-failure retry.** Diff delivered and verified (`luac5.3`
-compilation; isolated retry-loop logic tested against three cases: recovers
-on retry, genuine permanent failure, normal single-attempt success); **not
-yet committed**. Kept as its own phase/commit rather than folded into Phase
-1, given `yaml.lua`'s own header explicitly warns against casual
-modification — worth its own isolated history entry regardless of PATCH
-grouping.
-
-| File | Single-pass changes |
-|---|---|
-| `yaml.lua` | Intermittent `E482: Can't open file for writing` on save — most likely a transient lock from cloud-sync software (`P:\`, per this project's own documented Google Drive history) racing against this plugin's own `BufWritePost` sequence, which writes to the same file multiple times within one `vim.schedule` tick. Added a minimal, additive retry wrapper (`writefile_with_retry`) around the single `writefile` call in `save_frontmatter`'s Case B (disk writes only) — up to 4 attempts, increasing backoff (50/100/200ms). Does not touch `parse_yaml`/`generate_yaml` or any parsing logic. Silent when nothing's wrong; `WARN`s if a retry was needed; `ERROR`s only if every attempt is exhausted. |
-| docs | `CHANGELOG` (Fixed). |
-
-Verification: same caveat as Phase 1 — compile + isolated logic checks only,
-no live headless run yet. Smoke (user, pending): save the specific file that
-previously triggered `E482`; watch for a `WARN` (confirms a retry recovered
-a real transient lock) versus silence (confirms nothing's wrong) versus a
-sustained `ERROR` (would mean the retry window isn't long enough, or the
-root cause isn't a transient lock at all).
-
-Invariants: `save_frontmatter`'s signature and behavior unchanged for every
-caller; Case A (buffer-only, no disk write) untouched.
-
-Commit:
-
-```
-
-fix: retry transient write failures in yaml.save_frontmatter
-Addresses intermittent E482 'can't open file for writing' on save,
-likely a cloud-sync lock race against this plugin's own multi-write
-BufWritePost sequence. Minimal, additive: one retry-wrapped writefile
-call, nothing else in yaml.lua touched. Silent when nothing's wrong;
-WARNs on recovered retry, ERRORs only on genuine exhaustion -- never
-silent about a real failure.
-
-```
 
 **Phase 3 — `:PKMViews` open latency.** *Not started.* Unchanged from the
 original plan below — bench-gated, requires `bench.baseline()` measurement
@@ -925,7 +289,7 @@ before any code change.
 | File | Single-pass changes |
 |---|---|
 | `bench.lua` | If needed, a targeted bench for the views-open path (reuse `views_suite`/`baseline`). Developer-only. |
-| `views.lua` **or** `index.lua` | The fix, chosen **after** measurement. Candidates: pre-warm/reuse the index so the first `:PKMViews` does not pay a cold build; memoise `match_all` per view within an open (the `_match_cache` idea, Distant Additions 4) if the bench attributes the cost there. Exactly one of these files is touched, per the diagnosis. |
+| `views.lua` **or** `index.lua` | The fix, chosen **after** measurement. Candidates: pre-warm/reuse the index so the first `:PKMViews` does not pay a cold build; memoise `match_all` per view within an open (the `_match_cache` idea, Distant goals 4) if the bench attributes the cost there. Exactly one of these files is touched, per the diagnosis. |
 | docs | `CHANGELOG` (Fixed/Changed) with the measured before/after; `bench.baseline()` numbers recorded. |
 
 Verification: run `bench.baseline()` and the views-open bench on the real
@@ -1016,11 +380,11 @@ feat: create a relative note sharing the current note's tags
 
 | File | Single-pass changes |
 |---|---|
-| `markdown.lua` | Add **any-level** header navigation (jump to next/prev ATX heading regardless of level) via a pure `find_heading_target(lines, cursor, opts) → lnum?`. Neovim already provides **same-level** header motion natively, so PKM adds only the any-level complement; document the native integration. Update the module Public-API header and LuaDoc. *(Optional bundling: Distant Additions 1.8's "global next_header" also lives in `markdown.lua` and could ride this same pass if promoted.)* |
+| `markdown.lua` | Add **any-level** header navigation (jump to next/prev ATX heading regardless of level) via a pure `find_heading_target(lines, cursor, opts) → lnum?`. Neovim already provides **same-level** header motion natively, so PKM adds only the any-level complement; document the native integration. Update the module Public-API header and LuaDoc. *(Optional bundling: Distant goals 1.8's "global next_header" also lives in `markdown.lua` and could ride this same pass if promoted.)* |
 | `commands.lua` | `:PKMNextHeader`-family navigation commands. |
 | `keymaps.lua` | Wire navigation keymaps when set. |
 | `config.lua` | Navigation keymap defaults — consistent with the native same-level motion and existing markdown keymaps (default `false`). |
-| docs | `CHANGELOG` (Added). Record the PKM↔Neovim native-motion integration and note that a previously-created same-level command was dropped in favour of the native one. Promote the "different/any-level header" bullet of Distant Additions 1.2 into completed scope; restate that list-component and block navigation remain deferred pending the markdown conventions. |
+| docs | `CHANGELOG` (Added). Record the PKM↔Neovim native-motion integration and note that a previously-created same-level command was dropped in favour of the native one. Promote the "different/any-level header" bullet of Distant goals 1.2 into completed scope; restate that list-component and block navigation remain deferred pending the markdown conventions. |
 
 Verification: `test/test_v170_p3.lua` runs `find_heading_target` over a
 mixed-level fixture and asserts next/prev targets at boundaries (first/last
@@ -1048,15 +412,13 @@ feat: any-level header navigation
 than scheduled work. No implementation until explicitly promoted. These three
 are related: all concern how notes describe and relate to one another.*
 
-Only decision 4 is pending. Summarize the other decisions and fix them at
-the appropriate file/location.
+Only decision 4 is open; decisions 1–3 are resolved and summarised below.
 
--- NEW:
 1. **Note relationship protocol** — resolved: tag-set relatedness (Jaccard/
    overlap over tag sets) over rigid parent/child nomenclature, which is
    ill-defined here since notes cite freely and a "parent" can be cited by
    a note its "child" cites. Feeds directly into the relevance-ranking
-   ideas in Distant Additions 9; the v1.7.0 "relative note" feature already
+   ideas in Distant goals 9; the v1.7.0 "relative note" feature already
    embodies this view of relationship at creation time.
 
 2. **A note type for describing other notes** — resolved: no new
@@ -1072,7 +434,7 @@ the appropriate file/location.
    The default export flow should let the user choose between "export
    current note," "export current view," or a composed export (arbitrary
    views/tags/titles) — tracked as the still-open half of this item under
-   Distant Additions § Exportation.
+   Distant goals § Exportation.
 
 4.  **Command clearup:** several commands are residual, while others exist
     mainly to be called as part of other commands. As of now, typing `:PKM` and

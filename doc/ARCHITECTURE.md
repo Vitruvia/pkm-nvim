@@ -133,6 +133,13 @@ Two-mode sidebar (overview + detail); per-tabpage `_tabs` state including `type_
 pre-filter by type and pass `#all_paths` as total for "N of M" display.
 `refresh_sidebar_if_open()` — iterates all tabpages, applies per-tab type filter.
 `edit_view(name?)` — action picker: edit filter / rename / reparent.
+Note: the sidebar's per-tabpage `_tabs` state and the view-tree helpers
+(`build_tree_entries`, `get_view_parent`/`get_view_children`) are shared with the
+panels/pickers and with the public sidebar accessors (`get_last_view`,
+`is_sidebar_open`, `get_sidebar_win`), so the sidebar is **not** cleanly separable
+into its own module — extraction would require a bidirectional dependency and a
+wider public surface. A cleaner split, if ever pursued, is to extract the *model*
+layer (sidecar + tree helpers + `match_all`), not the sidebar UI.
 
 **panel.lua** — generic per-tabpage panel factory. `create(spec)` returns an independent
 panel object `{ open(init?), close(), toggle(init?), refresh(), is_open(), get_win() }`,
