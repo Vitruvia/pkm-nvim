@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "defaultMode": "plan",
+    "deny": [
+      "Bash(git gc:*)",
+      "Bash(git repack:*)",
+      "Bash(git prune:*)",
+      "Bash(git maintenance:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(rm -rf:*)"
+    ],
+    "ask": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git tag:*)",
+      "Bash(git merge:*)",
+      "Bash(git rebase:*)",
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)"
+    ],
+    "allow": [
+      "Bash(luacheck:*)",
+      "Bash(nvim --headless:*)"
+    ]
+  }
+}
