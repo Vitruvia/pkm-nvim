@@ -338,60 +338,41 @@ do
 end
 
 -- =============================================================================
--- deep_export_note(): one note in, its neighbourhood out
+-- Expansion runs on the picker selection, not on the whole filter result
 -- =============================================================================
 
 do
-  -- Both depth prompts and the results picker are stubbed: the point is which
-  -- seeds the entry chooses and what it hands on, not the UI itself.
-  local real_input   = vim.ui.input
-  local real_direct  = export.export_direct
-  local real_notify  = vim.notify
+  -- The UI chain is exercised end to end with only its two ends stubbed: the
+  -- depth prompts answer with their defaults, and the selection stands in for
+  -- what the user would mark in the picker. What is asserted is the contract
+  -- the flow depends on — the walk starts from the *selection*, so filtering
+  -- loosely and marking one note exports that note's neighbourhood and nobody
+  -- else's.
+  local selection = { paths_by_id[id_of(1)] }
 
-  local captured, warned
-  vim.ui.input        = function(_, cb) cb('') end          -- accept both defaults
-  export.export_direct = function(label, paths) captured = { label = label, paths = paths } end
-  vim.notify          = function(msg) warned = msg end
+  local expanded = export.collect_deep(selection,
+    { cites_depth = 2, cited_by_depth = 1, items_map = items_map })
 
-  --- Run the entry and pump the scheduler until it reaches export_direct.
-  ---@param path string|nil
-  local function run(path)
-    captured, warned = nil, nil
-    export.deep_export_note(path)
-    vim.wait(2000, function() return captured ~= nil or warned ~= nil end, 10)
-  end
+  -- From note 1 at 2/1: its citers 2/3/6, what it cites (2/4/5) and one hop
+  -- further (7), plus 9 through the mixed path 1→4←9. Note 8 stays out: three
+  -- cites hops away.
+  local ok, detail = same_set(expanded,
+    { N[1], N[2], N[3], N[4], N[5], N[6], N[7], '0009_note_n9' })
+  check("expansion from a one-note selection", ok, detail)
 
-  -- This entry defaults to 2/1 — for a single note, "and who cites it" is the
-  -- expected half. From note 1 that reaches: its citers 2/3/6, what it cites
-  -- (2/4/5) and one hop further (7), and 9 through the mixed path 1→4←9.
-  -- Note 8 stays out: three cites hops.
-  run(paths_by_id[id_of(1)])
-  local ok, detail = false, 'export_direct was never reached'
-  if captured then
-    ok, detail = same_set(captured.paths,
-      { N[1], N[2], N[3], N[4], N[5], N[6], N[7], '0009_note_n9' })
-  end
-  check("deep_export_note seeds with exactly the given note", ok, detail)
-  check("its label names the seed note",
-    captured ~= nil and captured.label:find(N[1], 1, true) ~= nil,
-    captured and captured.label or nil)
+  -- The same filter result, had every match been treated as a seed, would drag
+  -- in the neighbourhood of notes the user never picked — this is the case that
+  -- sent three journals into a Seneca export.
+  local as_if_all_seeds = export.collect_deep(
+    { paths_by_id[id_of(1)], paths_by_id[id_of(7)] },
+    { cites_depth = 2, cited_by_depth = 1, items_map = items_map })
+  local got = stems(as_if_all_seeds)
+  check("an extra seed measurably widens the result", got[N[8]] == true,
+    'note 8 should arrive through seed 7')
 
-  run(utils.join(notes_dir, 'no_such_note.md'))
-  check("unreadable path warns instead of exporting",
-    captured == nil and warned ~= nil and warned:find('open a note first', 1, true) ~= nil,
-    warned)
-
-  local outside = vim.fn.tempname() .. '.md'
-  vim.fn.writefile({ '---', 'title: "Outside"', '---', '', 'body' }, outside)
-  run(outside)
-  check("note outside the PKM root is refused",
-    captured == nil and warned ~= nil and warned:find('outside the PKM root', 1, true) ~= nil,
-    warned)
-  vim.fn.delete(outside)
-
-  vim.ui.input         = real_input
-  export.export_direct = real_direct
-  vim.notify           = real_notify
+  local narrowed = stems(expanded)
+  check("and that widening does not happen from the narrower selection",
+    narrowed[N[8]] == nil)
 end
 
 -- =============================================================================

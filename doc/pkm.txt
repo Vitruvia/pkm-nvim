@@ -260,10 +260,6 @@ EXPORT~
 :PKMExport              Choose simple or deep export, then open the filter
                         form. See |pkm-export|.
 
-:PKMExportDeep [path]   Export the current note (or [path]) together with the
-                        notes it cites and the notes citing it, to the chosen
-                        depths. See |pkm-export|.
-
 :PKMExportView [name]   Export all notes in a named view, skipping the filter
                         form. Tab-completes view names. Without a name,
                         presents a picker.
@@ -504,9 +500,8 @@ FRONTMATTER STRUCTURE~
 ==============================================================================
 10. EXPORT                                                       *pkm-export*
 
-:PKMExport opens an interactive filter form. :PKMExportDeep exports one note
-with its citation neighbourhood. :PKMExportView [name] exports a named view's
-notes directly without the form.
+:PKMExport opens an interactive filter form. :PKMExportView [name] exports
+a named view's notes directly without the form.
 
 THE FILTER FORM~
 >
@@ -531,36 +526,27 @@ SIMPLE VS DEEP~
 
 :PKMExport first asks which mode to use:
 
-  Simple    Export exactly the notes the filter matches.
-  Deep      Every matched note also seeds a walk across the cites/cited_by
-            frontmatter, so the notes they cite (and, if asked, the notes
-            that cite them) come along.
+  Simple    Export the notes you select in the picker.
+  Deep      The same, except the notes you select are treated as starting
+            points: the notes they cite — and, if asked, the notes citing
+            them — are exported alongside.
 
-Note that in Deep mode *every* note the filter matches becomes a seed: a
-filter matching four notes expands from all four, and the picker title says
-so ("deep filter: 4 seeds -> 9 notes"). To expand from one specific note, use
-:PKMExportDeep instead.
-
-:PKMExportDeep [path]                                      *:PKMExportDeep*
-            Export the note in the current buffer — or the given path — plus
-            its citation neighbourhood. No filter form: the seed is exactly
-            that one note, so nothing enters the export that the citation
-            graph did not put there. Defaults here are 2 hops along cites and
-            1 along cited_by, since "this note and what cites it" is usually
-            the point.
+Both modes run the same first two steps, so the gesture is unchanged: filter,
+then mark what you want with <Tab>. Deep only changes what happens after you
+confirm. Marking one note therefore exports that note's neighbourhood and
+nobody else's, however loose the filter was.
 
 Deep mode asks for two depths before the filter form:
 
   Depth along cites      how many citation hops to follow forward   (default 2)
-  Depth along cited_by   how many hops to follow backward           (default 0)
+  Depth along cited_by   how many hops to follow backward           (default 1)
 
-Both are counted from the notes the filter matched, and one path may mix
-directions: it may spend up to "cites" hops forward and "cited_by" hops
-backward, in any order. With the defaults, a deep export adds everything the
-matched notes cite, two hops out, and nobody who cites them. Blank accepts the
-default; 0 disables that direction. All citable types are followed (notes, bib,
-journal, scratch), cycles terminate, and the expanded list always goes through
-the same picker before anything is copied.
+Both are counted from the notes you selected, and one path may mix directions:
+it may spend up to "cites" hops forward and "cited_by" hops backward, in any
+order. Blank accepts the default; 0 disables that direction. All citable types
+are followed (notes, bib, journal, scratch) and cycles terminate. After the
+walk, a message reports how many notes the selection grew into, and then the
+destination prompt appears.
 
 ==============================================================================
 11. CONFIGURATION                                          *pkm-configuration*

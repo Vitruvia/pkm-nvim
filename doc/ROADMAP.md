@@ -383,9 +383,17 @@ preferred.*
 | File | Single-pass changes |
 |---|---|
 | `export.lua` | (1) `read_citation_edges(path)` — pure: frontmatter via `get_file_data`, returns `{ cites = {ids…}, cited_by = {ids…} }` unioning all four groups; grouped and legacy-flat shapes both accepted. (2) `collect_deep(seed_paths, opts)` — pure BFS with a **per-path budget** (`cites_depth` 2, `cited_by_depth` 0), cycle termination by budget dominance, identifiers→paths via `citations.get_citable_items_map()` (once per run, injectable through `opts.items_map`); returns the deduplicated union sorted by basename. (3) `deep_export()` — prompts both depths, reuses the filter form for seeds, hands the union to `export_direct`. |
-| `commands.lua` | `:PKMExport` opens with a native `vim.ui.select` simple-vs-deep choice; `:PKMExportView` untouched. |
+| `commands.lua` | `:PKMExport` opens with a native `vim.ui.select` simple-vs-deep choice; `:PKMExportView` untouched. **No new command** — per *Command clearup* (Near goals 4), deep export is a mode of the existing one, not a second `:PKMExport*` entry. |
 | `test/test_v170_p1.lua` | 20 checks (below). |
 | docs | `CHANGELOG` (Added), `ARCHITECTURE`, and `pkm.txt` §10 — the user-facing command flow changed. |
+
+**Where the expansion happens, decided during the phase:** the walk runs on the
+**picker selection**, not on the filter result. Seeding from every matched note
+made the common intent — "export this note and what it links to" — inexpressible
+without crafting a filter that matches exactly one note; it also produced a
+confusing first run, where filtering `Seneca` seeded three journals that merely
+mention the author. Simple and deep now share the same filter → picker steps and
+differ only in what happens after confirmation.
 
 **Semantics decided during the phase:** the two depths are *not* independent
 per-direction walks. Both count from the seeds, and one path may **mix**

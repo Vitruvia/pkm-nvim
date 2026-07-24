@@ -5,32 +5,27 @@
 ## [Unreleased]
 
 ### Added
--   **`:PKMExportDeep`** — export the note in the current buffer (or a path
-    given as argument) plus its citation neighbourhood, with no filter form in
-    between. The filter-form flow makes **every matched note a seed**, which is
-    rarely what "export this note and what it links to" means: filtering for
-    `Seneca` to export one note also seeds three journals that merely mention
-    Sêneca, and all of them expand. This entry seeds exactly one note, so only
-    the graph decides what else comes along. Depths default to 2 along `cites`
-    and **1** along `cited_by` here, since for a single note the citers are
-    usually half the point. The picker title now also names the origin of the
-    seeds (`deep filter: 4 seeds → 9 notes` vs `deep 0001_note_x: 1 seed → …`).
--   **Deep export (v1.7.0 Phase 1).** `:PKMExport` now opens with a mode choice:
-    *Simple* is the previous flow (export exactly what the filter matches),
-    *Deep* keeps the citation neighbourhood with it. Deep asks for two depths,
-    runs the same filter form, and treats its matches as **seeds** for a walk
-    across the `cites` / `cited_by` graph already maintained in frontmatter.
-    The expanded set goes to the ordinary results picker, so nothing is copied
-    before it has been seen.
+-   **Deep export (v1.7.0 Phase 1).** `:PKMExport` now opens with a mode
+    choice, staying a single command rather than sprouting a second one
+    (ROADMAP *Command clearup*: common options belong to one multimodal
+    command). *Simple* is the previous flow; *Deep* changes only what happens
+    after you confirm the picker — **the notes you selected become seeds** for
+    a walk across the `cites` / `cited_by` graph already maintained in
+    frontmatter, and what the walk finds is exported with them.
 
-    Traversal is a **per-path budget**: both depths count from the seeds, and a
-    single path may mix directions — up to `cites_depth` hops along `cites` and
-    `cited_by_depth` hops along `cited_by`, in any order. Defaults are
-    **2 and 0**, so out of the box a deep export adds what the seeds cite, two
-    hops out, and no citers. All four citable groups (`notes`, `bib`, `journal`,
+    Selecting the seeds *in the picker*, rather than seeding from every note
+    the filter matched, is what makes "export this note and what it links to"
+    expressible: filter loosely, mark the one note you meant. Both modes share
+    the same first two steps, so the gesture is unchanged.
+
+    Traversal is a **per-path budget**: both depths count from the selection,
+    and a single path may mix directions — up to `cites_depth` hops along
+    `cites` and `cited_by_depth` hops along `cited_by`, in any order. Defaults
+    are **2 and 1**. All four citable groups (`notes`, `bib`, `journal`,
     `scratch`) are followed. Cycles terminate: each hop spends budget, and a
     note is only re-expanded when it arrives with a budget the visited one does
-    not dominate.
+    not dominate. After the walk a message reports how many notes the selection
+    grew into, then the destination prompt appears.
 
     New in `export.lua`, both pure and read-only:
     `read_citation_edges(path)` → `{cites, cited_by}` identifier lists (grouped
