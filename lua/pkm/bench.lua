@@ -10,6 +10,8 @@
 --   - run_suite() deletes all synthetic files after the run by default.
 --     Pass opts.keep = true to retain them for manual inspection.
 --   - baseline() reads real notes but never writes or modifies any file.
+--   - views_open() reads the live index and the live view definitions and
+--     writes nothing; in synthetic mode it only touches its own bench_dir.
 --   - No function touches files outside its designated bench_dir or the
 --     real PKM root (baseline, read-only).
 --
@@ -35,6 +37,8 @@
 --   :lua require('pkm.bench').cleanup('/some/dir')
 --   :lua require('pkm.bench').views_suite()
 --   :lua require('pkm.bench').views_suite({ note_count = 1000 })
+--   :lua require('pkm.bench').views_open()
+--   :lua require('pkm.bench').views_open({ synthetic = 2000 })
 --
 -- Public API:
 --   time(fn)                       → elapsed_ms (float)
@@ -43,6 +47,9 @@
 --   baseline()                     → timed raw scan on real corpus (read-only)
 --   run_suite(bench_dir?, opts?)   → four-phase suite; cleans up afterward
 --   views_suite(opts?)             → view × note scaling bench (overview scenario)
+--   views_open(opts?)              → :PKMViews open-path bench on the live
+--                                    corpus and views (read-only), or on a
+--                                    synthetic corpus with opts.synthetic
 -- =============================================================================
 
 local M = {}
@@ -516,6 +523,248 @@ function M.views_suite(opts)
   end
 
   vim.notify('PKMBench views: suite complete.', vim.log.levels.INFO)
+end
+
+-- =============================================================================
+-- SECTION: Views-open bench
+-- =============================================================================
+--
+-- views_suite() above measures an *idealised* count loop (filter.eval only).
+-- The real overview path does more per view: it rebuilds the whole entry array
+-- (index.get_all()), materialises a path array, and sorts it. This section
+-- prices that real path so an optimisation can be chosen from measurement
+-- rather than from inspection.
+
+--- Sort paths in place with the comparator views.match_all() used before
+--- v1.6.1 Ph3: one fnamemodify() call per comparison (~N·logN VimL calls).
+--- Kept here so the bench can price it against the keyed variant below.
+---@param paths string[]  Sorted in place
+---@return string[] paths
+local function sort_inline(paths)
+  table.sort(paths, function(a, b)
+    return vim.fn.fnamemodify(a, ':t') < vim.fn.fnamemodify(b, ':t')
+  end)
+  return paths
+end
+
+--- Same ordering, with each key computed once (Schwartzian transform):
+--- N fnamemodify() calls instead of ~N·logN.
+---@param paths string[]  Sorted in place
+---@return string[] paths
+local function sort_keyed(paths)
+  local key = {}
+  for _, p in ipairs(paths) do key[p] = vim.fn.fnamemodify(p, ':t') end
+  table.sort(paths, function(a, b) return key[a] < key[b] end)
+  return paths
+end
+
+--- Emit one aligned result row.
+---@param label string
+---@param ms    number
+---@param note  string|nil  Optional trailing annotation
+local function report(label, ms, note)
+  vim.notify(string.format(
+    'PKMBench views-open  %-26s %9.2f ms%s',
+    label, ms, note and ('   ' .. note) or ''),
+    vim.log.levels.INFO)
+end
+
+--- Synthetic fallback for views_open(): prices the same two shapes
+--- (current overview vs count-only) against a disposable temp corpus and
+--- in-memory filter trees. Touches no live state and defines no view.
+---@param opts table  { synthetic = integer, view_count?, bench_dir?, keep? }
+local function views_open_synthetic(opts)
+  local note_count = type(opts.synthetic) == 'number' and opts.synthetic or 2000
+  local view_count = opts.view_count or 20
+  local keep       = opts.keep or false
+  local bench_dir  = opts.bench_dir or (vim.fn.tempname() .. '_pkmbench_open')
+
+  local filter    = require('pkm.filter')
+  local notes_dir = utils.join(bench_dir, 'notes')
+
+  vim.notify(string.format(
+    'PKMBench views-open: generating %d synthetic notes…', note_count),
+    vim.log.levels.INFO)
+  M.gen_notes(note_count, notes_dir)
+
+  local tbl     = phase_index_build(notes_dir)
+  local entries = {}
+  for _, e in pairs(tbl) do entries[#entries + 1] = e end
+
+  if #entries == 0 then
+    vim.notify('PKMBench views-open: no entries indexed — aborting', vim.log.levels.ERROR)
+    if not keep then M.cleanup(bench_dir) end
+    return
+  end
+
+  local trees = {}
+  for i = 1, view_count do
+    local tree = filter.parse('tag:' .. TAGS[((i - 1) % #TAGS) + 1])
+    if tree then trees[#trees + 1] = tree end
+  end
+
+  -- One get_all()-equivalent array rebuild, as index.get_all() performs it.
+  local function snapshot()
+    local out = {}
+    for _, e in ipairs(entries) do out[#out + 1] = e end
+    return out
+  end
+
+  -- Warm-up: JIT-compiles the eval loop before anything is recorded.
+  for _, tree in ipairs(trees) do
+    for _, e in ipairs(entries) do filter.eval(tree, e) end
+  end
+
+  -- Current shape: per view → array rebuild + path array + sort.
+  local ms_current = M.time(function()
+    for _, tree in ipairs(trees) do
+      local matched = {}
+      for _, e in ipairs(snapshot()) do
+        if filter.eval(tree, e) then matched[#matched + 1] = e.path end
+      end
+      sort_inline(matched)
+    end
+  end)
+
+  -- Count-only shape: one array rebuild for the whole batch, no sort.
+  local ms_counts = M.time(function()
+    local shared = snapshot()
+    for _, tree in ipairs(trees) do
+      local c = 0
+      for _, e in ipairs(shared) do
+        if filter.eval(tree, e) then c = c + 1 end
+      end
+    end
+  end)
+
+  vim.notify(string.format(
+    'PKMBench views-open (synthetic): %d views × %d notes',
+    #trees, #entries), vim.log.levels.INFO)
+  report('overview (current shape)', ms_current, string.format('%.2f ms/view', ms_current / #trees))
+  report('overview (count-only)',    ms_counts,  string.format('%.2f ms/view', ms_counts / #trees))
+
+  if keep then
+    vim.notify('PKMBench views-open: files kept at ' .. bench_dir, vim.log.levels.INFO)
+  else
+    M.cleanup(bench_dir)
+  end
+end
+
+--- Measure the `:PKMViews` / sidebar-overview open path against the corpus and
+--- the view definitions this session is configured with. Read-only: it calls
+--- the live index and live views but never writes a file or changes any state.
+---
+--- Point it at a real notes tree through test/min_init.lua's --root flag, which
+--- also guarantees the *working tree* copy of the plugin is what gets measured:
+---   nvim --headless -u test/min_init.lua -- --root=<notes root> \
+---     -c "lua require('pkm.bench').views_open()" -c "qa!"
+---
+--- Rows reported:
+---   index build (cold)      first get_all() when the index was not yet built
+---   get_all() warm          one entry-array rebuild — paid once per view today
+---   sort N, inline cmp      table.sort over all N paths, fnamemodify per compare
+---   sort N, keyed cmp       same ordering, one fnamemodify per path
+---   overview (match_all)    #match_all() once per view — today's real cost
+---   overview (count_many)   one count_many() for all views, when available
+---   detail (largest view)   one match_all() for the view with the most matches
+---
+--- The two sort rows use all N paths, an upper bound: a single view sorts only
+--- its own matches. They isolate the comparator cost, not a per-view total.
+---@param opts table|nil  { synthetic = integer } to use a disposable corpus
+---                       instead of the live one (see views_open_synthetic)
+function M.views_open(opts)
+  opts = opts or {}
+  if opts.synthetic then
+    views_open_synthetic(opts)
+    return
+  end
+
+  local config = require('pkm').config
+  if not config then
+    vim.notify(
+      'PKMBench: PKM not initialised — call require("pkm").setup() first',
+      vim.log.levels.ERROR)
+    return
+  end
+
+  local index = require('pkm.index')
+  local views = require('pkm.views')
+
+  local names = views.list()
+  if #names == 0 then
+    vim.notify(
+      'PKMBench views-open: no views defined for this root — '
+      .. 'run views_open({ synthetic = 2000 }) instead',
+      vim.log.levels.WARN)
+    return
+  end
+
+  -- 1. Cold build: only observable on the first index access of a session.
+  local ms_cold
+  if not index.is_built() then
+    ms_cold = M.time(function() index.get_all() end)
+  end
+
+  local entries = index.get_all()
+  if #entries == 0 then
+    vim.notify('PKMBench views-open: index is empty — nothing to measure',
+      vim.log.levels.WARN)
+    return
+  end
+
+  -- 2. Warm-up: JIT-compiles the eval/sort loops before recording.
+  for _, name in ipairs(names) do local _ = #views.match_all(name) end
+
+  -- 3. Timed rows.
+  local ms_get_all = M.time(function() index.get_all() end)
+
+  local paths = {}
+  for _, e in ipairs(entries) do paths[#paths + 1] = e.path end
+  local ms_sort_inline = M.time(function() sort_inline(vim.list_extend({}, paths)) end)
+  local ms_sort_keyed  = M.time(function() sort_keyed(vim.list_extend({}, paths)) end)
+
+  local counts = {}
+  local ms_overview = M.time(function()
+    for _, name in ipairs(names) do
+      counts[name] = #views.match_all(name)
+    end
+  end)
+
+  -- Present only after v1.6.1 Ph3 lands; this keeps one bench valid for the
+  -- before-and-after comparison without a second pass over this file.
+  local ms_count_many
+  if type(views.count_many) == 'function' then
+    ms_count_many = M.time(function() views.count_many(names) end)
+  end
+
+  local largest, largest_count = names[1], -1
+  for name, c in pairs(counts) do
+    if c > largest_count then largest, largest_count = name, c end
+  end
+  local ms_detail = M.time(function() views.match_all(largest) end)
+
+  -- 4. Report.
+  local v, n = #names, #entries
+  vim.notify(string.format(
+    'PKMBench views-open: %d views × %d notes  (root: %s)',
+    v, n, config.root_path), vim.log.levels.INFO)
+
+  if ms_cold then
+    report('index build (cold)', ms_cold, string.format('%.3f ms/note', ms_cold / n))
+  else
+    report('index build (cold)', 0, 'skipped — index already built')
+  end
+  report('get_all() warm', ms_get_all, string.format('×%d views today', v))
+  report('sort N, inline cmp', ms_sort_inline, string.format('N=%d', n))
+  report('sort N, keyed cmp', ms_sort_keyed, string.format('N=%d', n))
+  report('overview (match_all)', ms_overview, string.format('%.2f ms/view', ms_overview / v))
+  if ms_count_many then
+    report('overview (count_many)', ms_count_many, string.format('%.2f ms/view', ms_count_many / v))
+  else
+    report('overview (count_many)', 0, 'n/a — count_many() not present yet')
+  end
+  report('detail (largest view)', ms_detail,
+    string.format("'%s', %d matches", largest, largest_count))
 end
 
 return M

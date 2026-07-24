@@ -42,6 +42,10 @@
 --   set_panel_keymap(lhs)    → set the optional sidebar→views-panel key
 --   edit_view(name?)    → action picker: edit filter / rename / reparent; picker if nil
 --   match_all(name)     → string[]  paths matching the named view's filter
+--   count_all(name)     → integer   how many notes match, without building
+--                                   or sorting the path array
+--   count_many(names)   → table<string, integer>  counts for a batch of views
+--                                   from a single index read (overview path)
 --   open(name?)         → activate a view; prompts for name if nil
 --   open_last()         → reopen the last activated view (session-scoped)
 --   get_last_view()     → active view name for context-aware features (sidebar > last)
@@ -229,6 +233,16 @@ local function build_tree_entries()
   for _, root in ipairs(roots) do visit(root, 0) end
 
   return entries
+end
+
+--- Collect the view names of a tree-entry array, so an overview can ask for
+--- every count in one M.count_many() call instead of one call per row.
+---@param entries table[]  Entries from build_tree_entries()
+---@return string[]
+local function entry_names(entries)
+  local names = {}
+  for _, e in ipairs(entries) do names[#names + 1] = e.name end
+  return names
 end
 
 --- Sort a path list by note type (note→agg→bib→journal→scratch) then title.
@@ -590,18 +604,76 @@ function M.match_all(name)
   local filter  = require('pkm.filter')
   local entries = require('pkm.index').get_all()
   local matched = {}
+  local keys    = {}
 
   for _, entry in ipairs(entries) do
     if filter.eval(tree, entry) then
       matched[#matched + 1] = entry.path
+      keys[entry.path]      = vim.fn.fnamemodify(entry.path, ':t')
     end
   end
 
-  table.sort(matched, function(a, b)
-    return vim.fn.fnamemodify(a, ':t') < vim.fn.fnamemodify(b, ':t')
-  end)
+  -- Sort keys are computed once per match rather than once per comparison:
+  -- table.sort performs ~N·logN comparisons and fnamemodify is a VimL call.
+  -- The ordering is unchanged — the compared string is the same basename,
+  -- only precomputed (Schwartzian transform).
+  table.sort(matched, function(a, b) return keys[a] < keys[b] end)
 
   return matched
+end
+
+--- Count the entries a parsed filter tree matches.
+--- Counting path for the overview screens: materialises no path array and
+--- performs no sort, so V views cost V filter passes and nothing else.
+---@param tree    table    Parsed filter tree from get_tree()
+---@param entries table[]  Index entries to evaluate
+---@return integer
+local function count_matches(tree, entries)
+  local filter = require('pkm.filter')
+  local count  = 0
+  for _, entry in ipairs(entries) do
+    if filter.eval(tree, entry) then count = count + 1 end
+  end
+  return count
+end
+
+--- Return how many notes match the named view's filter.
+--- Equivalent to `#match_all(name)` — including its error behaviour (an
+--- unknown or invalid view notifies and counts 0) — but without building or
+--- sorting the path array.
+---@param name string
+---@return integer
+function M.count_all(name)
+  local tree, err = get_tree(name)
+  if not tree then
+    vim.notify(err, vim.log.levels.ERROR)
+    return 0
+  end
+  return count_matches(tree, require('pkm.index').get_all())
+end
+
+--- Return {view name → match count} for a batch of views, reading the index
+--- once for the whole batch. This is the overview path: V views cost one
+--- index.get_all() plus V filter passes, instead of V index reads, V path
+--- arrays and V sorts. Unknown or invalid views notify and count 0, exactly
+--- as `#match_all(name)` does.
+---@param names string[]
+---@return table<string, integer>
+function M.count_many(names)
+  if #names == 0 then return {} end
+
+  local entries = require('pkm.index').get_all()
+  local counts  = {}
+  for _, name in ipairs(names) do
+    local tree, err = get_tree(name)
+    if tree then
+      counts[name] = count_matches(tree, entries)
+    else
+      vim.notify(err, vim.log.levels.ERROR)
+      counts[name] = 0
+    end
+  end
+  return counts
 end
 
 --- Return the currently active view name for context-aware features.
@@ -793,8 +865,9 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
   local entries  = {}
 
   -- Subview entries first (shown at top with ascending sort)
+  local child_counts = M.count_many(children)
   for _, child in ipairs(children) do
-    local c_count = #M.match_all(child)
+    local c_count = child_counts[child] or 0
     entries[#entries + 1] = {
       value      = child,
       display    = string.format('[v] %s  (%d notes)', child, c_count),
@@ -877,10 +950,11 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
         end
         actions.close(prompt_bufnr)
         vim.schedule(function()
+          local ch_counts = M.count_many(ch)
           vim.ui.select(ch, {
             prompt      = string.format("Subviews of '%s':", name),
             format_item = function(n)
-              return string.format('%s  (%d)', n, #M.match_all(n))
+              return string.format('%s  (%d)', n, ch_counts[n] or 0)
             end,
           }, function(sel) if sel then M.open(sel) end end)
         end)
@@ -973,8 +1047,9 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     local lines = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
     line_paths, line_subs = {}, {}
 
+    local child_counts = M.count_many(filtered_children)
     for _, child in ipairs(filtered_children) do
-      local c_count = #M.match_all(child)
+      local c_count = child_counts[child] or 0
       lines[#lines + 1] = string.format('  [v] %s  (%d notes)', child, c_count)
       line_subs[#lines] = child
     end
@@ -1058,10 +1133,11 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     end
     close()
     vim.schedule(function()
+      local ch_counts = M.count_many(ch)
       vim.ui.select(ch, {
         prompt      = string.format("Subviews of '%s':", name),
         format_item = function(n)
-          return string.format('%s  (%d)', n, #M.match_all(n))
+          return string.format('%s  (%d)', n, ch_counts[n] or 0)
         end,
       }, function(sel) if sel then M.open(sel) end end)
     end)
@@ -1291,10 +1367,11 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
     return
   end
 
-  local tree  = build_tree_entries()
-  local items = {}
+  local tree   = build_tree_entries()
+  local counts = M.count_many(entry_names(tree))
+  local items  = {}
   for _, e in ipairs(tree) do
-    local count  = #M.match_all(e.name)
+    local count  = counts[e.name] or 0
     local indent = string.rep('  ', e.depth)
     local marker = e.has_children and '▶ ' or '• '
     items[#items + 1] = {
@@ -1445,9 +1522,10 @@ local _views_panel = panel.create({
       string.format('  Views  (%d)%s  <CR> open  / search  ? help',
         #filtered, filter_label),
     }
-    local map = {}
+    local map    = {}
+    local counts = M.count_many(entry_names(filtered))
     for _, e in ipairs(filtered) do
-      local count  = #M.match_all(e.name)
+      local count  = counts[e.name] or 0
       local indent = string.rep('  ', e.depth)
       local marker = e.has_children and '▶ ' or '• '
       lines[#lines + 1] = string.format('  %s%s%s  (%d)', indent, marker, e.name, count)
@@ -1592,9 +1670,10 @@ local _delete_panel = panel.create({
       string.format('  Delete View  (%d)%s  <CR> select (confirms)  / search  q close',
         #filtered, filter_label),
     }
-    local map = {}
+    local map    = {}
+    local counts = M.count_many(entry_names(filtered))
     for _, e in ipairs(filtered) do
-      local count  = #M.match_all(e.name)
+      local count  = counts[e.name] or 0
       local indent = string.rep('  ', e.depth)
       local marker = e.has_children and '▶ ' or '• '
       lines[#lines + 1] = string.format('  %s%s%s  (%d)', indent, marker, e.name, count)
@@ -2002,9 +2081,10 @@ local function sidebar_build_overview()
     ''
   }
   local view_lines = {}
+  local counts     = M.count_many(entry_names(tree))
 
   for _, e in ipairs(tree) do
-    local count  = #M.match_all(e.name)
+    local count  = counts[e.name] or 0
     local indent = string.rep('  ', e.depth + 1)
     local marker = e.has_children and '▶ ' or '• '
     lines[#lines + 1] = string.format('%s%s%s  (%d)', indent, marker, e.name, count)
@@ -2031,7 +2111,7 @@ local function sidebar_build_lines(name, paths, total_count)
 
   if parent or #children > 0 then
     if parent then
-      local p_count = #M.match_all(parent)
+      local p_count = M.count_all(parent)
       lines[#lines + 1] = string.format('  ▶ %s  (%d)', parent, p_count)
       tree_entries[#lines] = { name = parent, is_current = false }
     end
@@ -2040,8 +2120,9 @@ local function sidebar_build_lines(name, paths, total_count)
     lines[#lines + 1] = string.format('  ▼ %s  (%d)', name, #paths)
     tree_entries[#lines] = { name = name, is_current = true }
 
+    local child_counts = M.count_many(children)
     for _, child in ipairs(children) do
-      local c_count = #M.match_all(child)
+      local c_count = child_counts[child] or 0
       lines[#lines + 1] = string.format('  ▶ %s  (%d)', child, c_count)
       tree_entries[#lines] = { name = child, is_current = false }
     end

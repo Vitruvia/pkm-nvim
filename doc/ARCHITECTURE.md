@@ -133,6 +133,12 @@ Two-mode sidebar (overview + detail); per-tabpage `_tabs` state including `type_
 pre-filter by type and pass `#all_paths` as total for "N of M" display.
 `refresh_sidebar_if_open()` — iterates all tabpages, applies per-tab type filter.
 `edit_view(name?)` — action picker: edit filter / rename / reparent.
+Query API: `match_all(name)` returns the matching paths, sorted by basename with
+precomputed sort keys; `count_all(name)` / `count_many(names)` return counts only,
+reading the index once per batch and skipping the path array and the sort. Every
+"(N)" shown by an overview, panel or picker comes from the counting pair — never
+from `#match_all` — which is what keeps overview cost linear in views, not in
+views × sorts (see CHANGELOG, v1.6.1 Ph3, for the measured effect).
 Note: the sidebar's per-tabpage `_tabs` state and the view-tree helpers
 (`build_tree_entries`, `get_view_parent`/`get_view_children`) are shared with the
 panels/pickers and with the public sidebar accessors (`get_last_view`,

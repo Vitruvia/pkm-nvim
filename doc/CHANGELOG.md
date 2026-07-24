@@ -4,7 +4,41 @@
 
 ## [Unreleased]
 
+### Added
+-   `bench.views_open(opts?)` — developer-only benchmark for the `:PKMViews`
+    open path. Read-only: it times the live index and the live view definitions
+    (cold build, warm `get_all()`, both sort comparators, overview via
+    `match_all` vs `count_many`, and a single-view detail open) and writes
+    nothing. `views_open({ synthetic = N })` prices the same shapes against a
+    disposable temp corpus when there is no real corpus to point at.
+-   `test/test_v161_p3.lua` — asserts `count_all`/`count_many` agree with
+    `#match_all` (simple view, subproject, empty view, unknown name), that
+    counts follow index invalidation, and that `match_all`'s order is identical
+    to the pre-Phase-3 comparator's on a fixture built to expose the difference.
+
 ### Changed
+-   **`:PKMViews` open latency (v1.6.1 Phase 3).** The views overview screens
+    (Telescope views-tree, `:PKMViews` panel fallback, `:PKMViewDelete` panel,
+    sidebar overview, and the parent/child counts in every view picker) used to
+    call `#views.match_all(name)` once per view. Each of those calls rebuilt the
+    whole entry array (`index.get_all()`), materialised a path array and sorted
+    it — all to produce one number. They now use the new counting path,
+    `views.count_all(name)` / `views.count_many(names)`, which reads the index
+    once per batch and evaluates the filters without building or sorting
+    anything. Additionally `views.match_all()` precomputes its sort keys instead
+    of calling `vim.fn.fnamemodify()` inside the comparator (~N·logN VimL calls
+    per open). Ordering, counts and every displayed string are unchanged.
+
+    Measured with the new `bench.views_open()` on synthetic corpora, before and
+    after, same corpus per pair (Neovim 0.11.3, Windows):
+
+    | corpus | overview before | overview after | detail (one view) before → after |
+    |---|---|---|---|
+    | 600 notes × 20 views  |   9.3 ms | 2.1 ms (**4.5×**) | 0.60 ms → 0.16 ms |
+    | 2000 notes × 50 views | 121.4 ms | 13.1 ms (**9.3×**) | 2.69 ms → 0.57 ms |
+
+    Sorting all N paths in isolation: 43.7 ms (comparator-inline) → 4.2 ms
+    (precomputed keys) at N = 2000, i.e. ~10× on the comparator alone.
 -   PKM Mode's default layout now starts with `sidebar = false`.
 -   Internal: `type_prefix` / `strip_display_prefix` (and their note-type
     abbreviation table) are now shared from `pkm.utils` instead of being
@@ -23,11 +57,14 @@
      type, or document that `bench_dir` must use the native separator.
 
 -   `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
-     defined view to build the viewed-path set). `bench.views_suite` was run at
-     10k notes: overview costs V × 3.1ms (50 views → 158ms, 300 views → 935ms).
-     At current real corpus scale (hundreds of notes, tens of views) the cost
-     is negligible. `_match_cache` is deferred: revisit if corpus reaches ~5k
-     notes or view count exceeds ~200 with observed latency.
+     defined view to build the viewed-path set). Unlike the overview screens
+     fixed in v1.6.1 Ph3, it needs the *paths*, not the counts, so `count_many`
+     does not apply — but it also does not need them **sorted**, and it pays one
+     `index.get_all()` plus one sort per view. A `match_all` variant that skips
+     the sort (or an `each_match(name, fn)` iterator) would remove both; it was
+     left out of Ph3 to keep that phase to a single file. Measured cost at 2000
+     notes × 50 views: ~121 ms for the whole loop. At current real corpus scale
+     (hundreds of notes, tens of views) it stays imperceptible.
 
 -   Error below when ending any file with `ex: <text>`. The current workoround
     has been to simply avoid ending files that way, or wrapping any `ex:

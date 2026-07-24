@@ -277,37 +277,39 @@ are reported with root cause before any follow-up edit.
 
 #### v1.6.1 (PATCH) — Correctness batch + `:PKMViews` open latency
 
-*The two earlier correctness fix-batches of v1.6.1 have shipped (see
-`doc/CHANGELOG.md`); only the bench-gated `:PKMViews` open-latency phase below
-remains. PATCH — correctness/perf only, no new user-facing feature.*
+*All three phases of v1.6.1 have shipped (see `doc/CHANGELOG.md`).
+PATCH — correctness/perf only, no new user-facing feature.*
 
 
-**Phase 3 — `:PKMViews` open latency.** *Not started.* Unchanged from the
-original plan below — bench-gated, requires `bench.baseline()` measurement
-before any code change.
+**Phase 3 — `:PKMViews` open latency.** ✅ *Done (pending release tag).*
+Bench-gated as required: `bench.views_open()` was added first and run on
+identical corpora before and after the change.
 
 | File | Single-pass changes |
 |---|---|
-| `bench.lua` | If needed, a targeted bench for the views-open path (reuse `views_suite`/`baseline`). Developer-only. |
-| `views.lua` **or** `index.lua` | The fix, chosen **after** measurement. Candidates: pre-warm/reuse the index so the first `:PKMViews` does not pay a cold build; memoise `match_all` per view within an open (the `_match_cache` idea, Distant goals 4) if the bench attributes the cost there. Exactly one of these files is touched, per the diagnosis. |
-| docs | `CHANGELOG` (Fixed/Changed) with the measured before/after; `bench.baseline()` numbers recorded. |
+| `bench.lua` | `views_open(opts?)` — read-only bench of the views-open path (cold build, warm `get_all()`, both sort comparators, overview via `match_all` vs `count_many`, single-view detail). `views_open({ synthetic = N })` for a disposable corpus. |
+| `views.lua` | The measured fix: `count_all(name)` / `count_many(names)` counting path (no path array, no sort, one index read per batch) behind all overview counts, plus precomputed sort keys in `match_all` instead of `fnamemodify` inside the comparator. `index.lua` untouched. |
+| `test/test_v161_p3.lua` | Counts agree with `#match_all` (simple/subproject/empty/unknown); counts follow index invalidation; `match_all` ordering identical to the pre-Ph3 comparator on a basename-vs-stem fixture. |
+| docs | `CHANGELOG` (Added/Changed) with the measured before/after table. |
 
-Verification: run `bench.baseline()` and the views-open bench on the real
-corpus **before** any edit (mandatory — never optimize blind), then again
-after, and record both. Smoke: open `:PKMViews`/`<leader>va` on the
-~600-note corpus and confirm sub-perceptible latency.
+Result: overview 9.3 ms → 2.1 ms at 600 notes × 20 views; 121.4 ms → 13.1 ms at
+2000 × 50; single-view open ~4× faster. The cold index build was **not** the
+bottleneck (`index.prebuild` already covers it in PKMMode), so no pre-warm code
+was added.
 
-Invariants: no correctness change to view results; measurement precedes
+Invariants held: no correctness change to view results; measurement preceded
 optimization.
 
 Commit:
 
 ```
 
-perf: eliminate :PKMViews first-open latency
+perf: cut :PKMViews open latency with a counting path
 
-bench: measured the views-open path on the real corpus (before/after recorded)
-<views|index>: <the diagnosed fix — pre-warm index / memoise match_all>
+bench: views_open() — read-only bench of the views-open path (before/after)
+views: count_all/count_many replace #match_all for every overview count;
+  match_all precomputes sort keys instead of calling fnamemodify per comparison
+test: test_v161_p3 — counts match match_all, ordering unchanged
 docs: changelog with benchmark numbers
 
 ```
@@ -658,10 +660,12 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
 
 4.  **`_match_cache` in views.lua** — Cache matched path arrays alongside
     filter trees. Makes repeated `match_all` calls O(1) until invalidation.
-    Bench showed 3.1 ms/view at 10k notes; not warranted at current scale.
-    Revisit at ~5k notes or ~200+ views with observed latency. **Note:** the
-    v1.6.1 latency investigation may adopt this if the bench attributes the
-    `:PKMViews` cost to repeated `match_all`.
+    **Not adopted by v1.6.1 Ph3**, which reached a ~5–9× overview speedup
+    without introducing invalidatable state (`count_many` + precomputed sort
+    keys). A cache would now only pay off for repeated *path* queries —
+    `:PKMOrphans` and successive detail opens of the same view. Revisit at ~5k
+    notes or ~200+ views with observed latency, and only after the cheaper
+    `:PKMOrphans` fix in CHANGELOG § Known Bugs (skip the per-view sort).
 
 5.  **Note review queue** — Select and track notes intended for review. May
     include organizers, separators, or filter interactions for priority/subject
