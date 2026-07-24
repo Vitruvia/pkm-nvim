@@ -342,8 +342,10 @@ selected the two changes — and rejected two others.
 | `test/test_v162_p1.lua` | Reader equivalence over 13 raw byte cases; every index entry compared field by field against the pre-v1.6.2 reader; non-recursive listing and invalidation still correct. |
 | docs | `CHANGELOG` (Added/Changed) with the profile and the end-to-end before/after. |
 
-Result: `index.rebuild()` 230 → 95 ms at 600 notes, 790 → 314 ms at 2000
-(0.383 → 0.158 ms/note). The glob alone was 46% of the old build.
+Result on the **real corpus** (648 notes): 230.9 → 93.6 ms, 0.356 → 0.144
+ms/note. Synthetic: 230 → 95 ms at 600 notes, 790 → 314 ms at 2000. The two
+replaced calls were 79% of the old build (reads 42%, glob 37% on the real
+corpus; the split moves with note size).
 
 Invariants held: entry shape and every field value unchanged (asserted, not
 assumed); measurement preceded optimization and overruled two of the three

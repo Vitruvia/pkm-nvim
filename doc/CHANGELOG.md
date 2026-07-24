@@ -40,16 +40,24 @@
 
     | corpus | before | after |
     |---|---|---|
-    | 600 notes  | 230 ms | **95 ms** (2.4×) |
-    | 2000 notes | 790 ms | **314 ms** (2.5×) |
+    | **648 notes (real)** | 230.9 ms | **93.6 ms** (2.5×) |
+    | 600 notes (synthetic)  | 230 ms | 95 ms (2.4×) |
+    | 2000 notes (synthetic) | 790 ms | 314 ms (2.5×) |
 
-    Per note: 0.383 ms → 0.158 ms. This is the cold-build cost the v1.6.1 Ph3
-    measurement had isolated as what a first `:PKMViews` of a session actually
-    waits on (250–450 ms on the real 614-note corpus).
+    Per note: 0.356 ms → 0.144 ms on the real corpus (0.383 → 0.158 synthetic).
+    This is the cold-build cost the v1.6.1 Ph3 measurement had isolated as what
+    a first `:PKMViews` of a session actually waits on.
 
-    Two candidate swaps were **rejected by the same profile**: `vim.uv.fs_stat`
-    is 1.07× the cost of `vim.fn.getftime`, and a Lua stem pattern 2.6–4× the
-    cost of `vim.fn.fnamemodify(path, ':t:r')`. Both VimL calls stayed.
+    The attribution shifts with note size but the conclusion does not: on the
+    real corpus the reads are the largest share (41.7%) and the glob second
+    (36.8%), against 34%/46% on the synthetic one, because real notes have more
+    body to read per file.
+
+    Two candidate swaps were **rejected by the same profile**, on both corpora:
+    `vim.uv.fs_stat` is 1.07× the cost of `vim.fn.getftime`, and a Lua stem
+    pattern 2.1–4× the cost of `vim.fn.fnamemodify(path, ':t:r')`. Both VimL
+    calls stayed — `getftime` is still 12% of the build, with no cheaper source
+    for `mtime` found.
 
     Entry shape, field values and API are unchanged — `test_v162_p1.lua`
     compares every field against the previous reader. Two deliberate
