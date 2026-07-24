@@ -292,10 +292,16 @@ identical corpora before and after the change.
 | `test/test_v161_p3.lua` | Counts agree with `#match_all` (simple/subproject/empty/unknown); counts follow index invalidation; `match_all` ordering identical to the pre-Ph3 comparator on a basename-vs-stem fixture. |
 | docs | `CHANGELOG` (Added/Changed) with the measured before/after table. |
 
-Result: overview 9.3 ms → 2.1 ms at 600 notes × 20 views; 121.4 ms → 13.1 ms at
-2000 × 50; single-view open ~4× faster. The cold index build was **not** the
-bottleneck (`index.prebuild` already covers it in PKMMode), so no pre-warm code
-was added.
+Result on the **real corpus** (614 notes × 18 views): overview 9.3 → 6.7 ms,
+single-view open 2.59 → 0.48 ms. At that scale the gain is entirely the
+precomputed sort keys; the counting path is structural and shows up as V·N
+grows (synthetic 2000 × 50: 25.3 ms via `match_all` vs 13.1 ms via
+`count_many`). See CHANGELOG for the full table and the attribution.
+
+Left open by this phase: the **cold index build**, 250–450 ms for 614 notes —
+the real wait on a first `:PKMViews` when PKMMode has not already triggered
+`index.prebuild`. A deferred startup pre-warm is a separate phase
+(`init.lua`/`config.lua`), now with a measurement to justify it.
 
 Invariants held: no correctness change to view results; measurement preceded
 optimization.

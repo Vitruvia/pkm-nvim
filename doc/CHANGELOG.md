@@ -29,16 +29,36 @@
     of calling `vim.fn.fnamemodify()` inside the comparator (~N·logN VimL calls
     per open). Ordering, counts and every displayed string are unchanged.
 
-    Measured with the new `bench.views_open()` on synthetic corpora, before and
-    after, same corpus per pair (Neovim 0.11.3, Windows):
+    Measured with the new `bench.views_open()`, before and after, same corpus
+    per pair (Neovim 0.11.3, Windows). The first row is the real corpus; the
+    synthetic rows show how it scales:
 
     | corpus | overview before | overview after | detail (one view) before → after |
     |---|---|---|---|
-    | 600 notes × 20 views  |   9.3 ms | 2.1 ms (**4.5×**) | 0.60 ms → 0.16 ms |
-    | 2000 notes × 50 views | 121.4 ms | 13.1 ms (**9.3×**) | 2.69 ms → 0.57 ms |
+    | **614 notes × 18 views (real)** | 9.3 ms | **6.7 ms** (1.4×) | 2.59 ms → 0.48 ms (5.4×) |
+    | 600 notes × 20 views (synthetic)  |   9.3 ms | 2.1 ms (4.5×) | 0.60 ms → 0.16 ms |
+    | 2000 notes × 50 views (synthetic) | 121.4 ms | 13.1 ms (9.3×) | 2.69 ms → 0.57 ms |
 
     Sorting all N paths in isolation: 43.7 ms (comparator-inline) → 4.2 ms
     (precomputed keys) at N = 2000, i.e. ~10× on the comparator alone.
+
+    **Where the gain actually comes from, per corpus.** On the real corpus the
+    whole 9.3 → 6.7 ms is the precomputed sort keys: the post-change overview
+    costs the same through `match_all` (6.69 ms) as through `count_many`
+    (6.71 ms), because at 18 views the eliminated work — 18 entry-array copies
+    at 0.01 ms and sorts over small matched sets — is below run-to-run noise,
+    while ~0.37 ms/view of `filter.eval` dominates. The counting path is
+    therefore *structural* here: it removes the O(V) array copies and O(V)
+    sorts, which is what the synthetic rows measure once V·N is large enough
+    for them to matter (2000 × 50: 25.3 ms via `match_all` vs 13.1 ms via
+    `count_many`). Neither corpus shows a regression.
+
+    **Not addressed by this phase:** the cold index build, which is what a
+    first `:PKMViews` of a session really waits on — 250–450 ms for 614 notes
+    (0.4–0.7 ms/note; the spread is filesystem cache). `index.prebuild = true`
+    already pays it at PKMMode activation, so it is only felt when views are
+    opened without PKMMode. A deferred startup pre-warm would need its own
+    phase (`init.lua`/`config.lua`).
 -   PKM Mode's default layout now starts with `sidebar = false`.
 -   Internal: `type_prefix` / `strip_display_prefix` (and their note-type
     abbreviation table) are now shared from `pkm.utils` instead of being
