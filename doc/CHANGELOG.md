@@ -138,7 +138,29 @@
     `[PKM]`), matching the notifications used everywhere else. No behavioural
     change to displayed labels.
 
+### Fixed
+-   **The export picker exported one note when nothing was marked.** With
+    Telescope installed, `<CR>` on the results picker exported only the
+    highlighted entry unless every wanted note had first been marked with
+    `<Tab>`; the no-Telescope float, meanwhile, has always exported the whole
+    list on `<CR>` and says so in its header. The same command therefore
+    behaved differently depending on whether Telescope was installed, and
+    `:PKMExportView` — "export this whole view" — copied a single note.
+    `<CR>` with no marks now exports every note the prompt currently lists,
+    matching the float, the picker's own match count, and what the deep export
+    computes; `<Tab>` remains how a subset is chosen. Found while smoke-testing
+    deep export, which made the mismatch obvious: the traversal collected the
+    cited note and the picker copied only the seed.
+
 ### Known Bugs (queued)
+
+-   `test/test_phase1_old.lua` — the "parse rejects unknown field" assertion
+    fails. Test drift, not a code defect: the legacy suite predates the filter
+    DSL change that turned an unknown field prefix into an `any:` substring
+    match (`filter.lua:252` documents the current behaviour, and
+    `test_filter.lua` asserts it across 135 cases). `filter.lua` has not
+    changed since v1.5.4. Either update the legacy assertion or retire the file
+    in favour of `test_filter.lua`.
 
 -   `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
      malformed paths when `bench_dir` is a Unix-style path (e.g.

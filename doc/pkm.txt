@@ -514,7 +514,12 @@ THE FILTER FORM~
 
 All active fields are AND-ed together. Matching is exact substring — never
 fuzzy. After filtering, a Telescope picker (or scrollable float) opens.
-Confirm selection and enter a destination folder path.
+
+In the picker, <CR> exports every note currently listed — typing in the prompt
+narrows that list by exact substring. To export only some of them, mark those
+with <Tab> (<S-Tab> marks upward) and then press <CR>; with marks present only
+the marked notes are exported. The no-Telescope float behaves the same way:
+<CR> exports the whole list. Then enter a destination folder path.
 
 SIMPLE VS DEEP~
 

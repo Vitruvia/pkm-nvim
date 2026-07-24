@@ -528,28 +528,34 @@ local function telescope_results_picker(paths, default_dest, title_prefix)
 
   local count = #entries
 
+  --- Entries the prompt currently leaves visible. Shared by the finder and by
+  --- the confirm action, so "everything listed" means exactly what is on screen.
+  ---@param prompt string|nil
+  ---@return table[]
+  local function visible_entries(prompt)
+    if not prompt or prompt == "" then
+      return entries
+    end
+    local needle   = prompt:lower()
+    local filtered = {}
+    for _, e in ipairs(entries) do
+      if e.ordinal:lower():find(needle, 1, true) then
+        table.insert(filtered, e)
+      end
+    end
+    return filtered
+  end
+
   pickers.new({}, {
     prompt_title = string.format(
-      "%s%d match%s  ·  type for exact filter  ·  <Tab> select  ·  <CR> confirm",
+      "%s%d match%s  ·  type for exact filter  ·  <Tab> mark subset  ·  <CR> export listed",
       title_prefix and (title_prefix .. ':  ') or 'PKMExport:  ',
       count, count == 1 and '' or 'es'),
 
     -- new_dynamic re-runs fn on every prompt change.
     -- Exact substring matching (plain=true) guarantees no fzy behaviour.
     finder = finders.new_dynamic({
-      fn = function(prompt)
-        if not prompt or prompt == "" then
-          return entries
-        end
-        local needle   = prompt:lower()
-        local filtered = {}
-        for _, e in ipairs(entries) do
-          if e.ordinal:lower():find(needle, 1, true) then
-            table.insert(filtered, e)
-          end
-        end
-        return filtered
-      end,
+      fn = visible_entries,
       entry_maker = function(e) return e end,
     }),
 
@@ -573,15 +579,18 @@ local function telescope_results_picker(paths, default_dest, title_prefix)
         local picker     = action_state.get_current_picker(prompt_bufnr)
         local selections = picker:get_multi_selection()
 
+        -- Nothing marked: export everything the prompt currently lists — the
+        -- set the title counts, and what the no-Telescope float has always
+        -- done on <CR>. Marking with <Tab> is how a subset is exported.
         if #selections == 0 then
-          local entry = action_state.get_selected_entry()
-          if entry then selections = { entry } end
+          selections = visible_entries(action_state.get_current_line())
         end
 
         actions.close(prompt_bufnr)
 
         if #selections == 0 then
-          vim.notify("PKMExport: Nothing selected.", vim.log.levels.INFO)
+          vim.notify("PKMExport: Nothing to export — the filter matches no note.",
+            vim.log.levels.INFO)
           return
         end
 
