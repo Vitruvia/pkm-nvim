@@ -115,6 +115,13 @@ strong justification.** Contains the non-trivial nested-empty-structure parser.
 
 **export.lua** — filter + copy notes. No setup. Read-only. Delegates to filter.lua
 and index.lua. `export_direct(label, paths)` skips the filter form.
+Deep export (v1.7.0 Ph1): `read_citation_edges(path)` returns the identifier lists
+of both directions (grouped or legacy-flat frontmatter), and `collect_deep(seeds,
+opts?)` walks the citation graph out from the seeds under a **per-path budget** —
+`cites_depth` (2) hops along `cites` and `cited_by_depth` (0) along `cited_by`,
+mixable in any order, counted from the seeds. Both are pure; `deep_export()` is the
+UI entry that feeds their result to `export_direct`. Identifier→path resolution
+reuses `citations.get_citable_items_map()`.
 
 **filter.lua** — pure logic, no I/O. Grammar:
 `field = tag | title | text | filename | type | any`.

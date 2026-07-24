@@ -543,9 +543,23 @@ function M.register()
   -- Exporting
   -- ---------------------------------------------------------------------------
 
+  -- :PKMExport — simple (filter only) or deep (filter, then walk the citation
+  -- graph out from the matches). Native vim.ui.select: the choice set is small
+  -- and fixed, so it does not warrant a panel of its own.
   vim.api.nvim_create_user_command('PKMExport', function()
-    require('pkm.export').interactive_export()
-  end, { desc = 'Open the export filter form (filter notes and copy to a folder)' })
+    local export = require('pkm.export')
+    vim.ui.select(
+      { 'Simple — export exactly what the filter matches',
+        'Deep   — also export the notes they cite' },
+      { prompt = 'Export mode:' },
+      function(_, idx)
+        if idx == 1 then
+          export.interactive_export()
+        elseif idx == 2 then
+          export.deep_export()
+        end
+      end)
+  end, { desc = 'Export notes: filter form, optionally expanded across citations' })
 
   -- ---------------------------------------------------------------------------
   -- Toggles

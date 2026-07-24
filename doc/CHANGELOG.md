@@ -5,6 +5,29 @@
 ## [Unreleased]
 
 ### Added
+-   **Deep export (v1.7.0 Phase 1).** `:PKMExport` now opens with a mode choice:
+    *Simple* is the previous flow (export exactly what the filter matches),
+    *Deep* keeps the citation neighbourhood with it. Deep asks for two depths,
+    runs the same filter form, and treats its matches as **seeds** for a walk
+    across the `cites` / `cited_by` graph already maintained in frontmatter.
+    The expanded set goes to the ordinary results picker, so nothing is copied
+    before it has been seen.
+
+    Traversal is a **per-path budget**: both depths count from the seeds, and a
+    single path may mix directions — up to `cites_depth` hops along `cites` and
+    `cited_by_depth` hops along `cited_by`, in any order. Defaults are
+    **2 and 0**, so out of the box a deep export adds what the seeds cite, two
+    hops out, and no citers. All four citable groups (`notes`, `bib`, `journal`,
+    `scratch`) are followed. Cycles terminate: each hop spends budget, and a
+    note is only re-expanded when it arrives with a budget the visited one does
+    not dominate.
+
+    New in `export.lua`, both pure and read-only:
+    `read_citation_edges(path)` → `{cites, cited_by}` identifier lists (grouped
+    and legacy flat frontmatter both accepted), and
+    `collect_deep(seeds, opts?)` → deduplicated paths sorted by basename, seeds
+    included. Identifier resolution reuses `citations.get_citable_items_map()`,
+    called once per run; `opts.items_map` injects one instead.
 -   `utils.read_lines(path)` — reads a file into lines without leaving LuaJIT,
     reproducing `vim.fn.readfile()`'s normalisation exactly (UTF-8 BOM dropped,
     CR before LF removed, CR at end-of-file kept, empty file → `{}`). Measured

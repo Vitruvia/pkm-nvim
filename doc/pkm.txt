@@ -516,6 +516,27 @@ All active fields are AND-ed together. Matching is exact substring — never
 fuzzy. After filtering, a Telescope picker (or scrollable float) opens.
 Confirm selection and enter a destination folder path.
 
+SIMPLE VS DEEP~
+
+:PKMExport first asks which mode to use:
+
+  Simple    Export exactly the notes the filter matches.
+  Deep      Also export the notes they cite (and, if asked, the notes that
+            cite them), following the cites/cited_by frontmatter.
+
+Deep mode asks for two depths before the filter form:
+
+  Depth along cites      how many citation hops to follow forward   (default 2)
+  Depth along cited_by   how many hops to follow backward           (default 0)
+
+Both are counted from the notes the filter matched, and one path may mix
+directions: it may spend up to "cites" hops forward and "cited_by" hops
+backward, in any order. With the defaults, a deep export adds everything the
+matched notes cite, two hops out, and nobody who cites them. Blank accepts the
+default; 0 disables that direction. All citable types are followed (notes, bib,
+journal, scratch), cycles terminate, and the expanded list always goes through
+the same picker before anything is copied.
+
 ==============================================================================
 11. CONFIGURATION                                          *pkm-configuration*
 >

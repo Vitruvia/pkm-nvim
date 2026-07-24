@@ -2,8 +2,8 @@
 -- pkm.export — Note filtering and copy utility
 -- =============================================================================
 -- Dependencies : pkm.utils, pkm.filter (lazy), pkm.index (lazy),
---                pkm.yaml (lazy, fallback only), pkm.init (for config),
---                telescope (optional)
+--                pkm.yaml (lazy, fallback only), pkm.citations (lazy, deep
+--                export only), pkm.init (for config), telescope (optional)
 -- Consumed by  : pkm.commands (:PKMExport)
 --
 -- READ-ONLY — never modifies any note file.
@@ -19,10 +19,15 @@
 -- Public API:
 --   match_file(path, filters)  → boolean — test one file against filters
 --   collect_files(filters)     → string[] — all matching paths, sorted
+--   read_citation_edges(path)  → {cites, cited_by} — identifier lists, all groups
+--   collect_deep(seeds, opts?) → string[] — seeds expanded across the citation
+--                                graph; per-path budget of cites_depth (2) and
+--                                cited_by_depth (0) hops, mixable in any order
 --   copy_files(paths, dest)    → (copied, errors) — copy to destination
 --   export(filters, dest)      → programmatic no-UI entry point
 --   export_direct(label, paths) → export a pre-computed path list, skipping the filter form
 --   interactive_export()       → full UI: filter form → picker → copy
+--   deep_export()              → full UI: depths → filter form → graph walk → picker
 -- =============================================================================
 
 local M = {}
@@ -62,8 +67,8 @@ end
 --- @return number|nil content_start
 --- @return table|nil  lines
 local function get_file_data(path)
-  local ok, lines = pcall(vim.fn.readfile, path)
-  if not ok or not lines then return nil, nil, nil end
+  local lines = utils.read_lines(path)
+  if not lines then return nil, nil, nil end
   local fm, cs = require('pkm.yaml').parse_frontmatter(lines)
   if not fm then return nil, nil, nil end
   return fm, cs, lines
@@ -124,6 +129,151 @@ function M.collect_files(filters)
     return vim.fn.fnamemodify(a, ":t") < vim.fn.fnamemodify(b, ":t")
   end)
   return matched
+end
+
+-- ============================================================================
+-- CITATION GRAPH
+-- ============================================================================
+
+-- The four citable groups every cites/cited_by table carries. Notes written
+-- before the grouped structure landed may still hold a flat array instead;
+-- read_citation_edges accepts both rather than silently returning no edges.
+local CITE_GROUPS = { 'notes', 'bib', 'journal', 'scratch' }
+
+--- Append every identifier found in one cites/cited_by value to out.
+--- Accepts the grouped shape ({notes={…}, bib={…}, …}), the legacy flat array,
+--- and entries that are bare identifier strings instead of tables.
+---@param value any     Frontmatter value for `cites` or `cited_by`
+---@param out   string[] Collected identifiers, appended in place
+local function gather_identifiers(value, out)
+  if type(value) ~= 'table' then return end
+
+  local function take(entry)
+    if type(entry) == 'string' then
+      if entry ~= '' then out[#out + 1] = entry end
+    elseif type(entry) == 'table' and type(entry.identifier) == 'string'
+       and entry.identifier ~= '' then
+      out[#out + 1] = entry.identifier
+    end
+  end
+
+  local grouped = false
+  for _, group in ipairs(CITE_GROUPS) do
+    if type(value[group]) == 'table' then
+      grouped = true
+      for _, entry in ipairs(value[group]) do take(entry) end
+    end
+  end
+
+  -- Legacy flat array: only consider it when no group key was present, so a
+  -- grouped table never gets scanned twice.
+  if not grouped then
+    for _, entry in ipairs(value) do take(entry) end
+  end
+end
+
+--- Read one note's citation edges as identifier lists.
+--- Read-only and total: an unreadable file, a file without frontmatter, or a
+--- note with no citations all yield empty lists rather than an error.
+---@param path string  Absolute path to a note file
+---@return {cites: string[], cited_by: string[]}
+function M.read_citation_edges(path)
+  local edges = { cites = {}, cited_by = {} }
+
+  local fm = get_file_data(path)
+  if not fm then return edges end
+
+  gather_identifiers(fm.cites,    edges.cites)
+  gather_identifiers(fm.cited_by, edges.cited_by)
+  return edges
+end
+
+--- Expand a set of seed notes across the citation graph.
+---
+--- Traversal is a **per-path budget**: both depths are counted from the seeds,
+--- and a single path may mix directions — it may spend up to `cites_depth`
+--- hops along `cites` and up to `cited_by_depth` hops along `cited_by`, in any
+--- order. With the default 2/0 no `cited_by` hop is allowed, so the result is
+--- the seeds plus everything they cite, transitively, two hops out.
+---
+--- Termination: every hop strictly decreases one budget, and a note is only
+--- re-expanded when it is reached with a budget the visited one does not
+--- dominate, so cycles of any length stop on their first non-improving revisit.
+---
+--- Pure: reads note files and returns paths; opens no window and changes no
+--- state. Identifier resolution goes through `citations.get_citable_items_map()`,
+--- called once per run (it scans all three note folders), or through
+--- `opts.items_map` when the caller already has one.
+---@param seed_paths string[]  Absolute paths to start from
+---@param opts table|nil  { cites_depth = 2, cited_by_depth = 0, items_map? }
+---@return string[]  Deduplicated paths sorted by basename, seeds included
+function M.collect_deep(seed_paths, opts)
+  opts = opts or {}
+  local cites_depth    = opts.cites_depth    or 2
+  local cited_by_depth = opts.cited_by_depth or 0
+
+  local items_map = opts.items_map
+    or require('pkm.citations').get_citable_items_map()
+
+  -- identifier → path, from whichever map shape the caller supplied.
+  local id_to_path = {}
+  for id, data in pairs(items_map) do
+    local path = type(data) == 'table' and data.path or data
+    if type(path) == 'string' then id_to_path[id] = path end
+  end
+
+  local best    = {}   -- path → { cites, cited_by } best remaining budget seen
+  local found   = {}   -- path → true, everything reached (seeds included)
+  local queue   = {}
+  local head    = 1
+
+  --- Enqueue path when it arrives with a budget not already dominated.
+  local function push(path, cites_left, cited_by_left)
+    found[path] = true
+    local seen = best[path]
+    if seen and seen.cites >= cites_left and seen.cited_by >= cited_by_left then
+      return
+    end
+    best[path] = {
+      cites    = seen and math.max(seen.cites,    cites_left)    or cites_left,
+      cited_by = seen and math.max(seen.cited_by, cited_by_left) or cited_by_left,
+    }
+    queue[#queue + 1] = { path = path, cites = cites_left, cited_by = cited_by_left }
+  end
+
+  for _, path in ipairs(seed_paths or {}) do
+    push(path, cites_depth, cited_by_depth)
+  end
+
+  while head <= #queue do
+    local node = queue[head]
+    head = head + 1
+
+    if node.cites > 0 or node.cited_by > 0 then
+      local edges = M.read_citation_edges(node.path)
+
+      if node.cites > 0 then
+        for _, id in ipairs(edges.cites) do
+          local target = id_to_path[id]
+          if target then push(target, node.cites - 1, node.cited_by) end
+        end
+      end
+      if node.cited_by > 0 then
+        for _, id in ipairs(edges.cited_by) do
+          local target = id_to_path[id]
+          if target then push(target, node.cites, node.cited_by - 1) end
+        end
+      end
+    end
+  end
+
+  local paths, keys = {}, {}
+  for path in pairs(found) do
+    paths[#paths + 1] = path
+    keys[path] = vim.fn.fnamemodify(path, ':t')
+  end
+  table.sort(paths, function(a, b) return keys[a] < keys[b] end)
+  return paths
 end
 
 -- ============================================================================
@@ -537,6 +687,58 @@ function M.interactive_export()
         end
       )
     end
+  end)
+end
+
+--- Prompt for one traversal depth, accepting blank as the default.
+--- Cancelling (Esc) aborts the flow silently; a non-integer or negative value
+--- aborts with a warning rather than guessing what was meant.
+---@param label   string   Shown before the default, e.g. "Depth along cites"
+---@param default integer
+---@param on_ok   function(depth: integer)
+local function prompt_depth(label, default, on_ok)
+  vim.ui.input({ prompt = string.format('%s [%d]: ', label, default) }, function(input)
+    if input == nil then return end
+    local text = vim.trim(input)
+    if text == '' then
+      vim.schedule(function() on_ok(default) end)
+      return
+    end
+    local n = tonumber(text)
+    if not n or n < 0 or n ~= math.floor(n) then
+      vim.notify(
+        'PKMExport: depth must be a non-negative whole number — cancelled',
+        vim.log.levels.WARN)
+      return
+    end
+    vim.schedule(function() on_ok(n) end)
+  end)
+end
+
+--- Launch the deep-export UI: two depth prompts, then the same filter form the
+--- simple flow uses, whose matches become the seeds of a citation-graph walk.
+--- The expanded set goes to the ordinary results picker, so nothing is copied
+--- before the user has seen exactly which notes the traversal pulled in.
+function M.deep_export()
+  prompt_depth('Depth along cites', 2, function(cites_depth)
+    prompt_depth('Depth along cited_by', 0, function(cited_by_depth)
+      show_filter_form(function(filters)
+        local seeds = M.collect_files(filters)
+        if #seeds == 0 then
+          vim.notify('PKMExport: No notes matched the given filters.', vim.log.levels.INFO)
+          return
+        end
+
+        local paths = M.collect_deep(seeds, {
+          cites_depth    = cites_depth,
+          cited_by_depth = cited_by_depth,
+        })
+
+        local label = string.format('deep: %d seed%s → %d notes (cites %d, cited_by %d)',
+          #seeds, #seeds == 1 and '' or 's', #paths, cites_depth, cited_by_depth)
+        M.export_direct(label, paths)
+      end)
+    end)
   end)
 end
 

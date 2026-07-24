@@ -182,7 +182,8 @@ v1.6.1  PATCH  Correctness batch + :PKMViews latency ───┘  (after v1.6.0
 v1.6.2  PATCH  Index build cost (bench-driven)             (after v1.6.1)
         Ph1 scandir + LuaJIT reader  ✅ done
 v1.7.0  MINOR  Exportation, note creation & header nav     (no deps)
-        Ph1 deep export   Ph2 relative note   Ph3 header navigation
+        Ph1 deep export  ✅ done
+          Ph2 relative note   Ph3 header navigation
 ```
 
 Dependency summary: v1.6.0 Ph1 precedes Ph2 and Ph3 (they build on
@@ -377,21 +378,32 @@ Additions 1.2, across disjoint primary files. Grouped into one minor because
 each is small and self-contained; they may equally ship as separate minors if
 preferred.*
 
-**Phase 1 — deep export.**
+**Phase 1 — deep export.** ✅ *Done (pending release tag).*
 
 | File | Single-pass changes |
 |---|---|
-| `export.lua` | (1) `read_citation_edges(path)` — pure: read frontmatter via `get_file_data`, return `{ cites = {ids…}, cited_by = {ids…} }` unioning all four groups. (2) `collect_deep(seed_paths, opts)` — pure BFS with separate per-direction depth counters (`cites_depth` default 2, `cited_by_depth` default 0; 0 = no traversal), cycle detection, identifiers→paths via `citations.get_citable_items_map()`; returns the deduplicated, sorted union (seeds included). (3) A deep-export entry that prompts for mode + depths, then hands the union to `export_direct`. |
-| `commands.lua` | Extend the `:PKMExport` flow with a simple-vs-deep choice and the two depths, using native `vim.ui.select`/input (small fixed choice set stays native). |
-| docs | `CHANGELOG` (Added); note defaults 2/0. |
+| `export.lua` | (1) `read_citation_edges(path)` — pure: frontmatter via `get_file_data`, returns `{ cites = {ids…}, cited_by = {ids…} }` unioning all four groups; grouped and legacy-flat shapes both accepted. (2) `collect_deep(seed_paths, opts)` — pure BFS with a **per-path budget** (`cites_depth` 2, `cited_by_depth` 0), cycle termination by budget dominance, identifiers→paths via `citations.get_citable_items_map()` (once per run, injectable through `opts.items_map`); returns the deduplicated union sorted by basename. (3) `deep_export()` — prompts both depths, reuses the filter form for seeds, hands the union to `export_direct`. |
+| `commands.lua` | `:PKMExport` opens with a native `vim.ui.select` simple-vs-deep choice; `:PKMExportView` untouched. |
+| `test/test_v170_p1.lua` | 20 checks (below). |
+| docs | `CHANGELOG` (Added), `ARCHITECTURE`, and `pkm.txt` §10 — the user-facing command flow changed. |
+
+**Semantics decided during the phase:** the two depths are *not* independent
+per-direction walks. Both count from the seeds, and one path may **mix**
+directions, spending up to `cites_depth` `cites` hops and `cited_by_depth`
+`cited_by` hops in any order. With the default 2/0 the two readings coincide;
+they only diverge once `cited_by_depth ≥ 1`, where the chosen semantics also
+reaches "who else cites what the seed cites".
 
 Verification: `test/test_v170_p1.lua` builds the worked example (1 cites 2/4/5;
 5→7; 7→8; 1 cited_by 2/3/6) and asserts the default run yields {1,2,4,5,7} and
-not {3,6,8}; plus 2-node cycle termination; plus `cited_by_depth>0` pulls citers;
-plus all four groups followed. Smoke: deep-export a note citing across
+not {3,6,8}; plus 2- and 3-node cycle termination; `cited_by_depth>0` pulls
+citers; the mixed-path case that discriminates the semantics; all four groups
+followed; dangling identifier, frontmatter-less seed, empty seeds and duplicate
+seeds. Fixtures are rendered with `yaml.generate_yaml`, so they carry the exact
+object-array layout the parser expects. Smoke: deep-export a note citing across
 journal/bib types.
 
-Invariants: `export.lua` stays read-only; only `require`s `citations`/`yaml`.
+Invariants held: `export.lua` stayed read-only and pure outside its UI entry.
 
 Commit:
 
