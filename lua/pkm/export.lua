@@ -28,6 +28,8 @@
 --   export_direct(label, paths) → export a pre-computed path list, skipping the filter form
 --   interactive_export()       → full UI: filter form → picker → copy
 --   deep_export()              → full UI: depths → filter form → graph walk → picker
+--   deep_export_note(path?)    → full UI: depths → graph walk from one note
+--                                (current buffer by default) → picker
 -- =============================================================================
 
 local M = {}
@@ -724,8 +726,27 @@ local function prompt_depth(label, default, on_ok)
   end)
 end
 
---- Launch the deep-export UI: two depth prompts, then the same filter form the
---- simple flow uses, whose matches become the seeds of a citation-graph walk.
+--- Expand seeds and hand the result to the results picker.
+--- Shared tail of both deep-export entries.
+---@param seeds          string[]
+---@param cites_depth    integer
+---@param cited_by_depth integer
+---@param origin         string  How the seeds were chosen, shown in the title
+local function deep_expand_and_export(seeds, cites_depth, cited_by_depth, origin)
+  local paths = M.collect_deep(seeds, {
+    cites_depth    = cites_depth,
+    cited_by_depth = cited_by_depth,
+  })
+
+  local label = string.format('deep %s: %d seed%s → %d notes (cites %d, cited_by %d)',
+    origin, #seeds, #seeds == 1 and '' or 's', #paths, cites_depth, cited_by_depth)
+  M.export_direct(label, paths)
+end
+
+--- Launch the deep-export UI seeded by the filter form: two depth prompts, then
+--- the same form the simple flow uses, whose matches become the seeds of a
+--- citation-graph walk. Every matched note is a seed — a filter that matches
+--- four notes expands from all four, which the picker title states outright.
 --- The expanded set goes to the ordinary results picker, so nothing is copied
 --- before the user has seen exactly which notes the traversal pulled in.
 function M.deep_export()
@@ -737,16 +758,37 @@ function M.deep_export()
           vim.notify('PKMExport: No notes matched the given filters.', vim.log.levels.INFO)
           return
         end
-
-        local paths = M.collect_deep(seeds, {
-          cites_depth    = cites_depth,
-          cited_by_depth = cited_by_depth,
-        })
-
-        local label = string.format('deep: %d seed%s → %d notes (cites %d, cited_by %d)',
-          #seeds, #seeds == 1 and '' or 's', #paths, cites_depth, cited_by_depth)
-        M.export_direct(label, paths)
+        deep_expand_and_export(seeds, cites_depth, cited_by_depth, 'filter')
       end)
+    end)
+  end)
+end
+
+--- Launch the deep-export UI seeded by a single note — by default the one in
+--- the current buffer. This is the "export this note and its neighbourhood"
+--- entry: no filter form, so nothing enters the export that the citation graph
+--- did not put there.
+---@param path string|nil  Absolute path to seed with; nil uses the current buffer
+function M.deep_export_note(path)
+  path = path or vim.api.nvim_buf_get_name(0)
+
+  if path == '' or not path:match('%.md$') or vim.fn.filereadable(path) == 0 then
+    vim.notify(
+      'PKMExport: open a note first, or use :PKMExport → Deep to pick seeds by filter',
+      vim.log.levels.WARN)
+    return
+  end
+
+  local root = utils.normalize(require('pkm').config.root_path):lower()
+  if not utils.normalize(path):lower():find(root, 1, true) then
+    vim.notify('PKMExport: this file is outside the PKM root', vim.log.levels.WARN)
+    return
+  end
+
+  prompt_depth('Depth along cites', 2, function(cites_depth)
+    prompt_depth('Depth along cited_by', 1, function(cited_by_depth)
+      deep_expand_and_export({ path }, cites_depth, cited_by_depth,
+        vim.fn.fnamemodify(path, ':t:r'))
     end)
   end)
 end

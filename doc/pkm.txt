@@ -257,7 +257,12 @@ CITATIONS~
 
 EXPORT~
 
-:PKMExport              Open the export filter form. See |pkm-export|.
+:PKMExport              Choose simple or deep export, then open the filter
+                        form. See |pkm-export|.
+
+:PKMExportDeep [path]   Export the current note (or [path]) together with the
+                        notes it cites and the notes citing it, to the chosen
+                        depths. See |pkm-export|.
 
 :PKMExportView [name]   Export all notes in a named view, skipping the filter
                         form. Tab-completes view names. Without a name,
@@ -499,8 +504,9 @@ FRONTMATTER STRUCTURE~
 ==============================================================================
 10. EXPORT                                                       *pkm-export*
 
-:PKMExport opens an interactive filter form. :PKMExportView [name] exports
-a named view's notes directly without the form.
+:PKMExport opens an interactive filter form. :PKMExportDeep exports one note
+with its citation neighbourhood. :PKMExportView [name] exports a named view's
+notes directly without the form.
 
 THE FILTER FORM~
 >
@@ -526,8 +532,22 @@ SIMPLE VS DEEP~
 :PKMExport first asks which mode to use:
 
   Simple    Export exactly the notes the filter matches.
-  Deep      Also export the notes they cite (and, if asked, the notes that
-            cite them), following the cites/cited_by frontmatter.
+  Deep      Every matched note also seeds a walk across the cites/cited_by
+            frontmatter, so the notes they cite (and, if asked, the notes
+            that cite them) come along.
+
+Note that in Deep mode *every* note the filter matches becomes a seed: a
+filter matching four notes expands from all four, and the picker title says
+so ("deep filter: 4 seeds -> 9 notes"). To expand from one specific note, use
+:PKMExportDeep instead.
+
+:PKMExportDeep [path]                                      *:PKMExportDeep*
+            Export the note in the current buffer — or the given path — plus
+            its citation neighbourhood. No filter form: the seed is exactly
+            that one note, so nothing enters the export that the citation
+            graph did not put there. Defaults here are 2 hops along cites and
+            1 along cited_by, since "this note and what cites it" is usually
+            the point.
 
 Deep mode asks for two depths before the filter form:
 

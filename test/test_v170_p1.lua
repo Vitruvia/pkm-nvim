@@ -338,6 +338,63 @@ do
 end
 
 -- =============================================================================
+-- deep_export_note(): one note in, its neighbourhood out
+-- =============================================================================
+
+do
+  -- Both depth prompts and the results picker are stubbed: the point is which
+  -- seeds the entry chooses and what it hands on, not the UI itself.
+  local real_input   = vim.ui.input
+  local real_direct  = export.export_direct
+  local real_notify  = vim.notify
+
+  local captured, warned
+  vim.ui.input        = function(_, cb) cb('') end          -- accept both defaults
+  export.export_direct = function(label, paths) captured = { label = label, paths = paths } end
+  vim.notify          = function(msg) warned = msg end
+
+  --- Run the entry and pump the scheduler until it reaches export_direct.
+  ---@param path string|nil
+  local function run(path)
+    captured, warned = nil, nil
+    export.deep_export_note(path)
+    vim.wait(2000, function() return captured ~= nil or warned ~= nil end, 10)
+  end
+
+  -- This entry defaults to 2/1 — for a single note, "and who cites it" is the
+  -- expected half. From note 1 that reaches: its citers 2/3/6, what it cites
+  -- (2/4/5) and one hop further (7), and 9 through the mixed path 1→4←9.
+  -- Note 8 stays out: three cites hops.
+  run(paths_by_id[id_of(1)])
+  local ok, detail = false, 'export_direct was never reached'
+  if captured then
+    ok, detail = same_set(captured.paths,
+      { N[1], N[2], N[3], N[4], N[5], N[6], N[7], '0009_note_n9' })
+  end
+  check("deep_export_note seeds with exactly the given note", ok, detail)
+  check("its label names the seed note",
+    captured ~= nil and captured.label:find(N[1], 1, true) ~= nil,
+    captured and captured.label or nil)
+
+  run(utils.join(notes_dir, 'no_such_note.md'))
+  check("unreadable path warns instead of exporting",
+    captured == nil and warned ~= nil and warned:find('open a note first', 1, true) ~= nil,
+    warned)
+
+  local outside = vim.fn.tempname() .. '.md'
+  vim.fn.writefile({ '---', 'title: "Outside"', '---', '', 'body' }, outside)
+  run(outside)
+  check("note outside the PKM root is refused",
+    captured == nil and warned ~= nil and warned:find('outside the PKM root', 1, true) ~= nil,
+    warned)
+  vim.fn.delete(outside)
+
+  vim.ui.input         = real_input
+  export.export_direct = real_direct
+  vim.notify           = real_notify
+end
+
+-- =============================================================================
 
 print(string.format("== %s (%d failure%s) ==",
   failures == 0 and "PASS" or "FAIL", failures, failures == 1 and "" or "s"))

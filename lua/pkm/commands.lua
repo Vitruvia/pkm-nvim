@@ -550,7 +550,7 @@ function M.register()
     local export = require('pkm.export')
     vim.ui.select(
       { 'Simple — export exactly what the filter matches',
-        'Deep   — also export the notes they cite' },
+        'Deep   — every matched note also seeds a citation walk' },
       { prompt = 'Export mode:' },
       function(_, idx)
         if idx == 1 then
@@ -560,6 +560,18 @@ function M.register()
         end
       end)
   end, { desc = 'Export notes: filter form, optionally expanded across citations' })
+
+  -- :PKMExportDeep — export the current note plus its citation neighbourhood.
+  -- The filter-form flow seeds from *every* matched note, which is rarely what
+  -- is wanted when the intent is "this note and what it links to"; here the
+  -- seed is exactly one note, so only the graph decides what else comes along.
+  vim.api.nvim_create_user_command('PKMExportDeep', function(opts)
+    require('pkm.export').deep_export_note(opts.args ~= '' and opts.args or nil)
+  end, {
+    nargs    = '?',
+    complete = 'file',
+    desc     = 'Export the current note and the notes it cites / is cited by',
+  })
 
   -- ---------------------------------------------------------------------------
   -- Toggles

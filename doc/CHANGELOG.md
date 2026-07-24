@@ -5,6 +5,16 @@
 ## [Unreleased]
 
 ### Added
+-   **`:PKMExportDeep`** — export the note in the current buffer (or a path
+    given as argument) plus its citation neighbourhood, with no filter form in
+    between. The filter-form flow makes **every matched note a seed**, which is
+    rarely what "export this note and what it links to" means: filtering for
+    `Seneca` to export one note also seeds three journals that merely mention
+    Sêneca, and all of them expand. This entry seeds exactly one note, so only
+    the graph decides what else comes along. Depths default to 2 along `cites`
+    and **1** along `cited_by` here, since for a single note the citers are
+    usually half the point. The picker title now also names the origin of the
+    seeds (`deep filter: 4 seeds → 9 notes` vs `deep 0001_note_x: 1 seed → …`).
 -   **Deep export (v1.7.0 Phase 1).** `:PKMExport` now opens with a mode choice:
     *Simple* is the previous flow (export exactly what the filter matches),
     *Deep* keeps the citation neighbourhood with it. Deep asks for two depths,
