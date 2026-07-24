@@ -70,6 +70,9 @@ BufWritePost for citation sync + silent reload + TS restart).
 effects. This is the **canonical source of every config default** (see Configuration below).
 
 **utils.lua** — `utils.join(...)`, `utils.sep`, `utils.normalize(path)`,
+`utils.read_lines(path)` (readfile-equivalent reader that stays in LuaJIT —
+drops a UTF-8 BOM, strips CR before LF, keeps a CR at EOF, empty file → `{}`;
+used by the index build, where the VimL round trip per file was measurable),
 `utils.ensure_dir(path)`, `utils.notify(msg, level?)` (emits `[pkm]`),
 `utils.type_prefix(note_type)` / `utils.strip_display_prefix(filename, note_type)`
 (shared display helpers used by `ui.lua` and `views.lua`), `utils.is_windows`,
@@ -126,6 +129,12 @@ any cites/cited_by group is non-empty.
 Lazy build on first `get_all()`. Incremental invalidation via BufWritePost autocmd
 and explicit `invalidate(path)` after every programmatic write or delete.
 **Must NOT be called from buffer-only metadata commands** — no disk write occurred.
+The build lists directories with `uv.fs_scandir` and reads files with
+`utils.read_lines`; `vim.fn.glob`/`vim.fn.readfile` were measured as ~80% of it
+(v1.6.2 Ph1). `mtime` still comes from `vim.fn.getftime` and the filename stem
+from `vim.fn.fnamemodify` — both measured *faster* than their libuv/Lua
+counterparts, so they stayed. Listing is unordered (nothing depends on it) and
+no longer honours `'wildignore'`.
 
 **views.lua** — named project views. Sidecar `views.json` + `config.projects`.
 Two-mode sidebar (overview + detail); per-tabpage `_tabs` state including `type_filter`.

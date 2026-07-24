@@ -558,15 +558,24 @@ local function sort_keyed(paths)
   return paths
 end
 
---- Emit one aligned result row.
+--- Emit one aligned result row under a named bench.
+---@param prefix string  Bench name, e.g. 'views-open'
+---@param label  string
+---@param ms     number
+---@param note   string|nil  Optional trailing annotation
+local function report_row(prefix, label, ms, note)
+  vim.notify(string.format(
+    'PKMBench %-11s %-26s %9.2f ms%s',
+    prefix, label, ms, note and ('   ' .. note) or ''),
+    vim.log.levels.INFO)
+end
+
+--- Emit one aligned result row for the views-open bench.
 ---@param label string
 ---@param ms    number
 ---@param note  string|nil  Optional trailing annotation
 local function report(label, ms, note)
-  vim.notify(string.format(
-    'PKMBench views-open  %-26s %9.2f ms%s',
-    label, ms, note and ('   ' .. note) or ''),
-    vim.log.levels.INFO)
+  report_row('views-open', label, ms, note)
 end
 
 --- Synthetic fallback for views_open(): prices the same two shapes
@@ -765,6 +774,213 @@ function M.views_open(opts)
   end
   report('detail (largest view)', ms_detail,
     string.format("'%s', %d matches", largest, largest_count))
+end
+
+-- =============================================================================
+-- SECTION: Index-build profile
+-- =============================================================================
+--
+-- baseline() reports the *total* raw-scan cost; this section splits the index
+-- build into its parts and prices each candidate replacement next to what
+-- index.lua does today, so a change is chosen from attribution rather than
+-- from intuition. Read-only: reads notes, builds throw-away tables, and never
+-- touches the live index.
+
+--- Profile the index build over the corpus this session is configured with,
+--- component by component, with each candidate replacement measured beside the
+--- call index.lua makes today.
+---
+--- Run it against the real corpus (note that -c comes BEFORE --):
+---   nvim --headless -u test/min_init.lua \
+---     -c "lua require('pkm.bench').index_profile()" -c "qa!" -- --root=<root>
+---
+--- Rows: listing, file read (both readers), frontmatter parse, entry-field
+--- assembly, body concat, body:lower(), mtime (both sources), stem (both
+--- sources), and the total of the current pipeline.
+---@param opts table|nil  { synthetic = integer } to profile a temp corpus
+function M.index_profile(opts)
+  opts = opts or {}
+  local uv   = vim.uv or vim.loop
+  local yaml = require('pkm.yaml')
+
+  local dirs, bench_dir
+  if opts.synthetic then
+    bench_dir = opts.bench_dir or (vim.fn.tempname() .. '_pkmbench_index')
+    local notes_dir = utils.join(bench_dir, 'notes')
+    vim.notify(string.format(
+      'PKMBench index: generating %d synthetic notes…', opts.synthetic),
+      vim.log.levels.INFO)
+    M.gen_notes(opts.synthetic, notes_dir)
+    dirs = { notes_dir }
+  else
+    local config = require('pkm').config
+    if not config then
+      vim.notify(
+        'PKMBench: PKM not initialised — call require("pkm").setup() first',
+        vim.log.levels.ERROR)
+      return
+    end
+    dirs = {
+      utils.join(config.root_path, config.folders.consolidated),
+      utils.join(config.root_path, config.folders.journal),
+      utils.join(config.root_path, config.folders.scratchpad),
+    }
+  end
+
+  -- 1. Listing: what build() does today, once per note folder.
+  local files
+  local ms_list = M.time(function()
+    files = {}
+    for _, dir in ipairs(dirs) do
+      if vim.fn.isdirectory(dir) == 1 then
+        local found = vim.fn.glob(dir .. utils.sep .. '*.md', false, true)
+        if type(found) == 'table' then
+          for _, p in ipairs(found) do files[#files + 1] = p end
+        end
+      end
+    end
+  end)
+
+  local n = #files
+  if n == 0 then
+    vim.notify('PKMBench index: no notes found — nothing to profile', vim.log.levels.WARN)
+    if bench_dir then M.cleanup(bench_dir) end
+    return
+  end
+
+  -- 1b. Listing candidate: one directory read per folder through libuv,
+  --     filtering *.md in Lua instead of letting VimL expand a wildcard.
+  local scan_count = 0
+  local ms_list_uv = M.time(function()
+    scan_count = 0
+    for _, dir in ipairs(dirs) do
+      local req = uv.fs_scandir(dir)
+      if req then
+        while true do
+          local name, typ = uv.fs_scandir_next(req)
+          if not name then break end
+          if typ ~= 'directory' and name:sub(-3) == '.md' then
+            local _ = utils.join(dir, name)
+            scan_count = scan_count + 1
+          end
+        end
+      end
+    end
+  end)
+
+  -- 2. Warm-up: file cache and JIT, so the first reader measured is not the
+  --    one that pays for both.
+  for _, p in ipairs(files) do vim.fn.readfile(p); utils.read_lines(p) end
+
+  -- 3. Reading, both ways.
+  local cached = {}
+  local ms_readfile = M.time(function()
+    for _, p in ipairs(files) do cached[p] = vim.fn.readfile(p) end
+  end)
+  local ms_read_io = M.time(function()
+    for _, p in ipairs(files) do utils.read_lines(p) end
+  end)
+
+  -- 4. Frontmatter parse over the already-read lines.
+  local parsed = {}
+  local ms_parse = M.time(function()
+    for _, p in ipairs(files) do
+      local fm, start = yaml.parse_frontmatter(cached[p])
+      parsed[p] = { fm = fm, start = start }
+    end
+  end)
+
+  -- 5. Entry fields other than the body: note type, title, tags, citations.
+  local function any_in_groups(tbl)
+    if type(tbl) ~= 'table' then return false end
+    for _, grp in ipairs({ 'notes', 'bib', 'journal', 'scratch' }) do
+      if type(tbl[grp]) == 'table' and #tbl[grp] > 0 then return true end
+    end
+    return false
+  end
+  local ms_fields = M.time(function()
+    for _, p in ipairs(files) do
+      local fm = parsed[p].fm
+      if fm then
+        local stem = vim.fn.fnamemodify(p, ':t:r')
+        local _ = (type(fm.title) == 'string' and fm.title ~= '')
+          and fm.title or stem:gsub('_', ' ')
+        local tags = {}
+        if type(fm.tags) == 'table' then
+          for _, t in ipairs(fm.tags) do
+            if type(t) == 'string' then tags[#tags + 1] = t:lower() end
+          end
+        end
+        local _ = any_in_groups(fm.cites) or any_in_groups(fm.cited_by)
+      end
+    end
+  end)
+
+  -- 6. Body: the concat, then the lowercase copy filter.eval relies on.
+  local bodies = {}
+  local ms_body = M.time(function()
+    for _, p in ipairs(files) do
+      local lines, start = cached[p], parsed[p].start
+      local parts = {}
+      if start and start <= #lines then
+        for i = start, #lines do parts[#parts + 1] = lines[i] end
+      end
+      bodies[p] = table.concat(parts, '\n')
+    end
+  end)
+  local ms_lower = M.time(function()
+    for _, p in ipairs(files) do local _ = bodies[p]:lower() end
+  end)
+
+  -- 7. The two per-file metadata calls, each against its candidate.
+  local ms_getftime = M.time(function()
+    for _, p in ipairs(files) do local _ = vim.fn.getftime(p) end
+  end)
+  local ms_fs_stat = M.time(function()
+    for _, p in ipairs(files) do
+      local st = uv.fs_stat(p)
+      local _ = st and st.mtime.sec or 0
+    end
+  end)
+  local ms_fnamemodify = M.time(function()
+    for _, p in ipairs(files) do local _ = vim.fn.fnamemodify(p, ':t:r') end
+  end)
+  local ms_lua_stem = M.time(function()
+    for _, p in ipairs(files) do
+      local base = p:match('[^/\\]*$') or p
+      local _ = base:gsub('%.[^.]*$', '')
+    end
+  end)
+
+  -- 8. Report. Percentages are of the current pipeline's measured total.
+  local shared = ms_parse + ms_fields + ms_body + ms_lower + ms_getftime
+  local total  = ms_list + ms_readfile + shared           -- glob + readfile
+  local total_uv = ms_list_uv + ms_read_io + shared       -- scandir + io.open
+  local function pct(ms) return string.format('%4.1f%% of total', ms / total * 100) end
+
+  vim.notify(string.format('PKMBench index-profile: %d notes', n), vim.log.levels.INFO)
+  report_row('index', 'list (glob)', ms_list, pct(ms_list))
+  report_row('index', 'list (uv.fs_scandir)', ms_list_uv,
+    string.format('candidate, %.2f× of glob, %d files', ms_list_uv / ms_list, scan_count))
+  report_row('index', 'read (vim.fn.readfile)', ms_readfile, pct(ms_readfile))
+  report_row('index', 'read (io.open)', ms_read_io,
+    string.format('candidate, %.2f× of readfile', ms_read_io / ms_readfile))
+  report_row('index', 'parse_frontmatter', ms_parse, pct(ms_parse))
+  report_row('index', 'entry fields', ms_fields, pct(ms_fields))
+  report_row('index', 'body concat', ms_body, pct(ms_body))
+  report_row('index', 'body:lower()', ms_lower, pct(ms_lower))
+  report_row('index', 'mtime (getftime)', ms_getftime, pct(ms_getftime))
+  report_row('index', 'mtime (uv.fs_stat)', ms_fs_stat,
+    string.format('candidate, %.2f× of getftime', ms_fs_stat / ms_getftime))
+  report_row('index', 'stem (fnamemodify)', ms_fnamemodify, 'inside "entry fields"')
+  report_row('index', 'stem (lua pattern)', ms_lua_stem,
+    string.format('candidate, %.2f× of fnamemodify', ms_lua_stem / ms_fnamemodify))
+  report_row('index', 'TOTAL glob+readfile', total,
+    string.format('%.3f ms/note — the pre-v1.6.2 build', total / n))
+  report_row('index', 'TOTAL scandir+io.open', total_uv,
+    string.format('%.3f ms/note — %.2f× of the above', total_uv / n, total_uv / total))
+
+  if bench_dir and not opts.keep then M.cleanup(bench_dir) end
 end
 
 return M

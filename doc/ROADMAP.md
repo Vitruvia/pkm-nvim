@@ -178,7 +178,9 @@ v1.6.0  MINOR  Panels & navigation                     │
 v1.6.1  PATCH  Correctness batch + :PKMViews latency ───┘  (after v1.6.0)
         Ph1 fix-now batch  ✅ shipped
           Ph2 yaml.lua write-retry  ✅ shipped
-            Ph3 :PKMViews open-latency (bench-driven, not started)
+            Ph3 :PKMViews open-latency (bench-driven)  ✅ done
+v1.6.2  PATCH  Index build cost (bench-driven)             (after v1.6.1)
+        Ph1 scandir + LuaJIT reader  ✅ done
 v1.7.0  MINOR  Exportation, note creation & header nav     (no deps)
         Ph1 deep export   Ph2 relative note   Ph3 header navigation
 ```
@@ -317,6 +319,50 @@ views: count_all/count_many replace #match_all for every overview count;
   match_all precomputes sort keys instead of calling fnamemodify per comparison
 test: test_v161_p3 — counts match match_all, ordering unchanged
 docs: changelog with benchmark numbers
+
+```
+
+---
+
+#### v1.6.2 (PATCH) — Index build cost
+
+*Closes the item v1.6.1 Ph3 left open: the cold index build, the 250–450 ms a
+first PKM operation waits on when PKMMode has not pre-warmed the index. PATCH —
+perf only, no API and no behaviour change.*
+
+**Phase 1 — `scandir` + LuaJIT reader.** ✅ *Done (pending release tag).*
+Bench-gated: `bench.index_profile()` was written first and it, not intuition,
+selected the two changes — and rejected two others.
+
+| File | Single-pass changes |
+|---|---|
+| `bench.lua` | `index_profile(opts?)` — read-only per-component profile of the build, each current call priced beside its candidate, ending with both pipeline totals. |
+| `utils.lua` | `read_lines(path)` — `readfile`-equivalent reader that stays in LuaJIT (BOM, CR-before-LF, CR-at-EOF, empty file). |
+| `index.lua` | `glob_md` via `uv.fs_scandir`; `read_entry` via `utils.read_lines`. `getftime`/`fnamemodify` **kept** — measured faster than their replacements. |
+| `test/test_v162_p1.lua` | Reader equivalence over 13 raw byte cases; every index entry compared field by field against the pre-v1.6.2 reader; non-recursive listing and invalidation still correct. |
+| docs | `CHANGELOG` (Added/Changed) with the profile and the end-to-end before/after. |
+
+Result: `index.rebuild()` 230 → 95 ms at 600 notes, 790 → 314 ms at 2000
+(0.383 → 0.158 ms/note). The glob alone was 46% of the old build.
+
+Invariants held: entry shape and every field value unchanged (asserted, not
+assumed); measurement preceded optimization and overruled two of the three
+swaps originally planned.
+
+Commit:
+
+```
+
+perf: cut the index build cost with scandir and a LuaJIT reader
+
+bench: index_profile() — per-component profile of the build, current call vs
+  candidate, read-only
+utils: read_lines() — readfile-equivalent reader without the VimL round trip
+index: list folders with uv.fs_scandir (46% of the old build) and read notes
+  with utils.read_lines; getftime/fnamemodify kept — measured faster
+test: test_v162_p1 — reader equivalence and entry-by-entry comparison against
+  the previous reader
+docs: changelog with the profile and end-to-end numbers
 
 ```
 

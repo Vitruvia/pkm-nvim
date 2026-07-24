@@ -5,6 +5,20 @@
 ## [Unreleased]
 
 ### Added
+-   `utils.read_lines(path)` — reads a file into lines without leaving LuaJIT,
+    reproducing `vim.fn.readfile()`'s normalisation exactly (UTF-8 BOM dropped,
+    CR before LF removed, CR at end-of-file kept, empty file → `{}`). Measured
+    at ~0.54× the cost of `readfile` across 600 notes.
+-   `bench.index_profile(opts?)` — developer-only profile of the index build,
+    read-only. Splits the build into listing, file read, frontmatter parse,
+    entry-field assembly, body concat, `body:lower()` and mtime, and prices each
+    candidate replacement next to the call in use, ending with both pipeline
+    totals. `index_profile({ synthetic = N })` for a disposable corpus.
+-   `test/test_v162_p1.lua` — equivalence tests for the faster build: 13 raw
+    line-ending/BOM/EOF cases where `utils.read_lines` must match
+    `vim.fn.readfile` byte for byte, plus a fixture whose every index entry is
+    compared field by field against the pre-v1.6.2 reader rebuilt inside the
+    test.
 -   `bench.views_open(opts?)` — developer-only benchmark for the `:PKMViews`
     open path. Read-only: it times the live index and the live view definitions
     (cold build, warm `get_all()`, both sort comparators, overview via
@@ -17,6 +31,32 @@
     to the pre-Phase-3 comparator's on a fixture built to expose the difference.
 
 ### Changed
+-   **Index build cost (v1.6.2 Phase 1).** `index.lua` listed note folders with
+    `vim.fn.glob` and read every file with `vim.fn.readfile`. Profiling the
+    build over 600 notes attributed **46% of it to the glob alone** and 34% to
+    the reads; the listing is now a single `uv.fs_scandir` per folder (0.7 ms vs
+    107 ms — ~167×) and files go through `utils.read_lines` (~0.54× of
+    `readfile`). End-to-end `index.rebuild()`, best of three:
+
+    | corpus | before | after |
+    |---|---|---|
+    | 600 notes  | 230 ms | **95 ms** (2.4×) |
+    | 2000 notes | 790 ms | **314 ms** (2.5×) |
+
+    Per note: 0.383 ms → 0.158 ms. This is the cold-build cost the v1.6.1 Ph3
+    measurement had isolated as what a first `:PKMViews` of a session actually
+    waits on (250–450 ms on the real 614-note corpus).
+
+    Two candidate swaps were **rejected by the same profile**: `vim.uv.fs_stat`
+    is 1.07× the cost of `vim.fn.getftime`, and a Lua stem pattern 2.6–4× the
+    cost of `vim.fn.fnamemodify(path, ':t:r')`. Both VimL calls stayed.
+
+    Entry shape, field values and API are unchanged — `test_v162_p1.lua`
+    compares every field against the previous reader. Two deliberate
+    consequences of dropping `glob`: the listing order is now whatever the
+    filesystem returns (nothing depended on it — entries live in a hash keyed by
+    path and `get_all()` already iterated unordered), and `'wildignore'` /
+    `'suffixes'` no longer hide note files from the index.
 -   **`:PKMViews` open latency (v1.6.1 Phase 3).** The views overview screens
     (Telescope views-tree, `:PKMViews` panel fallback, `:PKMViewDelete` panel,
     sidebar overview, and the parent/child counts in every view picker) used to
