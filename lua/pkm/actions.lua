@@ -1,7 +1,7 @@
 -- =============================================================================
 -- pkm.actions — Bulk actions over a set of notes
 -- =============================================================================
--- Dependencies : pkm.tags (lazy)
+-- Dependencies : pkm.tags (lazy), pkm.rename (lazy)
 -- Consumed by  : pkm.telescope (live_picker <C-a>), pkm.views (views panel <C-a>)
 --
 -- One registry, one entry point. A navigation panel already knows how to choose
@@ -50,6 +50,11 @@ local REGISTRY = {
     id    = 'tag_rename',
     label = 'Rename a tag',
     run   = function(paths) require('pkm.tags').batch_on(paths, 'rename') end,
+  },
+  {
+    id    = 'set_titles',
+    label = 'Change the title',
+    run   = function(paths) require('pkm.rename').title_flow(paths) end,
   },
 }
 

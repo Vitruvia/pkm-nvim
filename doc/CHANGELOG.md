@@ -5,6 +5,32 @@
 ## [Unreleased]
 
 ### Added
+-   **Bulk title change, with patterns (v1.8.0 Phase 7).** `<C-a>` → *Change the
+    title* applies one pattern across the selected notes. The notes in a
+    selection do not share a title, so the operation is never "set it to X" but
+    "change *this part* of each one": add a prefix or a suffix, remove some text,
+    replace some text, or — deliberately chosen, not the default — rebuild from a
+    Lua pattern with captures (`Aula (%d+) %- (.+)` → `%2 (aula %1)`).
+    The dry-run is the ordinary note picker, so notes can still be dropped from
+    the batch: titles are independent of one another, and applying to three of
+    five leaves nothing inconsistent.
+-   **`lua/pkm/rename.lua`** — `plan_names(items, pattern)` **pure** (every rule
+    lives there: what each operation means, what a non-match is, and that a
+    pattern which would empty a title is refused), `describe`, `format_change`,
+    and `apply_titles(plan)` as the only writer — one frontmatter write per
+    changed note plus the mandatory `index.invalidate`, then a **single**
+    propagation pass.
+-   **The four everyday operations are literal.** Real titles carry `-`, `(`,
+    `.` and `%`, all Lua pattern magic; a "replace this text" that silently
+    misfired on them would be worse than no feature. Patterns are escaped with
+    `vim.pesc` on both sides, so `100%` replaces `100%` and `(v2)` is not a
+    capture group. Removing text from the middle collapses the spaces it leaves
+    touching. The `capture` mode is the one place a Lua pattern is honoured, and
+    a malformed one is reported per note instead of aborting the batch.
+-   `test/test_v180_p7.lua` — the engine, weighted toward the names that would
+    misfire if patterns reached Lua unescaped, plus the writing layer over a
+    disposable corpus, including a note citing **two** of the renamed ones.
+
 -   **Marking notes in the view surfaces (v1.8.0 Phase 6).** `<Tab>` now marks
     notes in the sidebar (`:PKMViewSidebar`, inside a view) and in the browse
     mode of `:PKMViews`; `<S-Tab>` marks and steps up. `<C-a>` acts on the marked
@@ -210,6 +236,14 @@
     to the pre-Phase-3 comparator's on a fixture built to expose the difference.
 
 ### Changed
+-   **`citations.propagate_titles(titles)` walks the vault once (v1.8.0 Ph7).**
+    `propagate_title` globs and reads every note in three folders *per call*, so
+    a bulk retitle calling it note-by-note would be quadratic — 50 notes over a
+    650-note vault is ~32k file reads. The batched form takes
+    `identifier → new title` and does the same work in one pass, rewriting a
+    citing note once even when it cites several of the renamed ones.
+    `propagate_title(path)` now delegates to it with a one-item map, so
+    single-note renames behave exactly as before.
 -   **`:PKMTags` no longer opens with a mode menu (v1.8.0 Phase 4).** Bare, it
     goes straight to the tag browser — the four-option menu decided nothing for
     the common case and cost a screen every time. It survives as the

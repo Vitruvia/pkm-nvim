@@ -858,26 +858,30 @@ function M.update_references_on_rename(old_basename, new_basename, new_title)
   end
 end
 
---- Propagate a note's current title into every citation entry (cites/cited_by,
---- all four groups) that references it, across every other note in the wiki.
---- Idempotent: a file is rewritten only when its stored title for this
---- identifier differs from the note's current title. Uses the same
---- read/regenerate/writefile path as update_references_on_rename, without
---- the body wiki-link rewrite (title propagation never touches body text).
----@param note_path string Absolute path of the note whose title may have changed
----@return nil
-function M.propagate_title(note_path)
-  local _, id = M.get_note_type_and_id(note_path)
-  if not id then return end
-
-  local current_title = M.get_note_title(note_path)
-  local norm_note_path = utils.normalize(note_path)
+--- Propagate new titles into every citation entry (cites/cited_by, all four
+--- groups) that references them, across every note in the wiki.
+---
+--- Takes a whole batch at once and walks the vault **once**: the scan globs and
+--- reads every note in three folders, so doing that per renamed note would be
+--- quadratic. A note citing three of the renamed ones is still read and written
+--- a single time.
+---
+--- Idempotent: a file is rewritten only when its stored title for an identifier
+--- differs from the new one. Uses the same read/regenerate/writefile path as
+--- update_references_on_rename, without the body wiki-link rewrite (title
+--- propagation never touches body text).
+---@param titles table<string, string>  identifier ("note-0042") → new title
+---@return integer updated  Number of citing files rewritten
+function M.propagate_titles(titles)
+  if not titles or not next(titles) then return 0 end
 
   local search_paths = {
     config.folders.consolidated,
     config.folders.journal,
     config.folders.scratchpad
   }
+
+  local updated = 0
 
   for _, folder in ipairs(search_paths) do
     if folder then
@@ -886,49 +890,64 @@ function M.propagate_title(note_path)
       if type(files) ~= "table" then files = {} end
 
       for _, file in ipairs(files) do
-        if utils.normalize(file) ~= norm_note_path then
-          local content = vim.fn.readfile(file)
-          local fm, content_start = yaml.parse_frontmatter(content)
+        local content = vim.fn.readfile(file)
+        local fm, content_start = yaml.parse_frontmatter(content)
 
-          if fm then
-            local modified = false
-            local lists_to_check = {}
-            if fm.cites then table.insert(lists_to_check, fm.cites) end
-            if fm.cited_by then table.insert(lists_to_check, fm.cited_by) end
+        if fm then
+          local modified = false
+          local lists_to_check = {}
+          if fm.cites then table.insert(lists_to_check, fm.cites) end
+          if fm.cited_by then table.insert(lists_to_check, fm.cited_by) end
 
-            for _, list in ipairs(lists_to_check) do
-              for _, group_key in ipairs({"notes", "bib", "journal", "scratch"}) do
-                if list[group_key] then
-                  for _, entry in ipairs(list[group_key]) do
-                    if type(entry) == "table" and entry.identifier == id
-                       and entry.title ~= current_title then
-                      entry.title = current_title
+          -- Every renamed note is checked against this file in the same visit,
+          -- so a note citing three of them is still read and written once.
+          for _, list in ipairs(lists_to_check) do
+            for _, group_key in ipairs({"notes", "bib", "journal", "scratch"}) do
+              if list[group_key] then
+                for _, entry in ipairs(list[group_key]) do
+                  if type(entry) == "table" and entry.identifier then
+                    local new_title = titles[entry.identifier]
+                    if new_title and entry.title ~= new_title then
+                      entry.title = new_title
                       modified = true
                     end
                   end
                 end
               end
             end
+          end
 
-            if modified then
-              local fm_lines = yaml.generate_yaml(fm)
-              local final_content = {"---"}
-              for _, line in ipairs(fm_lines) do table.insert(final_content, line) end
-              table.insert(final_content, "---")
-              if #content >= content_start and content[content_start] ~= "" then
-                table.insert(final_content, "")
-              end
-              for i = content_start, #content do
-                table.insert(final_content, content[i])
-              end
-              vim.fn.writefile(final_content, file)
-              require('pkm.index').invalidate(file)
+          if modified then
+            local fm_lines = yaml.generate_yaml(fm)
+            local final_content = {"---"}
+            for _, line in ipairs(fm_lines) do table.insert(final_content, line) end
+            table.insert(final_content, "---")
+            if #content >= content_start and content[content_start] ~= "" then
+              table.insert(final_content, "")
             end
+            for i = content_start, #content do
+              table.insert(final_content, content[i])
+            end
+            vim.fn.writefile(final_content, file)
+            require('pkm.index').invalidate(file)
+            updated = updated + 1
           end
         end
       end
     end
   end
+
+  return updated
+end
+
+--- Propagate one note's title to every note that cites it.
+--- Delegates to propagate_titles: one note is the one-item case of a batch.
+---@param note_path string Absolute path of the note whose title changed
+function M.propagate_title(note_path)
+  local _, id = M.get_note_type_and_id(note_path)
+  if not id then return end
+
+  M.propagate_titles({ [id] = M.get_note_title(note_path) })
 end
 
 -- =============================================================================

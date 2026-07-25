@@ -34,6 +34,7 @@ pkm.nvim/
 │   ├── tags.lua        # Tag rules (pure), preview (read-only), batch apply (writes)
 │   ├── picker.lua      # Shared note picker + confirmation float (Telescope or fallback)
 │   ├── actions.lua     # Bulk-action registry over a set of notes (panel <C-a>)
+│   ├── rename.lua      # Name patterns (pure), bulk title write + propagation
 │   ├── index.lua       # In-memory note index with incremental invalidation
 │   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
 │   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle)
@@ -181,6 +182,17 @@ sees; it takes the rows ready-made, so the module has no dependency on the tag e
 `confirm(opts)` remains for all-or-nothing gates (`<CR>` accepts, `q`/`<Esc>` backs
 out) where a per-note choice would be a lie. Writes nothing itself. Consumed by
 `export.lua` and `tags.lua`.
+
+**rename.lua** — pattern-based renaming over a set of notes (v1.8.0 Ph7). The
+notes in a selection do not share a name, so the input is a *pattern*, not a
+value. `plan_names(items, pattern)` is pure and holds every rule; the four
+everyday operations (`prefix`, `suffix`, `remove`, `replace`) are **literal**,
+escaped with `vim.pesc` on both sides, because real names carry `-`, `(`, `.`
+and `%`; `capture` is the one mode that honours a Lua pattern, and a malformed
+one is reported per note rather than raised. `apply_titles(plan)` is the only
+writer: one frontmatter write per changed note, `index.invalidate` on each, then
+a **single** `citations.propagate_titles` pass. `title_flow(paths)` is the
+interactive layer. Consumed by `actions.lua` (`set_titles`).
 
 **actions.lua** — the bulk-action registry (v1.8.0 Ph4). Rows of
 `{ id, label, run }`; `list()`/`get(id)` are pure, `run(paths)` shows the short

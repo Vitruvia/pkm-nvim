@@ -593,10 +593,16 @@ is a different operation with its own three-step flow; it shares only the
 radius: writing a title cannot leave a dangling link, renaming a file can. So the
 pattern engine is born in Ph7 with the safe use, and Ph8 only reuses it.
 
-- **Ph7 — pattern engine + titles.** `rename.lua` (new, pure `plan_names`,
-  `describe`, `find_collisions`), `citations.propagate_titles(map)` — **one**
-  vault pass for N notes — and `rename.apply_titles`, plus the `set_titles`
-  registry row.
+- **Ph7 — pattern engine + titles.** ✅ *Done (pending release tag).*
+  `rename.lua` (new): `plan_names` pure over five operations — `prefix`,
+  `suffix`, `remove`, `replace` literal via `vim.pesc`, and `capture` as the one
+  deliberate Lua-pattern mode; `describe`, `format_change`, `read_title`,
+  `title_items`, `apply_titles`, `title_flow`. `citations.propagate_titles(map)`
+  walks the vault once and `propagate_title` delegates to it. `set_titles` in the
+  action registry. Confirmation is `picker.select`, not all-or-nothing: titles
+  are independent, so dropping notes from the batch is safe.
+  `find_collisions` was **not** written here — two titles may legitimately match,
+  so collision detection has no consumer until filenames in Ph8.
 - **Ph8 — filenames.** `notes.rename_file(path, new_stem)` extracted from
   `rename_note()` (the two-step case-only dance on case-insensitive filesystems
   and the open-buffer awareness are reused, not reimplemented),
