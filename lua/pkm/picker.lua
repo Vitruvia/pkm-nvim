@@ -27,6 +27,8 @@
 --   select(paths, opts, on_confirm)   → note picker; on_confirm(string[] paths)
 --   select_tag(rows, opts, on_choice) → tag picker with counts, optionally
 --                                       creating what is typed; on_choice(tag)
+--   select_live(opts, on_confirm)     → the prompt *is* the operation: rows are
+--                                       recomputed from what is typed
 --   confirm(opts)                     → scrollable list + <CR>/q; no selection
 -- =============================================================================
 
@@ -288,6 +290,85 @@ local function telescope_select_tag(rows, opts, on_choice)
 end
 
 -- =============================================================================
+-- SECTION: Live front-end — the prompt *is* the operation
+-- =============================================================================
+--
+-- select() filters a fixed list. This one recomputes the list on every
+-- keystroke from what was typed, so a transformation can be written and seen at
+-- the same time: one panel instead of a form, a result screen, and a
+-- confirmation. `compute(prompt)` owns the meaning of the text; this module
+-- only draws rows and collects the answer.
+
+---@param opts       table  { title, hint, compute, display, preview?, on_cancel? }
+---@param on_confirm function(rows: table[])
+local function telescope_select_live(opts, on_confirm)
+  local pickers      = require('telescope.pickers')
+  local finders      = require('telescope.finders')
+  local actions      = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+  local previewers   = require('telescope.previewers')
+  local sorters      = require('telescope.sorters')
+
+  pickers.new({
+    sorting_strategy = 'ascending',
+    layout_config    = { prompt_position = 'top' },
+  }, {
+    prompt_title = opts.title .. '  ·  <Tab> mark subset  ·  <CR> ' .. opts.hint,
+
+    finder = finders.new_dynamic({
+      fn = function(prompt) return opts.compute(prompt) end,
+      entry_maker = function(row)
+        local display = opts.display(row)
+        return { value = row, display = display, ordinal = display }
+      end,
+    }),
+
+    -- Pass-through: the rows are already in the order compute() chose, and a
+    -- sorter would scramble a list the user is reading as a preview.
+    sorter = sorters.Sorter:new({ scoring_function = function() return 0 end }),
+
+    previewer = opts.preview and previewers.new_buffer_previewer({
+      title = 'Result',
+      define_preview = function(self, entry)
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
+          opts.preview(entry.value))
+        vim.api.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
+      end,
+    }) or nil,
+
+    attach_mappings = function(prompt_bufnr, map)
+      local sel_next = actions.toggle_selection + actions.move_selection_next
+      local sel_prev = actions.toggle_selection + actions.move_selection_previous
+      map('i', '<Tab>',   sel_next)
+      map('n', '<Tab>',   sel_next)
+      map('i', '<S-Tab>', sel_prev)
+      map('n', '<S-Tab>', sel_prev)
+
+      actions.select_default:replace(function()
+        local picker     = action_state.get_current_picker(prompt_bufnr)
+        local selections = picker:get_multi_selection()
+
+        local rows = {}
+        if #selections > 0 then
+          for _, sel in ipairs(selections) do rows[#rows + 1] = sel.value end
+        else
+          for entry in picker.manager:iter() do rows[#rows + 1] = entry.value end
+        end
+
+        actions.close(prompt_bufnr)
+        if #rows == 0 then
+          vim.notify('[pkm] nothing to apply', vim.log.levels.INFO)
+          return
+        end
+        vim.schedule(function() on_confirm(rows) end)
+      end)
+
+      return true
+    end,
+  }):find()
+end
+
+-- =============================================================================
 -- SECTION: Float front-end (no Telescope)
 -- =============================================================================
 
@@ -431,6 +512,67 @@ function M.select_tag(rows, opts, on_choice)
     else
       vim.schedule(function() on_choice(item.tag) end)
     end
+  end)
+end
+
+--- Type an operation and watch it apply, in one panel.
+--- `compute(prompt)` turns whatever is typed into the rows to show — matches,
+--- results, whatever the operation means — and `<CR>` hands back the rows that
+--- are marked, or every row listed when none are. The result is written and
+--- reviewed in the same place, instead of a form followed by a preview that
+--- shows the notes without the change in them.
+---
+--- Without Telescope it degrades to a single `vim.ui.input` followed by the
+--- ordinary confirmation picker: two screens rather than one, but the same
+--- input and the same answer.
+---@param opts       table  { title, hint, compute = function(prompt)→rows,
+---                           display = function(row)→string,
+---                           preview? = function(row)→string[],
+---                           on_cancel? = function }
+---@param on_confirm function(rows: table[])
+function M.select_live(opts, on_confirm)
+  opts = opts or {}
+  opts.title = opts.title or 'PKM'
+  opts.hint  = opts.hint  or 'apply to listed'
+
+  if pcall(require, 'telescope') then
+    telescope_select_live(opts, on_confirm)
+    return
+  end
+
+  vim.ui.input({ prompt = opts.title .. ': ' }, function(text)
+    if not text or text == '' then
+      if opts.on_cancel then opts.on_cancel() end
+      return
+    end
+
+    local rows = opts.compute(text)
+    if #rows == 0 then
+      vim.notify('[pkm] nothing matched', vim.log.levels.INFO)
+      return
+    end
+
+    -- The float front-end lists strings, so the rows are keyed by their own
+    -- display line and mapped back on confirmation.
+    local lines, by_line = {}, {}
+    for _, row in ipairs(rows) do
+      local line = opts.display(row)
+      lines[#lines + 1] = line
+      by_line[line]     = row
+    end
+
+    vim.schedule(function()
+      M.select(lines, {
+        title     = opts.title,
+        hint      = opts.hint,
+        display   = function(line) return line end,
+        on_cancel = opts.on_cancel,
+      }, function(confirmed)
+        local chosen = {}
+        for _, line in ipairs(confirmed) do chosen[#chosen + 1] = by_line[line] end
+        on_confirm(chosen)
+      end)
+    end)
   end)
 end
 

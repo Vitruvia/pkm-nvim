@@ -1,46 +1,45 @@
 -- =============================================================================
--- pkm.rename — Pattern-based renaming over a set of notes
+-- pkm.rename — Substitution over the names of a set of notes
 -- =============================================================================
 -- Dependencies : pkm.utils, pkm.yaml (lazy), pkm.index (lazy),
 --                pkm.citations (lazy), pkm.picker (lazy, interactive flow only)
 -- Consumed by  : pkm.actions (set_titles)
 --
--- The notes in a selection do **not** share a name. So a bulk operation over
--- names is never "set it to X" — it is "change *this part* of each one", which
--- is why a pattern is the input rather than a value.
+-- The notes in a selection do **not** share a name, so a bulk operation over
+-- names is never "set it to X" — it is a substitution: match this, write that.
+-- One input expresses it, in the syntax already in everyone's fingers:
 --
--- Two layers, the same split the tag engine uses:
+--     pattern/replacement          the two halves of a :%s command
+--     Aula \(\d\+\)/Aula 0\1       Neovim regex, with capture groups
+--     rascunho                     no '/' yet: just show what matches
+--     \/dados/ e dados             '\/' is a literal slash, not the separator
 --
---   plan_names()  pure — takes the current names and a pattern, returns what
---                 each one would become. No I/O, no state, no UI. Every rule
---                 lives here, so it is tested without touching a file.
+-- The regex is **Neovim's own** (`vim.fn.match` / `vim.fn.substitute`), not
+-- Lua's: the same expression that works in `:%s` works here, including `\1`
+-- backreferences, `\v`, `\c` and the rest.
+--
+-- Two layers:
+--
+--   plan_names()   pure-ish — takes names and a substitution, returns what each
+--                  becomes. Its only outside call is Neovim's regex engine, so
+--                  it is testable headlessly with no file and no UI.
 --   apply_titles() the only writing function — one frontmatter write per
---                 changed note, plus index.invalidate (mandatory: this writes
---                 to disk), and **one** title propagation pass at the end.
+--                  changed note plus the mandatory index.invalidate, then a
+--                  **single** title-propagation pass over the vault.
 --
--- Why propagation is batched: `citations.propagate_title` globs and reads every
--- note in three folders *per call*, so calling it note-by-note over a batch is
--- quadratic. `citations.propagate_titles` does the same work in one pass.
---
--- Patterns are **literal by default**. Real note names carry `-`, `.`, `(` and
--- `%`, all of which are Lua pattern magic; a plain "replace this text" that
--- silently misfired on them would be worse than useless. The one form that does
--- take a Lua pattern (`capture`) is a mode the user chooses on purpose.
---
--- Pattern shape (one op per operation):
---   { op = 'prefix',  text = 'draft — ' }   → prepend
---   { op = 'suffix',  text = ' (wip)'   }   → append
---   { op = 'remove',  text = '[wip] '   }   → drop every literal occurrence
---   { op = 'replace', from = 'Draft', to = 'Notes' }   → literal, all matches
---   { op = 'capture', from = 'Aula (%d+) %- (.+)', to = '%2 (aula %1)' }
+-- The flow is one panel: typing the substitution *is* the preview. See
+-- picker.select_live — the rows update on every keystroke, showing
+-- "before → after", and `<CR>` writes what is listed.
 --
 -- Public API:
---   plan_names(items, pattern)  → { {key, before, after, changed, error?}… } pure
---   describe(pattern)           → one-line description of the operation — pure
+--   parse_substitution(input)   → { find, replace? } | nil — pure
+--   plan_names(items, sub)      → { {key, before, after, matched, changed, error?}… }
+--   describe(sub)               → one-line description — pure
 --   format_change(item)         → "stem   before → after" display row — pure
 --   read_title(path)            → (fm, title) — read-only
+--   title_items(paths)          → { {key, before}… } — read-only
 --   apply_titles(plan)          → (applied, errors) — writes and propagates
---   title_flow(paths)           → interactive: pattern → preview → apply
+--   title_flow(paths)           → the live panel
 -- =============================================================================
 
 local M = {}
@@ -51,84 +50,86 @@ local utils = require('pkm.utils')
 -- SECTION: Pure core
 -- =============================================================================
 
---- Trim surrounding whitespace.
----@param text string
----@return string
-local function trim(text)
-  return (text:gsub('^%s+', ''):gsub('%s+$', ''))
-end
+--- Split a substitution expression into its two halves.
+--- The separator is the first unescaped `/`; `\/` is a literal slash and does
+--- not split. With no separator at all the whole text is the pattern and there
+--- is no replacement yet — which is what makes "type to see what matches" a
+--- state of its own rather than an accidental deletion.
+---@param input string|nil
+---@return { find: string, replace: string|nil }|nil
+function M.parse_substitution(input)
+  if not input or input == '' then return nil end
 
---- Apply one pattern to one name.
---- Returns the new name, or nil plus a reason when the pattern cannot produce
---- a usable one. A pattern that simply does not match is not an error: it
---- returns the name unchanged, and the caller reports it as "no change".
----@param before  string
----@param pattern table
----@return string|nil after
----@return string|nil err
-local function apply_pattern(before, pattern)
-  local op = pattern and pattern.op
-
-  if op == 'prefix' then
-    if not pattern.text or pattern.text == '' then return nil, 'no text given' end
-    return pattern.text .. before
-
-  elseif op == 'suffix' then
-    if not pattern.text or pattern.text == '' then return nil, 'no text given' end
-    return before .. pattern.text
-
-  elseif op == 'remove' then
-    if not pattern.text or pattern.text == '' then return nil, 'no text given' end
-    -- Literal: the text is escaped, so "(v2)" removes "(v2)" and not a group.
-    -- Cutting from the middle would leave the two surrounding spaces touching,
-    -- so runs are collapsed — removal is about the text, not about respacing.
-    local after = before:gsub(vim.pesc(pattern.text), '')
-    after = after:gsub('%s%s+', ' ')
-    return trim(after)
-
-  elseif op == 'replace' then
-    if not pattern.from or pattern.from == '' then return nil, 'no text to replace' end
-    -- Both sides literal. The replacement is escaped separately and bound to
-    -- its own local first: `s:gsub(a, b)` where `b` is itself a gsub call would
-    -- pass that call's *count* as gsub's third argument — a substitution limit
-    -- of zero, which silently does nothing.
-    local repl  = (pattern.to or ''):gsub('%%', '%%%%')
-    local after = before:gsub(vim.pesc(pattern.from), repl)
-    return trim(after)
-
-  elseif op == 'capture' then
-    if not pattern.from or pattern.from == '' then return nil, 'no pattern given' end
-    -- The one place a Lua pattern is honoured. A malformed one raises, so it
-    -- is caught and reported per note rather than aborting the batch.
-    local ok, after = pcall(string.gsub, before, pattern.from, pattern.to or '')
-    if not ok then return nil, 'invalid pattern' end
-    return trim(after)
+  local find_part, replace_part
+  local i = 1
+  while i <= #input do
+    local c = input:sub(i, i)
+    if c == '\\' then
+      i = i + 2                      -- skip the escaped character
+    elseif c == '/' then
+      find_part    = input:sub(1, i - 1)
+      replace_part = input:sub(i + 1)
+      break
+    else
+      i = i + 1
+    end
   end
 
-  return nil, 'unknown operation'
+  find_part = find_part or input
+  if find_part == '' then return nil end
+
+  --- `\/` reaches the regex engine as a plain slash.
+  local function unescape(text)
+    return (text:gsub('\\/', '/'))
+  end
+
+  return {
+    find    = unescape(find_part),
+    replace = replace_part and unescape(replace_part) or nil,
+  }
 end
 
---- Work out what each name would become.
---- Pure: no I/O, no globals, and the input list is never mutated.
----@param items   { key: string, before: string }[]
----@param pattern table
----@return { key: string, before: string, after: string, changed: boolean, error: string|nil }[]
-function M.plan_names(items, pattern)
+--- Work out what each name would become under a substitution.
+--- The input list is never mutated. A name that does not match is reported as
+--- `matched = false` rather than as an error — not matching is information, not
+--- a failure.
+---@param items { key: string, before: string }[]
+---@param sub   table|nil  Result of parse_substitution
+---@return { key: string, before: string, after: string, matched: boolean, changed: boolean, error: string|nil }[]
+function M.plan_names(items, sub)
   local out = {}
 
   for _, item in ipairs(items or {}) do
     local before = item.before or ''
-    local after, err = apply_pattern(before, pattern)
+    local matched, after, err = false, before, nil
 
-    if after and after == '' then
-      after, err = nil, 'would leave it empty'
+    if not sub or not sub.find or sub.find == '' then
+      matched = true                 -- nothing typed yet: everything is in play
+    else
+      local ok, pos = pcall(vim.fn.match, before, sub.find)
+      if not ok then
+        err = 'invalid pattern'
+      else
+        matched = pos >= 0
+        if matched and sub.replace ~= nil then
+          local ok2, result = pcall(vim.fn.substitute, before, sub.find, sub.replace, 'g')
+          if not ok2 then
+            err = 'invalid replacement'
+          elseif result == '' then
+            err = 'would leave it empty'
+          else
+            after = result
+          end
+        end
+      end
     end
 
     out[#out + 1] = {
       key     = item.key,
       before  = before,
-      after   = after or before,
-      changed = (after ~= nil) and (after ~= before) or false,
+      after   = after,
+      matched = matched,
+      changed = (err == nil) and (after ~= before) or false,
       error   = err,
     }
   end
@@ -136,22 +137,15 @@ function M.plan_names(items, pattern)
   return out
 end
 
---- One-line description of what a pattern does, for the confirmation header.
----@param pattern table
+--- One-line description of a substitution, for the panel title.
+---@param sub table|nil
 ---@return string
-function M.describe(pattern)
-  local op = pattern and pattern.op
-
-  if op == 'prefix'  then return string.format("Prefix with '%s'", pattern.text or '') end
-  if op == 'suffix'  then return string.format("Suffix with '%s'", pattern.text or '') end
-  if op == 'remove'  then return string.format("Remove '%s'", pattern.text or '') end
-  if op == 'replace' then
-    return string.format("Replace '%s' with '%s'", pattern.from or '', pattern.to or '')
+function M.describe(sub)
+  if not sub or not sub.find then return 'Change titles' end
+  if sub.replace == nil then
+    return string.format("matching '%s'", sub.find)
   end
-  if op == 'capture' then
-    return string.format("Pattern '%s' → '%s'", pattern.from or '', pattern.to or '')
-  end
-  return 'Rename'
+  return string.format("'%s' → '%s'", sub.find, sub.replace)
 end
 
 --- Render one planned change as a display row.
@@ -162,6 +156,9 @@ function M.format_change(item)
   local stem = vim.fn.fnamemodify(item.key, ':t:r')
   if item.error then
     return string.format('%s   %s  ✗  %s', stem, item.before, item.error)
+  end
+  if not item.changed then
+    return string.format('%s   %s', stem, item.before)
   end
   return string.format('%s   %s  →  %s', stem, item.before, item.after)
 end
@@ -212,9 +209,9 @@ end
 ---@return integer applied  Notes written
 ---@return integer errors   Notes that could not be written
 function M.apply_titles(plan)
-  local yaml       = require('pkm.yaml')
-  local index      = require('pkm.index')
-  local citations  = require('pkm.citations')
+  local yaml      = require('pkm.yaml')
+  local index     = require('pkm.index')
+  local citations = require('pkm.citations')
   local applied, errors = 0, 0
 
   -- identifier → new title, so the propagation pass runs once for the batch
@@ -250,54 +247,40 @@ end
 -- =============================================================================
 -- SECTION: Interactive flow
 -- =============================================================================
---
--- Pattern → preview → apply. The preview is the ordinary note picker, so a note
--- can still be dropped from the batch: titles are independent of one another,
--- and applying to three of five leaves nothing inconsistent. (Filenames are the
--- opposite case, and get an all-or-nothing gate instead.)
 
---- Ask for the operation and its operands.
---- The operation list is small and fixed, so it stays `vim.ui.select` — the
---- same criterion as the Simple/Deep menu of `:PKMExport`.
----@param on_pattern function(pattern: table)
-local function ask_pattern(on_pattern)
-  local ops = {
-    { op = 'prefix',  label = 'Add a prefix' },
-    { op = 'suffix',  label = 'Add a suffix' },
-    { op = 'remove',  label = 'Remove some text' },
-    { op = 'replace', label = 'Replace some text' },
-    { op = 'capture', label = 'Rebuild from a pattern  (advanced)' },
-  }
+--- The note as it would read after the substitution: the frontmatter title line
+--- carries the new value, so the preview shows the result and not the file as
+--- it is now.
+---@param item table  One planned row
+---@return string[]
+local function preview_lines(item)
+  local lines = utils.read_lines(item.key)
+  if not lines then return { '(unreadable)' } end
 
-  local labels = {}
-  for _, entry in ipairs(ops) do labels[#labels + 1] = entry.label end
-
-  vim.ui.select(labels, { prompt = 'Change the title how?' }, function(_, idx)
-    if not idx then return end
-    local op = ops[idx].op
-
-    if op == 'prefix' or op == 'suffix' or op == 'remove' then
-      local prompt = op == 'remove' and 'Text to remove: ' or 'Text to add: '
-      vim.ui.input({ prompt = prompt }, function(text)
-        if not text or text == '' then return end
-        vim.schedule(function() on_pattern({ op = op, text = text }) end)
-      end)
-      return
+  local out = {}
+  local in_frontmatter, done = false, false
+  for idx, line in ipairs(lines) do
+    if idx == 1 and line == '---' then
+      in_frontmatter = true
+      out[#out + 1] = line
+    elseif in_frontmatter and not done and line == '---' then
+      in_frontmatter = false
+      done = true
+      out[#out + 1] = line
+    elseif in_frontmatter and line:match('^title:') then
+      out[#out + 1] = 'title: ' .. item.after
+    else
+      out[#out + 1] = line
     end
+  end
 
-    local from_prompt = op == 'replace' and 'Text to replace: ' or 'Lua pattern: '
-    vim.ui.input({ prompt = from_prompt }, function(from)
-      if not from or from == '' then return end
-      local to_prompt = op == 'replace' and 'Replace with: ' or 'Rebuild as (use %1): '
-      vim.ui.input({ prompt = to_prompt }, function(to)
-        if to == nil then return end
-        vim.schedule(function() on_pattern({ op = op, from = from, to = to }) end)
-      end)
-    end)
-  end)
+  return out
 end
 
---- Change the title of several notes at once.
+--- Change the titles of several notes at once, in one panel.
+--- Typing the substitution is the preview: rows show `before → after` as the
+--- expression is written, and `<CR>` applies to what is listed. There is no
+--- form and no separate confirmation screen — the panel is both.
 ---@param paths string[]  Notes already chosen, e.g. the marks in a panel
 function M.title_flow(paths)
   if not paths or #paths == 0 then
@@ -311,43 +294,39 @@ function M.title_flow(paths)
     return
   end
 
-  ask_pattern(function(pattern)
-    local plan   = M.plan_names(items, pattern)
-    local header = M.describe(pattern)
+  --- Rows for what has been typed so far. Before a `/` appears this is the set
+  --- of titles that match; after it, the same set with their new values.
+  ---@param prompt string|nil
+  ---@return table[]
+  local function compute(prompt)
+    local sub  = M.parse_substitution(prompt)
+    local plan = M.plan_names(items, sub)
 
-    -- Only what would actually change reaches the confirmation; an entry that
-    -- errored is shown too, since a pattern that fails everywhere should say so
-    -- rather than look like "nothing matched".
-    local shown, by_key = {}, {}
-    for _, item in ipairs(plan) do
-      if item.changed or item.error then
-        shown[#shown + 1] = item.key
-        by_key[item.key]  = item
-      end
+    local rows = {}
+    for _, row in ipairs(plan) do
+      if row.matched or row.error then rows[#rows + 1] = row end
     end
+    return rows
+  end
 
-    if #shown == 0 then
-      vim.notify(
-        string.format('[pkm] %s — no title in the selection would change', header),
-        vim.log.levels.INFO)
+  require('pkm.picker').select_live({
+    title     = string.format('Change %d title%s  ·  pattern/replacement',
+      #items, #items == 1 and '' or 's'),
+    hint      = 'apply to listed',
+    compute   = compute,
+    display   = M.format_change,
+    preview   = preview_lines,
+    on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
+  }, function(rows)
+    local applied, errors = M.apply_titles(rows)
+    if applied == 0 and errors == 0 then
+      vim.notify('[pkm] nothing to change — no replacement given?', vim.log.levels.INFO)
       return
     end
-
-    require('pkm.picker').select(shown, {
-      title     = 'PKMTitle ' .. header,
-      hint      = 'apply to listed',
-      display   = function(key) return M.format_change(by_key[key]) end,
-      on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
-    }, function(confirmed)
-      local chosen = {}
-      for _, key in ipairs(confirmed) do chosen[#chosen + 1] = by_key[key] end
-
-      local applied, errors = M.apply_titles(chosen)
-      vim.notify(string.format('[pkm] %s — %d title%s updated%s',
-        header, applied, applied == 1 and '' or 's',
-        errors > 0 and (', ' .. errors .. ' failed') or ''),
-        errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
-    end)
+    vim.notify(string.format('[pkm] %d title%s updated%s',
+      applied, applied == 1 and '' or 's',
+      errors > 0 and (', ' .. errors .. ' failed') or ''),
+      errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
   end)
 end
 

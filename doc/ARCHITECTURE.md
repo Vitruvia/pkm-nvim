@@ -179,20 +179,26 @@ on_choice)` picks one tag from counted rows, previewing the notes that carry it 
 showing each row's `note`; with `opts.allow_new` typing an unknown tag offers to
 create it. Its sorter is pass-through, so the caller's ranking is what the user
 sees; it takes the rows ready-made, so the module has no dependency on the tag engine.
-`confirm(opts)` remains for all-or-nothing gates (`<CR>` accepts, `q`/`<Esc>` backs
-out) where a per-note choice would be a lie. Writes nothing itself. Consumed by
-`export.lua` and `tags.lua`.
+`select_live(opts, on_confirm)` (v1.8.0 Ph7) is the one where the prompt *is* the
+operation: `compute(prompt)` recomputes the rows on every keystroke, `display`
+draws them and `preview` shows the result of the row under the cursor, so an
+operation is written and seen in a single panel rather than a form followed by a
+result screen. `confirm(opts)` remains for all-or-nothing gates (`<CR>` accepts,
+`q`/`<Esc>` backs out) where a per-note choice would be a lie. Writes nothing
+itself. Consumed by `export.lua`, `tags.lua` and `rename.lua`.
 
-**rename.lua** — pattern-based renaming over a set of notes (v1.8.0 Ph7). The
-notes in a selection do not share a name, so the input is a *pattern*, not a
-value. `plan_names(items, pattern)` is pure and holds every rule; the four
-everyday operations (`prefix`, `suffix`, `remove`, `replace`) are **literal**,
-escaped with `vim.pesc` on both sides, because real names carry `-`, `(`, `.`
-and `%`; `capture` is the one mode that honours a Lua pattern, and a malformed
-one is reported per note rather than raised. `apply_titles(plan)` is the only
-writer: one frontmatter write per changed note, `index.invalidate` on each, then
-a **single** `citations.propagate_titles` pass. `title_flow(paths)` is the
-interactive layer. Consumed by `actions.lua` (`set_titles`).
+**rename.lua** — substitution over the names of a set of notes (v1.8.0 Ph7). The
+notes in a selection do not share a name, so the input is a *substitution*, not a
+value: one field holding `pattern/replacement`, the two halves of a `:%s`.
+`parse_substitution(input)` splits it (first unescaped `/`; `\/` is literal) and
+`plan_names(items, sub)` computes the result through **Neovim's own regex**
+(`vim.fn.match` / `vim.fn.substitute`), so the expression that works in `:%s`
+works here — which is also why there is no menu of operations: `^/X ` prepends,
+`$/ X` appends, `pat/` removes. Not matching is reported as `matched = false`,
+not as an error. `apply_titles(plan)` is the only writer: one frontmatter write
+per changed note, `index.invalidate` on each, then a **single**
+`citations.propagate_titles` pass. `title_flow(paths)` drives
+`picker.select_live`. Consumed by `actions.lua` (`set_titles`).
 
 **actions.lua** — the bulk-action registry (v1.8.0 Ph4). Rows of
 `{ id, label, run }`; `list()`/`get(id)` are pure, `run(paths)` shows the short

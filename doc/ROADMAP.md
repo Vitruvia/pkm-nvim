@@ -217,7 +217,31 @@ everything else floats and may be reordered.
    containing every modification it needs, file-by-file, never split across
    messages.
 
-4. **A feature ships its own UI, in its own phase.** When a phase creates or
+4. **One panel, not a wizard. Count the screens before writing the flow.**
+   A command's cost is measured in *screens between the user and the result*,
+   and a screen that does not decide anything is a defect. Concretely:
+
+   - **Prefer a single panel where typing *is* the operation** — the input and
+     the preview in the same place (`picker.select_live`). A form that collects
+     parameters, then a screen that shows the notes *without* the change in
+     them, is two screens doing the work of none.
+   - **A menu of operations is usually a syntax problem.** Five choices —
+     prefix, suffix, remove, replace, rebuild — collapse into one substitution
+     field, where `^/X ` prepends and `$/ X` appends. Ask whether the options
+     are really one expression the user already knows how to write.
+   - **Reuse the syntax the user has in their fingers.** Neovim regex over Lua
+     patterns; `pattern/replacement` over two prompts. Familiar beats novel even
+     when novel is tidier to implement.
+   - **Never make the user restate what the editor already knows.** No scope
+     prompt when a panel has a selection; no note picker when the notes were
+     just marked.
+
+   This principle was written after v1.8.0 Ph7 shipped a five-option menu
+   followed by two more screens, and had to be rebuilt as one panel. The failure
+   mode is systematic, not a slip: each step looks reasonable in isolation, and
+   the cost only shows when the flow is used.
+
+5. **A feature ships its own UI, in its own phase.** When a phase creates or
    changes a choice the user makes, the Telescope version of that screen —
    counts, previewer, the shared marking gesture — is part of *that* phase, not
    deferred to a later "UI pass". The `vim.ui.select` / float path remains as the
@@ -593,16 +617,21 @@ is a different operation with its own three-step flow; it shares only the
 radius: writing a title cannot leave a dangling link, renaming a file can. So the
 pattern engine is born in Ph7 with the safe use, and Ph8 only reuses it.
 
-- **Ph7 — pattern engine + titles.** ✅ *Done (pending release tag).*
-  `rename.lua` (new): `plan_names` pure over five operations — `prefix`,
-  `suffix`, `remove`, `replace` literal via `vim.pesc`, and `capture` as the one
-  deliberate Lua-pattern mode; `describe`, `format_change`, `read_title`,
-  `title_items`, `apply_titles`, `title_flow`. `citations.propagate_titles(map)`
-  walks the vault once and `propagate_title` delegates to it. `set_titles` in the
-  action registry. Confirmation is `picker.select`, not all-or-nothing: titles
-  are independent, so dropping notes from the batch is safe.
-  `find_collisions` was **not** written here — two titles may legitimately match,
-  so collision detection has no consumer until filenames in Ph8.
+- **Ph7 — substitution over titles, in one panel.** ✅ *Done (pending release tag).*
+  `rename.lua` (new): `parse_substitution` and `plan_names` over **Neovim's own
+  regex**, `describe`, `format_change`, `read_title`, `title_items`,
+  `apply_titles`, `title_flow`. `picker.select_live` (new) is the panel where the
+  prompt is the operation — rows recomputed per keystroke, preview showing the
+  note with the new title. `citations.propagate_titles(map)` walks the vault once
+  and `propagate_title` delegates to it. `set_titles` in the action registry.
+
+  *Shipped twice.* The first cut was a five-option menu (prefix / suffix /
+  remove / replace / Lua-pattern capture), then a result screen, then a
+  confirmation — and the middle screen showed the notes **without** the change in
+  them, so it previewed nothing. Rebuilt as one panel with one field. The lesson
+  is Operating Principle 4; the five options were a syntax problem wearing a menu.
+  `find_collisions` was **not** written — two titles may legitimately match, so
+  collision detection has no consumer until filenames in Ph8.
 - **Ph8 — filenames.** `notes.rename_file(path, new_stem)` extracted from
   `rename_note()` (the two-step case-only dance on case-insensitive filesystems
   and the open-buffer awareness are reused, not reimplemented),

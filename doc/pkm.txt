@@ -138,26 +138,31 @@ every note that view matches; there is nothing to mark there.
 The action menu is short: add, remove or rename a tag, or change the title.
 
 CHANGING TITLES IN BULK~
-The notes you selected do not share a title, so the operation is never "set it
-to X" — it is "change this part of each one". Pick one of: >
+One panel, and what you type is the operation. The field takes the two halves
+of a `:%s` command, separated by a slash: >
 
-    Add a prefix              Kant            ->  [wip] Kant
-    Add a suffix              Kant            ->  Kant (rascunho)
-    Remove some text          [wip] Kant      ->  Kant
-    Replace some text         Draft — Kant    ->  Notas — Kant
-    Rebuild from a pattern    Aula 03 - Kant  ->  Kant (aula 03)
+    pattern/replacement
+
+    Draft/Notas                    Draft — Kant    ->  Notas — Kant
+    ^/Sobre                        Kant            ->  Sobre Kant
+    $/ (rascunho)                  Kant            ->  Kant (rascunho)
+    \[wip\] /                      [wip] Kant      ->  Kant
+    Aula \(\d\+\)/Aula 0\1         Aula 3 - Kant   ->  Aula 03 - Kant
 <
-The first four are **literal**: the text you type matches itself, so `100%`,
-`(v2)` and `Aula 03 - Kant` behave the way they look. Only the last takes a Lua
-pattern, with captures in the replacement (`Aula (%d+) %- (.+)` -> `%2 (aula
-%1)`); a malformed one is reported for the note it fails on, and the rest of the
-batch is unaffected. Removing text from the middle closes the gap it leaves.
-A pattern that would empty a title is refused.
+It is Neovim's own regex — the expression that works in `:%s` works here, `\v`
+and `\c` included — so there is no menu of operations: an anchor is a prefix or
+a suffix, and an empty replacement is a removal. Write `\/` for a literal slash.
 
-Then the confirmation: the note picker again, one row per note showing
-"before -> after". Narrowing or marking there drops notes from the batch.
-Titles are also propagated: every note citing a retitled one has its stored
-copy of that title updated, in a single pass over the vault.
+Type only a pattern, with no slash, and the panel lists the titles that match:
+you can find the expression before committing to it. Add the slash and the rows
+become "before -> after", updating as you type, while the preview pane shows the
+note with its new title already in the frontmatter.
+
+<CR> applies to every note listed; <Tab> narrows to a subset first. A note that
+does not match is simply not listed, an expression that would empty a title is
+refused, and an invalid one is reported on the row it fails on — the rest of the
+batch is unaffected. Titles are propagated too: every note citing a retitled one
+has its stored copy updated, in a single pass over the vault.
 
 TAG BATCHES~
 Two steps, and nothing is written until the last is confirmed:

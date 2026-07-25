@@ -5,31 +5,36 @@
 ## [Unreleased]
 
 ### Added
--   **Bulk title change, with patterns (v1.8.0 Phase 7).** `<C-a>` → *Change the
-    title* applies one pattern across the selected notes. The notes in a
-    selection do not share a title, so the operation is never "set it to X" but
-    "change *this part* of each one": add a prefix or a suffix, remove some text,
-    replace some text, or — deliberately chosen, not the default — rebuild from a
-    Lua pattern with captures (`Aula (%d+) %- (.+)` → `%2 (aula %1)`).
-    The dry-run is the ordinary note picker, so notes can still be dropped from
-    the batch: titles are independent of one another, and applying to three of
-    five leaves nothing inconsistent.
--   **`lua/pkm/rename.lua`** — `plan_names(items, pattern)` **pure** (every rule
-    lives there: what each operation means, what a non-match is, and that a
-    pattern which would empty a title is refused), `describe`, `format_change`,
-    and `apply_titles(plan)` as the only writer — one frontmatter write per
-    changed note plus the mandatory `index.invalidate`, then a **single**
-    propagation pass.
--   **The four everyday operations are literal.** Real titles carry `-`, `(`,
-    `.` and `%`, all Lua pattern magic; a "replace this text" that silently
-    misfired on them would be worse than no feature. Patterns are escaped with
-    `vim.pesc` on both sides, so `100%` replaces `100%` and `(v2)` is not a
-    capture group. Removing text from the middle collapses the spaces it leaves
-    touching. The `capture` mode is the one place a Lua pattern is honoured, and
-    a malformed one is reported per note instead of aborting the batch.
--   `test/test_v180_p7.lua` — the engine, weighted toward the names that would
-    misfire if patterns reached Lua unescaped, plus the writing layer over a
-    disposable corpus, including a note citing **two** of the renamed ones.
+-   **Bulk title change, in one panel (v1.8.0 Phase 7).** `<C-a>` → *Change the
+    title* opens a single panel whose prompt **is** the operation: type
+    `pattern/replacement` and the rows update on every keystroke, showing
+    `before → after` for the notes that match. Type only a pattern and it shows
+    what matches, so the expression can be found before committing to it; the
+    file previewer shows the note **with the new title in its frontmatter**.
+    `<CR>` applies to everything listed, `<Tab>` narrows to a subset. No form,
+    no separate result screen, no confirmation step.
+-   **The regex is Neovim's own**, not Lua's: the expression that works in `:%s`
+    works here, capture groups (`Aula \(\d\+\)/Aula 0\1`), `\v`, `\c` and all.
+    `^/Sobre ` prepends, `$/ (wip)` appends, `\[wip\] /` removes — which is why
+    there is no menu of operations. `\/` is a literal slash rather than the
+    separator. A substitution that would empty a title is refused, an invalid
+    pattern is reported on the row it fails on, and a note that simply does not
+    match is shown as unchanged rather than as an error.
+-   **`lua/pkm/rename.lua`** — `parse_substitution(input)` and
+    `plan_names(items, sub)` (the input list is never mutated; the only outside
+    call is Neovim's regex engine, so both are testable headlessly),
+    `describe`, `format_change`, and `apply_titles(plan)` as the only writer —
+    one frontmatter write per changed note plus the mandatory
+    `index.invalidate`, then a **single** propagation pass.
+-   **`picker.select_live(opts, on_confirm)`** — the front-end behind it, and
+    reusable: `compute(prompt)` turns what is typed into rows, `display` draws
+    them, `preview` renders the result of the row under the cursor. Bulk file
+    rename will use the same panel. Without Telescope it degrades to one
+    `vim.ui.input` plus the ordinary confirmation picker.
+-   `test/test_v180_p7.lua` — the expression parser (escaped separators, the
+    replacement-less state, refusals), the planner against Neovim's regex engine
+    (captures, `\v`, anchors, global replacement), and the writing layer over a
+    disposable corpus including a note citing **two** of the retitled ones.
 
 -   **Marking notes in the view surfaces (v1.8.0 Phase 6).** `<Tab>` now marks
     notes in the sidebar (`:PKMViewSidebar`, inside a view) and in the browse
