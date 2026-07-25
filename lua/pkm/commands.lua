@@ -122,6 +122,16 @@ function M.register()
     require('pkm.notes').create_new_note(opts.args ~= '' and opts.args or nil)
   end, { nargs = '?' })
 
+  -- :PKMNewRelative — new note seeded with the current note's tags, so it lands
+  -- in the same views without retyping its classification.
+  vim.api.nvim_create_user_command('PKMNewRelative', function(opts)
+    require('pkm.notes').create_relative_note(opts.args ~= '' and opts.args or nil)
+  end, {
+    nargs    = '?',
+    complete = function() return { 'note', 'agg', 'bib' } end,
+    desc     = "Create a note inheriting the current note's tags",
+  })
+
   vim.api.nvim_create_user_command('PKMNewJournal', function()
     focus_main_win()
     require('pkm.journal').create_entry(true)

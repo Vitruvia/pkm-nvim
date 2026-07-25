@@ -5,6 +5,32 @@
 ## [Unreleased]
 
 ### Added
+-   **Tag engine (v1.8.0 Phase 1).** New `lua/pkm/tags.lua`, split in three
+    layers so the rules can be tested without touching a file:
+    `plan(tags, ops)` is **pure** and holds every rule; `preview(paths, ops)`
+    reports what would change and **writes nothing**; `apply(paths, ops)` is the
+    only writing function, one frontmatter write per changed note plus the
+    mandatory `index.invalidate` (the opposite of the buffer-only tag commands,
+    which must not invalidate).
+
+    Operations are `{ add, remove, rename }`, applied in that order: rename,
+    then remove, then add. Matching is case-insensitive and duplicates are
+    impossible — renaming onto a tag the note already has merges into it. A
+    surviving tag **keeps the spelling it had in the file**; only tags an
+    operation introduces are stored normalised, which is what stops a batch from
+    rewriting every note that happens to capitalise a tag. `remove` beats `add`
+    for the same tag.
+-   **`:PKMNewRelative`** — create a note that inherits the current note's tags,
+    so it lands in the same views without retyping its classification. Tags are
+    read from the *buffer*, so unsaved edits count. Optional type argument
+    (`:PKMNewRelative bib`), opt-in keymap `keymaps.new_relative` (default
+    `false`). `notes.create_new_note(note_type, opts)` gained `opts.tags` for
+    it, backwards-compatibly.
+-   `test/test_v180_p1.lua` — 14 cases over the pure core (order of operations,
+    case handling, precedence, input not mutated), then the batch layer over a
+    disposable corpus (preview writes nothing, apply touches only what changes,
+    re-applying is a no-op, the index sees it without a rebuild), plus
+    `merge_tags` after delegation and both relative-note paths.
 -   **Deep export (v1.7.0 Phase 1).** `:PKMExport` now opens with a mode
     choice, staying a single command rather than sprouting a second one
     (ROADMAP *Command clearup*: common options belong to one multimodal
@@ -59,6 +85,11 @@
     to the pre-Phase-3 comparator's on a fixture built to expose the difference.
 
 ### Changed
+-   **`citations.merge_tags` now delegates to `pkm.tags`** — the scan, the rules
+    and the writing are one rename operation applied to every indexed note, so
+    the loop that duplicated `readfile → parse → save → invalidate` is gone. Two
+    intended consequences: tag matching became case-insensitive (`Draft` merges
+    like `draft`), and tags untouched by the merge keep their original spelling.
 -   **Index build cost (v1.6.2 Phase 1).** `index.lua` listed note folders with
     `vim.fn.glob` and read every file with `vim.fn.readfile`. Profiling the
     build over 600 notes attributed **46% of it to the glob alone** and 34% to

@@ -975,71 +975,35 @@ end
 -- SECTION: Tag merging
 -- =============================================================================
 --- Merge a list of source tags into a single target tag across all notes.
---- Files containing any source tag will have those tags replaced by the target.
---- If the target tag is already present in a file alongside a source tag,
---- the source is removed and no duplicate is introduced.
+--- Files containing any source tag have those tags replaced by the target; if
+--- the target is already present alongside a source, the source is dropped and
+--- no duplicate appears.
+---
+--- The traversal, the rules and the writing all live in `pkm.tags` since
+--- v1.8.0 Ph1 — this is one rename operation applied to every indexed note.
+--- Two consequences of that move, both intended: tag matching is now
+--- case-insensitive (`Draft` merges like `draft`), and tags untouched by the
+--- merge keep the exact spelling they had in the file.
 --- @param source_tags table  List of tag strings to merge from
 --- @param target_tag  string Tag string to merge into
 --- @return number Count of modified files
 function M.merge_tags(source_tags, target_tag)
-  local source_set = {}
-  for _, t in ipairs(source_tags) do source_set[t] = true end
+  local tags = require('pkm.tags')
 
-  local search_paths = {
-    config.folders.consolidated,
-    config.folders.journal,
-    config.folders.scratchpad,
-  }
-
-  local modified = 0
-
-  for _, folder in ipairs(search_paths) do
-    if folder then
-      local search_path = utils.join(config.root_path, folder)
-      local files = vim.fn.glob(search_path .. utils.sep .. "*.md", false, true)
-      if type(files) ~= "table" then files = {} end
-
-      for _, file in ipairs(files) do
-        local content = vim.fn.readfile(file)
-        local fm, _ = yaml.parse_frontmatter(content)
-
-        if fm and type(fm.tags) == "table" then
-          local new_tags      = {}
-          local target_seen   = false  -- prevents duplicating the target
-          local changed       = false
-
-          for _, tag in ipairs(fm.tags) do
-            if source_set[tag] then
-              -- This is a source tag: replace with target (once)
-              changed = true
-              if not target_seen then
-                table.insert(new_tags, target_tag)
-                target_seen = true
-              end
-              -- source tag is dropped
-            elseif tag == target_tag then
-              -- Target already present; keep it, but don't add twice
-              if not target_seen then
-                table.insert(new_tags, tag)
-                target_seen = true
-              end
-            else
-              table.insert(new_tags, tag)
-            end
-          end
-
-          if changed then
-            fm.tags = new_tags
-            yaml.save_frontmatter(fm, nil, file)
-            require('pkm.index').invalidate(file)
-            modified = modified + 1
-          end
-        end
-      end
-    end
+  local rename = {}
+  for _, source in ipairs(source_tags or {}) do
+    rename[#rename + 1] = { from = source, to = target_tag }
   end
+  if #rename == 0 then return 0 end
 
-  return modified
+  local applied, errors = tags.apply(tags.all_note_paths(), { rename = rename })
+  if errors > 0 then
+    vim.notify(
+      string.format('[pkm] %d note%s could not be written while merging tags',
+        errors, errors == 1 and '' or 's'),
+      vim.log.levels.ERROR)
+  end
+  return applied
 end
 
 return M

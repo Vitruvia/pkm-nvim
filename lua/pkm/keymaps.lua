@@ -35,6 +35,7 @@ function M.register(config)
   end
 
   map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")
+  map(k.new_relative, "<cmd>PKMNewRelative<cr>", "New Relative Note")
   map(k.new_journal, "<cmd>PKMNewJournal<cr>", "New Journal")
   map(k.new_scratchpad, "<cmd>PKMNewScratchpad<cr>", "New Scratchpad")
   map(k.delete_note, "<cmd>PKMDeleteNote<cr>", "Delete Note")

@@ -183,7 +183,13 @@ v1.6.2  PATCH  Index build cost (bench-driven)             (after v1.6.1)
         Ph1 scandir + LuaJIT reader  ✅ done
 v1.7.0  MINOR  Exportation, note creation & header nav     (no deps)
         Ph1 deep export  ✅ done
-          Ph2 relative note   Ph3 header navigation
+          Ph2 relative note  ✅ done (shipped inside v1.8.0 Ph1)
+            Ph3 header navigation
+v1.8.0  MINOR  Bulk metadata operations                    (no deps)
+        Ph1 tag engine + relative note  ✅ done
+          Ph2 batch tag UI (picker reuse)
+            Ph3 view membership by tags
+              Ph4 bulk rename / title
 ```
 
 Dependency summary: v1.6.0 Ph1 precedes Ph2 and Ph3 (they build on
@@ -427,6 +433,10 @@ feat: deep export across the citation graph
 ```
 
 **Phase 2 — relative note (new note sharing the current note's tags).**
+✅ *Done — shipped as part of v1.8.0 Ph1*, where the tag engine it seeds from
+was built. Tags are read from the buffer (unsaved edits count) and normalised
+through `tags.plan`, so the new note carries exactly what `:PKMAddTag` would
+have written. `test/test_v180_p1.lua` covers it, including an untagged source.
 
 | File | Single-pass changes |
 |---|---|
@@ -479,6 +489,58 @@ feat: any-level header navigation
 - test: heading targeting over fixtures, including boundaries
 - docs: changelog; DA 1.2 (any-level header) promoted; native-motion note
 ```
+
+---
+
+#### v1.8.0 (MINOR) — Bulk metadata operations
+
+*Gathers the "reduce manual work" family that was scattered across Near goals:
+batch tags (§ 3.3), adding/removing a note from a view (§ 3.4), and bulk
+rename/title (previously unrecorded). They share one primitive — compute a
+metadata change, apply it to N notes — which is why they belong to one version;
+they are split into phases by how far each one's write can reach.*
+
+**Why rename is not in the same phase as tags.** Renaming fires
+`citations.update_references_on_rename` and `propagate_title`, which rewrite
+`[[links]]` and identifiers in every citing note. Multiplying the plugin's
+widest-blast-radius path by N alongside tag edits would violate the
+safe-co-modification principle, so it lands last, on machinery the earlier
+phases have already proven.
+
+**No new commands** beyond `:PKMNewRelative`: batch operations arrive as modes
+of `:PKMTags` and as an action of `:PKMView`, per *Command clearup* (Near goals
+4). The command surface is 45 registrations today.
+
+**Phase 1 — tag engine + relative note.** ✅ *Done (pending release tag).*
+
+| File | Single-pass changes |
+|---|---|
+| `tags.lua` (new) | `plan` (pure — rename→remove→add, case-insensitive, no duplicates, stored spelling preserved, remove beats add), `preview` (read-only), `apply` (writes + `index.invalidate`), `all_note_paths`. |
+| `citations.lua` | `merge_tags` delegates to `tags.apply`; its duplicated scan loop is gone. |
+| `notes.lua` | `create_new_note(note_type, opts)` seeds `opts.tags`; `create_relative_note()`. |
+| `commands.lua` / `keymaps.lua` / `config.lua` | `:PKMNewRelative` and the opt-in `keymaps.new_relative` (default `false`). |
+| `test/test_v180_p1.lua` | Pure rules, batch layer, `merge_tags` after delegation, both relative-note paths. |
+
+Invariants held: `apply` invalidates because it writes; the buffer-only tag
+commands still do not. No behaviour change to `merge_tags` beyond the two
+recorded in CHANGELOG (case-insensitive matching, spelling preserved).
+
+**Phase 2 — batch tag UI.** Extract the note-selection picker from `export.lua`
+into a reusable module, then give `:PKMTags` add/remove/rename modes over a
+selection, with the context shortcuts decided with the author: filter → picker
+(the export gesture), plus "the current view" and "the current note". The
+preview from Ph1 is what the UI shows before any write.
+
+**Phase 3 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
+sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4, plus an
+add/remove action in `:PKMView`. Must report when a view's filter cannot be
+satisfied by tags alone (`title:`/`text:`/`type:` predicates), rather than
+silently adding tags that will not make the note match.
+
+**Phase 4 — bulk rename / title.** Batch renaming and title changes over the
+same selection machinery, propagating through `update_references_on_rename` /
+`propagate_title`. Needs its own dry-run: a partial failure here leaves dangling
+links, which no other bulk operation risks.
 
 ---
 
@@ -643,8 +705,10 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
         note, like YAML frontmatter, code blocks, headers (no autowrapping
         headers with text that imediately precedes or follows them), tables, lists
         with custom prefixes, etc.;
-    3.  A way to batch add/modify tags.
-    4.  A way to "add" or "remove" file into a view (tag only). This feature is
+    3.  A way to batch add/modify tags. *(Promoted: engine done in v1.8.0 Ph1,
+        UI scheduled as v1.8.0 Ph2.)*
+    4.  A way to "add" or "remove" file into a view (tag only). *(Promoted:
+        scheduled as v1.8.0 Ph3.)* This feature is
     meant to grab all sets of tags (separated by an OR) that a view accepts. If
     only one is available, it is added to the file (no duplicates allowed). If
     more than one are available, the user is shown a panel with the options.

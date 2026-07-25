@@ -142,6 +142,12 @@ CREATION~
                         Type: 'note', 'bib', or 'agg'.
                         Prompts for type if omitted.
 
+:PKMNewRelative [type]  Create a consolidated note carrying the current note's
+                        tags, so it falls inside the same views without
+                        retyping its classification. Tags are read from the
+                        buffer, so unsaved tag edits count. Prompts for type
+                        if omitted.
+
 :PKMNewJournal          Create a journal entry timestamped to the current
                         time.
 
@@ -698,6 +704,7 @@ Additional keymaps (default false — assign to enable):
   focus_sidebar    jump focus directly to sidebar window
   toggle_file_explorer     toggle netrw / PKM views sidebar
   toggle_mode      :PKMMode toggle
+  new_relative     :PKMNewRelative
   set_title        :PKMSetTitle
   add_tag          :PKMAddTag
   remove_tag       :PKMRemoveTag

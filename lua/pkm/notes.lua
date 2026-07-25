@@ -6,7 +6,10 @@
 --
 -- Public API:
 --   setup(user_config)                        → Initialize with resolved PKM config
---   create_new_note(note_type?)               → Create consolidated note (prompts if nil)
+--   create_new_note(note_type?, opts?)        → Create consolidated note (prompts if nil);
+--                                               opts.tags seeds the frontmatter tags
+--   create_relative_note(note_type?)          → Create a note inheriting the current
+--                                               note's tags, so it lands in the same views
 --   create_scratchpad()                       → Create timestamped scratchpad note
 --   promote_note()                            → Promote scratchpad to consolidated or journal
 --   do_convert(current_path, current_type, target) → Perform note type conversion
@@ -138,12 +141,16 @@ end
 --- Prompts for type if not provided, then for title. Handles bib-specific
 --- fields (source_author, source_type) when type is "bib".
 ---@param note_type string|nil "note", "agg", or "bib" — prompts if nil
+---@param opts table|nil  { tags = string[] } seeds the new note's frontmatter
+---                       tags; used by create_relative_note()
 ---@return string|nil filepath Absolute path of created note, or nil on cancel
-function M.create_new_note(note_type)
+function M.create_new_note(note_type, opts)
+  opts = opts or {}
+
   if note_type == "" then
     note_type = nil
   end
-  
+
   -- If no type provided, prompt for it
   if not note_type then
     vim.ui.select(
@@ -159,7 +166,7 @@ function M.create_new_note(note_type)
       },
       function(selected)
         if selected then
-          M.create_new_note(selected) -- SIMPLIFIED recursive call
+          M.create_new_note(selected, opts) -- SIMPLIFIED recursive call
         else
           vim.notify("Note creation cancelled", vim.log.levels.INFO)
         end
@@ -207,7 +214,15 @@ function M.create_new_note(note_type)
   local frontmatter_data = {
     title = title ~= "" and title or "Unnamed Note",
   }
-  
+
+  -- Seeded tags (relative note). Normalised through pkm.tags so the new note
+  -- carries exactly what a tag written by :PKMAddTag would look like, with no
+  -- duplicates.
+  if type(opts.tags) == "table" and #opts.tags > 0 then
+    local seeded = require('pkm.tags').plan({}, { add = opts.tags })
+    if #seeded > 0 then frontmatter_data.tags = seeded end
+  end
+
   if note_type == "bib" then
     vim.fn.inputsave()
     local author = vim.fn.input("Author: ")
@@ -235,6 +250,44 @@ function M.create_new_note(note_type)
   
   vim.notify("Created: " .. filename, vim.log.levels.INFO)
   return filepath
+end
+
+--- Create a note that inherits the current note's tags.
+---
+--- A view is a filter over tags, so a note seeded with the same tags lands in
+--- the same views as the note it came from — which is the point: continuing a
+--- line of thought should not mean re-typing its classification.
+--- The source note is read from the buffer, so unsaved tag edits count.
+---@param note_type string|nil "note", "agg", or "bib" — prompts if nil
+---@return string|nil filepath
+function M.create_relative_note(note_type)
+  local filepath = vim.fn.expand('%:p')
+  if filepath == '' then
+    vim.notify('[pkm] no note in this buffer to take tags from', vim.log.levels.WARN)
+    return nil
+  end
+
+  local fm = require('pkm.yaml').parse_frontmatter(
+    vim.api.nvim_buf_get_lines(0, 0, -1, false))
+  if not fm then
+    vim.notify('[pkm] no frontmatter found in this buffer', vim.log.levels.WARN)
+    return nil
+  end
+
+  local source_tags = {}
+  if type(fm.tags) == 'table' then
+    source_tags = fm.tags
+  elseif type(fm.tags) == 'string' then
+    source_tags = { fm.tags }
+  end
+
+  if #source_tags == 0 then
+    vim.notify(
+      '[pkm] the current note has no tags — creating an untagged note',
+      vim.log.levels.INFO)
+  end
+
+  return M.create_new_note(note_type, { tags = source_tags })
 end
 
 --- Create a timestamped scratchpad note. Prompts for an optional title.

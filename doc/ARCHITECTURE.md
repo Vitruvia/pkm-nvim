@@ -31,6 +31,7 @@ pkm.nvim/
 │   ├── templates.lua   # Template application to notes
 │   ├── export.lua      # Note filtering and copy utility (read-only, no setup)
 │   ├── filter.lua      # Filter DSL parser and evaluator (pure logic, no I/O)
+│   ├── tags.lua        # Tag rules (pure), preview (read-only), batch apply (writes)
 │   ├── index.lua       # In-memory note index with incremental invalidation
 │   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
 │   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle)
@@ -162,6 +163,15 @@ panels/pickers and with the public sidebar accessors (`get_last_view`,
 into its own module — extraction would require a bidirectional dependency and a
 wider public surface. A cleaner split, if ever pursued, is to extract the *model*
 layer (sidecar + tree helpers + `match_all`), not the sidebar UI.
+
+**tags.lua** — tag computation and batch application, in three layers:
+`plan(tags, ops)` pure (every rule lives here — rename→remove→add, case-insensitive
+matching, no duplicates, surviving tags keep their stored spelling, remove beats
+add); `preview(paths, ops)` read-only; `apply(paths, ops)` the only writer, which
+**must** `index.invalidate` each note it writes — the mirror image of the
+buffer-only `citations.add_tag`/`remove_tag`, which must not. Consumed by
+`citations.merge_tags` and `notes.create_relative_note`; from v1.8.0 Ph2 on, by the
+batch tag UI.
 
 **panel.lua** — generic per-tabpage panel factory. `create(spec)` returns an independent
 panel object `{ open(init?), close(), toggle(init?), refresh(), is_open(), get_win() }`,

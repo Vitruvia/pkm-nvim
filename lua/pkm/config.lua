@@ -129,6 +129,7 @@ local defaults = {
   keymaps = {
     -- Note operations
     new_note         = "<leader>nn",
+    new_relative     = false,   -- new note inheriting the current note's tags
     new_journal      = "<leader>nj",
     new_scratchpad   = "<leader>ns",
     rename_note      = "<leader>nr",
