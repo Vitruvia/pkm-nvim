@@ -574,20 +574,61 @@ is a different operation with its own three-step flow; it shares only the
 | `commands.lua` | `:PKMTags` bare → the tag browser (mode menu only as the no-Telescope fallback); with arguments → one operation, deterministic over the whole vault, still gated by the change list. Completion for modes and existing tags. |
 | `test/test_v180_p4.lua` (new) | Registry, `scope_choices`, the whole argument contract with its refusals, `batch_on` writing without prompts. |
 
-**Phase 5 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
+**Phase 5 — naming a tag goes through the picker.** ✅ *Done (pending release tag).*
+
+| File | Single-pass changes |
+|---|---|
+| `tags.lua` | `rank_tags(rows, ctx)` pure — four tiers: on *some* of the selection, co-occurring with the selection's tags, unrelated (by usage), already on *all* of it. `suggest_tags(paths?)` gathers the context read-only. `ask_tags` routes all three modes through the picker, including the rename **destination** (existing tag = merge, new tag = rename). |
+| `picker.lua` | `select_tag` gained `opts.allow_new` (type to create; fallback offers `+ new tag…`), renders each row's `note`, and switched to a pass-through sorter so the caller's ranking reaches the screen. |
+| `test/test_v180_p5.lua` (new) | The tiers and their wording, purity of the input, `suggest_tags` over a corpus, the create path through the fallback. |
+
+**Phase 6 — bulk rename / title, with patterns.** The last and widest: renaming
+fires `citations.update_references_on_rename` and `propagate_title`, which
+rewrite `[[links]]` and identifiers in every citing note, so a partial failure
+leaves dangling links that no other bulk operation risks.
+
+*Why it needs patterns.* The notes in a selection do **not** share a name. The
+operation is therefore never "set the name to X" but "change this part of each
+name", and the design has to name the part. Planned pattern set, smallest that
+covers the author's cases:
+
+| Operation | Example |
+|---|---|
+| add prefix / suffix | `Kant` → `[wip] Kant` |
+| remove a substring | `[wip] Kant` → `Kant` |
+| replace a substring | `Draft — Kant` → `Notes — Kant` |
+| capture-and-rebuild | `Aula 03 - Kant` → `Kant (aula 03)` |
+
+Constraints, decided in advance:
+
+- **The core is pure.** `rename.plan_names(names, pattern)` → `{ before, after }`
+  per note, with no I/O, exactly as `tags.plan` is. Every rule (what a pattern
+  means, what happens on no match) lives there and is tested without a file.
+- **Literal by default.** A pattern is a plain substring unless the user opts
+  into captures; Lua patterns' magic characters (`-`, `.`, `%`, `(`) appear in
+  real note names and must not silently misfire. The capture form is a separate,
+  explicitly chosen mode.
+- **Filename and title are the same operation over different fields**, and both
+  are offered on the same selection — the difference is which string the plan
+  reads and which propagation the write triggers.
+- **Collisions are refused, not resolved.** Two notes planning the same filename
+  is an error surfaced before anything is written; the numbering prefix is
+  never part of the editable span (`0042_note_` stays).
+- **Dry-run before the write**, showing `before → after` per note plus the count
+  of citing notes each rename would touch. This is what `picker.confirm`
+  (all-or-nothing) was kept for: a rename that half-applies is worse than one
+  refused, so this confirmation does *not* let notes be dropped one by one.
+
+Ships as a registry row (`rename_files` / `set_titles`), inheriting `<C-a>` in
+every panel, plus argument forms on an existing command per the surface policy.
+
+**Phase 7 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
 sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4. Ships as
 **two rows in the action registry** (`view_add` / `view_remove`), so every panel
 that already has `<C-a>` gains it for free; the sidebar's note list gets its
 multi-selection here, since this phase is already in that surface. Must report
 when a view's filter cannot be satisfied by tags alone (`title:`/`text:`/`type:`
 predicates), rather than silently adding tags that will not make the note match.
-
-**Phase 6 — bulk rename / title.** Batch renaming and title changes over the
-same selection machinery, propagating through `update_references_on_rename` /
-`propagate_title`. Also a registry row, so it inherits every entry point. Needs
-its own dry-run: a partial failure here leaves dangling links, which no other
-bulk operation risks — this is the case `picker.confirm` (all-or-nothing gate)
-is kept for.
 
 ---
 

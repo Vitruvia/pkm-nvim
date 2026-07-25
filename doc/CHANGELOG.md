@@ -5,6 +5,27 @@
 ## [Unreleased]
 
 ### Added
+-   **Naming a tag goes through the picker (v1.8.0 Phase 5).** All three batch
+    modes now name their tag the same way, and always show what the tag already
+    means in the vault. `add` no longer asks for free text blind: it offers every
+    tag **ordered by relevance to the selection** — first the ones already on
+    *some* of the selected notes (completing a set is the usual reason to reach
+    for a tag), then tags that keep company with the selection's tags elsewhere
+    in the vault, then the rest by usage, and last the ones already on *all* of
+    them, labelled as changing nothing. Typing a tag that does not exist offers
+    to create it, so one screen answers both "which of my tags?" and "a new one".
+    `rename` gained the same picker for its **destination**: choosing an existing
+    tag merges into it, typing a new one renames to it.
+-   `tags.rank_tags(rows, ctx)` — the ranking, pure: every input explicit, rows
+    copied rather than reordered, and each copy carrying the note that explains
+    its position (`on 2 of 4 selected`, `co-occurs on 7 notes`). `suggest_tags`
+    is the read-only wrapper that gathers the context from the index.
+-   `picker.select_tag` gained `opts.allow_new` (type to create, with the fallback
+    offering `+ new tag…` then a prompt) and now renders each row's `note`. Its
+    sorter became pass-through, so the caller's ranking survives to the screen.
+-   `test/test_v180_p5.lua` — the four ranking tiers and their wording, the input
+    left untouched, `suggest_tags` over a corpus (partial coverage, co-occurrence,
+    unrelated, already-on-all), and the create-a-tag path through the fallback.
 -   **Bulk actions start from the selection (v1.8.0 Phase 4).** `<C-a>` in any
     note picker runs a bulk operation over **the notes marked there** — or, with
     nothing marked, over everything the prompt leaves listed — the same rule

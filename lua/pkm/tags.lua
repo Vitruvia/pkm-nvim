@@ -50,6 +50,8 @@
 --   plan(tags, ops)        → (new_tags, changed) — pure
 --   preview(paths, ops)    → { {path, before, after}… } — read-only
 --   tag_counts(paths?)     → { {tag, count, paths}… } sorted — read-only
+--   rank_tags(rows, ctx)   → the same rows ordered by relevance — pure
+--   suggest_tags(paths?)   → every tag, ranked for that selection — read-only
 --   format_change(item)    → one "before → after" display line — pure
 --   apply(paths, ops)      → (applied, errors) — writes and invalidates
 --   all_note_paths()       → every indexed note path (helper for whole-vault ops)
@@ -264,6 +266,110 @@ function M.tag_counts(paths)
   return rows
 end
 
+--- Order tags by how likely they are to be the one wanted for a selection.
+--- Pure: every input is explicit, so the ranking can be asserted without a
+--- vault. Rows are copied, never reordered in place, and each copy carries the
+--- `note` explaining why it sits where it does.
+---
+--- Four tiers, in this order:
+---   1. already on *some* of the selected notes — completing a set is the most
+---      common reason to reach for a tag;
+---   2. tags that co-occur, elsewhere in the vault, with the tags the selection
+---      already has;
+---   3. everything else, most used first;
+---   4. already on *all* of them — adding it would change nothing, so it goes
+---      last rather than being hidden.
+---@param rows table[]  { { tag, count, paths }, … }
+---@param ctx  table    { selected_count, on_selected = {tag→n}, cooccurrence = {tag→n} }
+---@return { tag: string, count: integer, paths: string[], note: string|nil }[]
+function M.rank_tags(rows, ctx)
+  ctx = ctx or {}
+  local selected_count = ctx.selected_count or 0
+  local on_selected    = ctx.on_selected or {}
+  local cooccurrence   = ctx.cooccurrence or {}
+
+  local ranked = {}
+  for _, row in ipairs(rows) do
+    local on   = on_selected[row.tag] or 0
+    local cooc = cooccurrence[row.tag] or 0
+
+    local tier, score, note
+    if on > 0 and on < selected_count then
+      tier, score = 1, on
+      note = string.format('on %d of %d selected', on, selected_count)
+    elseif on > 0 then
+      tier, score = 4, on
+      note = 'already on all selected'
+    elseif cooc > 0 then
+      tier, score = 2, cooc
+      note = string.format('co-occurs on %d note%s', cooc, cooc == 1 and '' or 's')
+    else
+      tier, score = 3, row.count
+    end
+
+    ranked[#ranked + 1] = {
+      tag   = row.tag,
+      count = row.count,
+      paths = row.paths,
+      note  = note,
+      _tier = tier,
+      _score = score,
+    }
+  end
+
+  table.sort(ranked, function(a, b)
+    if a._tier ~= b._tier then return a._tier < b._tier end
+    if a._score ~= b._score then return a._score > b._score end
+    return a.tag < b.tag
+  end)
+
+  return ranked
+end
+
+--- Every vault tag, ordered by relevance to a selection of notes.
+--- Read-only. The ranking itself is `rank_tags`; this only gathers the context
+--- it needs — which of the selection's notes already carry each tag, and which
+--- tags keep company with the selection's tags elsewhere in the vault.
+---@param paths string[]|nil  The selection; nil ranks by usage alone
+---@return { tag: string, count: integer, paths: string[], note: string|nil }[]
+function M.suggest_tags(paths)
+  local all = M.tag_counts()
+  if not paths or #paths == 0 then
+    return M.rank_tags(all, {})
+  end
+
+  local on_selected = {}
+  local sel_set     = {}
+  for _, row in ipairs(M.tag_counts(paths)) do
+    on_selected[row.tag] = row.count
+    sel_set[row.tag]     = true
+  end
+
+  -- Co-occurrence: on every note that shares a tag with the selection, count
+  -- the tags the selection does not have yet.
+  local cooccurrence = {}
+  for _, entry in ipairs(require('pkm.index').get_all()) do
+    local shares, others = false, {}
+    for _, tag in ipairs(entry.tags or {}) do
+      local norm = M.normalize(tag)
+      if norm then
+        if sel_set[norm] then shares = true else others[norm] = true end
+      end
+    end
+    if shares then
+      for tag in pairs(others) do
+        cooccurrence[tag] = (cooccurrence[tag] or 0) + 1
+      end
+    end
+  end
+
+  return M.rank_tags(all, {
+    selected_count = #paths,
+    on_selected    = on_selected,
+    cooccurrence   = cooccurrence,
+  })
+end
+
 --- Render one preview() item as a display row: "stem   before → after".
 --- Pure, so the wording shown before a destructive write is testable.
 ---@param item table  One entry of a preview() result
@@ -407,19 +513,31 @@ local function choose_scope(on_paths)
   end)
 end
 
---- Ask for the tag(s) an operation needs.
---- `remove` and `rename` offer only the tags carried by the selected notes —
---- acting on a tag absent from the selection can only be a mistake — with the
---- count of selected notes each one appears on; `add` takes free text.
+--- Ask for the tag(s) an operation needs. Every mode goes through the same
+--- picker, so naming a tag always looks the same and always shows what the tag
+--- already means in the vault:
+---
+---   add     every tag, ordered by relevance to the selection (see
+---           suggest_tags), and typing a tag that does not exist creates it.
+---   remove  only the tags the selected notes actually carry — removing one
+---           they do not have could only be a mistake.
+---   rename  the same list for the source; then every tag for the destination,
+---           where picking an existing one merges into it and typing a new one
+---           renames to it.
 ---@param kind    string    'add' | 'remove' | 'rename'
 ---@param paths   string[]  The notes the operation will run over
 ---@param on_ops  function(ops: table, header: string)
 local function ask_tags(kind, paths, on_ops)
+  local picker = require('pkm.picker')
+
   if kind == 'add' then
-    vim.ui.input({ prompt = 'Tag to add: ' }, function(tag)
-      local t = M.normalize(tag)
-      if not t then return end
-      vim.schedule(function() on_ops({ add = { t } }, "Add tag '" .. t .. "'") end)
+    picker.select_tag(M.suggest_tags(paths), {
+      title     = 'Tag to add',
+      allow_new = true,
+    }, function(chosen)
+      local tag = M.normalize(chosen)
+      if not tag then return end
+      on_ops({ add = { tag } }, "Add tag '" .. tag .. "'")
     end)
     return
   end
@@ -431,28 +549,34 @@ local function ask_tags(kind, paths, on_ops)
   end
 
   local title = kind == 'remove' and 'Tag to remove' or 'Tag to rename'
-  require('pkm.picker').select_tag(rows, { title = title }, function(chosen)
+  picker.select_tag(rows, { title = title }, function(chosen)
     local from = M.normalize(chosen)
     if not from then return end
 
     if kind == 'remove' then
-      vim.schedule(function()
-        on_ops({ remove = { from } }, "Remove tag '" .. from .. "'")
-      end)
+      on_ops({ remove = { from } }, "Remove tag '" .. from .. "'")
       return
     end
 
-    vim.ui.input({ prompt = string.format("Rename '%s' to: ", from) }, function(to)
+    -- Destination: every tag but the source. Choosing one that exists merges
+    -- into it — the same operation :PKMMergeTags performs, reached from here.
+    local targets = {}
+    for _, row in ipairs(M.suggest_tags(paths)) do
+      if row.tag ~= from then targets[#targets + 1] = row end
+    end
+
+    picker.select_tag(targets, {
+      title     = string.format("Rename '%s' to", from),
+      allow_new = true,
+    }, function(to)
       local target = M.normalize(to)
       if not target then return end
       if target == from then
         vim.notify('[pkm] same tag — nothing to do', vim.log.levels.INFO)
         return
       end
-      vim.schedule(function()
-        on_ops({ rename = { { from = from, to = target } } },
-          string.format("Rename '%s' to '%s'", from, target))
-      end)
+      on_ops({ rename = { { from = from, to = target } } },
+        string.format("Rename '%s' to '%s'", from, target))
     end)
   end)
 end

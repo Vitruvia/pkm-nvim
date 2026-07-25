@@ -174,8 +174,10 @@ knows which — with one rule in both: `<CR>` with nothing marked confirms every
 currently listed, `<Tab>` narrows to marks. `opts.display` (v1.8.0 Ph3) is the row
 renderer, which is what lets a batch preview be the same picker showing
 "before → after" instead of a screen with its own gesture. `select_tag(rows, opts,
-on_choice)` picks one tag from counted rows, previewing the notes that carry it; it
-takes the rows ready-made, so the module has no dependency on the tag engine.
+on_choice)` picks one tag from counted rows, previewing the notes that carry it and
+showing each row's `note`; with `opts.allow_new` typing an unknown tag offers to
+create it. Its sorter is pass-through, so the caller's ranking is what the user
+sees; it takes the rows ready-made, so the module has no dependency on the tag engine.
 `confirm(opts)` remains for all-or-nothing gates (`<CR>` accepts, `q`/`<Esc>` backs
 out) where a per-note choice would be a lie. Writes nothing itself. Consumed by
 `export.lua` and `tags.lua`.
@@ -196,7 +198,10 @@ add); `preview(paths, ops)` and `tag_counts(paths?)` read-only; `apply(paths, op
 the only writer, which **must** `index.invalidate` each note it writes — the mirror
 image of the buffer-only `citations.add_tag`/`remove_tag`, which must not.
 `tag_counts` sources tags from the index (so `Draft`/`draft` collapse into one row)
-and restricts to a selection when given one; `format_change(item)` is pure so the
+and restricts to a selection when given one; `rank_tags(rows, ctx)` is pure and
+orders them by relevance to a selection (on some of it → co-occurring → by usage →
+already on all of it), with `suggest_tags(paths?)` gathering that context
+read-only; `format_change(item)` is pure so the
 wording shown before a destructive write is testable, as are `scope_choices` and
 `parse_command_args` (the `:PKMTags` argument contract). The interactive layer is
 `browse_by_tag()` and `batch_on(paths, kind, ops?, header?)` — a selection that

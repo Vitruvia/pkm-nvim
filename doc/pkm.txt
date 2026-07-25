@@ -136,9 +136,16 @@ tree's <C-f> — mark notes with <Tab> and press <C-a>. With nothing marked,
 The action menu is short (add, remove or rename a tag; more in later versions).
 After it, two steps, and nothing is written until the last is confirmed:
 
-  1. Tag      free text when adding; when removing or renaming, the tags the
-              selected notes actually carry, each with the number of selected
-              notes it is on, previewing those notes as you move.
+  1. Tag      always the same picker. Adding offers every tag, ordered by
+              relevance to your selection: first the ones already on some of
+              the selected notes ("on 2 of 5 selected"), then tags that keep
+              company with theirs ("co-occurs on 7 notes"), then the rest by
+              usage, and last the ones already on all of them. Type a tag that
+              does not exist and it offers to create it.
+              Removing offers only the tags the selected notes carry.
+              Renaming asks for the source that way, then for the destination
+              from the same picker — an existing tag merges into it, a new one
+              renames to it.
   2. Confirm  the note picker again, one row per affected note showing its
               "before -> after" tags. <CR> applies to everything listed, so
               narrowing or marking here drops notes from the batch;
