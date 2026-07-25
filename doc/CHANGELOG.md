@@ -18,6 +18,17 @@
     — pure, so "the marked ones, or everything listed, in the order on screen"
     is asserted without opening a window. A mark for a note that is no longer
     listed is dropped rather than acted on.
+-   **`<C-a>` in `:PKMViews` when Telescope is installed.** Ph4 and Ph6 wired the
+    bulk-action key into `_views_panel` — the `panel.lua` fallback — but
+    `:PKMViews` dispatches to `telescope_views_tree_picker` whenever Telescope is
+    present, which is the path most users actually get. `<Tab>` appeared to work
+    there because it is Telescope's own multi-select; `<C-a>` was simply unmapped.
+    Both modes of that picker now have it: over notes, the marked ones or
+    everything the prompt leaves listed; over a view, every note it matches.
+    `<Tab>`/`<S-Tab>` are also mapped explicitly to toggle-and-step, matching
+    `picker.select`, rather than relying on Telescope's sorter-relative defaults.
+    Not caught by the phase test because Telescope is absent in headless — every
+    Telescope-backed surface stays smoke-only.
 -   `test/test_v180_p6.lua` — the pure rule, then the sidebar driven for real:
     opened on a disposable view, marked through its own keymaps, and inspected
     through its buffer (the marker reaches the screen, survives a refresh, keeps

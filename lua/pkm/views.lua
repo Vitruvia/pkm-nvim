@@ -1385,15 +1385,47 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
             open_relative_split(direction, sel.value, invocation_win, invocation_was_sidebar)
           end)
         end
+        -- <C-a>: bulk actions over the marked notes, or over everything the
+        -- prompt leaves listed — the same rule picker.select follows.
+        local function bulk_actions()
+          local picker     = action_state.get_current_picker(prompt_bufnr)
+          local selections = picker:get_multi_selection()
+
+          local paths = {}
+          if #selections > 0 then
+            for _, sel in ipairs(selections) do paths[#paths + 1] = sel.value end
+          else
+            for entry in picker.manager:iter() do paths[#paths + 1] = entry.value end
+          end
+
+          actions.close(prompt_bufnr)
+          if #paths == 0 then
+            vim.notify('[pkm] no notes to act on', vim.log.levels.INFO)
+            return
+          end
+          vim.schedule(function() require('pkm.actions').run(paths) end)
+        end
         local function do_help()
           show_keymap_help(' Browse All Notes Keymaps ', {
             '  <CR>     open note',
+            '  <Tab>    mark note',
+            '  <C-a>    bulk actions on marked notes (or all listed)',
             '  <C-f>    back to views',
             '  <C-v>    open note: split right',
             '  <C-x>    open note: split left',
             '  ?        this help',
           })
         end
+        -- Marking, spelled the same way as in picker.select.
+        local sel_next = actions.toggle_selection + actions.move_selection_next
+        local sel_prev = actions.toggle_selection + actions.move_selection_previous
+        map('i', '<Tab>',   sel_next)
+        map('n', '<Tab>',   sel_next)
+        map('i', '<S-Tab>', sel_prev)
+        map('n', '<S-Tab>', sel_prev)
+
+        map('i', '<C-a>', bulk_actions)
+        map('n', '<C-a>', bulk_actions)
         map('i', '<C-f>', go_views)
         map('n', '<C-f>', go_views)
         map('i', '<C-v>', function() do_split('right') end)
@@ -1460,9 +1492,25 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
         actions.close(prompt_bufnr)
         if sel then vim.schedule(function() M.edit_view(sel.value) end) end
       end
+      -- <C-a>: bulk actions over every note the view under the cursor
+      -- matches. Views are not notes, so there is nothing to mark here.
+      local function bulk_actions()
+        local sel = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        if not sel then return end
+
+        local paths = M.match_all(sel.value)
+        if #paths == 0 then
+          vim.notify("[pkm] view '" .. sel.value .. "' matches no notes",
+            vim.log.levels.INFO)
+          return
+        end
+        vim.schedule(function() require('pkm.actions').run(paths) end)
+      end
       local function do_help()
         show_keymap_help(' PKM Views Keymaps ', {
           '  <CR>     open view',
+          '  <C-a>    bulk actions on this view\'s notes',
           '  <C-f>    browse all notes',
           '  n        new view',
           '  u        update view (rename/reparent/edit filter)',
@@ -1470,6 +1518,8 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
         })
       end
 
+      map('i', '<C-a>', bulk_actions)
+      map('n', '<C-a>', bulk_actions)
       map('i', '<C-f>', go_browse)
       map('n', '<C-f>', go_browse)
       map('n', 'n', do_new)
