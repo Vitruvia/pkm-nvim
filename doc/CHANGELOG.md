@@ -26,6 +26,19 @@
     `describe`, `format_change`, and `apply_titles(plan)` as the only writer —
     one frontmatter write per changed note plus the mandatory
     `index.invalidate`, then a **single** propagation pass.
+-   **The panel comes back after a write.** Applying no longer ends the session:
+    the substitution panel reopens over the same notes, now reading as they do
+    on disk, so a second substitution costs no reopening. `<Esc>` is what ends
+    it. `<C-b>` steps back to a picker over the same notes, for when the
+    *selection* was wrong rather than the expression.
+-   **`lua/pkm/bufsync.lua`** — open buffers are kept in agreement with what a
+    bulk write put on disk. An **unmodified** buffer holding a written note is
+    reloaded silently. A **modified** one is not: the batch asks first
+    (`y`/`n`, and only when at least one note is actually open with unsaved
+    changes, so the common case sees no prompt), saving them before the write on
+    `y`, and on `n` proceeding but saying plainly that saving that buffer later
+    will overwrite the change. Wired into the title panel and into the batch tag
+    flow, which had the same exposure.
 -   **`picker.select_live(opts, on_confirm)`** — the front-end behind it, and
     reusable: `compute(prompt)` turns what is typed into rows, `display` draws
     them, `preview` renders the result of the row under the cursor. Bulk file

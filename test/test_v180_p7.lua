@@ -257,6 +257,73 @@ do
 end
 
 -- =============================================================================
+-- bufsync: open buffers agree with what the batch wrote
+-- =============================================================================
+
+local bufsync = require('pkm.bufsync')
+
+do
+  check("a note with no buffer is not found", bufsync.buffer_for(p2) == nil)
+  check("and contributes nothing to the unsaved set", #bufsync.unsaved({ p1, p2 }) == 0)
+end
+
+do
+  vim.cmd('edit ' .. vim.fn.fnameescape(p1))
+  local bufnr = vim.api.nvim_get_current_buf()
+
+  check("an open note is found", bufsync.buffer_for(p1) == bufnr,
+    tostring(bufsync.buffer_for(p1)))
+  check("a path spelled the other way round still finds it",
+    bufsync.buffer_for((p1:gsub('\\', '/'))) == bufnr)
+  check("an untouched buffer is not reported as unsaved",
+    #bufsync.unsaved({ p1 }) == 0)
+
+  -- Write to the file behind the buffer's back, as a batch does.
+  local fm = select(1, rename.read_title(p1))
+  fm.title = 'Alterado fora do buffer'
+  yaml.save_frontmatter(fm, nil, p1)
+
+  local before = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+  check("the buffer still shows the old text",
+    before:find('Alterado fora', 1, true) == nil)
+
+  check("reload re-reads it", bufsync.reload({ p1 }) == 1)
+  local after = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+  check("and the new title is on screen",
+    after:find('Alterado fora do buffer', 1, true) ~= nil, after:sub(1, 80))
+end
+
+do
+  -- A modified buffer must never be reloaded from under the user.
+  vim.cmd('edit ' .. vim.fn.fnameescape(p1))
+  local bufnr = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { 'edição não salva' })
+
+  local dirty, bufs = bufsync.unsaved({ p1, p2 })
+  check("an edited buffer is reported as unsaved",
+    #dirty == 1 and bufs[1] == bufnr, tostring(#dirty))
+
+  check("reload leaves it alone", bufsync.reload({ p1 }) == 0)
+  local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+  check("so the unsaved edit survives",
+    text:find('edição não salva', 1, true) ~= nil)
+
+  check("save writes it", bufsync.save({ p1 }) == 1)
+  check("after which it is no longer unsaved", #bufsync.unsaved({ p1 }) == 0)
+  check("and the edit reached the file",
+    table.concat(utils.read_lines(p1), '\n'):find('edição não salva', 1, true) ~= nil)
+
+  vim.cmd('silent! bwipeout!')
+end
+
+do
+  -- The gate does not interrupt when there is nothing to ask about.
+  local reached = false
+  bufsync.guard({ p2 }, function() reached = true end)
+  check("guard passes straight through when nothing is unsaved", reached)
+end
+
+-- =============================================================================
 
 print(string.format("== %s (%d failure%s) ==",
   failures == 0 and "PASS" or "FAIL", failures, failures == 1 and "" or "s"))

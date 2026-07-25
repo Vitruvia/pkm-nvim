@@ -164,6 +164,14 @@ refused, and an invalid one is reported on the row it fails on — the rest of t
 batch is unaffected. Titles are propagated too: every note citing a retitled one
 has its stored copy updated, in a single pass over the vault.
 
+The panel reopens after applying, over the notes as they now read, so a second
+substitution costs nothing; <Esc> closes it. <C-b> steps back to a picker over
+the same notes, for when the selection was wrong rather than the expression.
+
+Notes you have open are kept in step: an unmodified buffer is reloaded after the
+write, and one with unsaved changes is never reloaded behind your back — you are
+asked (y/n) whether to save it first, and only when there is one.
+
 TAG BATCHES~
 Two steps, and nothing is written until the last is confirmed:
 

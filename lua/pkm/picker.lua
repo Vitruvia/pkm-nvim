@@ -299,7 +299,7 @@ end
 -- confirmation. `compute(prompt)` owns the meaning of the text; this module
 -- only draws rows and collects the answer.
 
----@param opts       table  { title, hint, compute, display, preview?, on_cancel? }
+---@param opts       table  { title, hint, compute, display, preview?, on_back?, on_cancel? }
 ---@param on_confirm function(rows: table[])
 local function telescope_select_live(opts, on_confirm)
   local pickers      = require('telescope.pickers')
@@ -313,7 +313,8 @@ local function telescope_select_live(opts, on_confirm)
     sorting_strategy = 'ascending',
     layout_config    = { prompt_position = 'top' },
   }, {
-    prompt_title = opts.title .. '  ·  <Tab> mark subset  ·  <CR> ' .. opts.hint,
+    prompt_title = opts.title .. '  ·  <Tab> mark subset  ·  <CR> ' .. opts.hint
+      .. (opts.on_back and '  ·  <C-b> back' or ''),
 
     finder = finders.new_dynamic({
       fn = function(prompt) return opts.compute(prompt) end,
@@ -343,6 +344,17 @@ local function telescope_select_live(opts, on_confirm)
       map('n', '<Tab>',   sel_next)
       map('i', '<S-Tab>', sel_prev)
       map('n', '<S-Tab>', sel_prev)
+
+      -- <C-b>: step back to whatever chose this set of notes, for when the
+      -- selection was wrong rather than the expression.
+      if opts.on_back then
+        local function go_back()
+          actions.close(prompt_bufnr)
+          vim.schedule(opts.on_back)
+        end
+        map('i', '<C-b>', go_back)
+        map('n', '<C-b>', go_back)
+      end
 
       actions.select_default:replace(function()
         local picker     = action_state.get_current_picker(prompt_bufnr)
@@ -528,6 +540,7 @@ end
 ---@param opts       table  { title, hint, compute = function(prompt)→rows,
 ---                           display = function(row)→string,
 ---                           preview? = function(row)→string[],
+---                           on_back? = function  (bound to <C-b>),
 ---                           on_cancel? = function }
 ---@param on_confirm function(rows: table[])
 function M.select_live(opts, on_confirm)

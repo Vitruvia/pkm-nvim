@@ -2,7 +2,8 @@
 -- pkm.rename — Substitution over the names of a set of notes
 -- =============================================================================
 -- Dependencies : pkm.utils, pkm.yaml (lazy), pkm.index (lazy),
---                pkm.citations (lazy), pkm.picker (lazy, interactive flow only)
+--                pkm.citations (lazy), pkm.picker / pkm.bufsync
+--                (lazy, interactive flow only)
 -- Consumed by  : pkm.actions (set_titles)
 --
 -- The notes in a selection do **not** share a name, so a bulk operation over
@@ -281,6 +282,11 @@ end
 --- Typing the substitution is the preview: rows show `before → after` as the
 --- expression is written, and `<CR>` applies to what is listed. There is no
 --- form and no separate confirmation screen — the panel is both.
+---
+--- The panel comes back after a write, so several substitutions can be made in
+--- a row without reopening anything; `<Esc>` is what ends the session. `<C-b>`
+--- steps back to a picker over the same notes, for when the *selection* was
+--- wrong rather than the expression.
 ---@param paths string[]  Notes already chosen, e.g. the marks in a panel
 function M.title_flow(paths)
   if not paths or #paths == 0 then
@@ -309,24 +315,55 @@ function M.title_flow(paths)
     return rows
   end
 
-  require('pkm.picker').select_live({
+  local picker = require('pkm.picker')
+
+  --- Re-choose which notes, then come straight back here.
+  local function go_back()
+    picker.select(paths, {
+      title = 'Notes to retitle',
+      hint  = 'use listed',
+    }, function(chosen) M.title_flow(chosen) end)
+  end
+
+  picker.select_live({
     title     = string.format('Change %d title%s  ·  pattern/replacement',
       #items, #items == 1 and '' or 's'),
     hint      = 'apply to listed',
     compute   = compute,
     display   = M.format_change,
     preview   = preview_lines,
+    on_back   = go_back,
     on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
   }, function(rows)
-    local applied, errors = M.apply_titles(rows)
-    if applied == 0 and errors == 0 then
+    local targets = {}
+    for _, row in ipairs(rows) do
+      if row.changed and not row.error then targets[#targets + 1] = row.key end
+    end
+
+    if #targets == 0 then
       vim.notify('[pkm] nothing to change — no replacement given?', vim.log.levels.INFO)
+      M.title_flow(paths)
       return
     end
-    vim.notify(string.format('[pkm] %d title%s updated%s',
-      applied, applied == 1 and '' or 's',
-      errors > 0 and (', ' .. errors .. ' failed') or ''),
-      errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
+
+    -- Notes open with unsaved edits are asked about before anything is written;
+    -- the common case never sees a prompt.
+    local bufsync = require('pkm.bufsync')
+    bufsync.guard(targets, function()
+      local applied, errors = M.apply_titles(rows)
+
+      -- What is on screen must agree with what is now on disk.
+      bufsync.reload(targets)
+
+      vim.notify(string.format('[pkm] %d title%s updated%s',
+        applied, applied == 1 and '' or 's',
+        errors > 0 and (', ' .. errors .. ' failed') or ''),
+        errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
+
+      -- Back to the panel, over the notes as they now read: one more
+      -- substitution costs no reopening, and <Esc> is what ends the session.
+      M.title_flow(paths)
+    end)
   end)
 end
 

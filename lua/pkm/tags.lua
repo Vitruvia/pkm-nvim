@@ -2,7 +2,8 @@
 -- pkm.tags — Tag computation and batch application
 -- =============================================================================
 -- Dependencies : pkm.yaml (lazy), pkm.utils, pkm.index (lazy),
---                pkm.picker / pkm.filter / pkm.views (lazy, interactive flow only)
+--                pkm.picker / pkm.filter / pkm.views / pkm.bufsync
+--                (lazy, interactive flow only)
 -- Consumed by  : pkm.citations (merge_tags), pkm.notes (relative note),
 --                pkm.commands (:PKMTags batch modes)
 --
@@ -697,11 +698,19 @@ local function confirm_and_apply(paths, ops, header)
     display   = function(path) return M.format_change(by_path[path]) end,
     on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
   }, function(confirmed)
-    local applied, errors = M.apply(confirmed, ops)
-    vim.notify(string.format('[pkm] %s — %d note%s updated%s',
-      header, applied, applied == 1 and '' or 's',
-      errors > 0 and (', ' .. errors .. ' failed') or ''),
-      errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
+    -- Notes open with unsaved edits are asked about before anything is
+    -- written, and every open buffer is re-read afterwards so what is on
+    -- screen agrees with what is on disk.
+    local bufsync = require('pkm.bufsync')
+    bufsync.guard(confirmed, function()
+      local applied, errors = M.apply(confirmed, ops)
+      bufsync.reload(confirmed)
+
+      vim.notify(string.format('[pkm] %s — %d note%s updated%s',
+        header, applied, applied == 1 and '' or 's',
+        errors > 0 and (', ' .. errors .. ' failed') or ''),
+        errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
+    end)
   end)
 end
 

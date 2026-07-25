@@ -34,7 +34,8 @@ pkm.nvim/
 │   ├── tags.lua        # Tag rules (pure), preview (read-only), batch apply (writes)
 │   ├── picker.lua      # Shared note picker + confirmation float (Telescope or fallback)
 │   ├── actions.lua     # Bulk-action registry over a set of notes (panel <C-a>)
-│   ├── rename.lua      # Name patterns (pure), bulk title write + propagation
+│   ├── rename.lua      # Name substitution (pure), bulk title write + propagation
+│   ├── bufsync.lua     # Open buffers vs. bulk disk writes (reload / ask / save)
 │   ├── index.lua       # In-memory note index with incremental invalidation
 │   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
 │   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle)
@@ -186,6 +187,12 @@ operation is written and seen in a single panel rather than a form followed by a
 result screen. `confirm(opts)` remains for all-or-nothing gates (`<CR>` accepts,
 `q`/`<Esc>` backs out) where a per-note choice would be a lie. Writes nothing
 itself. Consumed by `export.lua`, `tags.lua` and `rename.lua`.
+
+**bufsync.lua** — keeps open buffers in agreement with what a bulk write put on
+disk (v1.8.0 Ph7). `reload(paths)` re-reads unmodified buffers and deliberately
+skips modified ones; `unsaved(paths)` finds the notes open with pending edits and
+`guard(paths, on_ready)` asks about them **only when there are any**, so the
+common case is promptless. Consumed by `rename.lua` and `tags.lua`.
 
 **rename.lua** — substitution over the names of a set of notes (v1.8.0 Ph7). The
 notes in a selection do not share a name, so the input is a *substitution*, not a
