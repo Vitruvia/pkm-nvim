@@ -193,6 +193,71 @@ do
 end
 
 -- =============================================================================
+-- The view's own note list (M.open) — the surface reached by pressing <CR> on
+-- a view. Headless has no Telescope, so this drives the float fallback; the
+-- Telescope twin of this picker is smoke-only, and was where <C-a> was missing.
+-- =============================================================================
+
+do
+  views.open('ph6')
+
+  local buf = vim.api.nvim_win_get_buf(0)
+  local function float_lines()
+    return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  end
+  local function float_marked()
+    local n = 0
+    for _, line in ipairs(float_lines()) do
+      if line:sub(1, #'▸') == '▸' then n = n + 1 end
+    end
+    return n
+  end
+
+  check("the view opened its note list", (function()
+    for _, line in ipairs(float_lines()) do
+      if line:find('View: ph6', 1, true) then return true end
+    end
+    return false
+  end)(), table.concat(float_lines(), ' | '))
+
+  check("nothing starts marked", float_marked() == 0)
+
+  feed('<Tab>')
+  check("<Tab> marks the note under the cursor", float_marked() == 1,
+    table.concat(float_lines(), ' | '))
+
+  feed('<Tab>')
+  check("and a second one", float_marked() == 2, table.concat(float_lines(), ' | '))
+
+  local orig = vim.ui.select
+  local prompt
+  vim.ui.select = function(_, opts) prompt = opts.prompt end
+
+  feed('<C-a>')
+  vim.wait(500, function() return prompt ~= nil end, 10)
+  check("<C-a> acts on the marked notes",
+    prompt ~= nil and prompt:find('2 notes', 1, true) ~= nil, tostring(prompt))
+
+  vim.ui.select = orig
+end
+
+do
+  -- With nothing marked, the whole list is offered.
+  views.open('ph6')
+
+  local orig = vim.ui.select
+  local prompt
+  vim.ui.select = function(_, opts) prompt = opts.prompt end
+
+  feed('<C-a>')
+  vim.wait(500, function() return prompt ~= nil end, 10)
+  check("<C-a> with no marks acts on every note in the view",
+    prompt ~= nil and prompt:find('3 notes', 1, true) ~= nil, tostring(prompt))
+
+  vim.ui.select = orig
+end
+
+-- =============================================================================
 
 print(string.format("== %s (%d failure%s) ==",
   failures == 0 and "PASS" or "FAIL", failures, failures == 1 and "" or "s"))

@@ -1018,9 +1018,38 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
         end)
       end
 
+      -- <C-a>: bulk actions over the marked notes, or over every note the
+      -- prompt leaves listed. Subview rows are views, not notes, so they are
+      -- skipped either way.
+      local function bulk_actions()
+        local picker     = action_state.get_current_picker(prompt_bufnr)
+        local selections = picker:get_multi_selection()
+
+        local chosen = {}
+        if #selections > 0 then
+          chosen = selections
+        else
+          for entry in picker.manager:iter() do chosen[#chosen + 1] = entry end
+        end
+
+        local targets = {}
+        for _, entry in ipairs(chosen) do
+          if not entry.is_subview then targets[#targets + 1] = entry.value end
+        end
+
+        actions.close(prompt_bufnr)
+        if #targets == 0 then
+          vim.notify('[pkm] no notes to act on', vim.log.levels.INFO)
+          return
+        end
+        vim.schedule(function() require('pkm.actions').run(targets) end)
+      end
+
       local function do_help()
         show_keymap_help(' PKMView Keymaps ', {
           '  <CR>     open note / enter subview',
+          '  <Tab>    mark note',
+          '  <C-a>    bulk actions on marked notes (or all listed)',
           '  <C-b>    back to views panel',
           '  <C-p>    go to parent view',
           '  <C-s>    go to subviews',
@@ -1031,6 +1060,16 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
         })
       end
 
+      -- Marking, spelled the same way as in picker.select.
+      local sel_next = actions.toggle_selection + actions.move_selection_next
+      local sel_prev = actions.toggle_selection + actions.move_selection_previous
+      map('i', '<Tab>',   sel_next)
+      map('n', '<Tab>',   sel_next)
+      map('i', '<S-Tab>', sel_prev)
+      map('n', '<S-Tab>', sel_prev)
+
+      map('i', '<C-a>', bulk_actions)
+      map('n', '<C-a>', bulk_actions)
       map('i', '<C-b>', go_back)
       map('n', '<C-b>', go_back)
       map('i', '<C-p>', go_parent)
@@ -1060,6 +1099,8 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
 
   local buf, win
   local line_paths, line_subs = {}, {}
+  local listed       = {}    -- note paths in display order, for <C-a>
+  local marked       = {}    -- path → true; survives re-render and filtering
   local filter_query = nil
 
   local function render()
@@ -1096,12 +1137,16 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     if #filtered_children > 0 and #sorted > 0 then
       lines[#lines + 1] = '  ' .. string.rep('─', 52)
     end
+    listed = {}
     for _, p in ipairs(sorted) do
       local e         = index.get(p)
       local note_type = e and e.note_type or 'other'
       local title     = e and e.title or vim.fn.fnamemodify(p, ':t:r')
-      lines[#lines + 1] = '  ' .. utils.type_prefix(note_type) .. ' ' .. title
+      -- The mark replaces the indent, so a marked row keeps its alignment.
+      local lead      = marked[p] and '▸ ' or '  '
+      lines[#lines + 1] = lead .. utils.type_prefix(note_type) .. ' ' .. title
       line_paths[#lines] = p
+      listed[#listed + 1] = p
     end
     if total == 0 then
       lines[#lines + 1] = (filter_query and filter_query ~= '')
@@ -1191,9 +1236,40 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     render()
   end
 
+  -- <Tab>/<S-Tab>: mark the note under the cursor and step on. render() puts
+  -- the cursor back at the top, so it is restored explicitly here.
+  ---@param step integer
+  local function toggle_mark_at_cursor(step)
+    local row = vim.api.nvim_win_get_cursor(win)[1]
+    local p   = line_paths[row]
+    if not p then return end
+
+    M.toggle_mark(marked, p)
+    render()
+
+    local target = math.min(math.max(row + step, 3), vim.api.nvim_buf_line_count(buf))
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_set_cursor(win, { target, 2 })
+    end
+  end
+
+  --- <C-a>: bulk actions over the marked notes, or over every note listed.
+  local function bulk_actions()
+    local targets = M.marked_in_order(marked, listed)
+    if #targets == 0 then
+      vim.notify('[pkm] no notes to act on', vim.log.levels.INFO)
+      return
+    end
+    close()
+    vim.schedule(function() require('pkm.actions').run(targets) end)
+  end
+
   local ko = { noremap = true, silent = true, buffer = buf }
   vim.keymap.set('n', '<CR>',  open_at_cursor, ko)
   vim.keymap.set('n', '/',     do_search,      ko)
+  vim.keymap.set('n', '<Tab>',   function() toggle_mark_at_cursor(1)  end, ko)
+  vim.keymap.set('n', '<S-Tab>', function() toggle_mark_at_cursor(-1) end, ko)
+  vim.keymap.set('n', '<C-a>', bulk_actions,   ko)
   vim.keymap.set('n', '<C-b>', go_back,        ko)
   vim.keymap.set('n', '<C-p>', go_parent,      ko)
   vim.keymap.set('n', '<C-s>', go_children,    ko)
@@ -1219,6 +1295,8 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
   vim.keymap.set('n', '?', function()
     show_keymap_help(' PKMView Keymaps ', {
       '  <CR>     open note / enter subview',
+      '  <Tab>    mark note   (<S-Tab> mark and go up)',
+      '  <C-a>    bulk actions on marked notes (or all listed)',
       '  <C-b>    back to views panel',
       '  <C-p>    go to parent view',
       '  <C-s>    go to subviews',

@@ -18,6 +18,14 @@
     — pure, so "the marked ones, or everything listed, in the order on screen"
     is asserted without opening a window. A mark for a note that is no longer
     listed is dropped rather than acted on.
+-   **`<C-a>` inside an open view.** Pressing `<CR>` on a view opens
+    `M.open(name)` — a *third* picker listing that view's notes, distinct from
+    both the views list and the note browser — and neither its Telescope form nor
+    its float fallback had the bulk-action key. Both now do, with `<Tab>`
+    marking; subview rows are skipped, since they are views rather than notes.
+    A sweep of every surface that lists notes confirms the rest were already
+    covered; the two pickers that remain without it (citation insertion, promote)
+    act on exactly one note by nature.
 -   **`<C-a>` in `:PKMViews` when Telescope is installed.** Ph4 and Ph6 wired the
     bulk-action key into `_views_panel` — the `panel.lua` fallback — but
     `:PKMViews` dispatches to `telescope_views_tree_picker` whenever Telescope is
