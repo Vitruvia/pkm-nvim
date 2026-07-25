@@ -1042,7 +1042,11 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
           vim.notify('[pkm] no notes to act on', vim.log.levels.INFO)
           return
         end
-        vim.schedule(function() require('pkm.actions').run(targets) end)
+        vim.schedule(function()
+          require('pkm.actions').run(targets, {
+            on_back = function() M.open(name) end,
+          })
+        end)
       end
 
       local function do_help()
@@ -1261,7 +1265,11 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       return
     end
     close()
-    vim.schedule(function() require('pkm.actions').run(targets) end)
+    vim.schedule(function()
+      require('pkm.actions').run(targets, {
+        on_back = function() M.open(name) end,
+      })
+    end)
   end
 
   local ko = { noremap = true, silent = true, buffer = buf }
@@ -1481,7 +1489,11 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
             vim.notify('[pkm] no notes to act on', vim.log.levels.INFO)
             return
           end
-          vim.schedule(function() require('pkm.actions').run(paths) end)
+          vim.schedule(function()
+            require('pkm.actions').run(paths, {
+              on_back = function() M.open_views_panel('browse') end,
+            })
+          end)
         end
         local function do_help()
           show_keymap_help(' Browse All Notes Keymaps ', {
@@ -1583,7 +1595,11 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
             vim.log.levels.INFO)
           return
         end
-        vim.schedule(function() require('pkm.actions').run(paths) end)
+        vim.schedule(function()
+          require('pkm.actions').run(paths, {
+            on_back = function() M.open_views_panel('views') end,
+          })
+        end)
       end
       local function do_help()
         show_keymap_help(' PKM Views Keymaps ', {
@@ -1780,8 +1796,13 @@ local _views_panel = panel.create({
         return
       end
 
+      local mode = state.mode
       helpers.close()
-      vim.schedule(function() require('pkm.actions').run(paths) end)
+      vim.schedule(function()
+        require('pkm.actions').run(paths, {
+          on_back = function() M.open_views_panel(mode) end,
+        })
+      end)
     end,
     ['n'] = function(state, helpers)
       if state.mode == 'browse' then return end

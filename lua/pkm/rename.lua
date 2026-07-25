@@ -288,7 +288,9 @@ end
 --- steps back to a picker over the same notes, for when the *selection* was
 --- wrong rather than the expression.
 ---@param paths string[]  Notes already chosen, e.g. the marks in a panel
-function M.title_flow(paths)
+---@param ctx   table|nil  { on_back? = function } — reopens whatever chose them
+function M.title_flow(paths, ctx)
+  ctx = ctx or {}
   if not paths or #paths == 0 then
     vim.notify('[pkm] no notes selected', vim.log.levels.INFO)
     return
@@ -317,12 +319,14 @@ function M.title_flow(paths)
 
   local picker = require('pkm.picker')
 
-  --- Re-choose which notes, then come straight back here.
-  local function go_back()
+  --- Back means *where the notes came from* — the browser, the view, the panel
+  --- — so the selection can genuinely be redone. Only when the caller did not
+  --- say how does this fall back to narrowing the set already in hand.
+  local go_back = ctx.on_back or function()
     picker.select(paths, {
       title = 'Notes to retitle',
       hint  = 'use listed',
-    }, function(chosen) M.title_flow(chosen) end)
+    }, function(chosen) M.title_flow(chosen, ctx) end)
   end
 
   picker.select_live({
@@ -342,7 +346,7 @@ function M.title_flow(paths)
 
     if #targets == 0 then
       vim.notify('[pkm] nothing to change — no replacement given?', vim.log.levels.INFO)
-      M.title_flow(paths)
+      M.title_flow(paths, ctx)
       return
     end
 
@@ -362,7 +366,7 @@ function M.title_flow(paths)
 
       -- Back to the panel, over the notes as they now read: one more
       -- substitution costs no reopening, and <Esc> is what ends the session.
-      M.title_flow(paths)
+      M.title_flow(paths, ctx)
     end)
   end)
 end

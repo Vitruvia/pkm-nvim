@@ -134,6 +134,7 @@ local function live_picker(title, entries, seed, presorted)
       local function bulk_actions()
         local picker     = t.state.get_current_picker(prompt_bufnr)
         local selections = picker:get_multi_selection()
+        local prompt     = t.state.get_current_line()
 
         local paths = {}
         if #selections > 0 then
@@ -143,7 +144,15 @@ local function live_picker(title, entries, seed, presorted)
         end
 
         t.actions.close(prompt_bufnr)
-        vim.schedule(function() require('pkm.actions').run(paths) end)
+        vim.schedule(function()
+          require('pkm.actions').run(paths, {
+            -- Back reopens *this* browser, with what was typed still in it, so
+            -- the selection can be redone rather than merely narrowed.
+            on_back = function()
+              live_picker(title, entries, prompt ~= '' and prompt or seed, presorted)
+            end,
+          })
+        end)
       end
 
       map('i', '<C-a>', bulk_actions)

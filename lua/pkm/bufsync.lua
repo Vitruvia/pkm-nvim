@@ -132,10 +132,15 @@ function M.guard(paths, on_ready)
     return
   end
 
+  -- Typeahead left over from the panel that got here — the `<CR>` that
+  -- confirmed it, above all — would answer this dialog before it is on screen,
+  -- and the user would never see it. inputsave() parks pending input first.
+  vim.fn.inputsave()
   local answer = vim.fn.confirm(
     string.format('%d selected note%s open with unsaved changes. Save first?',
       #dirty, #dirty == 1 and ' is' or 's are'),
     '&yes\n&no', 1)
+  vim.fn.inputrestore()
 
   if answer == 1 then
     M.save(dirty)

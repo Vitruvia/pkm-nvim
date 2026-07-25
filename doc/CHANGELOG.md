@@ -26,6 +26,13 @@
     `describe`, `format_change`, and `apply_titles(plan)` as the only writer —
     one frontmatter write per changed note plus the mandatory
     `index.invalidate`, then a **single** propagation pass.
+-   **`<C-b>` goes back where the notes came from.** The first cut reopened a
+    picker over the *same* notes, which could only narrow the set — no use when
+    the wrong note was picked upstream. `actions.run(paths, { on_back })` now
+    carries a way to reopen whatever chose them, and every surface supplies it:
+    the note browser (with what was typed still in the prompt), a view's note
+    list, either mode of the views panel. Backing out of the action menu goes
+    there too.
 -   **The panel comes back after a write.** Applying no longer ends the session:
     the substitution panel reopens over the same notes, now reading as they do
     on disk, so a second substitution costs no reopening. `<Esc>` is what ends
@@ -375,6 +382,14 @@
     change to displayed labels.
 
 ### Fixed
+-   **The unsaved-buffer dialog answered itself.** `bufsync.guard` asks with
+    `vim.fn.confirm`, which reads pending input — and the `<CR>` that had just
+    confirmed the Telescope panel was still in the typeahead, so the dialog took
+    it as "yes" and vanished before it could be seen. Saving happened silently
+    and the prompt looked absent. The call is now wrapped in
+    `vim.fn.inputsave()` / `inputrestore()`, which parks pending input for the
+    duration. The no-Telescope path never showed this: its confirmation is a
+    float whose `<CR>` is consumed by a keymap, leaving nothing in the queue.
 -   **The export picker exported one note when nothing was marked.** With
     Telescope installed, `<CR>` on the results picker exported only the
     highlighted entry unless every wanted note had first been marked with

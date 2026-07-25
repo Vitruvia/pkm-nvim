@@ -33,8 +33,11 @@ local M = {}
 -- =============================================================================
 
 --- Bulk actions, in the order the menu shows them.
---- `run` receives the selected paths and owns every screen it needs from there.
----@type { id: string, label: string, run: fun(paths: string[]) }[]
+--- `run` receives the selected paths and a context table, and owns every screen
+--- it needs from there. `ctx.on_back` reopens whatever chose these notes — the
+--- browser, the view, the panel — so an action can offer a way out that lands
+--- where the user actually came from rather than on a narrowed copy of it.
+---@type { id: string, label: string, run: fun(paths: string[], ctx: table) }[]
 local REGISTRY = {
   {
     id    = 'tag_add',
@@ -54,7 +57,7 @@ local REGISTRY = {
   {
     id    = 'set_titles',
     label = 'Change the title',
-    run   = function(paths) require('pkm.rename').title_flow(paths) end,
+    run   = function(paths, ctx) require('pkm.rename').title_flow(paths, ctx) end,
   },
 }
 
@@ -84,8 +87,9 @@ end
 --- a command argument, or a headless caller can reach for.
 ---@param id    string
 ---@param paths string[]
+---@param ctx   table|nil  { on_back? = function }
 ---@return boolean ok  false when the id is unknown or there are no notes
-function M.run_id(id, paths)
+function M.run_id(id, paths, ctx)
   local action = M.get(id)
   if not action then
     vim.notify('[pkm] unknown action: ' .. tostring(id), vim.log.levels.ERROR)
@@ -96,7 +100,7 @@ function M.run_id(id, paths)
     return false
   end
 
-  action.run(paths)
+  action.run(paths, ctx or {})
   return true
 end
 
@@ -104,7 +108,7 @@ end
 --- The menu is a small fixed choice set, so it stays `vim.ui.select` — the same
 --- criterion as the Simple/Deep menu of `:PKMExport`.
 ---@param paths string[]  The notes the action will act on
----@param opts  table|nil { prompt? = string }
+---@param opts  table|nil { prompt? = string, on_back? = function }
 function M.run(paths, opts)
   opts = opts or {}
 
@@ -120,9 +124,16 @@ function M.run(paths, opts)
     prompt = opts.prompt or string.format('Act on %d note%s:',
       #paths, #paths == 1 and '' or 's'),
   }, function(_, idx)
-    if not idx then return end
+    -- Backing out of the menu returns where the notes came from, when the
+    -- caller said how.
+    if not idx then
+      if opts.on_back then vim.schedule(opts.on_back) end
+      return
+    end
     local action = REGISTRY[idx]
-    if action then vim.schedule(function() action.run(paths) end) end
+    if action then
+      vim.schedule(function() action.run(paths, { on_back = opts.on_back }) end)
+    end
   end)
 end
 
