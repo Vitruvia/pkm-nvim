@@ -207,15 +207,30 @@ function M.register()
     desc     = 'Browse PKM notes with optional filter expression (tag:x AND title:y etc.)',
   })
 
+  -- :PKMTags — browse by tag, or run a batch tag operation over a selection.
+  -- Modes rather than a command each, per ROADMAP "Command clearup"; browsing
+  -- stays first so the common case is one keystroke away.
   vim.api.nvim_create_user_command('PKMTags', function()
     focus_main_win()
-    local has_tele = pcall(require, 'telescope')
-    if has_tele then
-      require('pkm.telescope').browse_tags()
-    else
-      require('pkm.ui').browse_tags()
-    end
-  end, { desc = 'Browse notes by tag (Telescope picker or ui fallback)' })
+    vim.ui.select({
+      'Browse by tag',
+      'Add a tag to notes…',
+      'Remove a tag from notes…',
+      'Rename a tag on notes…',
+    }, { prompt = 'Tags:' }, function(_, idx)
+      if idx == 1 then
+        local has_tele = pcall(require, 'telescope')
+        if has_tele then
+          require('pkm.telescope').browse_tags()
+        else
+          require('pkm.ui').browse_tags()
+        end
+      elseif idx == 2 then require('pkm.tags').batch_flow('add')
+      elseif idx == 3 then require('pkm.tags').batch_flow('remove')
+      elseif idx == 4 then require('pkm.tags').batch_flow('rename')
+      end
+    end)
+  end, { desc = 'Browse notes by tag, or add/remove/rename tags over a selection' })
 
   vim.api.nvim_create_user_command('PKMMergeTags', function()
     local has_tele = pcall(require, 'telescope')

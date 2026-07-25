@@ -5,6 +5,23 @@
 ## [Unreleased]
 
 ### Added
+-   **Batch tag operations (v1.8.0 Phase 2).** `:PKMTags` now opens with a mode
+    choice — browse (as before), or add / remove / rename a tag across a
+    selection. Each batch mode runs the same four steps: pick a **scope** (a
+    filter expression, the current note, or the active view), pick the **notes**
+    in the shared picker, name the **tag**, then look at a **preview** listing
+    every note's `before → after` before anything is written. Cancelling at any
+    step writes nothing. `remove` and `rename` offer the tags that actually
+    exist in the vault rather than free text.
+-   **`lua/pkm/picker.lua`** — the note-selection front-end, extracted from
+    `export.lua` so every operation that acts on a set of notes shares one
+    gesture: filter, `<Tab>` to mark, `<CR>` to confirm. `select()` confirms
+    **everything currently listed** when nothing is marked (matching the count
+    in its title); `confirm()` is the read-only preview gate used before writes.
+    Telescope or the float fallback is decided in this one place.
+-   `test/test_v180_p2.lua` — the preview wording (pure) and the float
+    front-end driven headlessly: `<CR>` confirms the whole list, `q`/`<Esc>`
+    cancels, an empty candidate list opens nothing.
 -   **Tag engine (v1.8.0 Phase 1).** New `lua/pkm/tags.lua`, split in three
     layers so the rules can be tested without touching a file:
     `plan(tags, ops)` is **pure** and holds every rule; `preview(paths, ops)`

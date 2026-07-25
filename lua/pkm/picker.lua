@@ -1,0 +1,242 @@
+-- =============================================================================
+-- pkm.picker — Note selection and confirmation front-ends
+-- =============================================================================
+-- Dependencies : pkm.utils, pkm.yaml (lazy), telescope (optional)
+-- Consumed by  : pkm.export (results picker), pkm.ui (batch tag flow)
+--
+-- Two front-ends, one gesture. Every operation that acts on a *set* of notes
+-- goes through select(): filter first, then mark with <Tab>, then confirm.
+-- Whether Telescope is installed changes nothing about that gesture — this
+-- module is the only place that knows which of the two is in play.
+--
+-- Selection rule, shared by both front-ends: <CR> with nothing marked confirms
+-- **everything currently listed**, which is what the title counts. Marking with
+-- <Tab> narrows the confirmation to the marks. Typing in the Telescope prompt
+-- filters by exact substring (never fuzzy) and therefore also narrows what an
+-- unmarked <CR> confirms.
+--
+-- Neither function writes anything: they collect an answer and hand it to a
+-- callback. What the caller does with it — copy, retag, delete — is the
+-- caller's business.
+--
+-- Public API:
+--   select(paths, opts, on_confirm)  → note picker; on_confirm(string[] paths)
+--   confirm(opts)                    → scrollable list + <CR>/q; no selection
+-- =============================================================================
+
+local M = {}
+
+local utils = require('pkm.utils')
+
+-- =============================================================================
+-- SECTION: Row rendering
+-- =============================================================================
+
+--- Display string for one note row: "<filename>  [tag1, tag2]".
+--- Tags are shown with the spelling stored in the file, not the index's
+--- normalised copy, so the row matches what the note actually says.
+---@param path string
+---@return string
+local function build_display(path)
+  local name  = vim.fn.fnamemodify(path, ':t')
+  local lines = utils.read_lines(path)
+  local fm    = lines and require('pkm.yaml').parse_frontmatter(lines) or nil
+
+  local tags = {}
+  if fm and type(fm.tags) == 'table' then
+    for _, t in ipairs(fm.tags) do
+      if type(t) == 'string' then tags[#tags + 1] = t end
+    end
+  end
+
+  return name .. (#tags > 0 and ('  [' .. table.concat(tags, ', ') .. ']') or '')
+end
+
+--- Compose the title both front-ends show.
+---@param title string   Caller's label, e.g. 'PKMExport'
+---@param count integer
+---@param hint  string   What <CR> does, e.g. 'export listed'
+---@return string
+local function title_line(title, count, hint)
+  return string.format('%s:  %d note%s  ·  <Tab> mark subset  ·  <CR> %s',
+    title, count, count == 1 and '' or 's', hint)
+end
+
+-- =============================================================================
+-- SECTION: Telescope front-end
+-- =============================================================================
+
+---@param paths      string[]
+---@param opts       table     { title, hint, on_cancel? }
+---@param on_confirm function(paths: string[])
+local function telescope_select(paths, opts, on_confirm)
+  local pickers      = require('telescope.pickers')
+  local finders      = require('telescope.finders')
+  local actions      = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+  local previewers   = require('telescope.previewers')
+  local sorters      = require('telescope.sorters')
+
+  -- Built once; the dynamic finder filters this table on every keystroke.
+  local entries = {}
+  for _, path in ipairs(paths) do
+    local display = build_display(path)
+    entries[#entries + 1] = {
+      value   = path,
+      display = display,
+      ordinal = display,
+      path    = path,   -- required by the vim_buffer_cat previewer
+    }
+  end
+
+  --- Entries the prompt currently leaves visible. Shared by the finder and the
+  --- confirm action, so "everything listed" cannot drift from what is on screen.
+  ---@param prompt string|nil
+  ---@return table[]
+  local function visible_entries(prompt)
+    if not prompt or prompt == '' then return entries end
+    local needle   = prompt:lower()
+    local filtered = {}
+    for _, e in ipairs(entries) do
+      if e.ordinal:lower():find(needle, 1, true) then filtered[#filtered + 1] = e end
+    end
+    return filtered
+  end
+
+  pickers.new({}, {
+    prompt_title = title_line(opts.title, #entries, opts.hint)
+      .. '  ·  type for exact filter',
+
+    finder = finders.new_dynamic({
+      fn          = visible_entries,
+      entry_maker = function(e) return e end,
+    }),
+
+    -- Pass-through sorter: always score 0, so Telescope cannot reintroduce a
+    -- fuzzy pass on top of the exact substring filter above.
+    sorter = sorters.Sorter:new({ scoring_function = function() return 0 end }),
+
+    previewer = previewers.vim_buffer_cat.new({}),
+
+    attach_mappings = function(prompt_bufnr, map)
+      local sel_next = actions.toggle_selection + actions.move_selection_next
+      local sel_prev = actions.toggle_selection + actions.move_selection_previous
+      map('i', '<Tab>',   sel_next)
+      map('n', '<Tab>',   sel_next)
+      map('i', '<S-Tab>', sel_prev)
+      map('n', '<S-Tab>', sel_prev)
+
+      actions.select_default:replace(function()
+        local picker     = action_state.get_current_picker(prompt_bufnr)
+        local selections = picker:get_multi_selection()
+        if #selections == 0 then
+          selections = visible_entries(action_state.get_current_line())
+        end
+
+        actions.close(prompt_bufnr)
+
+        if #selections == 0 then
+          vim.notify('[pkm] nothing listed to act on', vim.log.levels.INFO)
+          return
+        end
+
+        local chosen = {}
+        for _, sel in ipairs(selections) do chosen[#chosen + 1] = sel.value end
+        vim.schedule(function() on_confirm(chosen) end)
+      end)
+
+      return true
+    end,
+  }):find()
+end
+
+-- =============================================================================
+-- SECTION: Float front-end (no Telescope)
+-- =============================================================================
+
+--- Open a scrollable, read-only float over `lines` and wire confirm/cancel.
+---@param title      string
+---@param lines      string[]
+---@param on_confirm function()
+---@param on_cancel  function|nil
+local function float_window(title, lines, on_confirm, on_cancel)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('modifiable', false,  { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
+
+  local width  = math.min(82, vim.o.columns - 4)
+  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.7))
+  local win    = vim.api.nvim_open_win(buf, true, {
+    relative  = 'editor',
+    width     = width,
+    height    = height,
+    col       = math.floor((vim.o.columns - width)  / 2),
+    row       = math.floor((vim.o.lines   - height) / 2),
+    style     = 'minimal',
+    border    = 'rounded',
+    title     = ' ' .. title .. ' ',
+    title_pos = 'center',
+  })
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
+  end
+
+  local ko = { noremap = true, silent = true, buffer = buf }
+  vim.keymap.set('n', '<CR>', function() close(); on_confirm() end, ko)
+  for _, lhs in ipairs({ 'q', '<Esc>' }) do
+    vim.keymap.set('n', lhs, function()
+      close()
+      if on_cancel then on_cancel() end
+    end, ko)
+  end
+end
+
+-- =============================================================================
+-- SECTION: Public API
+-- =============================================================================
+
+--- Pick notes from a list and hand the confirmed subset to on_confirm.
+--- Telescope when available (filter as you type, `<Tab>` to mark), the float
+--- fallback otherwise (whole list, `<CR>` confirms all).
+---@param paths      string[]  Candidates, already collected by the caller
+---@param opts       table     { title = string, hint = string, on_cancel? = function }
+---@param on_confirm function(paths: string[])
+function M.select(paths, opts, on_confirm)
+  opts = opts or {}
+  opts.title = opts.title or 'PKM'
+  opts.hint  = opts.hint  or 'confirm'
+
+  if #paths == 0 then
+    vim.notify('[pkm] no notes to choose from', vim.log.levels.INFO)
+    return
+  end
+
+  if pcall(require, 'telescope') then
+    telescope_select(paths, opts, on_confirm)
+    return
+  end
+
+  local header = '  ' .. title_line(opts.title, #paths, opts.hint)
+    .. '  ·  q/<Esc> cancel'
+  local lines  = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
+  for _, p in ipairs(paths) do
+    lines[#lines + 1] = '  • ' .. build_display(p)
+  end
+
+  float_window(opts.title, lines,
+    function() vim.schedule(function() on_confirm(paths) end) end,
+    opts.on_cancel)
+end
+
+--- Show a read-only list and ask for confirmation. No selection, no marks:
+--- `<CR>` accepts the whole thing, `q`/`<Esc>` backs out. Used to preview a
+--- change before it is written.
+---@param opts table  { title, lines, on_confirm, on_cancel? }
+function M.confirm(opts)
+  float_window(opts.title or 'PKM', opts.lines or {},
+    opts.on_confirm or function() end, opts.on_cancel)
+end
+
+return M

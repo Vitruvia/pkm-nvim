@@ -32,6 +32,7 @@ pkm.nvim/
 │   ├── export.lua      # Note filtering and copy utility (read-only, no setup)
 │   ├── filter.lua      # Filter DSL parser and evaluator (pure logic, no I/O)
 │   ├── tags.lua        # Tag rules (pure), preview (read-only), batch apply (writes)
+│   ├── picker.lua      # Shared note picker + confirmation float (Telescope or fallback)
 │   ├── index.lua       # In-memory note index with incremental invalidation
 │   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
 │   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle)
@@ -115,7 +116,8 @@ strong justification.** Contains the non-trivial nested-empty-structure parser.
 `merge_tags_picker`.
 
 **export.lua** — filter + copy notes. No setup. Read-only. Delegates to filter.lua
-and index.lua. `export_direct(label, paths)` skips the filter form.
+and index.lua for matching, and to `picker.lua` for selection (v1.8.0 Ph2 — the
+results picker used to live here). `export_direct(label, paths)` skips the filter form.
 Deep export (v1.7.0 Ph1): `read_citation_edges(path)` returns the identifier lists
 of both directions (grouped or legacy-flat frontmatter), and `collect_deep(seeds,
 opts?)` walks the citation graph out from the seeds under a **per-path budget** —
@@ -164,14 +166,23 @@ into its own module — extraction would require a bidirectional dependency and 
 wider public surface. A cleaner split, if ever pursued, is to extract the *model*
 layer (sidecar + tree helpers + `match_all`), not the sidebar UI.
 
-**tags.lua** — tag computation and batch application, in three layers:
+**picker.lua** — note selection and confirmation front-ends. `select(paths, opts,
+on_confirm)` shows the Telescope picker or the float fallback — the only place that
+knows which — with one rule in both: `<CR>` with nothing marked confirms everything
+currently listed, `<Tab>` narrows to marks. `confirm(opts)` is the read-only preview
+gate (`<CR>` accepts, `q`/`<Esc>` backs out). Writes nothing itself. Consumed by
+`export.lua` and by `tags.batch_flow`.
+
+**tags.lua** — tag computation and batch application, in four layers:
 `plan(tags, ops)` pure (every rule lives here — rename→remove→add, case-insensitive
 matching, no duplicates, surviving tags keep their stored spelling, remove beats
 add); `preview(paths, ops)` read-only; `apply(paths, ops)` the only writer, which
 **must** `index.invalidate` each note it writes — the mirror image of the
-buffer-only `citations.add_tag`/`remove_tag`, which must not. Consumed by
-`citations.merge_tags` and `notes.create_relative_note`; from v1.8.0 Ph2 on, by the
-batch tag UI.
+buffer-only `citations.add_tag`/`remove_tag`, which must not. `format_preview` is
+pure so the wording of a destructive confirmation is testable, and `batch_flow(kind)`
+is the interactive layer (scope → notes → tag → preview → apply) that decides nothing
+on its own. Consumed by `citations.merge_tags`, `notes.create_relative_note` and
+`:PKMTags`.
 
 **panel.lua** — generic per-tabpage panel factory. `create(spec)` returns an independent
 panel object `{ open(init?), close(), toggle(init?), refresh(), is_open(), get_win() }`,

@@ -477,223 +477,29 @@ local function show_filter_form(on_submit)
 end
 
 -- ============================================================================
--- TELESCOPE RESULTS PICKER
+-- ENTRY POINTS
 -- ============================================================================
 
---- Build the display / ordinal string for a picker row.
---- Format: "<filename>  [tag1, tag2]"
---- Status is intentionally excluded (being removed from metadata).
-local function build_display(path, fm)
-  local name = vim.fn.fnamemodify(path, ":t")
-  local tags  = {}
-  if type(fm.tags) == "table" then
-    for _, t in ipairs(fm.tags) do
-      if type(t) == "string" then table.insert(tags, t) end
-    end
-  end
-  local tag_str = #tags > 0 and ("  [" .. table.concat(tags, ", ") .. "]") or ""
-  return name .. tag_str
-end
-
---- Open a Telescope picker over a pre-filtered list of files.
----
---- The list shown is exactly what `collect_files` returned; no fzy applied.
---- Typing in the prompt runs exact substring filtering (via new_dynamic) on
---- the display string. The sorter is a pass-through (score 0 always) so it
---- cannot reintroduce fzy behaviour regardless of Telescope version.
----
---- @param paths        table   Pre-filtered list of absolute paths
---- @param default_dest string
---- @param title_prefix string|nil  Optional prefix for the picker title; nil uses 'PKMExport'
---- @param on_confirm   function|nil  Receives the confirmed path list; defaults
----                                   to prompting for a destination and copying
-local function telescope_results_picker(paths, default_dest, title_prefix, on_confirm)
-  local pickers      = require('telescope.pickers')
-  local finders      = require('telescope.finders')
-  local actions      = require('telescope.actions')
-  local action_state = require('telescope.actions.state')
-  local previewers   = require('telescope.previewers')
-  local sorters      = require('telescope.sorters')
-
-  -- Build entry table once; new_dynamic will filter it on each keystroke.
-  local entries = {}
-  for _, path in ipairs(paths) do
-    local fm, _, _ = get_file_data(path)
-    fm = fm or {}
-    local display = build_display(path, fm)
-    table.insert(entries, {
-      value   = path,
-      display = display,
-      ordinal = display,
-      path    = path,   -- required by vim_buffer_cat previewer
-    })
-  end
-
-  local count = #entries
-
-  --- Entries the prompt currently leaves visible. Shared by the finder and by
-  --- the confirm action, so "everything listed" means exactly what is on screen.
-  ---@param prompt string|nil
-  ---@return table[]
-  local function visible_entries(prompt)
-    if not prompt or prompt == "" then
-      return entries
-    end
-    local needle   = prompt:lower()
-    local filtered = {}
-    for _, e in ipairs(entries) do
-      if e.ordinal:lower():find(needle, 1, true) then
-        table.insert(filtered, e)
-      end
-    end
-    return filtered
-  end
-
-  pickers.new({}, {
-    prompt_title = string.format(
-      "%s%d match%s  ·  type for exact filter  ·  <Tab> mark subset  ·  <CR> export listed",
-      title_prefix and (title_prefix .. ':  ') or 'PKMExport:  ',
-      count, count == 1 and '' or 'es'),
-
-    -- new_dynamic re-runs fn on every prompt change.
-    -- Exact substring matching (plain=true) guarantees no fzy behaviour.
-    finder = finders.new_dynamic({
-      fn = visible_entries,
-      entry_maker = function(e) return e end,
-    }),
-
-    -- Pass-through sorter: always returns score 0 (keep, no reordering).
-    -- This prevents Telescope from applying any secondary fzy pass.
-    sorter = sorters.Sorter:new({
-      scoring_function = function() return 0 end,
-    }),
-
-    previewer = previewers.vim_buffer_cat.new({}),
-
-    attach_mappings = function(prompt_bufnr, map)
-      local sel_next = actions.toggle_selection + actions.move_selection_next
-      local sel_prev = actions.toggle_selection + actions.move_selection_previous
-      map("i", "<Tab>",   sel_next)
-      map("n", "<Tab>",   sel_next)
-      map("i", "<S-Tab>", sel_prev)
-      map("n", "<S-Tab>", sel_prev)
-
-      actions.select_default:replace(function()
-        local picker     = action_state.get_current_picker(prompt_bufnr)
-        local selections = picker:get_multi_selection()
-
-        -- Nothing marked: export everything the prompt currently lists — the
-        -- set the title counts, and what the no-Telescope float has always
-        -- done on <CR>. Marking with <Tab> is how a subset is exported.
-        if #selections == 0 then
-          selections = visible_entries(action_state.get_current_line())
-        end
-
-        actions.close(prompt_bufnr)
-
-        if #selections == 0 then
-          vim.notify("PKMExport: Nothing to export — the filter matches no note.",
-            vim.log.levels.INFO)
-          return
-        end
-
-        local selected_paths = {}
-        for _, sel in ipairs(selections) do
-          table.insert(selected_paths, sel.value)
-        end
-
-        vim.schedule(function()
-          if on_confirm then
-            on_confirm(selected_paths)
-          else
-            prompt_dest_and_copy(selected_paths, default_dest)
-          end
-        end)
-      end)
-
-      return true
-    end,
-  }):find()
-end
-
--- ============================================================================
--- FALLBACK RESULTS FLOAT  (no Telescope)
--- ============================================================================
-
---- Scrollable floating buffer listing matched files.
---- <CR> exports all; q/<Esc> cancels.
---- @param paths      table
---- @param on_confirm function(paths)
---- @param on_cancel  function()
-local function show_result_float(paths, on_confirm, on_cancel)
-  local header    = string.format(
-    "  %d note%s matched  ·  <CR> export all  ·  q/<Esc> cancel",
-    #paths, #paths == 1 and "" or "s")
-  local separator = "  " .. string.rep("─", math.max(#header - 2, 10))
-
-  local lines = { header, separator }
-  for _, p in ipairs(paths) do
-    table.insert(lines, "  • " .. vim.fn.fnamemodify(p, ":t"))
-  end
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
-  vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
-
-  local width  = math.min(82, vim.o.columns - 4)
-  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.7))
-  local win    = vim.api.nvim_open_win(buf, true, {
-    relative  = 'editor',
-    width     = width,
-    height    = height,
-    col       = math.floor((vim.o.columns - width)  / 2),
-    row       = math.floor((vim.o.lines   - height) / 2),
-    style     = 'minimal',
-    border    = 'rounded',
-    title     = ' PKMExport: Matched Notes ',
-    title_pos = 'center',
-  })
-
-  local function close()
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
-    end
-  end
-
-  local ko = { noremap = true, silent = true, buffer = buf }
-  vim.keymap.set('n', '<CR>',  function() close(); on_confirm(paths) end, ko)
-  vim.keymap.set('n', 'q',     function() close(); on_cancel()       end, ko)
-  vim.keymap.set('n', '<Esc>', function() close(); on_cancel()       end, ko)
-end
-
--- ============================================================================
--- ENTRY POINT
--- ============================================================================
-
---- Launch the full interactive export UI.
---- Show the selection UI over paths — Telescope picker when available, the
---- scrollable float otherwise — and hand the confirmed list to on_confirm.
---- The single place that knows which of the two front-ends is in play.
+--- Show the note picker over paths and copy whatever is confirmed.
+--- Selection itself lives in `pkm.picker` since v1.8.0 Ph2, so every set
+--- operation in the plugin shares one gesture.
 ---@param paths        string[]
 ---@param default_dest string
----@param title_prefix string|nil
----@param on_confirm   function(paths: string[])
-local function select_notes(paths, default_dest, title_prefix, on_confirm)
-  local has_telescope = pcall(require, 'telescope')
-  if has_telescope then
-    telescope_results_picker(paths, default_dest, title_prefix, on_confirm)
-  else
-    show_result_float(
-      paths,
-      function(confirmed) vim.schedule(function() on_confirm(confirmed) end) end,
-      function() vim.notify('PKMExport: Cancelled.', vim.log.levels.INFO) end
-    )
-  end
+---@param title        string|nil    Picker label; nil uses 'PKMExport'
+---@param on_confirm   function|nil  Defaults to the destination prompt and copy
+local function select_notes(paths, default_dest, title, on_confirm)
+  require('pkm.picker').select(paths, {
+    title     = title or 'PKMExport',
+    hint      = 'export listed',
+    on_cancel = function() vim.notify('PKMExport: Cancelled.', vim.log.levels.INFO) end,
+  }, on_confirm or function(confirmed)
+    prompt_dest_and_copy(confirmed, default_dest)
+  end)
 end
 
+--- Launch the full interactive export UI.
 --- Step 1: floating filter form.
---- Step 2: Telescope results picker (if available) or scrollable float.
+--- Step 2: note picker (Telescope or float).
 --- Step 3: destination prompt and copy.
 function M.interactive_export()
   local config       = require('pkm').config

@@ -187,7 +187,7 @@ v1.7.0  MINOR  Exportation, note creation & header nav     (no deps)
             Ph3 header navigation
 v1.8.0  MINOR  Bulk metadata operations                    (no deps)
         Ph1 tag engine + relative note  ✅ done
-          Ph2 batch tag UI (picker reuse)
+          Ph2 batch tag UI (picker reuse)  ✅ done
             Ph3 view membership by tags
               Ph4 bulk rename / title
 ```
@@ -525,11 +525,19 @@ Invariants held: `apply` invalidates because it writes; the buffer-only tag
 commands still do not. No behaviour change to `merge_tags` beyond the two
 recorded in CHANGELOG (case-insensitive matching, spelling preserved).
 
-**Phase 2 — batch tag UI.** Extract the note-selection picker from `export.lua`
-into a reusable module, then give `:PKMTags` add/remove/rename modes over a
-selection, with the context shortcuts decided with the author: filter → picker
-(the export gesture), plus "the current view" and "the current note". The
-preview from Ph1 is what the UI shows before any write.
+**Phase 2 — batch tag UI.** ✅ *Done (pending release tag).*
+
+| File | Single-pass changes |
+|---|---|
+| `picker.lua` (new) | `select(paths, opts, on_confirm)` — the results picker moved out of `export.lua`, Telescope or float decided in one place, `<CR>` confirming everything listed and `<Tab>` narrowing. `confirm(opts)` — the read-only preview gate. |
+| `export.lua` | Delegates selection to `picker`; its local Telescope picker and result float are gone (a stray LuaDoc line left by Ph1 of v1.7.0 was fixed in passing). |
+| `tags.lua` | `format_preview(plan, header)` pure, and `batch_flow(kind)` — scope (filter / current note / current view) → picker → tag prompt → preview → apply. |
+| `commands.lua` | `:PKMTags` becomes multimodal: browse, add, remove, rename. No new command. |
+| `test/test_v180_p2.lua` | Preview wording; the float front-end driven headlessly (confirm-all, cancel, empty list). |
+
+The interactive flow is UI and stays hand-smoked; its two seams are not, and
+both are covered: the wording is a pure function, and the float front-end — the
+one that decides what an unmarked `<CR>` means — is drivable in headless.
 
 **Phase 3 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
 sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4, plus an

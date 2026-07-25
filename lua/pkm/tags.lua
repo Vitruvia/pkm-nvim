@@ -1,11 +1,12 @@
 -- =============================================================================
 -- pkm.tags — Tag computation and batch application
 -- =============================================================================
--- Dependencies : pkm.yaml (lazy), pkm.utils, pkm.index (lazy)
+-- Dependencies : pkm.yaml (lazy), pkm.utils, pkm.index (lazy),
+--                pkm.picker / pkm.filter / pkm.views (lazy, interactive flow only)
 -- Consumed by  : pkm.citations (merge_tags), pkm.notes (relative note),
---                and, from v1.8.0 Ph2 on, the batch tag UI
+--                pkm.commands (:PKMTags batch modes)
 --
--- Two layers, deliberately separated:
+-- Four layers, deliberately separated:
 --
 --   plan()     pure — takes a tag list and an operation set, returns the new
 --              tag list. No I/O, no state, no UI. Every rule of the feature
@@ -14,6 +15,9 @@
 --              change. Writes nothing.
 --   apply()    the only writing function — same plan(), then one frontmatter
 --              write per changed note.
+--   batch_flow() the interactive layer on top: pick a scope, pick the notes,
+--              name the tag, look at the preview, then apply. It decides
+--              nothing on its own — every rule it obeys lives in plan().
 --
 -- Operation set (all fields optional):
 --   { add    = { "tag", … },              -- appended when absent
@@ -41,8 +45,10 @@
 --   normalize(tag)         → canonical form of one tag, or nil when empty
 --   plan(tags, ops)        → (new_tags, changed) — pure
 --   preview(paths, ops)    → { {path, before, after}… } — read-only
+--   format_preview(plan, header) → string[] display lines — pure
 --   apply(paths, ops)      → (applied, errors) — writes and invalidates
 --   all_note_paths()       → every indexed note path (helper for whole-vault ops)
+--   batch_flow(kind)       → interactive add / remove / rename over a selection
 -- =============================================================================
 
 local M = {}
@@ -204,6 +210,33 @@ function M.preview(paths, ops)
   return out
 end
 
+--- Render a preview() result as display lines.
+--- Pure, so the wording of a destructive confirmation is testable.
+---@param plan   table   Result of preview()
+---@param header string  First line, e.g. "Add tag 'draft'"
+---@return string[]
+function M.format_preview(plan, header)
+  local count = #plan
+  local lines = {
+    string.format('  %s — %d note%s change%s  ·  <CR> apply  ·  q/<Esc> cancel',
+      header, count, count == 1 and '' or 's', count == 1 and 's' or ''),
+    '  ' .. string.rep('─', 64),
+  }
+
+  for _, item in ipairs(plan) do
+    lines[#lines + 1] = '  ' .. vim.fn.fnamemodify(item.path, ':t:r')
+    lines[#lines + 1] = string.format('      %s  →  %s',
+      #item.before > 0 and table.concat(item.before, ', ') or '(none)',
+      #item.after  > 0 and table.concat(item.after,  ', ') or '(none)')
+  end
+
+  if count == 0 then
+    lines[#lines + 1] = '  (nothing would change)'
+  end
+
+  return lines
+end
+
 -- =============================================================================
 -- SECTION: Batch — writes
 -- =============================================================================
@@ -238,6 +271,161 @@ function M.apply(paths, ops)
   end
 
   return applied, errors
+end
+
+-- =============================================================================
+-- SECTION: Interactive flow
+-- =============================================================================
+--
+-- Scope → notes → tag → preview → apply. Every step can be backed out of, and
+-- nothing is written before the preview has been confirmed.
+
+--- Paths of the notes matching a filter expression, using the same DSL as
+--- :PKMBrowse and the view filters.
+---@param expr string
+---@return string[]|nil paths  nil when the expression does not parse
+local function paths_matching(expr)
+  local filter    = require('pkm.filter')
+  local tree, err = filter.parse(expr)
+  if not tree then
+    vim.notify('[pkm] ' .. (err or 'invalid filter'), vim.log.levels.ERROR)
+    return nil
+  end
+
+  local out = {}
+  for _, entry in ipairs(require('pkm.index').get_all()) do
+    if filter.eval(tree, entry) then out[#out + 1] = entry.path end
+  end
+  return out
+end
+
+--- Resolve the candidate notes for a batch operation and pass them on.
+--- Scopes: the note in the current buffer, the active view, or a filter.
+---@param on_paths function(paths: string[])
+local function choose_scope(on_paths)
+  local views   = require('pkm.views')
+  local current = vim.api.nvim_buf_get_name(0)
+  local active  = views.get_last_view()
+
+  local choices = { 'Filter…  (tag:x AND title:y)' }
+  local kinds   = { 'filter' }
+  if current ~= '' and current:match('%.md$') then
+    choices[#choices + 1] = 'Current note  (' .. vim.fn.fnamemodify(current, ':t:r') .. ')'
+    kinds[#kinds + 1]     = 'note'
+  end
+  if active then
+    choices[#choices + 1] = "Current view  ('" .. active .. "')"
+    kinds[#kinds + 1]     = 'view'
+  end
+
+  vim.ui.select(choices, { prompt = 'Which notes?' }, function(_, idx)
+    if not idx then return end
+    local kind = kinds[idx]
+
+    if kind == 'note' then
+      on_paths({ current })
+
+    elseif kind == 'view' then
+      on_paths(views.match_all(active))
+
+    else
+      vim.ui.input({ prompt = 'Filter: ' }, function(expr)
+        if not expr or expr:match('^%s*$') then return end
+        local paths = paths_matching(expr)
+        if paths then vim.schedule(function() on_paths(paths) end) end
+      end)
+    end
+  end)
+end
+
+--- Ask for the tag(s) an operation needs.
+--- `remove` and `rename` offer the tags that exist in the vault, since acting
+--- on a tag that is not there is always a mistake; `add` takes free text.
+---@param kind    string  'add' | 'remove' | 'rename'
+---@param on_ops  function(ops: table, header: string)
+local function ask_tags(kind, on_ops)
+  if kind == 'add' then
+    vim.ui.input({ prompt = 'Tag to add: ' }, function(tag)
+      local t = M.normalize(tag)
+      if not t then return end
+      vim.schedule(function() on_ops({ add = { t } }, "Add tag '" .. t .. "'") end)
+    end)
+    return
+  end
+
+  local existing = require('pkm.citations').get_all_tags()
+  if #existing == 0 then
+    vim.notify('[pkm] no tags exist yet', vim.log.levels.INFO)
+    return
+  end
+
+  local prompt = kind == 'remove' and 'Tag to remove:' or 'Tag to rename:'
+  vim.ui.select(existing, { prompt = prompt }, function(chosen)
+    if not chosen then return end
+    local from = M.normalize(chosen)
+    if not from then return end
+
+    if kind == 'remove' then
+      vim.schedule(function()
+        on_ops({ remove = { from } }, "Remove tag '" .. from .. "'")
+      end)
+      return
+    end
+
+    vim.ui.input({ prompt = string.format("Rename '%s' to: ", from) }, function(to)
+      local target = M.normalize(to)
+      if not target then return end
+      if target == from then
+        vim.notify('[pkm] same tag — nothing to do', vim.log.levels.INFO)
+        return
+      end
+      vim.schedule(function()
+        on_ops({ rename = { { from = from, to = target } } },
+          string.format("Rename '%s' to '%s'", from, target))
+      end)
+    end)
+  end)
+end
+
+--- Run one batch tag operation end to end.
+--- Writes only after the preview float has been confirmed; an operation that
+--- would change nothing says so and stops there.
+---@param kind string  'add' | 'remove' | 'rename'
+function M.batch_flow(kind)
+  choose_scope(function(candidates)
+    if #candidates == 0 then
+      vim.notify('[pkm] no notes in that scope', vim.log.levels.INFO)
+      return
+    end
+
+    require('pkm.picker').select(candidates, {
+      title = 'PKMTags ' .. kind,
+      hint  = 'use listed',
+    }, function(selected)
+      ask_tags(kind, function(ops, header)
+        local plan = M.preview(selected, ops)
+        if #plan == 0 then
+          vim.notify(
+            string.format('[pkm] %s — no note in the selection would change', header),
+            vim.log.levels.INFO)
+          return
+        end
+
+        require('pkm.picker').confirm({
+          title      = 'PKMTags: confirm',
+          lines      = M.format_preview(plan, header),
+          on_cancel  = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
+          on_confirm = function()
+            local applied, errors = M.apply(selected, ops)
+            vim.notify(string.format('[pkm] %s — %d note%s updated%s',
+              header, applied, applied == 1 and '' or 's',
+              errors > 0 and (', ' .. errors .. ' failed') or ''),
+              errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
+          end,
+        })
+      end)
+    end)
+  end)
 end
 
 return M

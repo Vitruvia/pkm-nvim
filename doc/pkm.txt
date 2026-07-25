@@ -122,7 +122,24 @@ bidirectionally and on save.
 
 SEARCH~
 Use |:PKMBrowse| for live filter-as-you-type search across all notes.
-Use |:PKMTags| to browse by tag. Use |:PKMOrphans| to find unfiled notes.
+Use |:PKMTags| to browse by tag, or to add, remove or rename a tag across many
+notes at once. Use |:PKMOrphans| to find unfiled notes.
+
+BATCH TAGS~
+The batch modes of |:PKMTags| run in four steps, and write nothing until the
+last one is confirmed:
+
+  1. Scope    a filter expression, the current note, or the active view.
+  2. Notes    the shared picker — type to narrow, <Tab> to mark, <CR> to take
+              everything listed.
+  3. Tag      free text when adding; when removing or renaming, a list of the
+              tags that actually exist.
+  4. Preview  every affected note with its "before -> after" tag list.
+              <CR> applies, q/<Esc> backs out.
+
+Tags already present are never duplicated, matching ignores case, and a tag
+already written in the file keeps its spelling — a batch never rewrites a note
+just to lower-case a tag.
 
 VIEWS~
 Use |:PKMViewNew| to save filter expressions as named project views.
@@ -227,8 +244,11 @@ SEARCH AND BROWSE~
                         cites/cited_by group), and do not match any defined
                         view. Useful for locating abandoned or unfiled notes.
 
-:PKMTags                Browse notes by tag. Select a tag from the full tag
-                        list; opens :PKMBrowse pre-filtered to that tag.
+:PKMTags                Browse notes by tag, or run a batch tag operation.
+                        Browsing selects a tag from the full tag list and
+                        opens :PKMBrowse pre-filtered to it. The other three
+                        modes add, remove or rename a tag across a selection
+                        of notes — see |pkm-search| for the four steps.
 
 :PKMMergeTags           Merge one or more tags into a target tag across all
                         notes. Three-step Telescope picker, or fallback UI.
