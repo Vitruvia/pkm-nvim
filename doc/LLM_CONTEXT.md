@@ -7,11 +7,12 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.6.1**
+## Current version: **v1.6.1** (released); **v1.8.0 Ph1–Ph7 shipped on `dev`**
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
-mirrors it. Upcoming work — the `:PKMViews` open-latency optimization and **v1.7.0**
-(minor) — is tracked in `doc/ROADMAP.md` § **Release Plan**.
+mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
+Remaining work is tracked in `doc/ROADMAP.md` § **Release Plan**; the standing
+rules for executing it live in `doc/PRINCIPLES.md`.
 
 ---
 
@@ -21,7 +22,13 @@ Full module-by-module detail (role, key functions, invariants) is owned by
 `doc/ARCHITECTURE.md` § **Module Responsibilities** — read there for anything beyond
 quick orientation. Module list: `init, config, utils, commands, keymaps, yaml,
 timestamp, citations, notes, journal, ui, telescope, templates, export, filter,
-index, views, panel, mode, syntax, trash, markdown, bench`.
+index, views, panel, mode, syntax, trash, markdown, bench, tags, picker, actions,
+rename, bufsync`.
+
+The last five are the bulk-operation stack (v1.8.0): `tags` and `rename` hold the
+rules and the writes, `picker` owns every selection screen, `actions` is the
+registry every panel's `<C-a>` opens, and `bufsync` keeps open buffers in step
+with what a batch wrote.
 
 ---
 
@@ -43,6 +50,8 @@ index, views, panel, mode, syntax, trash, markdown, bench`.
 | Never strip backlinks in `trash_note()` | Backlinks preserved for restoration; `cleanup_deleted_note` only in `empty()` / `purge_old()` |
 | Never run `git gc` on this repo | Google Drive sync causes object-directory deletion conflicts |
 | Never touch a file twice within one phase | Each phase edits every file it touches in a single pass; see `doc/PRINCIPLES.md` § Execution for how to split work that doesn't fit one pass |
+| Never call `vim.fn.confirm` / `input` right after closing a picker without `inputsave()` | They read the typeahead: the `<CR>` that closed the picker answers the dialog before it is drawn, and it vanishes unseen (v1.8.0 Ph7) |
+| Never scan the vault per note in a batch | `citations.propagate_title` / `update_references_on_rename` glob and read three folders *per call*; use the batched form or it is quadratic |
 
 ---
 
@@ -86,6 +95,15 @@ local function get_tab()
   return _tabs[id]
 end
 -- setup(): register TabClosed autocmd to prune _tabs entries for closed tabs.
+```
+
+Bulk write over a set of notes (disk write → invalidate → buffers → propagate):
+```lua
+local bufsync = require('pkm.bufsync')
+bufsync.guard(paths, function()          -- asks only if a buffer is unsaved
+  local applied = require('pkm.rename').apply_titles(plan)  -- writes + invalidates
+  bufsync.reload(paths)                  -- unmodified buffers re-read from disk
+end)
 ```
 
 Buffer-only frontmatter mutation (no disk write, no index.invalidate):
