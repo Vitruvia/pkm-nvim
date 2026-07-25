@@ -135,7 +135,8 @@ a view; <S-Tab> marks and steps up), and in the browse mode of |:PKMViews|.
 Over a *view* — in the sidebar's overview or the views list — <C-a> acts on
 every note that view matches; there is nothing to mark there.
 
-The action menu is short: add, remove or rename a tag, or change the title.
+The action menu is short: add, remove or rename a tag, change the title, or
+rename the file.
 
 CHANGING TITLES IN BULK~
 One panel, and what you type is the operation. The field takes the two halves
@@ -171,6 +172,26 @@ the same notes, for when the selection was wrong rather than the expression.
 Notes you have open are kept in step: an unmodified buffer is reloaded after the
 write, and one with unsaved changes is never reloaded behind your back — you are
 asked (y/n) whether to save it first, and only when there is one.
+
+RENAMING FILES IN BULK~
+Same panel, same `pattern/replacement`, but over the filename — and with one
+difference that matters. The `0042_note_` prefix is identity, not description:
+the expression never sees it, so numbering and type survive any pattern. What
+you are editing is the part after it: >
+
+    Rascunho_/                 1001_note_Rascunho_Kant  ->  1001_note_Kant
+    ^/Aula_                    1001_note_Kant           ->  1001_note_Aula_Kant
+<
+Journal and scratchpad notes cannot be renamed this way — their name *is* their
+timestamp, which the whole ordering depends on. Selecting them is not an error;
+they are reported as skipped, with the reason, and left alone.
+
+The preview shows the new filename and how many notes cite this one, because
+each of those has to be rewritten. Then, unlike titles, <CR> leads to a final
+yes/no over the **whole** list: renaming rewrites [[links]] and citation entries
+everywhere, and a batch that half-applies leaves dangling links. Two notes that
+would end up sharing a name is refused before that gate — the number already
+makes names unique, so a collision means the expression was wrong.
 
 TAG BATCHES~
 Two steps, and nothing is written until the last is confirmed:

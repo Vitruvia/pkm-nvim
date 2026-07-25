@@ -5,6 +5,33 @@
 ## [Unreleased]
 
 ### Added
+-   **Bulk file rename (v1.8.0 Phase 8).** `<C-a>` → *Rename the file* is the
+    same substitution panel as titles, over the editable part of the filename.
+    The `NNNN_type_` prefix is identity, not description: the expression never
+    sees it and the result is rebuilt around it, so numbering and type survive
+    any pattern. Journal and scratchpad notes are **not** renameable — their name
+    *is* their timestamp — and a selection containing them says so instead of
+    quietly dropping them. The preview shows the new filename and how many notes
+    cite this one and would therefore be rewritten.
+-   **The write is all-or-nothing here, unlike titles.** Renaming rewrites
+    `[[links]]` and citation entries in every citing note, so a batch that
+    half-applies leaves dangling links. `<CR>` therefore leads to a final gate
+    that accepts or refuses the whole list — `picker.confirm`, kept for exactly
+    this — stating the total number of citations about to be rewritten. Two notes
+    that would end up sharing a name is refused before the gate is even shown:
+    the numbering prefix already guarantees uniqueness, so a collision means the
+    expression was wrong.
+-   **`notes.rename_file(path, new_stem)`** — the mechanical half of
+    `rename_note`, extracted rather than reimplemented: the two-step dance a
+    case-only rename needs on a case-insensitive filesystem, the awareness of a
+    buffer holding the file (its content is preserved and its name follows), and
+    the index invalidation of both paths. It does **not** propagate;
+    `rename_note` remains the interactive wrapper that does.
+-   `test/test_v180_p8.lua` — the stem split and the skip list, collision
+    refusal, the rename mechanics including an open buffer and an existing
+    target, a real batch whose citing note has body links *and* frontmatter
+    entries rewritten in one pass, and note deletion still striking links
+    through via the shared pass.
 -   **Bulk title change, in one panel (v1.8.0 Phase 7).** `<C-a>` → *Change the
     title* opens a single panel whose prompt **is** the operation: type
     `pattern/replacement` and the rows update on every keystroke, showing
@@ -261,6 +288,14 @@
     to the pre-Phase-3 comparator's on a fixture built to expose the difference.
 
 ### Changed
+-   **`citations.update_references_on_renames(pairs)` walks the vault once
+    (v1.8.0 Ph8).** Like the title propagation before it, the per-note function
+    globbed and read three folders on every call. The batched form takes every
+    rename at once and rewrites a citing note a single time even when it cites
+    several of them; `update_references_on_rename` delegates with a one-item
+    list, so single renames and note deletion are unchanged. Body links are now
+    resolved through a lookup in one pass per line rather than one `gsub` per
+    rename, which also makes a chained batch (A→B, B→C) safe.
 -   **`citations.propagate_titles(titles)` walks the vault once (v1.8.0 Ph7).**
     `propagate_title` globs and reads every note in three folders *per call*, so
     a bulk retitle calling it note-by-note would be quadratic — 50 notes over a

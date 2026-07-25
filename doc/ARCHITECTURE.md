@@ -205,7 +205,18 @@ works here — which is also why there is no menu of operations: `^/X ` prepends
 not as an error. `apply_titles(plan)` is the only writer: one frontmatter write
 per changed note, `index.invalidate` on each, then a **single**
 `citations.propagate_titles` pass. `title_flow(paths)` drives
-`picker.select_live`. Consumed by `actions.lua` (`set_titles`).
+`picker.select_live`.
+
+Filenames (v1.8.0 Ph8) are the same substitution over a different field:
+`split_stem` separates the fixed `NNNN_type_` prefix from the editable name so a
+pattern can never touch identity, `stem_items` returns what may be renamed plus
+what may not (journal and scratchpad names *are* their timestamp) with the
+reason, `find_collisions` refuses a batch that would produce one name twice, and
+`apply_filenames` renames through `notes.rename_file` and then rewrites every
+reference with a single `citations.update_references_on_renames`.
+`filename_flow` is the same panel, but its `<CR>` leads to an all-or-nothing
+`picker.confirm`: a rename that half-applies leaves dangling links. Consumed by
+`actions.lua` (`set_titles`, `rename_files`).
 
 **actions.lua** — the bulk-action registry (v1.8.0 Ph4). Rows of
 `{ id, label, run }`; `list()`/`get(id)` are pure, `run(paths)` shows the short

@@ -59,6 +59,11 @@ local REGISTRY = {
     label = 'Change the title',
     run   = function(paths, ctx) require('pkm.rename').title_flow(paths, ctx) end,
   },
+  {
+    id    = 'rename_files',
+    label = 'Rename the file',
+    run   = function(paths, ctx) require('pkm.rename').filename_flow(paths, ctx) end,
+  },
 }
 
 -- =============================================================================

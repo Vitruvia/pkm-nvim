@@ -744,118 +744,152 @@ function M.goto_citation(silent)
   return false
 end
 
---- Propagate a note rename or deletion across all files in the wiki.
---- Updates [[wiki-links]] in note bodies and identifier/link fields in
---- cites/cited_by frontmatter. Pass "__DELETED__" as new_basename to
---- strike through links instead of replacing them.
+--- Propagate a whole batch of note renames (or deletions) across the wiki.
+--- Updates `[[wiki-links]]` in note bodies and the identifier/link/title fields
+--- in cites/cited_by frontmatter.
+---
+--- Takes every rename at once and walks the vault **once**: the scan globs and
+--- reads every note in three folders, so doing it per renamed note would be
+--- quadratic. A note citing three of them is read and written a single time.
+---
+--- A pair whose `new` is `"__DELETED__"` strikes its links through in bodies and
+--- drops its entries from citation lists, which is how note deletion reuses this
+--- same pass.
+---@param renames { old: string, new: string, title: string|nil }[]  stems, no extension
+---@return integer updated  Number of citing files rewritten
+function M.update_references_on_renames(renames)
+  if not renames or #renames == 0 then return 0 end
+
+  -- Two lookups over the same records: bodies match on the old filename,
+  -- frontmatter on the old identifier.
+  local by_old_name, by_old_id, any = {}, {}, false
+  for _, pair in ipairs(renames) do
+    local _, old_id = M.get_note_type_and_id(pair.old .. ".md")
+    local new_id
+    if pair.new ~= "__DELETED__" then
+      _, new_id = M.get_note_type_and_id(pair.new .. ".md")
+    end
+
+    if old_id then
+      local record = { old = pair.old, new = pair.new, new_id = new_id, title = pair.title }
+      by_old_name[pair.old] = record
+      by_old_id[old_id]     = record
+      any = true
+    end
+  end
+  if not any then return 0 end
+
+  local search_paths = {
+    config.folders.consolidated,
+    config.folders.journal,
+    config.folders.scratchpad
+  }
+
+  local updated = 0
+
+  for _, folder in ipairs(search_paths) do
+    if folder then
+      local search_path = utils.join(config.root_path, folder)
+      local files = vim.fn.glob(search_path .. "/*.md", false, true)
+      if type(files) ~= "table" then files = {} end
+
+      for _, file in ipairs(files) do
+        local content  = vim.fn.readfile(file)
+        local modified = false
+        local new_content_lines = {}
+
+        -- 1. Body replacement. One pass per line, resolving each link through
+        --    the table: replacing name by name in sequence would let a chained
+        --    batch (A→B, B→C) rewrite the same link twice.
+        for _, line in ipairs(content) do
+          local new_line = line:gsub("%[%[([^%]]+)%]%]", function(name)
+            local record = by_old_name[name]
+            if not record then return nil end          -- keep the match as-is
+            if record.new == "__DELETED__" then
+              return "~~" .. name .. "~~ (deleted)"
+            end
+            return "[[" .. record.new .. "]]"
+          end)
+          if new_line ~= line then modified = true end
+          table.insert(new_content_lines, new_line)
+        end
+
+        -- 2. YAML replacement.
+        local fm, content_start = yaml.parse_frontmatter(new_content_lines)
+        if fm then
+          local lists_to_check = {}
+          if fm.cites then table.insert(lists_to_check, fm.cites) end
+          if fm.cited_by then table.insert(lists_to_check, fm.cited_by) end
+
+          for _, list in ipairs(lists_to_check) do
+            for _, group_key in ipairs({"notes", "bib", "journal", "scratch"}) do
+              if list[group_key] then
+                local new_group_list = {}
+                local list_modified  = false
+
+                for _, item in ipairs(list[group_key]) do
+                  local record = (type(item) == "table") and item.identifier
+                                 and by_old_id[item.identifier] or nil
+                  if record then
+                    if record.new == "__DELETED__" then
+                      list_modified = true                -- dropped from the list
+                      modified      = true
+                    else
+                      item.link = "[[" .. record.new .. "]]"
+                      if record.new_id then item.identifier = record.new_id end
+                      if record.title and item.title then item.title = record.title end
+                      table.insert(new_group_list, item)
+                      modified = true
+                    end
+                  else
+                    table.insert(new_group_list, item)
+                  end
+                end
+
+                if list_modified then
+                  list[group_key] = new_group_list
+                end
+              end
+            end
+          end
+        end
+
+        if modified then
+          if fm then
+            local fm_lines = yaml.generate_yaml(fm)
+            local final_content = {"---"}
+            for _, line in ipairs(fm_lines) do table.insert(final_content, line) end
+            table.insert(final_content, "---")
+            if #new_content_lines >= content_start and new_content_lines[content_start] ~= "" then
+              table.insert(final_content, "")
+            end
+            for i = content_start, #new_content_lines do
+              table.insert(final_content, new_content_lines[i])
+            end
+            vim.fn.writefile(final_content, file)
+          else
+            vim.fn.writefile(new_content_lines, file)
+          end
+          require('pkm.index').invalidate(file)
+          updated = updated + 1
+        end
+      end
+    end
+  end
+
+  return updated
+end
+
+--- Propagate one note rename or deletion across all files in the wiki.
+--- Delegates to update_references_on_renames: one rename is the one-item case
+--- of a batch.
 ---@param old_basename string Filename without extension before rename
 ---@param new_basename string Filename without extension after rename, or "__DELETED__"
 ---@param new_title string|nil New title to update in citation entries, or nil
 function M.update_references_on_rename(old_basename, new_basename, new_title)
-  local _, old_id = M.get_note_type_and_id(old_basename .. ".md")
-  local _, new_id = nil, nil
-  if new_basename ~= "__DELETED__" then
-      _, new_id = M.get_note_type_and_id(new_basename .. ".md")
-  end
-  
-  if not old_id then return end
-  
-  local search_paths = {
-    config.folders.consolidated,
-    config.folders.journal, 
-    config.folders.scratchpad
-  }
-  
-  for _, folder in ipairs(search_paths) do
-    if folder then
-        local search_path = utils.join(config.root_path, folder)
-        local files = vim.fn.glob(search_path .. "/*.md", false, true)
-        if type(files) ~= "table" then files = {} end
-        
-        for _, file in ipairs(files) do
-          local content = vim.fn.readfile(file)
-          local modified = false
-          local new_content_lines = {}
-          
-          -- 1. Body replacement (Inline links)
-          for _, line in ipairs(content) do
-            local new_line = line
-            if new_basename == "__DELETED__" then
-                local link_pattern = "%[%[" .. vim.pesc(old_basename) .. "%]%]"
-                if line:match(link_pattern) then
-                    new_line = line:gsub(link_pattern, "~~" .. old_basename .. "~~ (deleted)")
-                    modified = true
-                end
-            else
-                new_line = line:gsub(
-                  "%[%[" .. vim.pesc(old_basename) .. "%]%]",
-                  "[[" .. new_basename .. "]]"
-                )
-                if new_line ~= line then modified = true end
-            end
-            table.insert(new_content_lines, new_line)
-          end
-          
-          -- 2. YAML replacement
-          local fm, content_start = yaml.parse_frontmatter(new_content_lines)
-          if fm then
-             local lists_to_check = {}
-             if fm.cites then table.insert(lists_to_check, fm.cites) end
-             if fm.cited_by then table.insert(lists_to_check, fm.cited_by) end
-             
-             for _, list in ipairs(lists_to_check) do
-                for _, group_key in ipairs({"notes", "bib", "journal", "scratch"}) do
-                    if list[group_key] then
-                        local new_group_list = {}
-                        local list_modified = false
-                        
-                        for _, item in ipairs(list[group_key]) do
-                            if type(item) == "table" and item.identifier == old_id then
-                                if new_basename == "__DELETED__" then
-                                    list_modified = true
-                                    modified = true
-                                else
-                                    item.link = "[[" .. new_basename .. "]]"
-                                    if new_id then item.identifier = new_id end
-                                    if new_title and item.title then item.title = new_title end
-                                    table.insert(new_group_list, item)
-                                    modified = true
-                                end
-                            else
-                                table.insert(new_group_list, item)
-                            end
-                        end
-                        
-                        if list_modified then
-                            list[group_key] = new_group_list
-                        end
-                    end
-                end
-             end
-          end
-          
-          if modified then
-               if fm then
-                  local fm_lines = yaml.generate_yaml(fm)
-                  local final_content = {"---"}
-                  for _, line in ipairs(fm_lines) do table.insert(final_content, line) end
-                  table.insert(final_content, "---")
-                  if #new_content_lines >= content_start and new_content_lines[content_start] ~= "" then
-                    table.insert(final_content, "")
-                  end
-                  for i = content_start, #new_content_lines do
-                    table.insert(final_content, new_content_lines[i])
-                  end
-                  vim.fn.writefile(final_content, file)
-                  require('pkm.index').invalidate(file)
-              else
-                  vim.fn.writefile(new_content_lines, file)
-                  require('pkm.index').invalidate(file)
-              end
-          end
-        end
-    end
-  end
+  M.update_references_on_renames({
+    { old = old_basename, new = new_basename, title = new_title },
+  })
 end
 
 --- Propagate new titles into every citation entry (cites/cited_by, all four

@@ -860,6 +860,81 @@ end
 -- Exposed for test/test_v154_p1.lua only; not part of the module's public API.
 M._is_same_file = is_same_file
 
+--- Rename one note file on disk, without asking anything and without
+--- propagating. The mechanical half of `rename_note`, extracted so a batch can
+--- reuse it: the two-step dance a case-only rename needs on a case-insensitive
+--- filesystem, the awareness of a buffer holding the file, and the index
+--- invalidation of both paths are subtle enough that a second implementation
+--- would be a second set of bugs.
+---
+--- **Propagation is the caller's job.** A batch rewrites citing notes once for
+--- the whole set, not once per file — see `citations.update_references_on_renames`.
+---@param path     string  Absolute path of the note as it is now
+---@param new_stem string  New filename stem, without extension
+---@return boolean ok
+---@return string|nil new_path  Absolute path after the rename
+---@return string|nil err
+function M.rename_file(path, new_stem)
+  local dir      = vim.fn.fnamemodify(path, ':h')
+  local new_path = utils.join(dir, new_stem .. '.md')
+
+  if new_path:gsub('\\', '/') == path:gsub('\\', '/') then
+    return true, path
+  end
+
+  local target_exists = vim.fn.filereadable(new_path) == 1
+  local same_file     = target_exists and is_same_file(path, new_path)
+
+  if target_exists and not same_file then
+    return false, nil, 'target already exists: ' .. new_stem .. '.md'
+  end
+
+  -- Content comes from the buffer when one holds this file, so a rename never
+  -- discards edits the user has not saved; from disk otherwise.
+  local bufnr = require('pkm.bufsync').buffer_for(path)
+  local lines = bufnr and vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+                or vim.fn.readfile(path)
+
+  if same_file then
+    -- Case-only rename on a case-insensitive filesystem: path and new_path
+    -- resolve to the SAME directory entry, so writing directly to new_path
+    -- would just reopen the existing file under its current on-disk casing —
+    -- the stored name would never actually change. Force it via a two-step
+    -- rename through a distinct temp name; a single rename() call is not
+    -- reliable for case-only changes on every case-insensitive filesystem.
+    local tmp_path = path .. '.pkmtmp'
+    if vim.fn.filereadable(tmp_path) == 1 then
+      return false, nil, 'stale temp file present, try again'
+    end
+    if vim.fn.rename(path, tmp_path) ~= 0 then
+      return false, nil, 'could not stage temp file'
+    end
+    if vim.fn.rename(tmp_path, new_path) ~= 0 then
+      vim.fn.rename(tmp_path, path)  -- best-effort: don't strand it under .pkmtmp
+      return false, nil, 'could not apply new casing'
+    end
+    vim.fn.writefile(lines, new_path)
+  else
+    -- Genuine new target: write-then-delete avoids :saveas/:write entirely, so
+    -- an otherwise-unmodified rename cannot trigger an E13 forced-write prompt.
+    if vim.fn.writefile(lines, new_path) ~= 0 then
+      return false, nil, 'could not write ' .. new_stem .. '.md'
+    end
+    vim.fn.delete(path)
+  end
+
+  if bufnr then
+    vim.api.nvim_buf_set_name(bufnr, new_path)
+    vim.bo[bufnr].modified = false
+  end
+
+  local index = require('pkm.index')
+  index.invalidate(path)
+  index.invalidate(new_path)
+
+  return true, new_path
+end
+
 --- Prompt for a new name and rename the current PKM note file.
 --- For consolidated notes: preserves number and type prefix, renames the title part.
 --- For journal/scratchpad: allows renaming the full stem.
@@ -869,7 +944,6 @@ M._is_same_file = is_same_file
 function M.rename_note()
   local filepath = vim.fn.expand('%:p')
   local old_stem = vim.fn.fnamemodify(filepath, ':t:r')
-  local dir      = vim.fn.fnamemodify(filepath, ':h')
 
   local folder_type
   if filepath:find(config.folders.consolidated, 1, true) then
@@ -905,66 +979,14 @@ function M.rename_note()
     new_stem = sanitize_title(input)
   end
 
-  local new_filepath = utils.join(dir, new_stem .. '.md')
-
-  if new_filepath:gsub('\\', '/') == filepath:gsub('\\', '/') then return end
-
-  local target_exists = vim.fn.filereadable(new_filepath) == 1
-  local same_file     = target_exists and is_same_file(filepath, new_filepath)
-
-  if target_exists and not same_file then
-    vim.notify('[pkm] cannot rename: target already exists: ' .. new_stem .. '.md', vim.log.levels.ERROR)
+  local ok, new_filepath, err = M.rename_file(filepath, new_stem)
+  if not ok then
+    vim.notify('[pkm] rename failed: ' .. (err or 'unknown error'), vim.log.levels.ERROR)
     return
   end
+  if new_filepath == filepath then return end   -- nothing to do
 
-  local bufnr = vim.api.nvim_get_current_buf()
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-
-  if same_file then
-    -- Case-only rename on a case-insensitive filesystem: filepath and
-    -- new_filepath resolve to the SAME directory entry, so writing directly
-    -- to new_filepath would just reopen the existing file under its current
-    -- on-disk casing — the stored name would never actually change. Force
-    -- it via a two-step rename through a distinct temp name; a single
-    -- rename() call is not reliable for case-only changes on every
-    -- case-insensitive filesystem implementation.
-    local tmp_path = filepath .. '.pkmtmp'
-    if vim.fn.filereadable(tmp_path) == 1 then
-      vim.notify('[pkm] rename failed: stale temp file present, try again', vim.log.levels.ERROR)
-      return
-    end
-    if vim.fn.rename(filepath, tmp_path) ~= 0 then
-      vim.notify('[pkm] rename failed: could not stage temp file', vim.log.levels.ERROR)
-      return
-    end
-    if vim.fn.rename(tmp_path, new_filepath) ~= 0 then
-      vim.fn.rename(tmp_path, filepath)  -- best-effort: don't strand the note under .pkmtmp
-      vim.notify('[pkm] rename failed: could not apply new casing', vim.log.levels.ERROR)
-      return
-    end
-    -- Write current buffer content (including any unsaved edits) so a
-    -- case-only rename never silently discards pending changes.
-    vim.fn.writefile(lines, new_filepath)
-    vim.api.nvim_buf_set_name(bufnr, new_filepath)
-    vim.bo[bufnr].modified = false
-  else
-    -- Genuine new target: write-then-delete avoids :saveas/:write entirely,
-    -- so an otherwise-unmodified rename cannot trigger an E13 forced-write
-    -- prompt. writefile() bypasses Vim's own write pipeline.
-    if vim.fn.writefile(lines, new_filepath) ~= 0 then
-      vim.notify('[pkm] rename failed: could not write ' .. new_stem .. '.md', vim.log.levels.ERROR)
-      return
-    end
-    vim.api.nvim_buf_set_name(bufnr, new_filepath)
-    vim.fn.delete(filepath)
-    vim.bo[bufnr].modified = false
-  end
-
-  local index = require('pkm.index')
-  index.invalidate(filepath)
-  index.invalidate(new_filepath)
-
-  local fm, _ = yaml.parse_frontmatter(lines)
+  local fm, _ = yaml.parse_frontmatter(vim.fn.readfile(new_filepath))
   local display_title = (fm and type(fm.title) == 'string' and fm.title ~= '')
                         and fm.title
                         or new_stem:gsub('_', ' ')

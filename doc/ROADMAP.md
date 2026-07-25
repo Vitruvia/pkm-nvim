@@ -302,30 +302,13 @@ Three of those decisions still constrain what is left:
   `update_references_on_renames` must follow; the per-note functions rescan the
   whole vault.
 
-**Phase 8 — bulk filename rename.** The widest blast radius, which is why it is
-last: renaming rewrites `[[links]]` and identifiers in every citing note, and a
-partial failure leaves dangling links that no other bulk operation risks.
-
-| File | Planned single-pass changes |
-|---|---|
-| `notes.lua` | Extract `rename_file(path, new_stem)` from `rename_note()` — the two-step dance for case-only renames on case-insensitive filesystems and the open-buffer awareness are **reused, not reimplemented**. `rename_note()` becomes the interactive wrapper. |
-| `citations.lua` | `update_references_on_renames(pairs)` — one vault pass for the whole batch, with the single-item function delegating to it, exactly as `propagate_titles` already does. |
-| `rename.lua` | `find_collisions(plan)` and `apply_filenames(plan)`, reusing `plan_names` and the live panel unchanged: the substitution is the same, only the field it reads and the propagation it triggers differ. |
-| `actions.lua` | `rename_files` row. |
-
-Constraints, decided in advance:
-
-- **Consolidated notes only.** Journal and scratchpad names encode their
-  timestamp, so they are listed as skipped, with the reason, before anything is
-  written. The editable span is what follows `NNNN_type_`; the numbering prefix
-  is never part of it.
-- **Collisions are refused, not resolved.** Two notes planning the same filename
-  is an error surfaced before any write.
-- **The dry-run is all-or-nothing here**, unlike titles: a rename that
-  half-applies leaves dangling links, so the confirmation does *not* let notes be
-  dropped one by one. This is the case `picker.confirm` was kept for.
-- **Buffers stay in step** through `bufsync`, including the rename of a buffer's
-  own name when the file it points at moves.
+**Phase 8 — bulk file rename.** ✅ *Shipped; the detail is in `doc/CHANGELOG.md`.*
+The same substitution panel over the editable part of the filename, the
+`NNNN_type_` prefix untouched, consolidated notes only, collisions refused, and
+an all-or-nothing gate because renaming rewrites `[[links]]` everywhere.
+`notes.rename_file` was extracted from `rename_note`, and
+`citations.update_references_on_renames` batches the vault scan the way
+`propagate_titles` already did.
 
 **Phase 9 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
 sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4. Ships as
