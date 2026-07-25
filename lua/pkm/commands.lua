@@ -218,13 +218,7 @@ function M.register()
       'Remove a tag from notes…',
       'Rename a tag on notes…',
     }, { prompt = 'Tags:' }, function(_, idx)
-      if idx == 1 then
-        local has_tele = pcall(require, 'telescope')
-        if has_tele then
-          require('pkm.telescope').browse_tags()
-        else
-          require('pkm.ui').browse_tags()
-        end
+      if idx == 1 then require('pkm.tags').browse_by_tag()
       elseif idx == 2 then require('pkm.tags').batch_flow('add')
       elseif idx == 3 then require('pkm.tags').batch_flow('remove')
       elseif idx == 4 then require('pkm.tags').batch_flow('rename')

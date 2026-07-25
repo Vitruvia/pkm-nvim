@@ -1,7 +1,7 @@
 -- =============================================================================
 -- pkm.telescope — Telescope pickers for notes, tags, citations, and export
 -- =============================================================================
--- Dependencies : pkm.citations, pkm.filter (lazy), pkm.index (lazy),
+-- Dependencies : pkm.citations (lazy), pkm.filter (lazy), pkm.index (lazy),
 --                pkm.views (lazy), telescope.nvim (optional, checked at call time)
 --
 -- Telescope availability is checked at call time inside require_telescope(),
@@ -11,7 +11,6 @@
 -- Public API:
 --   insert_citation_picker()  → context-aware citation picker
 --   browse(filter_expr?)      → live filter-as-you-type note browser
---   browse_tags()             → tag picker → browse pre-seeded to tag:<x>
 --   browse_recent(n?)         → n most-recently-modified notes (mtime order; live-filterable)
 --   browse_paths(title, paths) → scoped live browser over a pre-computed path list
 --   find_notes()              → telescope find_files over PKM root
@@ -19,7 +18,6 @@
 -- =============================================================================
 local M = {}
 
-local citations = require('pkm.citations')
 local utils = require('pkm.utils')
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 
@@ -316,39 +314,6 @@ function M.browse_recent(n)
     entries = sliced
   end
   live_picker(string.format('Recent (%d)', #entries), entries, nil, true)
-end
-
---- Tag picker. On selection, opens PKMBrowse pre-filtered to tag:<selected>.
---- No longer uses ripgrep; tag list is sourced from the citation index.
-function M.browse_tags()
-  local t = require_telescope()
-  if not t then return end
-
-  local tags = citations.get_all_tags()
-
-  if #tags == 0 then
-    vim.notify('[pkm] no tags found', vim.log.levels.INFO)
-    return
-  end
-
-  t.pickers.new({}, {
-    prompt_title = 'Browse by Tag',
-    finder = t.finders.new_table {
-      results = tags,
-      entry_maker = function(tag)
-        return { value = tag, display = tag, ordinal = tag }
-      end,
-    },
-    sorter = t.conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr)
-      t.actions.select_default:replace(function()
-        t.actions.close(prompt_bufnr)
-        local sel = t.state.get_selected_entry()
-        if sel then M.browse('tag:' .. sel.value) end
-      end)
-      return true
-    end,
-  }):find()
 end
 
 --- Open telescope find_files over the PKM root. Searches by filename only.

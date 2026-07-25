@@ -12,12 +12,14 @@
 --              tag list. No I/O, no state, no UI. Every rule of the feature
 --              lives here, so it can be tested without touching a file.
 --   preview()  read-only — runs plan() over many notes and reports what would
---              change. Writes nothing.
+--              change. Writes nothing. tag_counts() is read-only too: it
+--              answers "which tags exist here, and on how many notes".
 --   apply()    the only writing function — same plan(), then one frontmatter
 --              write per changed note.
 --   batch_flow() the interactive layer on top: pick a scope, pick the notes,
---              name the tag, look at the preview, then apply. It decides
---              nothing on its own — every rule it obeys lives in plan().
+--              name the tag, confirm the change list, then apply. It decides
+--              nothing on its own — every rule it obeys lives in plan(), and
+--              every screen it shows belongs to pkm.picker.
 --
 -- Operation set (all fields optional):
 --   { add    = { "tag", … },              -- appended when absent
@@ -45,9 +47,11 @@
 --   normalize(tag)         → canonical form of one tag, or nil when empty
 --   plan(tags, ops)        → (new_tags, changed) — pure
 --   preview(paths, ops)    → { {path, before, after}… } — read-only
---   format_preview(plan, header) → string[] display lines — pure
+--   tag_counts(paths?)     → { {tag, count, paths}… } sorted — read-only
+--   format_change(item)    → one "before → after" display line — pure
 --   apply(paths, ops)      → (applied, errors) — writes and invalidates
 --   all_note_paths()       → every indexed note path (helper for whole-vault ops)
+--   browse_by_tag()        → tag picker → browse pre-seeded to tag:<x>
 --   batch_flow(kind)       → interactive add / remove / rename over a selection
 -- =============================================================================
 
@@ -210,31 +214,60 @@ function M.preview(paths, ops)
   return out
 end
 
---- Render a preview() result as display lines.
---- Pure, so the wording of a destructive confirmation is testable.
----@param plan   table   Result of preview()
----@param header string  First line, e.g. "Add tag 'draft'"
----@return string[]
-function M.format_preview(plan, header)
-  local count = #plan
-  local lines = {
-    string.format('  %s — %d note%s change%s  ·  <CR> apply  ·  q/<Esc> cancel',
-      header, count, count == 1 and '' or 's', count == 1 and 's' or ''),
-    '  ' .. string.rep('─', 64),
-  }
+--- Which tags exist, and on how many notes.
+--- Reads the index, never the disk: index entries already carry a normalised
+--- tag list, so two spellings of the same tag ("Draft", "draft") collapse into
+--- one row here — which is precisely what the old disk scan failed to do.
+--- Passing `paths` restricts the counts to that selection, so a batch operation
+--- can offer only the tags its own notes actually carry.
+---@param paths string[]|nil  Restrict to these notes; nil means the whole vault
+---@return { tag: string, count: integer, paths: string[] }[]  sorted by tag
+function M.tag_counts(paths)
+  local index   = require('pkm.index')
+  local entries = {}
 
-  for _, item in ipairs(plan) do
-    lines[#lines + 1] = '  ' .. vim.fn.fnamemodify(item.path, ':t:r')
-    lines[#lines + 1] = string.format('      %s  →  %s',
-      #item.before > 0 and table.concat(item.before, ', ') or '(none)',
-      #item.after  > 0 and table.concat(item.after,  ', ') or '(none)')
+  if paths then
+    for _, path in ipairs(paths) do
+      local entry = index.get(path)
+      if entry then entries[#entries + 1] = entry end
+    end
+  else
+    entries = index.get_all()
   end
 
-  if count == 0 then
-    lines[#lines + 1] = '  (nothing would change)'
+  local rows, by_tag = {}, {}
+  for _, entry in ipairs(entries) do
+    -- A note listing the same tag twice still counts once.
+    local counted = {}
+    for _, tag in ipairs(entry.tags or {}) do
+      local norm = M.normalize(tag)
+      if norm and not counted[norm] then
+        counted[norm] = true
+        local row = by_tag[norm]
+        if not row then
+          row = { tag = norm, count = 0, paths = {} }
+          by_tag[norm] = row
+          rows[#rows + 1] = row
+        end
+        row.count = row.count + 1
+        row.paths[#row.paths + 1] = entry.path
+      end
+    end
   end
 
-  return lines
+  table.sort(rows, function(a, b) return a.tag < b.tag end)
+  return rows
+end
+
+--- Render one preview() item as a display row: "stem   before → after".
+--- Pure, so the wording shown before a destructive write is testable.
+---@param item table  One entry of a preview() result
+---@return string
+function M.format_change(item)
+  return string.format('%s   %s  →  %s',
+    vim.fn.fnamemodify(item.path, ':t:r'),
+    #item.before > 0 and table.concat(item.before, ', ') or '(none)',
+    #item.after  > 0 and table.concat(item.after,  ', ') or '(none)')
 end
 
 -- =============================================================================
@@ -339,11 +372,13 @@ local function choose_scope(on_paths)
 end
 
 --- Ask for the tag(s) an operation needs.
---- `remove` and `rename` offer the tags that exist in the vault, since acting
---- on a tag that is not there is always a mistake; `add` takes free text.
----@param kind    string  'add' | 'remove' | 'rename'
+--- `remove` and `rename` offer only the tags carried by the selected notes —
+--- acting on a tag absent from the selection can only be a mistake — with the
+--- count of selected notes each one appears on; `add` takes free text.
+---@param kind    string    'add' | 'remove' | 'rename'
+---@param paths   string[]  The notes the operation will run over
 ---@param on_ops  function(ops: table, header: string)
-local function ask_tags(kind, on_ops)
+local function ask_tags(kind, paths, on_ops)
   if kind == 'add' then
     vim.ui.input({ prompt = 'Tag to add: ' }, function(tag)
       local t = M.normalize(tag)
@@ -353,15 +388,14 @@ local function ask_tags(kind, on_ops)
     return
   end
 
-  local existing = require('pkm.citations').get_all_tags()
-  if #existing == 0 then
-    vim.notify('[pkm] no tags exist yet', vim.log.levels.INFO)
+  local rows = M.tag_counts(paths)
+  if #rows == 0 then
+    vim.notify('[pkm] no tags on the selected notes', vim.log.levels.INFO)
     return
   end
 
-  local prompt = kind == 'remove' and 'Tag to remove:' or 'Tag to rename:'
-  vim.ui.select(existing, { prompt = prompt }, function(chosen)
-    if not chosen then return end
+  local title = kind == 'remove' and 'Tag to remove' or 'Tag to rename'
+  require('pkm.picker').select_tag(rows, { title = title }, function(chosen)
     local from = M.normalize(chosen)
     if not from then return end
 
@@ -387,9 +421,32 @@ local function ask_tags(kind, on_ops)
   end)
 end
 
+--- Pick a tag and browse the notes carrying it.
+--- The picker shows how many notes each tag is on and previews them, so the
+--- choice is informed before the browser opens.
+function M.browse_by_tag()
+  local rows = M.tag_counts()
+  if #rows == 0 then
+    vim.notify('[pkm] no tags found', vim.log.levels.INFO)
+    return
+  end
+
+  require('pkm.picker').select_tag(rows, { title = 'Browse by tag' }, function(tag)
+    -- A tag with a space must reach the filter parser quoted.
+    local expr = 'tag:' .. (tag:find('%s') and ('"' .. tag .. '"') or tag)
+    if pcall(require, 'telescope') then
+      require('pkm.telescope').browse(expr)
+    else
+      require('pkm.ui').browse(expr)
+    end
+  end)
+end
+
 --- Run one batch tag operation end to end.
---- Writes only after the preview float has been confirmed; an operation that
---- would change nothing says so and stops there.
+--- Writes only after the change list has been confirmed, and only over the
+--- notes that confirmation returns — the same picker gesture as everywhere
+--- else, so the last screen can still drop a note from the batch. An operation
+--- that would change nothing says so and stops there.
 ---@param kind string  'add' | 'remove' | 'rename'
 function M.batch_flow(kind)
   choose_scope(function(candidates)
@@ -402,7 +459,7 @@ function M.batch_flow(kind)
       title = 'PKMTags ' .. kind,
       hint  = 'use listed',
     }, function(selected)
-      ask_tags(kind, function(ops, header)
+      ask_tags(kind, selected, function(ops, header)
         local plan = M.preview(selected, ops)
         if #plan == 0 then
           vim.notify(
@@ -411,18 +468,26 @@ function M.batch_flow(kind)
           return
         end
 
-        require('pkm.picker').confirm({
-          title      = 'PKMTags: confirm',
-          lines      = M.format_preview(plan, header),
-          on_cancel  = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
-          on_confirm = function()
-            local applied, errors = M.apply(selected, ops)
-            vim.notify(string.format('[pkm] %s — %d note%s updated%s',
-              header, applied, applied == 1 and '' or 's',
-              errors > 0 and (', ' .. errors .. ' failed') or ''),
-              errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
-          end,
-        })
+        -- Only the notes that would actually change reach the confirmation,
+        -- each rendered as its own before → after row.
+        local paths, by_path = {}, {}
+        for _, item in ipairs(plan) do
+          paths[#paths + 1] = item.path
+          by_path[item.path] = item
+        end
+
+        require('pkm.picker').select(paths, {
+          title     = 'PKMTags ' .. header,
+          hint      = 'apply to listed',
+          display   = function(path) return M.format_change(by_path[path]) end,
+          on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
+        }, function(confirmed)
+          local applied, errors = M.apply(confirmed, ops)
+          vim.notify(string.format('[pkm] %s — %d note%s updated%s',
+            header, applied, applied == 1 and '' or 's',
+            errors > 0 and (', ' .. errors .. ' failed') or ''),
+            errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
+        end)
       end)
     end)
   end)

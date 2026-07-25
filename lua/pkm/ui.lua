@@ -11,7 +11,6 @@
 --
 -- Public API:
 --   setup(user_config)        → Initialize with resolved PKM config
---   browse_tags()              → Two-level tag → file picker
 --   browse(filter_expr?)       → Prompt for filter expression, eval, vim.ui.select results
 --   browse_paths(title, paths) → Show scoped path list via vim.ui.select (sorted)
 --   browse_recent(n?)          → n most-recently-modified notes via vim.ui.select
@@ -610,23 +609,6 @@ function M.browse_recent(n)
     end,
   }, function(sel)
     if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.path)) end
-  end)
-end
-
---- Tag picker. On selection, opens browse() pre-filtered to tag:<selected>.
-function M.browse_tags()
-  local tags = require('pkm.citations').get_all_tags()
-
-  if #tags == 0 then
-    vim.notify('[pkm] no tags found', vim.log.levels.INFO)
-    return
-  end
-
-  vim.ui.select(tags, {
-    prompt = 'Browse by Tag',
-    format_item = function(t) return t end,
-  }, function(sel)
-    if sel then M.browse('tag:' .. sel) end
   end)
 end
 

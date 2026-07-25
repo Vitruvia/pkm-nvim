@@ -1,8 +1,8 @@
 -- =============================================================================
 -- pkm.picker — Note selection and confirmation front-ends
 -- =============================================================================
--- Dependencies : pkm.utils, pkm.yaml (lazy), telescope (optional)
--- Consumed by  : pkm.export (results picker), pkm.ui (batch tag flow)
+-- Dependencies : pkm.utils, pkm.yaml (lazy), pkm.index (lazy), telescope (optional)
+-- Consumed by  : pkm.export (results picker), pkm.tags (tag picker, batch flow)
 --
 -- Two front-ends, one gesture. Every operation that acts on a *set* of notes
 -- goes through select(): filter first, then mark with <Tab>, then confirm.
@@ -15,13 +15,18 @@
 -- filters by exact substring (never fuzzy) and therefore also narrows what an
 -- unmarked <CR> confirms.
 --
--- Neither function writes anything: they collect an answer and hand it to a
+-- That one gesture is why a batch preview is not a screen of its own: the
+-- "before → after" list is just select() with a different row renderer
+-- (opts.display), so marking never flips meaning between screens.
+--
+-- No function here writes anything: they collect an answer and hand it to a
 -- callback. What the caller does with it — copy, retag, delete — is the
 -- caller's business.
 --
 -- Public API:
---   select(paths, opts, on_confirm)  → note picker; on_confirm(string[] paths)
---   confirm(opts)                    → scrollable list + <CR>/q; no selection
+--   select(paths, opts, on_confirm)   → note picker; on_confirm(string[] paths)
+--   select_tag(rows, opts, on_choice) → tag picker with counts; on_choice(tag)
+--   confirm(opts)                     → scrollable list + <CR>/q; no selection
 -- =============================================================================
 
 local M = {}
@@ -62,12 +67,45 @@ local function title_line(title, count, hint)
     title, count, count == 1 and '' or 's', hint)
 end
 
+--- Right-pad to a display width, counting columns rather than bytes so that
+--- accented tags ("língua-portuguesa") line up with plain ASCII ones.
+---@param text  string
+---@param width integer
+---@return string
+local function pad_to(text, width)
+  return text .. string.rep(' ', math.max(width - vim.fn.strdisplaywidth(text), 0))
+end
+
+--- Preview body for one tag: the notes carrying it, title first.
+--- Read from the index, so it costs nothing beyond what is already in memory.
+---@param row table  { tag, count, paths }
+---@return string[]
+local function tag_preview_lines(row)
+  local index = require('pkm.index')
+  local lines = {
+    '# ' .. row.tag,
+    '',
+    string.format('%d note%s', row.count, row.count == 1 and '' or 's'),
+    '',
+  }
+
+  for _, path in ipairs(row.paths) do
+    local entry = index.get(path)
+    lines[#lines + 1] = string.format('%s %s',
+      utils.type_prefix(entry and entry.note_type or nil),
+      (entry and entry.title ~= '' and entry.title) or vim.fn.fnamemodify(path, ':t:r'))
+    lines[#lines + 1] = '      ' .. vim.fn.fnamemodify(path, ':t')
+  end
+
+  return lines
+end
+
 -- =============================================================================
 -- SECTION: Telescope front-end
 -- =============================================================================
 
 ---@param paths      string[]
----@param opts       table     { title, hint, on_cancel? }
+---@param opts       table     { title, hint, display, on_cancel? }
 ---@param on_confirm function(paths: string[])
 local function telescope_select(paths, opts, on_confirm)
   local pickers      = require('telescope.pickers')
@@ -80,7 +118,7 @@ local function telescope_select(paths, opts, on_confirm)
   -- Built once; the dynamic finder filters this table on every keystroke.
   local entries = {}
   for _, path in ipairs(paths) do
-    local display = build_display(path)
+    local display = opts.display(path)
     entries[#entries + 1] = {
       value   = path,
       display = display,
@@ -150,6 +188,59 @@ local function telescope_select(paths, opts, on_confirm)
   }):find()
 end
 
+---@param rows      table[]   { { tag, count, paths }, … }
+---@param opts      table     { title }
+---@param on_choice function(tag: string)
+local function telescope_select_tag(rows, opts, on_choice)
+  local pickers      = require('telescope.pickers')
+  local finders      = require('telescope.finders')
+  local actions      = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+  local previewers   = require('telescope.previewers')
+  local conf         = require('telescope.config').values
+
+  local width = 0
+  for _, row in ipairs(rows) do
+    width = math.max(width, vim.fn.strdisplaywidth(row.tag))
+  end
+
+  pickers.new({}, {
+    prompt_title = string.format('%s:  %d tag%s', opts.title, #rows, #rows == 1 and '' or 's'),
+
+    finder = finders.new_table({
+      results = rows,
+      entry_maker = function(row)
+        return {
+          value   = row,
+          ordinal = row.tag,
+          display = string.format('%s  (%d note%s)',
+            pad_to(row.tag, width), row.count, row.count == 1 and '' or 's'),
+        }
+      end,
+    }),
+
+    sorter = conf.generic_sorter({}),
+
+    previewer = previewers.new_buffer_previewer({
+      title = 'Notes with this tag',
+      define_preview = function(self, entry)
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
+          tag_preview_lines(entry.value))
+        vim.api.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
+      end,
+    }),
+
+    attach_mappings = function(prompt_bufnr)
+      actions.select_default:replace(function()
+        local sel = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        if sel then vim.schedule(function() on_choice(sel.value.tag) end) end
+      end)
+      return true
+    end,
+  }):find()
+end
+
 -- =============================================================================
 -- SECTION: Float front-end (no Telescope)
 -- =============================================================================
@@ -200,13 +291,18 @@ end
 --- Pick notes from a list and hand the confirmed subset to on_confirm.
 --- Telescope when available (filter as you type, `<Tab>` to mark), the float
 --- fallback otherwise (whole list, `<CR>` confirms all).
+---
+--- `opts.display` renders one row. It defaults to filename + tags; a batch
+--- preview passes its own renderer so the same picker shows "before → after"
+--- without changing what marking and `<CR>` mean.
 ---@param paths      string[]  Candidates, already collected by the caller
----@param opts       table     { title = string, hint = string, on_cancel? = function }
+---@param opts       table     { title, hint, display? = function(path)→string, on_cancel? }
 ---@param on_confirm function(paths: string[])
 function M.select(paths, opts, on_confirm)
   opts = opts or {}
-  opts.title = opts.title or 'PKM'
-  opts.hint  = opts.hint  or 'confirm'
+  opts.title   = opts.title   or 'PKM'
+  opts.hint    = opts.hint    or 'confirm'
+  opts.display = opts.display or build_display
 
   if #paths == 0 then
     vim.notify('[pkm] no notes to choose from', vim.log.levels.INFO)
@@ -222,7 +318,7 @@ function M.select(paths, opts, on_confirm)
     .. '  ·  q/<Esc> cancel'
   local lines  = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
   for _, p in ipairs(paths) do
-    lines[#lines + 1] = '  • ' .. build_display(p)
+    lines[#lines + 1] = '  • ' .. opts.display(p)
   end
 
   float_window(opts.title, lines,
@@ -230,9 +326,43 @@ function M.select(paths, opts, on_confirm)
     opts.on_cancel)
 end
 
+--- Pick one tag from a counted list and hand it to on_choice.
+--- Telescope shows the note count beside each tag and previews the notes that
+--- carry it; without Telescope it degrades to `vim.ui.select` with the count in
+--- the label. The caller builds the rows (see `tags.tag_counts`), which is what
+--- keeps this module free of any dependency on the tag engine.
+---@param rows      table[]  { { tag = string, count = integer, paths = string[] }, … }
+---@param opts      table    { title = string }
+---@param on_choice function(tag: string)
+function M.select_tag(rows, opts, on_choice)
+  opts = opts or {}
+  opts.title = opts.title or 'Tags'
+
+  if #rows == 0 then
+    vim.notify('[pkm] no tags to choose from', vim.log.levels.INFO)
+    return
+  end
+
+  if pcall(require, 'telescope') then
+    telescope_select_tag(rows, opts, on_choice)
+    return
+  end
+
+  vim.ui.select(rows, {
+    prompt      = opts.title,
+    format_item = function(row)
+      return string.format('%s  (%d note%s)',
+        row.tag, row.count, row.count == 1 and '' or 's')
+    end,
+  }, function(row)
+    if row then vim.schedule(function() on_choice(row.tag) end) end
+  end)
+end
+
 --- Show a read-only list and ask for confirmation. No selection, no marks:
---- `<CR>` accepts the whole thing, `q`/`<Esc>` backs out. Used to preview a
---- change before it is written.
+--- `<CR>` accepts the whole thing, `q`/`<Esc>` backs out. For an all-or-nothing
+--- gate over a change the user cannot usefully narrow — where select() would
+--- promise a per-note choice the operation does not have.
 ---@param opts table  { title, lines, on_confirm, on_cancel? }
 function M.confirm(opts)
   float_window(opts.title or 'PKM', opts.lines or {},

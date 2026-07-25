@@ -217,6 +217,16 @@ everything else floats and may be reordered.
    containing every modification it needs, file-by-file, never split across
    messages.
 
+4. **A feature ships its own UI, in its own phase.** When a phase creates or
+   changes a choice the user makes, the Telescope version of that screen —
+   counts, previewer, the shared marking gesture — is part of *that* phase, not
+   deferred to a later "UI pass". The `vim.ui.select` / float path remains as the
+   no-Telescope fallback, and small fixed choice sets (3–4 options, e.g. the
+   Simple/Deep menu of `:PKMExport`) may stay `vim.ui.select` outright. Shipping
+   the poor version first creates rework and an inconsistent surface across
+   commands; v1.8.0 Ph3 had to go back and redo the tag panel for exactly this
+   reason.
+
 ---
 
 #### Standing bug-prevention design rules
@@ -539,16 +549,32 @@ The interactive flow is UI and stays hand-smoked; its two seams are not, and
 both are covered: the wording is a pure function, and the float front-end — the
 one that decides what an unmarked `<CR>` means — is drivable in headless.
 
-**Phase 3 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
+**Phase 3 — rich tag UI.** ✅ *Done (pending release tag).*
+
+| File | Single-pass changes |
+|---|---|
+| `picker.lua` | `select_tag(rows, opts, on_choice)` — tag + note count, Telescope previewer listing the notes carrying it, `vim.ui.select` fallback with the count in the label. The caller supplies the rows, so this module still knows nothing about the tag engine. `select()` gained `opts.display`, the row renderer both front-ends use. |
+| `tags.lua` | `tag_counts(paths?)` (read-only, index-sourced, case-collapsing, restrictable to a selection), `format_change(item)` replacing `format_preview`, `browse_by_tag()`. `ask_tags` takes the selection and scopes the tag list to it; `batch_flow` confirms through `select()` + `display` and applies only to what confirmation returns. |
+| `telescope.lua` / `ui.lua` | `browse_tags` deleted from both — one tag picker now. |
+| `commands.lua` | `:PKMTags` browse calls `tags.browse_by_tag()`; the Telescope branch moves into `picker`. |
+| `test/test_v180_p3.lua` (new) · `test_v180_p2.lua` | Counts, collapsing, scoping, row wording, the float rendering a batch through `opts.display`, the fallback; the Ph2 file drops its `format_preview` block. |
+
+Deliberately out of scope: `:PKMMergeTags`. Merging distinct tags under one name
+is a different operation with its own three-step flow; it shares only the
+"choose a tag" screen, and can adopt `select_tag` in a phase of its own.
+
+**Phase 4 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
 sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4, plus an
 add/remove action in `:PKMView`. Must report when a view's filter cannot be
 satisfied by tags alone (`title:`/`text:`/`type:` predicates), rather than
-silently adding tags that will not make the note match.
+silently adding tags that will not make the note match. Its pickers ship with it
+(Operating Principle 4).
 
-**Phase 4 — bulk rename / title.** Batch renaming and title changes over the
+**Phase 5 — bulk rename / title.** Batch renaming and title changes over the
 same selection machinery, propagating through `update_references_on_rename` /
 `propagate_title`. Needs its own dry-run: a partial failure here leaves dangling
-links, which no other bulk operation risks.
+links, which no other bulk operation risks — this is the case `picker.confirm`
+(all-or-nothing gate) is kept for.
 
 ---
 

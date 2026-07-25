@@ -54,45 +54,18 @@ local p3 = write_note('0303_note_three', {})
 index.rebuild()
 
 -- =============================================================================
--- format_preview(): the wording shown before anything is written
+-- preview(): which notes a batch would touch
+--
+-- (The wording of each row moved to tags.format_change in v1.8.0 Ph3, where the
+-- confirmation became a picker; test_v180_p3 covers it.)
 -- =============================================================================
 
 do
-  local plan  = tags.preview({ p1, p2, p3 }, { add = { 'gamma' } })
-  local lines = tags.format_preview(plan, "Add tag 'gamma'")
-
-  check("header names the operation and the count",
-    lines[1]:find("Add tag 'gamma'", 1, true) ~= nil
-    and lines[1]:find('3 notes change', 1, true) ~= nil,
-    lines[1])
-  check("header advertises how to apply and how to cancel",
-    lines[1]:find('<CR> apply', 1, true) ~= nil
-    and lines[1]:find('q/<Esc> cancel', 1, true) ~= nil,
-    lines[1])
-
-  local body = table.concat(lines, '\n')
-  check("each note shows its before → after",
-    body:find('alpha, beta  →  alpha, beta, gamma', 1, true) ~= nil, body)
-  check("an empty tag list reads as (none)",
-    body:find('(none)  →  gamma', 1, true) ~= nil, body)
-  check("every changed note is listed", #lines == 2 + 3 * 2,
-    string.format('%d lines', #lines))
-end
-
-do
-  local lines = tags.format_preview({}, "Remove tag 'nowhere'")
-  check("an empty plan says nothing would change",
-    table.concat(lines, '\n'):find('nothing would change', 1, true) ~= nil,
-    table.concat(lines, '\n'))
-  check("and reports zero notes, in the singular-free wording",
-    lines[1]:find('0 notes change', 1, true) ~= nil, lines[1])
-end
-
-do
-  local plan  = tags.preview({ p1 }, { add = { 'solo' } })
-  local lines = tags.format_preview(plan, "Add tag 'solo'")
-  check("one note is phrased in the singular",
-    lines[1]:find('1 note changes', 1, true) ~= nil, lines[1])
+  local plan = tags.preview({ p1, p2, p3 }, { add = { 'gamma' } })
+  check("every note in the batch is reported as changing", #plan == 3,
+    string.format('%d entries', #plan))
+  check("an unaffected operation reports nothing",
+    #tags.preview({ p1, p2, p3 }, { remove = { 'nowhere' } }) == 0)
 end
 
 -- =============================================================================

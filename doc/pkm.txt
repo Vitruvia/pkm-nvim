@@ -123,7 +123,8 @@ bidirectionally and on save.
 SEARCH~
 Use |:PKMBrowse| for live filter-as-you-type search across all notes.
 Use |:PKMTags| to browse by tag, or to add, remove or rename a tag across many
-notes at once. Use |:PKMOrphans| to find unfiled notes.
+notes at once. The tag picker lists how many notes carry each tag and previews
+them. Use |:PKMOrphans| to find unfiled notes.
 
 BATCH TAGS~
 The batch modes of |:PKMTags| run in four steps, and write nothing until the
@@ -132,10 +133,13 @@ last one is confirmed:
   1. Scope    a filter expression, the current note, or the active view.
   2. Notes    the shared picker — type to narrow, <Tab> to mark, <CR> to take
               everything listed.
-  3. Tag      free text when adding; when removing or renaming, a list of the
-              tags that actually exist.
-  4. Preview  every affected note with its "before -> after" tag list.
-              <CR> applies, q/<Esc> backs out.
+  3. Tag      free text when adding; when removing or renaming, the tags the
+              selected notes actually carry, each with the number of selected
+              notes it is on, previewing those notes as you move.
+  4. Confirm  the same picker again, one row per affected note showing its
+              "before -> after" tags. <CR> applies to everything listed, so
+              narrowing or marking here drops notes from the batch;
+              q/<Esc> backs out and writes nothing.
 
 Tags already present are never duplicated, matching ignores case, and a tag
 already written in the file keeps its spelling — a batch never rewrites a note

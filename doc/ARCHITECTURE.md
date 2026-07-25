@@ -107,13 +107,14 @@ strong justification.** Contains the non-trivial nested-empty-structure parser.
 **journal.lua** — journal creation (auto-timestamped); `sync_filename_on_save`.
 
 **ui.lua** — fallback UI (no Telescope): `browse`, `browse_paths`, `browse_recent`,
-`browse_tags`, `insert_citation_ui`, `merge_tags_ui`, `show_stats`.
+`insert_citation_ui`, `merge_tags_ui`, `show_stats`.
 `toggle_bufpanel()` / `is_bufpanel_open()` — per-tabpage buffer-list panel, built on
 `panel.create`. Tag panel is also built on `panel.create`.
 
 **telescope.lua** — all Telescope pickers. Checked at call time via `pcall`.
-`browse`, `browse_paths`, `browse_recent`, `browse_tags`, `insert_citation_picker`,
-`merge_tags_picker`.
+`browse`, `browse_paths`, `browse_recent`, `insert_citation_picker`,
+`merge_tags_picker`. (Tag browsing lives in `tags.browse_by_tag` since v1.8.0 Ph3 —
+both `browse_tags` implementations are gone.)
 
 **export.lua** — filter + copy notes. No setup. Read-only. Delegates to filter.lua
 and index.lua for matching, and to `picker.lua` for selection (v1.8.0 Ph2 — the
@@ -169,20 +170,27 @@ layer (sidecar + tree helpers + `match_all`), not the sidebar UI.
 **picker.lua** — note selection and confirmation front-ends. `select(paths, opts,
 on_confirm)` shows the Telescope picker or the float fallback — the only place that
 knows which — with one rule in both: `<CR>` with nothing marked confirms everything
-currently listed, `<Tab>` narrows to marks. `confirm(opts)` is the read-only preview
-gate (`<CR>` accepts, `q`/`<Esc>` backs out). Writes nothing itself. Consumed by
-`export.lua` and by `tags.batch_flow`.
+currently listed, `<Tab>` narrows to marks. `opts.display` (v1.8.0 Ph3) is the row
+renderer, which is what lets a batch preview be the same picker showing
+"before → after" instead of a screen with its own gesture. `select_tag(rows, opts,
+on_choice)` picks one tag from counted rows, previewing the notes that carry it; it
+takes the rows ready-made, so the module has no dependency on the tag engine.
+`confirm(opts)` remains for all-or-nothing gates (`<CR>` accepts, `q`/`<Esc>` backs
+out) where a per-note choice would be a lie. Writes nothing itself. Consumed by
+`export.lua` and `tags.lua`.
 
 **tags.lua** — tag computation and batch application, in four layers:
 `plan(tags, ops)` pure (every rule lives here — rename→remove→add, case-insensitive
 matching, no duplicates, surviving tags keep their stored spelling, remove beats
-add); `preview(paths, ops)` read-only; `apply(paths, ops)` the only writer, which
-**must** `index.invalidate` each note it writes — the mirror image of the
-buffer-only `citations.add_tag`/`remove_tag`, which must not. `format_preview` is
-pure so the wording of a destructive confirmation is testable, and `batch_flow(kind)`
-is the interactive layer (scope → notes → tag → preview → apply) that decides nothing
-on its own. Consumed by `citations.merge_tags`, `notes.create_relative_note` and
-`:PKMTags`.
+add); `preview(paths, ops)` and `tag_counts(paths?)` read-only; `apply(paths, ops)`
+the only writer, which **must** `index.invalidate` each note it writes — the mirror
+image of the buffer-only `citations.add_tag`/`remove_tag`, which must not.
+`tag_counts` sources tags from the index (so `Draft`/`draft` collapse into one row)
+and restricts to a selection when given one; `format_change(item)` is pure so the
+wording shown before a destructive write is testable. `browse_by_tag()` and
+`batch_flow(kind)` are the interactive layer (scope → notes → tag → confirm → apply),
+deciding nothing on their own. Consumed by `citations.merge_tags`,
+`notes.create_relative_note` and `:PKMTags`.
 
 **panel.lua** — generic per-tabpage panel factory. `create(spec)` returns an independent
 panel object `{ open(init?), close(), toggle(init?), refresh(), is_open(), get_win() }`,

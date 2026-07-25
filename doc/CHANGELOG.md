@@ -5,6 +5,30 @@
 ## [Unreleased]
 
 ### Added
+-   **Rich tag picker (v1.8.0 Phase 3).** Every tag choice now runs through
+    `picker.select_tag()`: each tag is listed with **how many notes carry it**,
+    and the Telescope preview shows those notes (type, title, filename) before
+    anything is chosen. It serves both `:PKMTags` → browse and the tag prompt of
+    the batch modes; without Telescope it degrades to `vim.ui.select` with the
+    count in the label. The two former tag pickers (`telescope.browse_tags`,
+    `ui.browse_tags`) are gone — one implementation, one behaviour.
+
+    The rule this phase establishes, now recorded in the ROADMAP Operating
+    Principles: **a feature's Telescope display ships in the feature's own
+    phase**, never as deferred UI work.
+-   **The batch confirmation is a picker, not a static float.** `picker.select()`
+    gained `opts.display`, so the `before → after` list is the same note picker
+    as everywhere else: the file previewer works, typing filters, `<Tab>` marks a
+    subset, and an unmarked `<CR>` applies to everything listed. Dropping a note
+    from the batch at the last moment is therefore possible, and marking never
+    changes meaning between screens. `tags.format_preview` (whole-float renderer)
+    became `tags.format_change` (one row); `picker.confirm` stays for
+    all-or-nothing gates where a per-note choice would be a lie.
+-   `test/test_v180_p3.lua` — `tag_counts` (counts, two spellings collapsing into
+    one row, a repeated tag counted once, restriction to a selection), the
+    `format_change` wording, the float front-end rendering a batch through
+    `opts.display`, and the `select_tag` fallback.
+
 -   **Batch tag operations (v1.8.0 Phase 2).** `:PKMTags` now opens with a mode
     choice — browse (as before), or add / remove / rename a tag across a
     selection. Each batch mode runs the same four steps: pick a **scope** (a
@@ -102,6 +126,19 @@
     to the pre-Phase-3 comparator's on a fixture built to expose the difference.
 
 ### Changed
+-   **Tag lists come from the index, not from a disk scan (v1.8.0 Phase 3).**
+    `tags.tag_counts()` reads the in-memory index (cheap since v1.6.2) instead of
+    `citations.get_all_tags()`, which globbed and read every note in three
+    folders on each call. Two visible consequences, both intended: tags are shown
+    in their normalised (lower-case) form, and `Draft`/`draft` — previously two
+    separate entries in the picker — are now one row with the combined count.
+    `citations.get_all_tags()` itself is unchanged and still serves
+    `:PKMMergeTags`.
+-   **`remove` / `rename` offer only the tags of the selected notes.** The tag
+    prompt is scoped to the selection made one step earlier, and shows how many
+    *selected* notes each tag appears on, instead of listing every tag in the
+    vault — choosing a tag absent from the selection could only ever produce
+    "no note in the selection would change".
 -   **`citations.merge_tags` now delegates to `pkm.tags`** — the scan, the rules
     and the writing are one rename operation applied to every indexed note, so
     the loop that duplicated `readfile → parse → save → invalidate` is gone. Two
