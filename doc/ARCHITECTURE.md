@@ -33,6 +33,7 @@ pkm.nvim/
 │   ├── filter.lua      # Filter DSL parser and evaluator (pure logic, no I/O)
 │   ├── tags.lua        # Tag rules (pure), preview (read-only), batch apply (writes)
 │   ├── picker.lua      # Shared note picker + confirmation float (Telescope or fallback)
+│   ├── actions.lua     # Bulk-action registry over a set of notes (panel <C-a>)
 │   ├── index.lua       # In-memory note index with incremental invalidation
 │   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
 │   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle)
@@ -179,6 +180,15 @@ takes the rows ready-made, so the module has no dependency on the tag engine.
 out) where a per-note choice would be a lie. Writes nothing itself. Consumed by
 `export.lua` and `tags.lua`.
 
+**actions.lua** — the bulk-action registry (v1.8.0 Ph4). Rows of
+`{ id, label, run }`; `list()`/`get(id)` are pure, `run(paths)` shows the short
+menu, `run_id(id, paths)` dispatches without one. Every navigation panel calls
+`run(paths)` and knows nothing about what the actions do; every action receives
+paths and knows nothing about panels. New bulk operations are appended here
+rather than wired into panels again — and because the registry is data, it is the
+first piece shaped for the planned `pkm.api`. Consumed by `telescope.lua`
+(`live_picker` `<C-a>`) and `views.lua` (views panel `<C-a>`).
+
 **tags.lua** — tag computation and batch application, in four layers:
 `plan(tags, ops)` pure (every rule lives here — rename→remove→add, case-insensitive
 matching, no duplicates, surviving tags keep their stored spelling, remove beats
@@ -187,10 +197,13 @@ the only writer, which **must** `index.invalidate` each note it writes — the m
 image of the buffer-only `citations.add_tag`/`remove_tag`, which must not.
 `tag_counts` sources tags from the index (so `Draft`/`draft` collapse into one row)
 and restricts to a selection when given one; `format_change(item)` is pure so the
-wording shown before a destructive write is testable. `browse_by_tag()` and
-`batch_flow(kind)` are the interactive layer (scope → notes → tag → confirm → apply),
-deciding nothing on their own. Consumed by `citations.merge_tags`,
-`notes.create_relative_note` and `:PKMTags`.
+wording shown before a destructive write is testable, as are `scope_choices` and
+`parse_command_args` (the `:PKMTags` argument contract). The interactive layer is
+`browse_by_tag()` and `batch_on(paths, kind, ops?, header?)` — a selection that
+already exists, straight to the tag prompt and the confirmation — with
+`batch_flow(kind)` reduced to building a selection for callers that have none.
+Consumed by `actions.lua`, `citations.merge_tags`, `notes.create_relative_note`
+and `:PKMTags`.
 
 **panel.lua** — generic per-tabpage panel factory. `create(spec)` returns an independent
 panel object `{ open(init?), close(), toggle(init?), refresh(), is_open(), get_win() }`,

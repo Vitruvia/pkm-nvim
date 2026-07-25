@@ -207,24 +207,73 @@ function M.register()
     desc     = 'Browse PKM notes with optional filter expression (tag:x AND title:y etc.)',
   })
 
-  -- :PKMTags — browse by tag, or run a batch tag operation over a selection.
-  -- Modes rather than a command each, per ROADMAP "Command clearup"; browsing
-  -- stays first so the common case is one keystroke away.
-  vim.api.nvim_create_user_command('PKMTags', function()
+  -- :PKMTags — the tag browser, or one batch operation stated in arguments.
+  -- Bare, it goes straight to the browser: the mode menu was a screen that
+  -- decided nothing for the common case. Batch operations belong to the
+  -- navigation panels, where the notes are chosen (<C-a>); the argument form is
+  -- the deterministic path for scripts and advanced users, and always ends at
+  -- the change list. Without Telescope the old mode menu is the fallback.
+  vim.api.nvim_create_user_command('PKMTags', function(opts)
     focus_main_win()
+    local tags = require('pkm.tags')
+
+    if #opts.fargs > 0 then
+      local mode, ops, header, err = tags.parse_command_args(opts.fargs)
+      if err then
+        vim.notify('[pkm] :PKMTags — ' .. err, vim.log.levels.ERROR)
+        return
+      end
+      if mode == 'browse' then
+        tags.browse_by_tag()
+      elseif ops then
+        -- Stated in full, so the scope is the whole vault; the change list is
+        -- still shown, and nothing is written until it is confirmed.
+        tags.batch_on(tags.all_note_paths(), mode, ops, header)
+      else
+        tags.batch_flow(mode)
+      end
+      return
+    end
+
+    if pcall(require, 'telescope') then
+      tags.browse_by_tag()
+      return
+    end
+
     vim.ui.select({
       'Browse by tag',
       'Add a tag to notes…',
       'Remove a tag from notes…',
       'Rename a tag on notes…',
     }, { prompt = 'Tags:' }, function(_, idx)
-      if idx == 1 then require('pkm.tags').browse_by_tag()
-      elseif idx == 2 then require('pkm.tags').batch_flow('add')
-      elseif idx == 3 then require('pkm.tags').batch_flow('remove')
-      elseif idx == 4 then require('pkm.tags').batch_flow('rename')
+      if idx == 1 then tags.browse_by_tag()
+      elseif idx == 2 then tags.batch_flow('add')
+      elseif idx == 3 then tags.batch_flow('remove')
+      elseif idx == 4 then tags.batch_flow('rename')
       end
     end)
-  end, { desc = 'Browse notes by tag, or add/remove/rename tags over a selection' })
+  end, {
+    nargs    = '*',
+    complete = function(arg_lead, cmd_line)
+      local words = vim.split(vim.trim(cmd_line), '%s+')
+      -- Word 1 is the command itself; the mode is word 2.
+      local typing_mode = #words < 2 or (#words == 2 and arg_lead ~= '')
+
+      local candidates = {}
+      if typing_mode then
+        candidates = { 'browse', 'add', 'remove', 'rename' }
+      elseif words[2] == 'remove' or words[2] == 'rename' then
+        for _, row in ipairs(require('pkm.tags').tag_counts()) do
+          candidates[#candidates + 1] = row.tag
+        end
+      end
+
+      return vim.tbl_filter(function(c)
+        return c:find(arg_lead, 1, true) == 1
+      end, candidates)
+    end,
+    desc = 'Browse notes by tag; with arguments, run one batch tag operation',
+  })
 
   vim.api.nvim_create_user_command('PKMMergeTags', function()
     local has_tele = pcall(require, 'telescope')

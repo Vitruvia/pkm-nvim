@@ -5,6 +5,33 @@
 ## [Unreleased]
 
 ### Added
+-   **Bulk actions start from the selection (v1.8.0 Phase 4).** `<C-a>` in any
+    note picker runs a bulk operation over **the notes marked there** — or, with
+    nothing marked, over everything the prompt leaves listed — the same rule
+    `<CR>` already obeys. Since one `live_picker` backs them all, that covers
+    `:PKMBrowse`, `:PKMBrowseRecent`, the sidebar's `/` and the views tree's
+    `<C-f>` at once; `<Tab>` marks. The views panel (`:PKMViews`) gets `<C-a>`
+    too: over a view it acts on every note the view matches, over a note on that
+    note. Choosing notes is what the navigation panels are for — rebuilding the
+    selection through a command was manual work the plugin exists to remove.
+-   **`lua/pkm/actions.lua`** — the bulk-action registry: a plain list of
+    `{ id, label, run }`, with `list()`/`get(id)` pure and enumerable, `run(paths)`
+    for the menu and `run_id(id, paths)` for a caller that already knows what it
+    wants. Growing the menu means appending a row here, not touching a panel
+    again — view membership and bulk rename will land exactly that way. It is
+    also the first piece shaped for the future `pkm.api`: the operations are
+    data, so they can be listed and invoked without a screen.
+-   **`:PKMTags` takes arguments.** `:PKMTags rename draf draft`,
+    `:PKMTags add draft`, `:PKMTags remove draft`, `:PKMTags browse` — with
+    completion for the mode and, for `remove`/`rename`, for the existing tags.
+    The argument form is deterministic (whole vault) and **still ends at the
+    change list**; nothing is written before it is confirmed. No new command:
+    per ROADMAP *Command clearup*, an argument on an existing command is how an
+    advanced user or a script gets direct access.
+-   `test/test_v180_p4.lua` — the registry (ids, labels, dispatch, unknown id,
+    empty selection), `scope_choices` (why the one-option menu disappeared),
+    the whole `parse_command_args` contract including its refusals, and
+    `batch_on` writing a decided operation with no prompts.
 -   **Rich tag picker (v1.8.0 Phase 3).** Every tag choice now runs through
     `picker.select_tag()`: each tag is listed with **how many notes carry it**,
     and the Telescope preview shows those notes (type, title, filename) before
@@ -126,6 +153,16 @@
     to the pre-Phase-3 comparator's on a fixture built to expose the difference.
 
 ### Changed
+-   **`:PKMTags` no longer opens with a mode menu (v1.8.0 Phase 4).** Bare, it
+    goes straight to the tag browser — the four-option menu decided nothing for
+    the common case and cost a screen every time. It survives as the
+    no-Telescope fallback. The batch modes moved to where the notes are chosen:
+    `<C-a>` in a picker or in `:PKMViews`.
+-   **The scope menu no longer appears when it has one option.** Asking "which
+    notes?" with only *Filter…* available is a step that decides nothing, so the
+    filter prompt opens directly. `tags.scope_choices(path, view)` is pure, and
+    the batch flow that needs a scope is now only reached by callers that have
+    no selection of their own.
 -   **Tag lists come from the index, not from a disk scan (v1.8.0 Phase 3).**
     `tags.tag_counts()` reads the in-memory index (cheap since v1.6.2) instead of
     `citations.get_all_tags()`, which globbed and read every note in three

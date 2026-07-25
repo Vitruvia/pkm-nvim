@@ -127,19 +127,33 @@ notes at once. The tag picker lists how many notes carry each tag and previews
 them. Use |:PKMOrphans| to find unfiled notes.
 
 BATCH TAGS~
-The batch modes of |:PKMTags| run in four steps, and write nothing until the
-last one is confirmed:
+Bulk operations start from the notes you have in front of you. In any note
+picker — |:PKMBrowse|, |:PKMBrowseRecent|, the sidebar's "/" and the views
+tree's <C-f> — mark notes with <Tab> and press <C-a>. With nothing marked,
+<C-a> acts on everything the prompt currently leaves listed. In |:PKMViews|,
+<C-a> over a view acts on every note that view matches.
 
-  1. Scope    a filter expression, the current note, or the active view.
-  2. Notes    the shared picker — type to narrow, <Tab> to mark, <CR> to take
-              everything listed.
-  3. Tag      free text when adding; when removing or renaming, the tags the
+The action menu is short (add, remove or rename a tag; more in later versions).
+After it, two steps, and nothing is written until the last is confirmed:
+
+  1. Tag      free text when adding; when removing or renaming, the tags the
               selected notes actually carry, each with the number of selected
               notes it is on, previewing those notes as you move.
-  4. Confirm  the same picker again, one row per affected note showing its
+  2. Confirm  the note picker again, one row per affected note showing its
               "before -> after" tags. <CR> applies to everything listed, so
               narrowing or marking here drops notes from the batch;
               q/<Esc> backs out and writes nothing.
+
+|:PKMTags| also takes arguments, for scripts and for direct access: >
+
+    :PKMTags                       browse by tag (the bare form)
+    :PKMTags add draft             add a tag
+    :PKMTags remove draft          remove a tag
+    :PKMTags rename draf draft     rename a tag
+<
+The argument form is deterministic — it targets the whole vault, not whatever
+happens to be open — and still ends at the confirmation step above. Quote a
+multi-word tag: `:PKMTags add "ring forge"`.
 
 Tags already present are never duplicated, matching ignores case, and a tag
 already written in the file keeps its spelling — a batch never rewrites a note
@@ -248,11 +262,16 @@ SEARCH AND BROWSE~
                         cites/cited_by group), and do not match any defined
                         view. Useful for locating abandoned or unfiled notes.
 
-:PKMTags                Browse notes by tag, or run a batch tag operation.
-                        Browsing selects a tag from the full tag list and
-                        opens :PKMBrowse pre-filtered to it. The other three
-                        modes add, remove or rename a tag across a selection
-                        of notes — see |pkm-search| for the four steps.
+:PKMTags [mode] [tag] [new-tag]
+                        Bare, it opens the tag picker — each tag with the
+                        number of notes carrying it, previewing them — and
+                        opens :PKMBrowse pre-filtered to the one chosen.
+                        Without Telescope, a mode menu instead.
+                        With arguments (browse | add | remove | rename), it
+                        runs that operation over the whole vault, ending at
+                        the confirmation step. Completes modes and tags.
+                        To act on chosen notes instead, mark them in any note
+                        picker and press <C-a> — see |pkm-search|.
 
 :PKMMergeTags           Merge one or more tags into a target tag across all
                         notes. Three-step Telescope picker, or fallback UI.

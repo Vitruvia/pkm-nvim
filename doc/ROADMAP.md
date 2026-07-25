@@ -563,18 +563,31 @@ Deliberately out of scope: `:PKMMergeTags`. Merging distinct tags under one name
 is a different operation with its own three-step flow; it shares only the
 "choose a tag" screen, and can adopt `select_tag` in a phase of its own.
 
-**Phase 4 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
-sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4, plus an
-add/remove action in `:PKMView`. Must report when a view's filter cannot be
-satisfied by tags alone (`title:`/`text:`/`type:` predicates), rather than
-silently adding tags that will not make the note match. Its pickers ship with it
-(Operating Principle 4).
+**Phase 4 — bulk actions start from the selection.** ✅ *Done (pending release tag).*
 
-**Phase 5 — bulk rename / title.** Batch renaming and title changes over the
+| File | Single-pass changes |
+|---|---|
+| `actions.lua` (new) | The bulk-action registry: `{ id, label, run }` rows, `list()`/`get(id)` pure, `run(paths)` (menu) and `run_id(id, paths)` (no menu). Later phases append rows instead of touching panels again. |
+| `tags.lua` | `batch_on(paths, kind, ops?, header?)` — the entry point for a selection that already exists, with the tag prompt skipped when `ops` is given; `batch_flow(kind)` reduced to "build a selection, then delegate". `scope_choices(path, view)` pure, and a one-option scope menu no longer appears. `parse_command_args(fargs)` pure. |
+| `telescope.lua` | `live_picker` gains `<Tab>` marking and `<C-a>` → `actions.run`, covering `:PKMBrowse`, `:PKMBrowseRecent`, the sidebar `/` and the views tree `<C-f>` in one place. |
+| `views.lua` | Views panel `<C-a>`: a view's matched notes, or the note under the cursor in browse mode. |
+| `commands.lua` | `:PKMTags` bare → the tag browser (mode menu only as the no-Telescope fallback); with arguments → one operation, deterministic over the whole vault, still gated by the change list. Completion for modes and existing tags. |
+| `test/test_v180_p4.lua` (new) | Registry, `scope_choices`, the whole argument contract with its refusals, `batch_on` writing without prompts. |
+
+**Phase 5 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
+sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4. Ships as
+**two rows in the action registry** (`view_add` / `view_remove`), so every panel
+that already has `<C-a>` gains it for free; the sidebar's note list gets its
+multi-selection here, since this phase is already in that surface. Must report
+when a view's filter cannot be satisfied by tags alone (`title:`/`text:`/`type:`
+predicates), rather than silently adding tags that will not make the note match.
+
+**Phase 6 — bulk rename / title.** Batch renaming and title changes over the
 same selection machinery, propagating through `update_references_on_rename` /
-`propagate_title`. Needs its own dry-run: a partial failure here leaves dangling
-links, which no other bulk operation risks — this is the case `picker.confirm`
-(all-or-nothing gate) is kept for.
+`propagate_title`. Also a registry row, so it inherits every entry point. Needs
+its own dry-run: a partial failure here leaves dangling links, which no other
+bulk operation risks — this is the case `picker.confirm` (all-or-nothing gate)
+is kept for.
 
 ---
 
@@ -626,6 +639,30 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
     simply show options for what type of panel should be opened (unless the user
     is constantly opening such panels, in which case selecting options will become
     a drag).
+
+    **Partially resolved (v1.8.0 Ph4) — the policy every phase now follows:**
+
+    a.  **A typed command is for what the user invokes directly.** Nothing gets a
+        new `:PKM*` name when it fits as an argument to an existing command or as
+        an action in a panel. `:PKMExportDeep` (removed) and the batch tag modes
+        (moved to `<C-a>`) are the two worked examples.
+    b.  **Every capability lands in three layers:** a pure or read-only core with
+        no UI; a row in the `actions.lua` registry when it acts on a set of notes;
+        and at most one more argument on an existing command. The UI is always the
+        thinnest layer.
+    c.  **Choosing notes belongs to the navigation panels**, not to a command's
+        own scope prompt. A command that needs a selection and has none is the
+        exception, not the design.
+    d.  **The interactive form and the programmatic form are the same command.**
+        Bare, it is the friendly path (`:PKMTags` → the tag browser); with
+        arguments, it is deterministic and script-callable (`:PKMTags rename draf
+        draft`) — one entry in `:PKM<TAB>` either way. Destructive operations keep
+        their confirmation in both forms.
+
+    Still open: which of the 47 registrations are residual, which should become
+    keymaps only, and which should stop being commands. That pass belongs with
+    the `pkm.api` work in Near goals 4, since the two answer the same question
+    from opposite ends.
 
 ---
 
@@ -756,7 +793,39 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
     [b,c]}
 
         
-4.  **Misc** (currently set to be done in the active development's Phase X,
+4.  **`pkm.api` — a programmatic surface for LLM assistants and advanced users.**
+    The author intends to drive the vault from an assistant (Claude) running in a
+    terminal or through Neovim's command line: create notes, retag in bulk, query
+    views, export a set — without a human at a picker. That needs a boundary the
+    plugin does not have yet, and the point of drawing it is as much about what
+    stays *out* of `:PKM<TAB>` as about what goes in.
+
+    Shape (not yet designed in detail, but the constraints are fixed):
+
+    -   **`require('pkm.api')` returns data and never opens UI.** Headless-safe by
+        construction, so every function is callable from
+        `nvim --headless -c "lua ..."` and testable without a screen.
+    -   **It wraps existing cores, it does not reimplement them.** The pure and
+        read-only layers already exist — `tags.plan`/`preview`/`apply`,
+        `filter.parse`/`eval`, `index.get_all`, `export.collect_deep`,
+        `views.match_all`, `actions.list` — and the API is the stable naming over
+        them. Commands and panels become the other, equally thin, wrapper.
+    -   **Bulk operations are enumerable.** `actions.list()` (v1.8.0 Ph4) already
+        returns `{ id, label, run }`, which is what lets an assistant discover the
+        available operations instead of hard-coding them.
+    -   **Writes stay auditable.** Anything that touches disk reports what it
+        changed (as `tags.apply` does) and keeps `index.invalidate` discipline;
+        confirmation belongs to the *interactive* wrapper, so the API must never
+        silently acquire a prompt.
+    -   **No new typed commands.** The API is reached from Lua; at most one
+        dispatcher would ever be added, and only if a real need appears.
+
+    Sequencing: it comes after the bulk-operation phases it would expose (v1.8.0
+    Ph5–Ph6), and it carries the still-open half of *Command clearup* (Design
+    Question 4) — deciding which of the 47 registrations survive as typed
+    commands once a programmatic path exists.
+
+5.  **Misc** (currently set to be done in the active development's Phase X,
     meaning the LLM assistant should decide when it is best to implement them):
     -   Partially fixed: now I get prompted (have to answer with y or n)
         instead of having to type `w!`. This is an acceptable solution, unless

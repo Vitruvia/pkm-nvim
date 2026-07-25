@@ -16,10 +16,12 @@
 --              answers "which tags exist here, and on how many notes".
 --   apply()    the only writing function — same plan(), then one frontmatter
 --              write per changed note.
---   batch_flow() the interactive layer on top: pick a scope, pick the notes,
---              name the tag, confirm the change list, then apply. It decides
---              nothing on its own — every rule it obeys lives in plan(), and
---              every screen it shows belongs to pkm.picker.
+--   batch_on()  the interactive layer on top of a selection that already
+--              exists — the marks in a navigation panel, a view's notes, a
+--              command argument. It decides nothing on its own: every rule it
+--              obeys lives in plan(), every screen it shows belongs to
+--              pkm.picker. batch_flow() is the same thing for callers with no
+--              selection, and only adds the steps needed to build one.
 --
 -- Operation set (all fields optional):
 --   { add    = { "tag", … },              -- appended when absent
@@ -51,8 +53,11 @@
 --   format_change(item)    → one "before → after" display line — pure
 --   apply(paths, ops)      → (applied, errors) — writes and invalidates
 --   all_note_paths()       → every indexed note path (helper for whole-vault ops)
+--   scope_choices(path, view) → the scopes a batch can start from — pure
+--   parse_command_args(fargs) → (mode, ops, header, err) for :PKMTags — pure
 --   browse_by_tag()        → tag picker → browse pre-seeded to tag:<x>
---   batch_flow(kind)       → interactive add / remove / rename over a selection
+--   batch_on(paths, kind, ops?, header?) → batch over notes already chosen
+--   batch_flow(kind)       → the same, for callers that must first build one
 -- =============================================================================
 
 local M = {}
@@ -332,41 +337,72 @@ local function paths_matching(expr)
   return out
 end
 
+--- The scopes a batch operation can start from, given the session's state.
+--- Pure, so the one case that matters can be asserted: with nothing open and no
+--- active view only 'filter' remains, and a menu of one option is a step that
+--- decides nothing.
+---@param current_path string|nil  Name of the buffer in the current window
+---@param active_view  string|nil  Name of the last opened view, if any
+---@return { kind: string, label: string }[]  never empty; 'filter' is always last
+function M.scope_choices(current_path, active_view)
+  local choices = {}
+
+  if current_path and current_path ~= '' and current_path:match('%.md$') then
+    choices[#choices + 1] = {
+      kind  = 'note',
+      label = 'Current note  (' .. vim.fn.fnamemodify(current_path, ':t:r') .. ')',
+    }
+  end
+  if active_view then
+    choices[#choices + 1] = {
+      kind  = 'view',
+      label = "Current view  ('" .. active_view .. "')",
+    }
+  end
+
+  choices[#choices + 1] = { kind = 'filter', label = 'Filter…  (tag:x AND title:y)' }
+  return choices
+end
+
+--- Prompt for a filter expression and hand over what it matches.
+---@param on_paths function(paths: string[])
+local function ask_filter(on_paths)
+  vim.ui.input({ prompt = 'Filter: ' }, function(expr)
+    if not expr or expr:match('^%s*$') then return end
+    local paths = paths_matching(expr)
+    if paths then vim.schedule(function() on_paths(paths) end) end
+  end)
+end
+
 --- Resolve the candidate notes for a batch operation and pass them on.
---- Scopes: the note in the current buffer, the active view, or a filter.
+--- Only reached when the caller has no selection of its own — from a navigation
+--- panel the notes are already chosen, and none of this runs.
 ---@param on_paths function(paths: string[])
 local function choose_scope(on_paths)
   local views   = require('pkm.views')
   local current = vim.api.nvim_buf_get_name(0)
   local active  = views.get_last_view()
+  local choices = M.scope_choices(current, active)
 
-  local choices = { 'Filter…  (tag:x AND title:y)' }
-  local kinds   = { 'filter' }
-  if current ~= '' and current:match('%.md$') then
-    choices[#choices + 1] = 'Current note  (' .. vim.fn.fnamemodify(current, ':t:r') .. ')'
-    kinds[#kinds + 1]     = 'note'
-  end
-  if active then
-    choices[#choices + 1] = "Current view  ('" .. active .. "')"
-    kinds[#kinds + 1]     = 'view'
+  -- One viable scope is not a choice: go straight to it.
+  if #choices == 1 then
+    ask_filter(on_paths)
+    return
   end
 
-  vim.ui.select(choices, { prompt = 'Which notes?' }, function(_, idx)
+  local labels = {}
+  for _, choice in ipairs(choices) do labels[#labels + 1] = choice.label end
+
+  vim.ui.select(labels, { prompt = 'Which notes?' }, function(_, idx)
     if not idx then return end
-    local kind = kinds[idx]
+    local kind = choices[idx].kind
 
     if kind == 'note' then
       on_paths({ current })
-
     elseif kind == 'view' then
       on_paths(views.match_all(active))
-
     else
-      vim.ui.input({ prompt = 'Filter: ' }, function(expr)
-        if not expr or expr:match('^%s*$') then return end
-        local paths = paths_matching(expr)
-        if paths then vim.schedule(function() on_paths(paths) end) end
-      end)
+      ask_filter(on_paths)
     end
   end)
 end
@@ -421,6 +457,72 @@ local function ask_tags(kind, paths, on_ops)
   end)
 end
 
+--- Interpret `:PKMTags` arguments.
+--- Pure: no editor state, no I/O, so the command's contract — the one an
+--- advanced user or a script relies on — is testable on its own.
+---
+---   (nothing)              → browse
+---   browse                 → browse
+---   add|remove <tag>       → that operation, tag already resolved
+---   add|remove             → that operation, tag to be prompted for
+---   rename <from> <to>     → rename, both tags resolved
+---
+---@param fargs string[]|nil  Command arguments, already split by Neovim
+---@return string|nil mode    'browse' | 'add' | 'remove' | 'rename'; nil on error
+---@return table|nil  ops     Operation set when the arguments carry the tags
+---@return string|nil header  Wording for the confirmation, alongside ops
+---@return string|nil err     Message when the arguments do not make sense
+function M.parse_command_args(fargs)
+  fargs = fargs or {}
+  if #fargs == 0 then return 'browse' end
+
+  --- A quoted argument reaches us with its quotes; a tag never wants them.
+  ---@param arg string|nil
+  ---@return string|nil
+  local function unquote(arg)
+    if type(arg) ~= 'string' then return nil end
+    return M.normalize((arg:gsub('^(["\'])(.*)%1$', '%2')))
+  end
+
+  local mode = fargs[1]:lower()
+
+  if mode == 'browse' then
+    if #fargs > 1 then return nil, nil, nil, 'browse takes no further argument' end
+    return 'browse'
+  end
+
+  if mode == 'add' or mode == 'remove' then
+    if #fargs > 2 then
+      return nil, nil, nil, mode .. ' takes at most one tag'
+    end
+    if #fargs == 1 then return mode end
+
+    local tag = unquote(fargs[2])
+    if not tag then return nil, nil, nil, 'empty tag' end
+
+    if mode == 'add' then
+      return mode, { add = { tag } }, "Add tag '" .. tag .. "'"
+    end
+    return mode, { remove = { tag } }, "Remove tag '" .. tag .. "'"
+  end
+
+  if mode == 'rename' then
+    if #fargs ~= 3 then
+      return nil, nil, nil, 'rename needs both the old and the new tag'
+    end
+
+    local from, to = unquote(fargs[2]), unquote(fargs[3])
+    if not from or not to then return nil, nil, nil, 'empty tag' end
+    if from == to then return nil, nil, nil, 'same tag — nothing to do' end
+
+    return mode,
+      { rename = { { from = from, to = to } } },
+      string.format("Rename '%s' to '%s'", from, to)
+  end
+
+  return nil, nil, nil, "unknown mode '" .. fargs[1] .. "'"
+end
+
 --- Pick a tag and browse the notes carrying it.
 --- The picker shows how many notes each tag is on and previews them, so the
 --- choice is informed before the browser opens.
@@ -442,11 +544,72 @@ function M.browse_by_tag()
   end)
 end
 
---- Run one batch tag operation end to end.
---- Writes only after the change list has been confirmed, and only over the
---- notes that confirmation returns — the same picker gesture as everywhere
---- else, so the last screen can still drop a note from the batch. An operation
---- that would change nothing says so and stops there.
+--- Show the change list for `ops` over `paths`, and write what is confirmed.
+--- The confirmation is the ordinary note picker, so narrowing or marking there
+--- drops notes from the batch; nothing is written until it returns.
+---@param paths  string[]
+---@param ops    table
+---@param header string   e.g. "Rename 'draf' to 'draft'"
+local function confirm_and_apply(paths, ops, header)
+  local plan = M.preview(paths, ops)
+  if #plan == 0 then
+    vim.notify(
+      string.format('[pkm] %s — no note in the selection would change', header),
+      vim.log.levels.INFO)
+    return
+  end
+
+  -- Only the notes that would actually change reach the confirmation, each
+  -- rendered as its own before → after row.
+  local changed, by_path = {}, {}
+  for _, item in ipairs(plan) do
+    changed[#changed + 1] = item.path
+    by_path[item.path]    = item
+  end
+
+  require('pkm.picker').select(changed, {
+    title     = 'PKMTags ' .. header,
+    hint      = 'apply to listed',
+    display   = function(path) return M.format_change(by_path[path]) end,
+    on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
+  }, function(confirmed)
+    local applied, errors = M.apply(confirmed, ops)
+    vim.notify(string.format('[pkm] %s — %d note%s updated%s',
+      header, applied, applied == 1 and '' or 's',
+      errors > 0 and (', ' .. errors .. ' failed') or ''),
+      errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
+  end)
+end
+
+--- Run a batch tag operation over notes that are **already chosen** — the marks
+--- in a navigation panel, a view's notes, a command's argument. This is the
+--- entry point every panel uses: no scope menu, no note picker, straight to the
+--- tag prompt and then the confirmation.
+--- With `ops` supplied the tag prompt is skipped too, which is what makes
+--- `:PKMTags rename old new` a single step.
+---@param paths  string[]
+---@param kind   string       'add' | 'remove' | 'rename'
+---@param ops    table|nil    Ready-made operation set; prompts when omitted
+---@param header string|nil   Wording for the confirmation; derived when omitted
+function M.batch_on(paths, kind, ops, header)
+  if not paths or #paths == 0 then
+    vim.notify('[pkm] no notes selected', vim.log.levels.INFO)
+    return
+  end
+
+  if ops then
+    confirm_and_apply(paths, ops, header or 'Tag change')
+    return
+  end
+
+  ask_tags(kind, paths, function(built_ops, built_header)
+    confirm_and_apply(paths, built_ops, built_header)
+  end)
+end
+
+--- Run one batch tag operation end to end, starting from a scope.
+--- The fallback path, for when the operation is invoked without a selection:
+--- resolve a scope, pick the notes, then hand over to batch_on.
 ---@param kind string  'add' | 'remove' | 'rename'
 function M.batch_flow(kind)
   choose_scope(function(candidates)
@@ -459,36 +622,7 @@ function M.batch_flow(kind)
       title = 'PKMTags ' .. kind,
       hint  = 'use listed',
     }, function(selected)
-      ask_tags(kind, selected, function(ops, header)
-        local plan = M.preview(selected, ops)
-        if #plan == 0 then
-          vim.notify(
-            string.format('[pkm] %s — no note in the selection would change', header),
-            vim.log.levels.INFO)
-          return
-        end
-
-        -- Only the notes that would actually change reach the confirmation,
-        -- each rendered as its own before → after row.
-        local paths, by_path = {}, {}
-        for _, item in ipairs(plan) do
-          paths[#paths + 1] = item.path
-          by_path[item.path] = item
-        end
-
-        require('pkm.picker').select(paths, {
-          title     = 'PKMTags ' .. header,
-          hint      = 'apply to listed',
-          display   = function(path) return M.format_change(by_path[path]) end,
-          on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
-        }, function(confirmed)
-          local applied, errors = M.apply(confirmed, ops)
-          vim.notify(string.format('[pkm] %s — %d note%s updated%s',
-            header, applied, applied == 1 and '' or 's',
-            errors > 0 and (', ' .. errors .. ' failed') or ''),
-            errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
-        end)
-      end)
+      M.batch_on(selected, kind)
     end)
   end)
 end

@@ -1572,6 +1572,15 @@ local _views_panel = panel.create({
         open_relative_split('left', target, state.invocation_win, state.invocation_was_sidebar)
       end)
     end,
+    -- <C-a>: bulk actions. Over a view, the notes it matches; over a note in
+    -- browse mode, that note. The action menu itself lives in pkm.actions.
+    ['<C-a>'] = function(state, helpers)
+      local target = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not target then return end
+      local paths = (state.mode == 'browse') and { target } or M.match_all(target)
+      helpers.close()
+      vim.schedule(function() require('pkm.actions').run(paths) end)
+    end,
     ['n'] = function(state, helpers)
       if state.mode == 'browse' then return end
       helpers.close()
@@ -1597,6 +1606,7 @@ local _views_panel = panel.create({
           '  <CR>     open note',
           '  <C-v>    open note: split right',
           '  <C-x>    open note: split left',
+          '  <C-a>    bulk actions on this note',
           '  <C-f>    back to views',
           '  /        search',
           '  q        close',
@@ -1607,6 +1617,7 @@ local _views_panel = panel.create({
           '  <CR>     open view',
           '  n        new view',
           '  u        update view (rename/reparent/edit filter)',
+          '  <C-a>    bulk actions on this view\'s notes',
           '  <C-f>    browse all notes',
           '  /        search',
           '  q        close',

@@ -59,6 +59,11 @@ end
 --- Items are sorted by type then title at open time; the fn re-evaluates the
 --- prompt as a filter.lua expression on every keystroke. Falls back to an
 --- any-predicate when the expression is incomplete (e.g. mid-typing "AND").
+---
+--- `<Tab>` marks notes and `<C-a>` runs a bulk action over them (or over
+--- everything the prompt leaves listed, when nothing is marked). Since this one
+--- picker backs browse, browse_recent and browse_paths, that covers
+--- :PKMBrowse, :PKMBrowseRecent, the sidebar's '/' and the views tree's <C-f>.
 ---@param title   string    Picker prompt title
 ---@param entries table[]   Index entry array; each entry has path, filename, title, tags, body, note_type
 ---@param seed    string|nil  Optional expression to pre-populate the prompt
@@ -94,7 +99,7 @@ local function live_picker(title, entries, seed, presorted)
     sorting_strategy = 'ascending',
     layout_config    = { prompt_position = 'top' },
   }, {
-    prompt_title = title,
+    prompt_title = title .. '  ·  <Tab> mark  ·  <C-a> act on selection',
     finder = t.finders.new_dynamic {
       fn = function(prompt)
         if not prompt or prompt == '' then return all_items end
@@ -116,12 +121,42 @@ local function live_picker(title, entries, seed, presorted)
     },
     sorter    = t.sorters.empty(),
     previewer = t.conf.file_previewer({}),
-    attach_mappings = function(prompt_bufnr)
+    attach_mappings = function(prompt_bufnr, map)
       t.actions.select_default:replace(function()
         t.actions.close(prompt_bufnr)
         local sel = t.state.get_selected_entry()
         if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.value)) end
       end)
+
+      -- <C-a>: act on the notes marked here — or, with nothing marked, on
+      -- everything the prompt currently leaves listed. Same rule as
+      -- picker.select, so marking never changes meaning between screens.
+      local function bulk_actions()
+        local picker     = t.state.get_current_picker(prompt_bufnr)
+        local selections = picker:get_multi_selection()
+
+        local paths = {}
+        if #selections > 0 then
+          for _, sel in ipairs(selections) do paths[#paths + 1] = sel.value end
+        else
+          for entry in picker.manager:iter() do paths[#paths + 1] = entry.value end
+        end
+
+        t.actions.close(prompt_bufnr)
+        vim.schedule(function() require('pkm.actions').run(paths) end)
+      end
+
+      map('i', '<C-a>', bulk_actions)
+      map('n', '<C-a>', bulk_actions)
+
+      -- Marking, spelled the same way as in picker.select.
+      local sel_next = t.actions.toggle_selection + t.actions.move_selection_next
+      local sel_prev = t.actions.toggle_selection + t.actions.move_selection_previous
+      map('i', '<Tab>',   sel_next)
+      map('n', '<Tab>',   sel_next)
+      map('i', '<S-Tab>', sel_prev)
+      map('n', '<S-Tab>', sel_prev)
+
       return true
     end,
   }):find()
