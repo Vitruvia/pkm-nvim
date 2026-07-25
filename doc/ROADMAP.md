@@ -1,8 +1,13 @@
 # PKM.nvim — Project Roadmap for LLM Assistants
 
-**Purpose:** The forward plan (versions, phases, goals) and the protocols for
-executing it. For codebase architecture see `doc/ARCHITECTURE.md`; for code rules,
-patterns, and environment see `doc/LLM_CONTEXT.md`.
+**Purpose:** The forward plan — versions, phases, goals — and nothing else.
+Detail decreases as work recedes into the future; completed work is summarised in
+a line pointing at `doc/CHANGELOG.md`, and is dropped entirely once nothing
+pending depends on it.
+
+For the standing rules that govern *how* a phase is executed and verified, see
+`doc/PRINCIPLES.md`. For codebase architecture see `doc/ARCHITECTURE.md`; for
+code rules, patterns, and environment see `doc/LLM_CONTEXT.md`.
 
 ---
 
@@ -198,216 +203,22 @@ everything else floats and may be reordered.
 
 ---
 
-#### Operating Principles (apply to every version and phase)
+#### Standing rules — moved out
 
-1. **One pass per file per phase.** A phase may touch many files, but never the
-   same file twice within that phase. All edits to a given file in a phase must
-   be mutually compatible, low-risk, and verifiable together, so it is safe to
-   apply them all before verifying. When a file would need two incompatible
-   passes, the work is split along a seam where each part still functions
-   independently, and the parts land in different phases (possibly different
-   versions). Different phases **may** re-touch the same file.
-
-2. **A phase groups by safe co-modification, not by category.** Items share a
-   phase when their file edits combine cleanly, even if one is a bugfix and
-   another a feature. The rule is a ceiling, not a mandate to cram unrelated
-   work together.
-
-3. **Each phase fits one response.** A phase is delivered as a single message
-   containing every modification it needs, file-by-file, never split across
-   messages.
-
-4. **One panel, not a wizard. Count the screens before writing the flow.**
-   A command's cost is measured in *screens between the user and the result*,
-   and a screen that does not decide anything is a defect. Concretely:
-
-   - **Prefer a single panel where typing *is* the operation** — the input and
-     the preview in the same place (`picker.select_live`). A form that collects
-     parameters, then a screen that shows the notes *without* the change in
-     them, is two screens doing the work of none.
-   - **A menu of operations is usually a syntax problem.** Five choices —
-     prefix, suffix, remove, replace, rebuild — collapse into one substitution
-     field, where `^/X ` prepends and `$/ X` appends. Ask whether the options
-     are really one expression the user already knows how to write.
-   - **Reuse the syntax the user has in their fingers.** Neovim regex over Lua
-     patterns; `pattern/replacement` over two prompts. Familiar beats novel even
-     when novel is tidier to implement.
-   - **Never make the user restate what the editor already knows.** No scope
-     prompt when a panel has a selection; no note picker when the notes were
-     just marked.
-
-   This principle was written after v1.8.0 Ph7 shipped a five-option menu
-   followed by two more screens, and had to be rebuilt as one panel. The failure
-   mode is systematic, not a slip: each step looks reasonable in isolation, and
-   the cost only shows when the flow is used.
-
-5. **A feature ships its own UI, in its own phase.** When a phase creates or
-   changes a choice the user makes, the Telescope version of that screen —
-   counts, previewer, the shared marking gesture — is part of *that* phase, not
-   deferred to a later "UI pass". The `vim.ui.select` / float path remains as the
-   no-Telescope fallback, and small fixed choice sets (3–4 options, e.g. the
-   Simple/Deep menu of `:PKMExport`) may stay `vim.ui.select` outright. Shipping
-   the poor version first creates rework and an inconsistent surface across
-   commands; v1.8.0 Ph3 had to go back and redo the tag panel for exactly this
-   reason.
+The Operating Principles, the standing bug-prevention design rules and the
+Standing Verification Protocol now live in **`doc/PRINCIPLES.md`**. They apply to
+every version and phase and do not change as the plan does, which is why they no
+longer sit in a document meant to shrink as work completes. Read that file before
+planning or executing a phase.
 
 ---
 
-#### Standing bug-prevention design rules
+#### v1.6.1 (PATCH) and v1.6.2 (PATCH) — shipped
 
-- **`winfixbuf` safety net.** Every PKM panel window (sidebar, buffer panel, and
-  every panel built on `panel.lua`) sets `winfixbuf = true` immediately after
-  its buffer is assigned. This converts the whole class of "a file opened inside
-  the panel" bugs (`:Ex`, `:edit`, `:PKMViewEdit` invoked while a panel holds
-  focus) from a silent hijack that destroys the panel into a loud, harmless
-  error. PKM's own open/create commands additionally redirect through
-  `focus_main_win()` for smooth UX; `winfixbuf` catches everything not explicitly
-  guarded, including built-ins PKM cannot intercept.
-- **Pure-logic-first.** Non-trivial logic (deep-export traversal, case-rename
-  identity test, title-propagation diff, citation-edge extraction, header
-  targeting, window-slot arithmetic, tag-set relatedness) is written as a pure
-  function with explicit inputs/outputs and no editor or filesystem side effects
-  in the core. The per-phase test file exercises the pure function; the
-  command/UI layer is a thin wrapper.
-- **Reuse, don't reimplement.** Resolve citation identifiers through
-  `citations.get_citable_items_map()`; redirect panel focus through
-  `focus_main_win()`; refresh sidebars through `views.refresh_sidebar_if_open()`;
-  propagate identity changes through the existing rename-propagation machinery.
-- **Invariants restated per phase.** Each phase names the invariants it must not
-  break (e.g. never `index.invalidate` from buffer-only metadata commands; never
-  strip backlinks in `trash_note()`; never register `UndoPost`; never run
-  `git gc`; always `utils.join` / `utils.normalize` for paths; Telescope checked
-  at call time; never optimize without a `bench.lua` baseline). A phase that
-  cannot satisfy an invariant is re-scoped, not forced.
-
----
-
-#### Standing Verification Protocol
-
-Every phase is verified in this order before its commit:
-
-0. **Push, then sync.** `git commit -a -m "..."` → `git push pkm-nvim dev` →
-   `:Lazy sync` (or `:Lazy update`) in Neovim, then restart. Lazy.nvim
-   installs this plugin from GitHub, not the local working tree — none of
-   the steps below can observe a change that hasn't been pushed and pulled
-   first. Tag only after step 5 passes, never before.
-1. **Headless sandbox run** against a disposable scratch corpus...
-   `Notes` tree:
-   `nvim --headless -u test/min_init.lua -c "luafile test/test_<phase>.lua" -c "qa!"`.
-   Empirical execution precedes any claim that a fix works.
-2. **Per-phase test file** `test/test_<version>_<phase>.lua` asserting pure-logic
-   outputs including success, failure, boundary, cycle, empty, and nil inputs.
-3. **Static pass** — `luacheck` on changed files, plus the recurring-issue
-   checklist (string-concatenated paths; cross-module `M.` references; load-time
-   Telescope checks; greedy timestamp patterns; missing
-   `update_references_on_rename`; double declarations; template-key/config-key
-   mismatches).
-4. **Cross-platform spot-check** — path-touching changes exercised against a
-   Windows drive path (`P:/Notes/...`) and a WSL mount path (`/mnt/p/Notes/...`)
-   in the fixture.
-5. **Manual smoke checklist** — the exact `:PKM*` commands to run and their
-   expected outcomes.
-
-**Review protocol for returned modifications.** When applied changes are pasted
-back, each is checked for: (a) landing only in the named function/region;
-(b) header/section/LuaDoc discipline; (c) no second pass on a file already
-touched this phase; (d) no forbidden pattern reintroduced; (e) presence and pass
-of the phase's test artefacts; (f) behaviour matching the spec. Discrepancies
-are reported with root cause before any follow-up edit.
-
----
-
-
-#### v1.6.1 (PATCH) — Correctness batch + `:PKMViews` open latency
-
-*All three phases of v1.6.1 have shipped (see `doc/CHANGELOG.md`).
-PATCH — correctness/perf only, no new user-facing feature.*
-
-
-**Phase 3 — `:PKMViews` open latency.** ✅ *Done (pending release tag).*
-Bench-gated as required: `bench.views_open()` was added first and run on
-identical corpora before and after the change.
-
-| File | Single-pass changes |
-|---|---|
-| `bench.lua` | `views_open(opts?)` — read-only bench of the views-open path (cold build, warm `get_all()`, both sort comparators, overview via `match_all` vs `count_many`, single-view detail). `views_open({ synthetic = N })` for a disposable corpus. |
-| `views.lua` | The measured fix: `count_all(name)` / `count_many(names)` counting path (no path array, no sort, one index read per batch) behind all overview counts, plus precomputed sort keys in `match_all` instead of `fnamemodify` inside the comparator. `index.lua` untouched. |
-| `test/test_v161_p3.lua` | Counts agree with `#match_all` (simple/subproject/empty/unknown); counts follow index invalidation; `match_all` ordering identical to the pre-Ph3 comparator on a basename-vs-stem fixture. |
-| docs | `CHANGELOG` (Added/Changed) with the measured before/after table. |
-
-Result on the **real corpus** (614 notes × 18 views): overview 9.3 → 6.7 ms,
-single-view open 2.59 → 0.48 ms. At that scale the gain is entirely the
-precomputed sort keys; the counting path is structural and shows up as V·N
-grows (synthetic 2000 × 50: 25.3 ms via `match_all` vs 13.1 ms via
-`count_many`). See CHANGELOG for the full table and the attribution.
-
-Left open by this phase: the **cold index build**, 250–450 ms for 614 notes —
-the real wait on a first `:PKMViews` when PKMMode has not already triggered
-`index.prebuild`. A deferred startup pre-warm is a separate phase
-(`init.lua`/`config.lua`), now with a measurement to justify it.
-
-Invariants held: no correctness change to view results; measurement preceded
-optimization.
-
-Commit:
-
-```
-
-perf: cut :PKMViews open latency with a counting path
-
-bench: views_open() — read-only bench of the views-open path (before/after)
-views: count_all/count_many replace #match_all for every overview count;
-  match_all precomputes sort keys instead of calling fnamemodify per comparison
-test: test_v161_p3 — counts match match_all, ordering unchanged
-docs: changelog with benchmark numbers
-
-```
-
----
-
-#### v1.6.2 (PATCH) — Index build cost
-
-*Closes the item v1.6.1 Ph3 left open: the cold index build, the 250–450 ms a
-first PKM operation waits on when PKMMode has not pre-warmed the index. PATCH —
-perf only, no API and no behaviour change.*
-
-**Phase 1 — `scandir` + LuaJIT reader.** ✅ *Done (pending release tag).*
-Bench-gated: `bench.index_profile()` was written first and it, not intuition,
-selected the two changes — and rejected two others.
-
-| File | Single-pass changes |
-|---|---|
-| `bench.lua` | `index_profile(opts?)` — read-only per-component profile of the build, each current call priced beside its candidate, ending with both pipeline totals. |
-| `utils.lua` | `read_lines(path)` — `readfile`-equivalent reader that stays in LuaJIT (BOM, CR-before-LF, CR-at-EOF, empty file). |
-| `index.lua` | `glob_md` via `uv.fs_scandir`; `read_entry` via `utils.read_lines`. `getftime`/`fnamemodify` **kept** — measured faster than their replacements. |
-| `test/test_v162_p1.lua` | Reader equivalence over 13 raw byte cases; every index entry compared field by field against the pre-v1.6.2 reader; non-recursive listing and invalidation still correct. |
-| docs | `CHANGELOG` (Added/Changed) with the profile and the end-to-end before/after. |
-
-Result on the **real corpus** (648 notes): 230.9 → 93.6 ms, 0.356 → 0.144
-ms/note. Synthetic: 230 → 95 ms at 600 notes, 790 → 314 ms at 2000. The two
-replaced calls were 79% of the old build (reads 42%, glob 37% on the real
-corpus; the split moves with note size).
-
-Invariants held: entry shape and every field value unchanged (asserted, not
-assumed); measurement preceded optimization and overruled two of the three
-swaps originally planned.
-
-Commit:
-
-```
-
-perf: cut the index build cost with scandir and a LuaJIT reader
-
-bench: index_profile() — per-component profile of the build, current call vs
-  candidate, read-only
-utils: read_lines() — readfile-equivalent reader without the VimL round trip
-index: list folders with uv.fs_scandir (46% of the old build) and read notes
-  with utils.read_lines; getftime/fnamemodify kept — measured faster
-test: test_v162_p1 — reader equivalence and entry-by-entry comparison against
-  the previous reader
-docs: changelog with the profile and end-to-end numbers
-
-```
+Correctness batch, `:PKMViews` open latency, and index build cost. Both are
+complete; what they changed and what the measurements were is in
+`doc/CHANGELOG.md`. Kept here only as the reason v1.6.1 follows v1.6.0 in the
+ordering above.
 
 ---
 
@@ -418,83 +229,11 @@ Additions 1.2, across disjoint primary files. Grouped into one minor because
 each is small and self-contained; they may equally ship as separate minors if
 preferred.*
 
-**Phase 1 — deep export.** ✅ *Done (pending release tag).*
-
-| File | Single-pass changes |
-|---|---|
-| `export.lua` | (1) `read_citation_edges(path)` — pure: frontmatter via `get_file_data`, returns `{ cites = {ids…}, cited_by = {ids…} }` unioning all four groups; grouped and legacy-flat shapes both accepted. (2) `collect_deep(seed_paths, opts)` — pure BFS with a **per-path budget** (`cites_depth` 2, `cited_by_depth` 0), cycle termination by budget dominance, identifiers→paths via `citations.get_citable_items_map()` (once per run, injectable through `opts.items_map`); returns the deduplicated union sorted by basename. (3) `deep_export()` — prompts both depths, reuses the filter form for seeds, hands the union to `export_direct`. |
-| `commands.lua` | `:PKMExport` opens with a native `vim.ui.select` simple-vs-deep choice; `:PKMExportView` untouched. **No new command** — per *Command clearup* (Near goals 4), deep export is a mode of the existing one, not a second `:PKMExport*` entry. |
-| `test/test_v170_p1.lua` | 20 checks (below). |
-| docs | `CHANGELOG` (Added), `ARCHITECTURE`, and `pkm.txt` §10 — the user-facing command flow changed. |
-
-**Where the expansion happens, decided during the phase:** the walk runs on the
-**picker selection**, not on the filter result. Seeding from every matched note
-made the common intent — "export this note and what it links to" — inexpressible
-without crafting a filter that matches exactly one note; it also produced a
-confusing first run, where filtering `Seneca` seeded three journals that merely
-mention the author. Simple and deep now share the same filter → picker steps and
-differ only in what happens after confirmation.
-
-**Semantics decided during the phase:** the two depths are *not* independent
-per-direction walks. Both count from the seeds, and one path may **mix**
-directions, spending up to `cites_depth` `cites` hops and `cited_by_depth`
-`cited_by` hops in any order. With the default 2/0 the two readings coincide;
-they only diverge once `cited_by_depth ≥ 1`, where the chosen semantics also
-reaches "who else cites what the seed cites".
-
-Verification: `test/test_v170_p1.lua` builds the worked example (1 cites 2/4/5;
-5→7; 7→8; 1 cited_by 2/3/6) and asserts the default run yields {1,2,4,5,7} and
-not {3,6,8}; plus 2- and 3-node cycle termination; `cited_by_depth>0` pulls
-citers; the mixed-path case that discriminates the semantics; all four groups
-followed; dangling identifier, frontmatter-less seed, empty seeds and duplicate
-seeds. Fixtures are rendered with `yaml.generate_yaml`, so they carry the exact
-object-array layout the parser expects. Smoke: deep-export a note citing across
-journal/bib types.
-
-Invariants held: `export.lua` stayed read-only and pure outside its UI entry.
-
-Commit:
-
-```
-feat: deep export across the citation graph
-
-- export: pure BFS over cites/cited_by with per-direction depth limits
-  (cites=2, cited_by=0) and cycle detection; id resolution reuses
-  citations.get_citable_items_map; all four citable groups traversed
-- commands: simple-vs-deep choice and depth selection in the export flow
-- test: worked-example traversal, cycle termination, multi-type edges
-- docs: changelog
-```
-
-**Phase 2 — relative note (new note sharing the current note's tags).**
-✅ *Done — shipped as part of v1.8.0 Ph1*, where the tag engine it seeds from
-was built. Tags are read from the buffer (unsaved edits count) and normalised
-through `tags.plan`, so the new note carries exactly what `:PKMAddTag` would
-have written. `test/test_v180_p1.lua` covers it, including an untagged source.
-
-| File | Single-pass changes |
-|---|---|
-| `notes.lua` | `create_relative_note()` — create a new consolidated note pre-seeded with the current note's `tags` (so it lands in the same view when one exists). Reuses `create_new_note`'s numbering/template path; only the tag seeding is new. A "relative" note, since tags — not a rigid view — define the relationship (see Design Questions: note relationships). |
-| `commands.lua` | `:PKMNewRelative` (or equivalent) invoking it. |
-| `keymaps.lua` | Wire the keymap when set. |
-| `config.lua` | Default keymap (default `false`). |
-| docs | `CHANGELOG` (Added). |
-
-Verification: `test/test_v170_p2.lua` asserts the new note's frontmatter carries
-exactly the source note's tags. Smoke: from a tagged note, create a relative
-note and confirm it appears in the same view.
-
-Commit:
-
-```
-feat: create a relative note sharing the current note's tags
-
-- notes: create_relative_note() seeds the new note with the source tags so it
-  falls within the same view when one exists
-- commands/keymaps/config: :PKMNewRelative and opt-in keymap
-- test: tag inheritance
-- docs: changelog
-```
+**Phases 1 and 2 — deep export, and the relative note.** ✅ *Shipped; see
+`doc/CHANGELOG.md`.* Two decisions from Ph1 still constrain later work: the deep
+walk runs on the **picker selection**, not on every filter match, and the two
+depths are a per-path budget counted from the seeds, mixable in any order.
+Ph2 shipped inside v1.8.0 Ph1, where the tag engine it seeds from was written.
 
 **Phase 3 — header navigation.**
 
@@ -545,140 +284,48 @@ phases have already proven.
 of `:PKMTags` and as an action of `:PKMView`, per *Command clearup* (Near goals
 4). The command surface is 45 registrations today.
 
-**Phase 1 — tag engine + relative note.** ✅ *Done (pending release tag).*
+**Phases 1–7 — done.** ✅ *Shipped; the detail is in `doc/CHANGELOG.md`.*
+Tag engine and `:PKMNewRelative` (Ph1); batch tag UI and the shared note picker
+(Ph2); the rich tag picker with counts and previews (Ph3); bulk actions starting
+from the selection, with `actions.lua` and `<C-a>` in every note-listing surface
+(Ph4); tag naming through the picker, ranked by relevance to the selection (Ph5);
+marking notes in the view surfaces (Ph6); substitution over titles in one live
+panel, plus `bufsync` (Ph7).
 
-| File | Single-pass changes |
+Three of those decisions still constrain what is left:
+
+- **`picker.select_live`** is the panel Ph8 must reuse — the prompt is the
+  operation, rows recompute per keystroke, preview shows the result.
+- **`find_collisions` was deliberately not written** in Ph7: two titles may
+  legitimately match, so collision detection has no consumer until filenames.
+- **Batched propagation** (`citations.propagate_titles`) is the pattern Ph8's
+  `update_references_on_renames` must follow; the per-note functions rescan the
+  whole vault.
+
+**Phase 8 — bulk filename rename.** The widest blast radius, which is why it is
+last: renaming rewrites `[[links]]` and identifiers in every citing note, and a
+partial failure leaves dangling links that no other bulk operation risks.
+
+| File | Planned single-pass changes |
 |---|---|
-| `tags.lua` (new) | `plan` (pure — rename→remove→add, case-insensitive, no duplicates, stored spelling preserved, remove beats add), `preview` (read-only), `apply` (writes + `index.invalidate`), `all_note_paths`. |
-| `citations.lua` | `merge_tags` delegates to `tags.apply`; its duplicated scan loop is gone. |
-| `notes.lua` | `create_new_note(note_type, opts)` seeds `opts.tags`; `create_relative_note()`. |
-| `commands.lua` / `keymaps.lua` / `config.lua` | `:PKMNewRelative` and the opt-in `keymaps.new_relative` (default `false`). |
-| `test/test_v180_p1.lua` | Pure rules, batch layer, `merge_tags` after delegation, both relative-note paths. |
-
-Invariants held: `apply` invalidates because it writes; the buffer-only tag
-commands still do not. No behaviour change to `merge_tags` beyond the two
-recorded in CHANGELOG (case-insensitive matching, spelling preserved).
-
-**Phase 2 — batch tag UI.** ✅ *Done (pending release tag).*
-
-| File | Single-pass changes |
-|---|---|
-| `picker.lua` (new) | `select(paths, opts, on_confirm)` — the results picker moved out of `export.lua`, Telescope or float decided in one place, `<CR>` confirming everything listed and `<Tab>` narrowing. `confirm(opts)` — the read-only preview gate. |
-| `export.lua` | Delegates selection to `picker`; its local Telescope picker and result float are gone (a stray LuaDoc line left by Ph1 of v1.7.0 was fixed in passing). |
-| `tags.lua` | `format_preview(plan, header)` pure, and `batch_flow(kind)` — scope (filter / current note / current view) → picker → tag prompt → preview → apply. |
-| `commands.lua` | `:PKMTags` becomes multimodal: browse, add, remove, rename. No new command. |
-| `test/test_v180_p2.lua` | Preview wording; the float front-end driven headlessly (confirm-all, cancel, empty list). |
-
-The interactive flow is UI and stays hand-smoked; its two seams are not, and
-both are covered: the wording is a pure function, and the float front-end — the
-one that decides what an unmarked `<CR>` means — is drivable in headless.
-
-**Phase 3 — rich tag UI.** ✅ *Done (pending release tag).*
-
-| File | Single-pass changes |
-|---|---|
-| `picker.lua` | `select_tag(rows, opts, on_choice)` — tag + note count, Telescope previewer listing the notes carrying it, `vim.ui.select` fallback with the count in the label. The caller supplies the rows, so this module still knows nothing about the tag engine. `select()` gained `opts.display`, the row renderer both front-ends use. |
-| `tags.lua` | `tag_counts(paths?)` (read-only, index-sourced, case-collapsing, restrictable to a selection), `format_change(item)` replacing `format_preview`, `browse_by_tag()`. `ask_tags` takes the selection and scopes the tag list to it; `batch_flow` confirms through `select()` + `display` and applies only to what confirmation returns. |
-| `telescope.lua` / `ui.lua` | `browse_tags` deleted from both — one tag picker now. |
-| `commands.lua` | `:PKMTags` browse calls `tags.browse_by_tag()`; the Telescope branch moves into `picker`. |
-| `test/test_v180_p3.lua` (new) · `test_v180_p2.lua` | Counts, collapsing, scoping, row wording, the float rendering a batch through `opts.display`, the fallback; the Ph2 file drops its `format_preview` block. |
-
-Deliberately out of scope: `:PKMMergeTags`. Merging distinct tags under one name
-is a different operation with its own three-step flow; it shares only the
-"choose a tag" screen, and can adopt `select_tag` in a phase of its own.
-
-**Phase 4 — bulk actions start from the selection.** ✅ *Done (pending release tag).*
-
-| File | Single-pass changes |
-|---|---|
-| `actions.lua` (new) | The bulk-action registry: `{ id, label, run }` rows, `list()`/`get(id)` pure, `run(paths)` (menu) and `run_id(id, paths)` (no menu). Later phases append rows instead of touching panels again. |
-| `tags.lua` | `batch_on(paths, kind, ops?, header?)` — the entry point for a selection that already exists, with the tag prompt skipped when `ops` is given; `batch_flow(kind)` reduced to "build a selection, then delegate". `scope_choices(path, view)` pure, and a one-option scope menu no longer appears. `parse_command_args(fargs)` pure. |
-| `telescope.lua` | `live_picker` gains `<Tab>` marking and `<C-a>` → `actions.run`, covering `:PKMBrowse`, `:PKMBrowseRecent`, the sidebar `/` and the views tree `<C-f>` in one place. |
-| `views.lua` | Views panel `<C-a>`: a view's matched notes, or the note under the cursor in browse mode. |
-| `commands.lua` | `:PKMTags` bare → the tag browser (mode menu only as the no-Telescope fallback); with arguments → one operation, deterministic over the whole vault, still gated by the change list. Completion for modes and existing tags. |
-| `test/test_v180_p4.lua` (new) | Registry, `scope_choices`, the whole argument contract with its refusals, `batch_on` writing without prompts. |
-
-**Phase 5 — naming a tag goes through the picker.** ✅ *Done (pending release tag).*
-
-| File | Single-pass changes |
-|---|---|
-| `tags.lua` | `rank_tags(rows, ctx)` pure — four tiers: on *some* of the selection, co-occurring with the selection's tags, unrelated (by usage), already on *all* of it. `suggest_tags(paths?)` gathers the context read-only. `ask_tags` routes all three modes through the picker, including the rename **destination** (existing tag = merge, new tag = rename). |
-| `picker.lua` | `select_tag` gained `opts.allow_new` (type to create; fallback offers `+ new tag…`), renders each row's `note`, and switched to a pass-through sorter so the caller's ranking reaches the screen. |
-| `test/test_v180_p5.lua` (new) | The tiers and their wording, purity of the input, `suggest_tags` over a corpus, the create path through the fallback. |
-
-**Phase 6 — marking notes in the view surfaces.** ✅ *Done (pending release tag).*
-
-| File | Single-pass changes |
-|---|---|
-| `views.lua` | `toggle_mark` / `marked_in_order` pure. Sidebar: `t.marked` per tab, `<Tab>`/`<S-Tab>` in detail mode, the marker replacing the row indent (alignment intact), marks surviving refresh and cleared on view switch, `<C-a>` over marks-or-listed (detail) and over the view under the cursor (overview). Views panel: `<Tab>` marking in browse mode, `state.listed` for display order, `<C-a>` over marks-or-listed. Help text in both. |
-| `test/test_v180_p6.lua` (new) | The pure rule (display order, stale marks dropped, empty-set fallback), then the sidebar driven through its own keymaps and inspected through its buffer. |
-
-**Phases 7 and 8 — bulk title and bulk rename, with patterns.** Split by blast
-radius: writing a title cannot leave a dangling link, renaming a file can. So the
-pattern engine is born in Ph7 with the safe use, and Ph8 only reuses it.
-
-- **Ph7 — substitution over titles, in one panel.** ✅ *Done (pending release tag).*
-  `rename.lua` (new): `parse_substitution` and `plan_names` over **Neovim's own
-  regex**, `describe`, `format_change`, `read_title`, `title_items`,
-  `apply_titles`, `title_flow`. `picker.select_live` (new) is the panel where the
-  prompt is the operation — rows recomputed per keystroke, preview showing the
-  note with the new title. `citations.propagate_titles(map)` walks the vault once
-  and `propagate_title` delegates to it. `set_titles` in the action registry.
-
-  *Shipped twice.* The first cut was a five-option menu (prefix / suffix /
-  remove / replace / Lua-pattern capture), then a result screen, then a
-  confirmation — and the middle screen showed the notes **without** the change in
-  them, so it previewed nothing. Rebuilt as one panel with one field. The lesson
-  is Operating Principle 4; the five options were a syntax problem wearing a menu.
-  `find_collisions` was **not** written — two titles may legitimately match, so
-  collision detection has no consumer until filenames in Ph8.
-- **Ph8 — filenames.** `notes.rename_file(path, new_stem)` extracted from
-  `rename_note()` (the two-step case-only dance on case-insensitive filesystems
-  and the open-buffer awareness are reused, not reimplemented),
-  `citations.update_references_on_renames(pairs)` — again one vault pass — and
-  `rename.apply_filenames`, plus the `rename_files` row. **Consolidated notes
-  only:** journal and scratchpad names encode their timestamp, so they are
-  listed as skipped, with the reason, before anything is written.
-
-*Why one pass matters.* `propagate_title` and `update_references_on_rename` each
-glob and read every note in three folders **per call**. Called note-by-note over
-a batch that is quadratic — 50 notes over a 650-note vault is ~32k file reads —
-so both gain a batched form and the single-item functions delegate to it.
-
-*Why it needs patterns.* The notes in a selection do **not** share a name. The
-operation is therefore never "set the name to X" but "change this part of each
-name", and the design has to name the part. Planned pattern set, smallest that
-covers the author's cases:
-
-| Operation | Example |
-|---|---|
-| add prefix / suffix | `Kant` → `[wip] Kant` |
-| remove a substring | `[wip] Kant` → `Kant` |
-| replace a substring | `Draft — Kant` → `Notes — Kant` |
-| capture-and-rebuild | `Aula 03 - Kant` → `Kant (aula 03)` |
+| `notes.lua` | Extract `rename_file(path, new_stem)` from `rename_note()` — the two-step dance for case-only renames on case-insensitive filesystems and the open-buffer awareness are **reused, not reimplemented**. `rename_note()` becomes the interactive wrapper. |
+| `citations.lua` | `update_references_on_renames(pairs)` — one vault pass for the whole batch, with the single-item function delegating to it, exactly as `propagate_titles` already does. |
+| `rename.lua` | `find_collisions(plan)` and `apply_filenames(plan)`, reusing `plan_names` and the live panel unchanged: the substitution is the same, only the field it reads and the propagation it triggers differ. |
+| `actions.lua` | `rename_files` row. |
 
 Constraints, decided in advance:
 
-- **The core is pure.** `rename.plan_names(names, pattern)` → `{ before, after }`
-  per note, with no I/O, exactly as `tags.plan` is. Every rule (what a pattern
-  means, what happens on no match) lives there and is tested without a file.
-- **Literal by default.** A pattern is a plain substring unless the user opts
-  into captures; Lua patterns' magic characters (`-`, `.`, `%`, `(`) appear in
-  real note names and must not silently misfire. The capture form is a separate,
-  explicitly chosen mode.
-- **Filename and title are the same operation over different fields**, and both
-  are offered on the same selection — the difference is which string the plan
-  reads and which propagation the write triggers.
+- **Consolidated notes only.** Journal and scratchpad names encode their
+  timestamp, so they are listed as skipped, with the reason, before anything is
+  written. The editable span is what follows `NNNN_type_`; the numbering prefix
+  is never part of it.
 - **Collisions are refused, not resolved.** Two notes planning the same filename
-  is an error surfaced before anything is written; the numbering prefix is
-  never part of the editable span (`0042_note_` stays).
-- **Dry-run before the write**, showing `before → after` per note plus the count
-  of citing notes each rename would touch. This is what `picker.confirm`
-  (all-or-nothing) was kept for: a rename that half-applies is worse than one
-  refused, so this confirmation does *not* let notes be dropped one by one.
-
-Both ship as registry rows, inheriting `<C-a>` in every panel, plus argument
-forms on an existing command per the surface policy.
+  is an error surfaced before any write.
+- **The dry-run is all-or-nothing here**, unlike titles: a rename that
+  half-applies leaves dangling links, so the confirmation does *not* let notes be
+  dropped one by one. This is the case `picker.confirm` was kept for.
+- **Buffers stay in step** through `bufsync`, including the rename of a buffer's
+  own name when the file it points at moves.
 
 **Phase 9 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
 sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4. Ships as

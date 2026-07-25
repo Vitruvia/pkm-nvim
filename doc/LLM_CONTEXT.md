@@ -42,7 +42,7 @@ index, views, panel, mode, syntax, trash, markdown, bench`.
 | Never call `index.invalidate` from buffer-only metadata commands | No disk write occurred; re-index happens on user's next `:w` |
 | Never strip backlinks in `trash_note()` | Backlinks preserved for restoration; `cleanup_deleted_note` only in `empty()` / `purge_old()` |
 | Never run `git gc` on this repo | Google Drive sync causes object-directory deletion conflicts |
-| Never touch a file twice within one phase | Each phase edits every file it touches in a single pass; see `doc/ROADMAP.md` § Operating Principles for how to split work that doesn't fit one pass |
+| Never touch a file twice within one phase | Each phase edits every file it touches in a single pass; see `doc/PRINCIPLES.md` § Execution for how to split work that doesn't fit one pass |
 
 ---
 

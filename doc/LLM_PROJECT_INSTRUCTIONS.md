@@ -24,6 +24,8 @@ source. The key files are:
   functions, and pending decisions
 - `doc/ARCHITECTURE.md` — codebase layout, module responsibilities, and config
   shape
+- `doc/PRINCIPLES.md` — standing rules: phase execution, design principles,
+  bug-prevention rules, and the Standing Verification Protocol.
 - `doc/ROADMAP.md` — forward plan (phases, release plan) and future ideas not yet
   in scope
 

@@ -20,9 +20,15 @@ they own.
   non-negotiable code rules, established patterns, git workflow, environment.
 - `doc/PHILOSOPHY.md` — scope constraints. A change that violates a principle is
   out of scope regardless of how useful it seems in isolation.
+- `doc/PRINCIPLES.md` — the standing rules that outlive any plan: how work is
+  split into phases, how features are shaped (**one panel, not a wizard**; a
+  feature ships its own UI; the command-surface policy), the bug-prevention
+  design rules, and the **Standing Verification Protocol** (the required check
+  order, and what the headless suite cannot see).
 - `doc/ARCHITECTURE.md` — codebase layout, module responsibilities, config shape.
-- `doc/ROADMAP.md` — forward plan (phases, release plan) and the **Standing
-  Verification Protocol** (the required check order).
+- `doc/ROADMAP.md` — the forward plan only: phases still to do, in decreasing
+  detail as they recede. Completed work is summarised in a line and lives in the
+  CHANGELOG; it is dropped from the ROADMAP once nothing pending depends on it.
 - `doc/CHANGELOG.md` — version history, known bugs, dead code, suspended
   functions, pending decisions. Check Known Bugs before proposing any fix.
 
