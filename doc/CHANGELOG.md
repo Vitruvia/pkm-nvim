@@ -5,6 +5,23 @@
 ## [Unreleased]
 
 ### Added
+-   **Marking notes in the view surfaces (v1.8.0 Phase 6).** `<Tab>` now marks
+    notes in the sidebar (`:PKMViewSidebar`, inside a view) and in the browse
+    mode of `:PKMViews`; `<S-Tab>` marks and steps up. `<C-a>` acts on the marked
+    notes — or on everything listed when none are marked, the rule `<CR>` already
+    follows in every picker. The sidebar's overview mode keeps `<C-a>` acting on
+    the notes of the view under the cursor: it lists views, not notes, so there
+    is nothing there to mark and the gesture never means two things.
+    Marks are keyed by path, so a refresh preserves them even when the view's
+    contents shifted underneath; entering another view clears them.
+-   `views.toggle_mark(marked, key)` and `views.marked_in_order(marked, ordered)`
+    — pure, so "the marked ones, or everything listed, in the order on screen"
+    is asserted without opening a window. A mark for a note that is no longer
+    listed is dropped rather than acted on.
+-   `test/test_v180_p6.lua` — the pure rule, then the sidebar driven for real:
+    opened on a disposable view, marked through its own keymaps, and inspected
+    through its buffer (the marker reaches the screen, survives a refresh, keeps
+    the column alignment, and clears on view switch).
 -   **Naming a tag goes through the picker (v1.8.0 Phase 5).** All three batch
     modes now name their tag the same way, and always show what the tag already
     means in the vault. `add` no longer asks for free text blind: it offers every

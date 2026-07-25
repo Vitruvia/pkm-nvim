@@ -127,11 +127,13 @@ notes at once. The tag picker lists how many notes carry each tag and previews
 them. Use |:PKMOrphans| to find unfiled notes.
 
 BATCH TAGS~
-Bulk operations start from the notes you have in front of you. In any note
-picker — |:PKMBrowse|, |:PKMBrowseRecent|, the sidebar's "/" and the views
-tree's <C-f> — mark notes with <Tab> and press <C-a>. With nothing marked,
-<C-a> acts on everything the prompt currently leaves listed. In |:PKMViews|,
-<C-a> over a view acts on every note that view matches.
+Bulk operations start from the notes you have in front of you. Mark notes with
+<Tab> and press <C-a>; with nothing marked, <C-a> acts on everything listed.
+That works in every note picker (|:PKMBrowse|, |:PKMBrowseRecent|, the sidebar's
+"/" and the views tree's <C-f>), in the view sidebar (|:PKMViewSidebar|, inside
+a view; <S-Tab> marks and steps up), and in the browse mode of |:PKMViews|.
+Over a *view* — in the sidebar's overview or the views list — <C-a> acts on
+every note that view matches; there is nothing to mark there.
 
 The action menu is short (add, remove or rename a tag; more in later versions).
 After it, two steps, and nothing is written until the last is confirmed:
@@ -408,6 +410,12 @@ detail (notes in one view). Keymaps are the same window in both modes.
            In detail, on a note line: open note in the main editing window.
   <C-v>    Open the note under the cursor in a new vertical split.
            (Detail mode only.)
+  <Tab>    Mark the note under the cursor and step down; <S-Tab> marks and
+           steps up. Marks are per note, so they survive a refresh and are
+           cleared when you enter another view. (Detail mode only.)
+  <C-a>    Bulk actions on the marked notes, or on every note listed when
+           none are marked. In overview, on every note of the view under
+           the cursor. See |pkm-search|.
   <C-t>    Cycle the type filter: all → note → agg → bib → journal →
            scratch → all. Filters the note list and shows "N of M" count.
            (Detail mode only; resets to all on return to overview.)

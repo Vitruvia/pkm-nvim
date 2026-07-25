@@ -582,10 +582,33 @@ is a different operation with its own three-step flow; it shares only the
 | `picker.lua` | `select_tag` gained `opts.allow_new` (type to create; fallback offers `+ new tag…`), renders each row's `note`, and switched to a pass-through sorter so the caller's ranking reaches the screen. |
 | `test/test_v180_p5.lua` (new) | The tiers and their wording, purity of the input, `suggest_tags` over a corpus, the create path through the fallback. |
 
-**Phase 6 — bulk rename / title, with patterns.** The last and widest: renaming
-fires `citations.update_references_on_rename` and `propagate_title`, which
-rewrite `[[links]]` and identifiers in every citing note, so a partial failure
-leaves dangling links that no other bulk operation risks.
+**Phase 6 — marking notes in the view surfaces.** ✅ *Done (pending release tag).*
+
+| File | Single-pass changes |
+|---|---|
+| `views.lua` | `toggle_mark` / `marked_in_order` pure. Sidebar: `t.marked` per tab, `<Tab>`/`<S-Tab>` in detail mode, the marker replacing the row indent (alignment intact), marks surviving refresh and cleared on view switch, `<C-a>` over marks-or-listed (detail) and over the view under the cursor (overview). Views panel: `<Tab>` marking in browse mode, `state.listed` for display order, `<C-a>` over marks-or-listed. Help text in both. |
+| `test/test_v180_p6.lua` (new) | The pure rule (display order, stale marks dropped, empty-set fallback), then the sidebar driven through its own keymaps and inspected through its buffer. |
+
+**Phases 7 and 8 — bulk title and bulk rename, with patterns.** Split by blast
+radius: writing a title cannot leave a dangling link, renaming a file can. So the
+pattern engine is born in Ph7 with the safe use, and Ph8 only reuses it.
+
+- **Ph7 — pattern engine + titles.** `rename.lua` (new, pure `plan_names`,
+  `describe`, `find_collisions`), `citations.propagate_titles(map)` — **one**
+  vault pass for N notes — and `rename.apply_titles`, plus the `set_titles`
+  registry row.
+- **Ph8 — filenames.** `notes.rename_file(path, new_stem)` extracted from
+  `rename_note()` (the two-step case-only dance on case-insensitive filesystems
+  and the open-buffer awareness are reused, not reimplemented),
+  `citations.update_references_on_renames(pairs)` — again one vault pass — and
+  `rename.apply_filenames`, plus the `rename_files` row. **Consolidated notes
+  only:** journal and scratchpad names encode their timestamp, so they are
+  listed as skipped, with the reason, before anything is written.
+
+*Why one pass matters.* `propagate_title` and `update_references_on_rename` each
+glob and read every note in three folders **per call**. Called note-by-note over
+a batch that is quadratic — 50 notes over a 650-note vault is ~32k file reads —
+so both gain a batched form and the single-item functions delegate to it.
 
 *Why it needs patterns.* The notes in a selection do **not** share a name. The
 operation is therefore never "set the name to X" but "change this part of each
@@ -619,16 +642,16 @@ Constraints, decided in advance:
   (all-or-nothing) was kept for: a rename that half-applies is worse than one
   refused, so this confirmation does *not* let notes be dropped one by one.
 
-Ships as a registry row (`rename_files` / `set_titles`), inheriting `<C-a>` in
-every panel, plus argument forms on an existing command per the surface policy.
+Both ship as registry rows, inheriting `<C-a>` in every panel, plus argument
+forms on an existing command per the surface policy.
 
-**Phase 7 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
+**Phase 9 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
 sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4. Ships as
 **two rows in the action registry** (`view_add` / `view_remove`), so every panel
-that already has `<C-a>` gains it for free; the sidebar's note list gets its
-multi-selection here, since this phase is already in that surface. Must report
-when a view's filter cannot be satisfied by tags alone (`title:`/`text:`/`type:`
-predicates), rather than silently adding tags that will not make the note match.
+that already has `<C-a>` gains it for free — including the sidebar, which got its
+marking in Ph6. Must report when a view's filter cannot be satisfied by tags
+alone (`title:`/`text:`/`type:` predicates), rather than silently adding tags
+that will not make the note match.
 
 ---
 

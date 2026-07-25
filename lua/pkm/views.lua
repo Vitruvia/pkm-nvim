@@ -94,6 +94,7 @@ local function get_tab()
       view_lines   = {},
       history      = {},
       type_filter  = nil,   -- string|nil; filters displayed notes by note_type
+      marked       = {},    -- path → true; survives refresh, cleared on switch
     }
   end
   return _tabs[id]
@@ -101,6 +102,45 @@ end
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5,
 other = 6 }
+
+-- =============================================================================
+-- SECTION: Marking (pure)
+-- =============================================================================
+--
+-- The panels here list notes in a plain buffer, so marking is a set of keys the
+-- caller keeps and the renderer reads. Both functions are pure: the rule "the
+-- marked ones, or everything listed, in the order on screen" is the same rule
+-- picker.select follows, and it is asserted without opening a window.
+
+--- Toggle one key in a mark set, in place.
+---@param marked table<string, boolean>
+---@param key    string|nil
+---@return boolean now_marked  false when the key was cleared or absent
+function M.toggle_mark(marked, key)
+  if not marked or not key then return false end
+  if marked[key] then
+    marked[key] = nil
+    return false
+  end
+  marked[key] = true
+  return true
+end
+
+--- The keys a bulk action should act on: those marked, in the order they are
+--- listed — or, when nothing is marked, everything listed.
+---@param marked  table<string, boolean>|nil
+---@param ordered string[]  Keys in display order
+---@return string[]
+function M.marked_in_order(marked, ordered)
+  ordered = ordered or {}
+  if not marked then return ordered end
+
+  local out = {}
+  for _, key in ipairs(ordered) do
+    if marked[key] then out[#out + 1] = key end
+  end
+  return #out > 0 and out or ordered
+end
 
 -- =============================================================================
 -- SECTION: Internal helpers — config and sidecar
@@ -1494,10 +1534,15 @@ local _views_panel = panel.create({
           #filtered, filter_label),
       }
       local map = {}
+      state.listed = {}
       for _, e in ipairs(filtered) do
-        lines[#lines + 1] = string.format('  %s %s',
-          utils.type_prefix(e.note_type), e.title or e.filename or '?')
+        -- Same convention as the sidebar: the mark replaces the indent, so
+        -- marking a row never shifts the column beside it.
+        local lead = (state.marked and state.marked[e.path]) and '▸ ' or '  '
+        lines[#lines + 1] = string.format('%s%s %s',
+          lead, utils.type_prefix(e.note_type), e.title or e.filename or '?')
         map[#lines] = e.path
+        state.listed[#state.listed + 1] = e.path
       end
       if #filtered == 0 then
         lines[#lines + 1] = '  (no notes match)'
@@ -1552,6 +1597,7 @@ local _views_panel = panel.create({
     ['<C-f>'] = function(state, helpers)
       state.mode   = (state.mode == 'browse') and 'views' or 'browse'
       state.filter = nil
+      state.marked = {}   -- another list entirely; old marks mean nothing here
       helpers.refresh()
     end,
     ['<C-v>'] = function(state, helpers)
@@ -1572,12 +1618,40 @@ local _views_panel = panel.create({
         open_relative_split('left', target, state.invocation_win, state.invocation_was_sidebar)
       end)
     end,
-    -- <C-a>: bulk actions. Over a view, the notes it matches; over a note in
-    -- browse mode, that note. The action menu itself lives in pkm.actions.
-    ['<C-a>'] = function(state, helpers)
-      local target = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+    -- <Tab>: mark the note under the cursor (browse mode only — the views list
+    -- holds views, not notes) and step down.
+    ['<Tab>'] = function(state, helpers)
+      if state.mode ~= 'browse' then return end
+      local row    = vim.api.nvim_win_get_cursor(state.win)[1]
+      local target = state.map[row]
       if not target then return end
-      local paths = (state.mode == 'browse') and { target } or M.match_all(target)
+
+      state.marked = state.marked or {}
+      M.toggle_mark(state.marked, target)
+      helpers.refresh()
+
+      if row + 1 <= vim.api.nvim_buf_line_count(state.buf) then
+        vim.api.nvim_win_set_cursor(state.win, { row + 1, 0 })
+      end
+    end,
+    -- <C-a>: bulk actions. In browse mode, over the marked notes — or every
+    -- note listed when none are marked. Over a view, the notes it matches.
+    -- The action menu itself lives in pkm.actions.
+    ['<C-a>'] = function(state, helpers)
+      local paths
+      if state.mode == 'browse' then
+        paths = M.marked_in_order(state.marked, state.listed)
+      else
+        local target = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+        if not target then return end
+        paths = M.match_all(target)
+      end
+
+      if not paths or #paths == 0 then
+        vim.notify('[pkm] no notes to act on', vim.log.levels.INFO)
+        return
+      end
+
       helpers.close()
       vim.schedule(function() require('pkm.actions').run(paths) end)
     end,
@@ -1606,7 +1680,8 @@ local _views_panel = panel.create({
           '  <CR>     open note',
           '  <C-v>    open note: split right',
           '  <C-x>    open note: split left',
-          '  <C-a>    bulk actions on this note',
+          '  <Tab>    mark note',
+          '  <C-a>    bulk actions on marked notes (or all listed)',
           '  <C-f>    back to views',
           '  /        search',
           '  q        close',
@@ -2110,10 +2185,12 @@ local function sidebar_build_overview()
 end
 
 --- Build detail display lines for a specific view.
----@param name  string
----@param paths string[]
+---@param name   string
+---@param paths  string[]
+---@param total_count integer|nil
+---@param marked table<string, boolean>|nil  Notes to flag as marked
 ---@return string[], table, integer, string[]
-local function sidebar_build_lines(name, paths, total_count)
+local function sidebar_build_lines(name, paths, total_count, marked)
   local index    = require('pkm.index')
   local parent   = get_view_parent(name)
   local children = get_view_children(name)
@@ -2172,7 +2249,10 @@ local function sidebar_build_lines(name, paths, total_count)
     else
       label = vim.fn.fnamemodify(path, ':t:r')
     end
-    lines[#lines + 1] = string.format('  %s %s', utils.type_prefix(note_type), label)
+    -- The mark replaces the leading indent rather than adding to it, so a
+    -- marked row does not shift the column everything else lines up on.
+    local lead = (marked and marked[path]) and '▸ ' or '  '
+    lines[#lines + 1] = string.format('%s%s %s', lead, utils.type_prefix(note_type), label)
   end
 
   if #sorted == 0 then
@@ -2201,6 +2281,7 @@ local function sidebar_switch_to_overview()
   t.tree         = {}
   t.header_count = 0
   t.view_lines   = view_lines
+  t.marked       = {}   -- a different list of notes; old marks mean nothing here
   sidebar_set_content(lines)
   if vim.api.nvim_win_is_valid(t.win) then
     vim.api.nvim_win_set_cursor(
@@ -2225,8 +2306,9 @@ local function sidebar_switch_to_detail(name)
     display_paths = filtered
   end
 
+  t.marked       = {}   -- entering another view: its notes were never marked
   local lines, tree_entries, header_count, sorted =
-    sidebar_build_lines(name, display_paths, #all_paths)
+    sidebar_build_lines(name, display_paths, #all_paths, t.marked)
   t.mode         = 'detail'
   t.name         = name
   t.paths        = sorted
@@ -2244,6 +2326,8 @@ local function sidebar_show_help()
   local lines = {
     '  <CR>     open note / enter view',
     '  N<CR>    open note in window N (leftmost = 1)',
+    '  <Tab>    mark note   (<S-Tab> mark and go up)',
+    '  <C-a>    bulk actions on marked notes (or all listed)',
     '  <C-v>    open note in new vertical split',
     '  <C-t>    cycle type filter  (all/n/a/b/j/s)',
     '  T        toggle filename / title labels',
@@ -2521,6 +2605,52 @@ function M.open_sidebar(name)
     end
   end, ko)
 
+  -- <Tab>/<S-Tab>: mark the note under the cursor and step on. Detail mode
+  -- only — the overview lists views, not notes, so there is nothing to mark.
+  --- @param step integer  +1 down, -1 up
+  local function toggle_mark_at_cursor(step)
+    local ct = get_tab()
+    if ct.mode ~= 'detail' then return end
+
+    local row = vim.api.nvim_win_get_cursor(ct.win)[1]
+    local idx = row - ct.header_count
+    if idx < 1 or idx > #ct.paths then return end
+
+    M.toggle_mark(ct.marked, ct.paths[idx])
+    M.refresh_sidebar_if_open()
+
+    local target = math.max(row + step, 1)
+    if target <= vim.api.nvim_buf_line_count(ct.buf) then
+      vim.api.nvim_win_set_cursor(ct.win, { target, 0 })
+    end
+  end
+
+  vim.keymap.set('n', '<Tab>',   function() toggle_mark_at_cursor(1)  end, ko)
+  vim.keymap.set('n', '<S-Tab>', function() toggle_mark_at_cursor(-1) end, ko)
+
+  -- <C-a>: bulk actions. In detail mode, over the marked notes — or every note
+  -- listed when none are marked, the rule <CR> follows everywhere else. In
+  -- overview mode, over the notes of the view under the cursor.
+  vim.keymap.set('n', '<C-a>', function()
+    local ct  = get_tab()
+    local row = vim.api.nvim_win_get_cursor(ct.win)[1]
+
+    local paths
+    if ct.mode == 'overview' then
+      local vname = ct.view_lines[row]
+      if not vname then return end
+      paths = M.match_all(vname)
+    else
+      paths = M.marked_in_order(ct.marked, ct.paths)
+    end
+
+    if #paths == 0 then
+      vim.notify('[pkm] no notes to act on', vim.log.levels.INFO)
+      return
+    end
+    require('pkm.actions').run(paths)
+  end, ko)
+
   -- <C-v>: open note in a new vertical split (detail mode only)
   vim.keymap.set('n', '<C-v>', function()
     local ct  = get_tab()
@@ -2699,8 +2829,10 @@ function M.refresh_sidebar_if_open()
             end
             display_paths = filtered
           end
+          -- Marks are keyed by path, so a refresh preserves them even when the
+          -- view's contents shifted underneath.
           lines, tree_entries, header_count, sorted =
-            sidebar_build_lines(t.name, display_paths, #all_paths)
+            sidebar_build_lines(t.name, display_paths, #all_paths, t.marked)
           t.paths        = sorted
           t.tree         = tree_entries
           t.header_count = header_count
