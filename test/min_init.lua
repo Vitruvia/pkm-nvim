@@ -27,11 +27,18 @@
 --                        Omit this flag to test the float/no-Telescope
 --                        fallback paths (the default, and what every
 --                        automated test file in this repo assumes so far).
+--   --leader=<key>       Leader key for the plugin's `<leader>…` mappings.
+--                        Defaults to a space, matching the author's real
+--                        config, so a smoke session exercises the keymaps as
+--                        they are actually typed. `space`, `bs`/`backslash`
+--                        and `comma` are spelled out because argv cannot
+--                        carry them; anything else is taken literally.
 --
 -- Usage examples (from repo root):
 --   nvim --headless -u test/min_init.lua -c "luafile test/test_v160_p1.lua" -c "qa!"
 --   nvim -u test/min_init.lua -- --root=/mnt/p/Notes
 --   nvim -u test/min_init.lua -- --root=/mnt/p/Notes --with-telescope
+--   nvim -u test/min_init.lua -- --root=P:/NotesCopia --with-telescope --leader=comma
 --
 -- Extending: add new flags by reading FLAGS['your-flag-name'] wherever
 -- needed below (or in a new SECTION). parse_flags() itself needs no
@@ -102,6 +109,31 @@ if FLAGS['with-telescope'] then
       vim.log.levels.WARN)
   end
 end
+
+-- =============================================================================
+-- SECTION: --leader
+-- =============================================================================
+--
+-- `<leader>` is expanded when a mapping is created, not when it is pressed, so
+-- this has to be set **before** pkm.setup() registers anything. Without it the
+-- session falls back to Neovim's default `\`, and the keymaps are all there but
+-- under a prefix nobody types — which reads as "the keymaps don't work".
+
+local LEADER_WORDS = {
+  space     = ' ',
+  bs        = '\\',
+  backslash = '\\',
+  comma     = ',',
+}
+
+local leader = FLAGS['leader']
+if leader == true or leader == nil then
+  leader = ' '   -- the author's habitual leader; smoke as you actually type
+else
+  leader = LEADER_WORDS[leader:lower()] or leader
+end
+vim.g.mapleader      = leader
+vim.g.maplocalleader = leader
 
 -- =============================================================================
 -- SECTION: --root
