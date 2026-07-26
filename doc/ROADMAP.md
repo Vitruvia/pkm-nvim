@@ -179,11 +179,12 @@ v1.8.0  MINOR  Bulk metadata operations  ✅ released 25/7/2026, tagged
         relative note) — those two numbers stayed planning labels and have no
         tag of their own.
 
-v1.8.1  PATCH  Defects from the v1.8.0 smoke pass          (next)
-        Ph1 view membership offers the wrong views  ✅ done
-          Ph2 confirmation on every removal  ✅ done
-            Ph3 the undo cursor — reproduce, then fix  ✅ done
-v1.9.0  MINOR  Views from where you already are            (after v1.8.1)
+v1.8.1  PATCH  Defects from the v1.8.0 smoke pass  ✅ released 26/7/2026, tagged
+        View membership offering the wrong views, confirmation on every
+        removal, and the undo cursor — reproduced before it was touched, which
+        is what ended a bug that had been "fixed" three times.
+
+v1.9.0  MINOR  Views from where you already are             (next)
         Ph1 :PKMView add|remove <name> on the current note
           Ph2 create a note already inside a view
 v1.10.0 MINOR  Header navigation                           (no deps)
@@ -219,16 +220,17 @@ planning or executing a phase.
 
 ---
 
-#### Shipped — v1.6.x, v1.7.0's first two phases, and v1.8.0
+#### Shipped — v1.6.x, v1.7.0's first two phases, v1.8.0 and v1.8.1
 
 v1.6.1 and v1.6.2: correctness batch, `:PKMViews` open latency, index build cost.
 v1.7.0 Ph1–Ph2: deep export, and the relative note — Ph2 shipped inside v1.8.0
 Ph1, where the tag engine it seeds from was written. v1.8.0: the bulk-operation
-stack in nine phases, released and tagged 25/7/2026. What each changed is in
+stack in nine phases, released and tagged 25/7/2026. v1.8.1: the three defects
+its smoke pass found, released and tagged 26/7/2026. What each changed is in
 `doc/CHANGELOG.md`.
 
-Three of their decisions still constrain pending work, and are the only reason
-this section survives:
+Their decisions still constrain pending work, and are the only reason this
+section survives:
 
 -   **Deep export runs on the picker selection**, not on every filter match, and
     its two depths are a per-path budget counted from the seeds, mixable in any
@@ -236,55 +238,30 @@ this section survives:
 -   **`picker.select_live` is the panel shape** any further bulk operation
     reuses: the prompt *is* the operation, rows recompute per keystroke, the
     preview shows the result. There is no form and no separate result screen.
+-   **`picker.choose` is the one-of-N menu**, for a list the caller has already
+    ranked. A flow that reaches `vim.ui.select` directly puts a Telescope user
+    on the command line halfway through a Telescope flow.
 -   **`actions.list()` returns `{ id, label, run }`** — the enumeration that will
     let `pkm.api` discover bulk operations instead of hard-coding them.
+-   **`ctx.view` orders, it never decides.** Knowing where a selection came from
+    says nothing about what the operation should act on; treating it as an
+    answer is what made "add to another view" unreachable from inside one.
+-   **Nothing the plugin does may enter the user's undo block.** A buffer
+    mutation during the write cycle drags `u` off the edit — Neovim recomputes
+    the cursor from the changed region — and no cursor handling repairs it.
+    A mutation from a scheduled callback also leaves the block *open* and
+    absorbs whatever the user types next; force the break with
+    `let &undolevels = &undolevels` (setting it to `-1` discards the history).
+    Separately, the post-write rewrite of the file must happen on **every**
+    save, or Neovim's record of it goes stale and a later `:w` stops with W11.
+-   **`last_updated_on` has no consumer.** Recency is the filesystem mtime the
+    index stores; read `entry.mtime`. It must not be trusted as a record of
+    human editing — Drive sync, restores and checkouts all push mtime forward.
 
 **v1.6.2 and v1.7.0 have no tag.** Their work reached the user inside the v1.8.0
 release and the CHANGELOG entry for v1.8.0 records that; the numbers stayed
 planning labels. Header navigation, the third phase v1.7.0 never got, is v1.10.0
 below.
-
----
-
-#### v1.8.1 (PATCH) — what the v1.8.0 smoke pass found
-
-*Three defects, in the order to attack them. No new features — the two
-capabilities the same smoke pass asked for are v1.9.0, not this.*
-
-**Phase 1 — view membership offers the wrong views.** ✅ *Shipped; the detail is
-in `doc/CHANGELOG.md`.* `ctx.view` orders the menu and no longer answers it:
-`add` offers every view with the already-full ones sunk to the bottom, `remove`
-offers only the views the selection is in (via `tags.view_membership`) and acts
-on only the notes that are in the chosen one. The decision that outlives it:
-**cutting a menu that decides nothing is not the same as cutting the choice** —
-conflating the two is what caused the defect, and Phase 2 depends on keeping
-them apart.
-
-**Phase 2 — every removal asks first.** ✅ *Shipped; the detail is in
-`doc/CHANGELOG.md`.* The rule now lives in `doc/PRINCIPLES.md` § *Standing
-bug-prevention design rules*, with its exemptions written down. The audit found
-one violation — `D` in the buffer panel discarding unsaved edits without a word
-— and it now asks whenever, and only when, something would be lost.
-
-**Phase 3 — the undo cursor.** ✅ *Shipped; the detail is in
-`doc/CHANGELOG.md`.* The reproduction came first, and it is what ended the
-cycle: Neovim recomputes the post-`u` cursor from the changed region, so every
-previous fix — all of which adjusted the cursor — could not have worked.
-`BufWritePre` no longer touches the buffer; `last_updated_on` is stamped onto
-the file when the note is released.
-
-Three decisions from it constrain later work:
-
--   **Nothing the plugin does may enter the user's undo block.** A buffer
-    mutation during the write cycle drags `u` off the edit, and no cursor
-    handling repairs it.
--   **A mutation from a scheduled callback leaves the undo block open** and
-    absorbs whatever the user types next. Force the break with
-    `let &undolevels = &undolevels`; setting it to `-1` discards the history.
--   **`last_updated_on` has no consumer.** Recency is the filesystem mtime the
-    index stores. Anything tempted to read the field should read `entry.mtime`
-    instead — and must not trust it as a record of human editing, since Drive
-    sync, restores and checkouts all push mtime forward.
 
 ---
 
