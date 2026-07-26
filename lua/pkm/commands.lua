@@ -404,13 +404,49 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- Views
   -- ---------------------------------------------------------------------------
+  -- :PKMView [add|remove] [name] — open a view, or move the current note in or
+  -- out of one. No second command: the verbs are arguments, and a bare name
+  -- still means "open", so nothing that worked before reads differently now.
   vim.api.nvim_create_user_command('PKMView', function(opts)
-    focus_main_win()
-    require('pkm.views').open(opts.args ~= '' and opts.args or nil)
+    local views = require('pkm.views')
+    local mode, name, err = views.parse_command_args(opts.fargs, views.list())
+
+    if err then
+      vim.notify('[pkm] ' .. err, vim.log.levels.ERROR)
+      return
+    end
+
+    if mode == 'open' then
+      focus_main_win()
+      views.open(name)
+      return
+    end
+
+    -- The note under the cursor is the whole selection here.
+    local filepath = vim.fn.expand('%:p')
+    local root     = require('pkm').config.root_path or ''
+    local in_root  = filepath ~= '' and root ~= ''
+      and filepath:gsub('\\', '/'):lower():find(root:gsub('\\', '/'):lower(), 1, true)
+    if not in_root or not filepath:match('%.md$') then
+      vim.notify('[pkm] not a PKM note — open one first', vim.log.levels.WARN)
+      return
+    end
+
+    require('pkm.tags').view_flow({ filepath }, mode, { target = name })
   end, {
-    nargs    = '?',
-    complete = function() return require('pkm.views').list() end,
-    desc     = 'Open a named project view (tab-completes view names)',
+    nargs    = '*',
+    complete = function(_, line)
+      local views = require('pkm.views')
+      -- After a verb, only view names make sense; before it, both do.
+      if line:match('^%s*PKMView%s+[Aa][Dd][Dd]%s')
+      or line:match('^%s*PKMView%s+[Rr][Ee][Mm][Oo][Vv][Ee]%s') then
+        return views.list()
+      end
+      local out = { 'add', 'remove' }
+      vim.list_extend(out, views.list())
+      return out
+    end,
+    desc     = 'Open a view, or add/remove the current note (:PKMView add <name>)',
   })
 
   vim.api.nvim_create_user_command('PKMViews', function()

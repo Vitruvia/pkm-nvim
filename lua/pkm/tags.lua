@@ -832,9 +832,12 @@ end
 --- pointless option, and the note may equally need removing from a different
 --- view that also contains it. So `add` offers every view, and `remove` offers
 --- exactly the views the selection is actually in.
+---
+--- `ctx.target` is the opposite: a view the user named outright
+--- (`:PKMView add leituras`). That *is* the answer, so no menu is shown.
 ---@param paths string[]
 ---@param kind  string     'add' | 'remove'
----@param ctx   table|nil   { view? = string, on_back? = function }
+---@param ctx   table|nil   { view? = string, target? = string, on_back? = function }
 function M.view_flow(paths, kind, ctx)
   ctx = ctx or {}
 
@@ -905,6 +908,28 @@ function M.view_flow(paths, kind, ctx)
   local rows = M.view_membership(paths)
   if #rows == 0 then
     vim.notify('[pkm] no views defined', vim.log.levels.INFO)
+    return
+  end
+
+  -- A view the user *named* is an answer, and the only kind of answer this
+  -- function accepts from its caller. `ctx.view` is provenance and merely
+  -- orders (see above); `ctx.target` is `:PKMView remove leituras`, where the
+  -- question was already asked and answered on the command line. Keeping the
+  -- two apart is what stops the v1.8.1 defect from growing back.
+  if ctx.target then
+    for _, row in ipairs(rows) do
+      if row.name == ctx.target then
+        if kind == 'remove' and #row.paths == 0 then
+          vim.notify(string.format("[pkm] not in '%s' — nothing to remove",
+            ctx.target), vim.log.levels.INFO)
+          return
+        end
+        with_view(row.name, (kind == 'remove') and row.paths or paths)
+        return
+      end
+    end
+    vim.notify(string.format("[pkm] no view named '%s'", ctx.target),
+      vim.log.levels.ERROR)
     return
   end
 

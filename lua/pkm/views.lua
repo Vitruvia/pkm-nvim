@@ -57,6 +57,7 @@
 --   get_tree(name)      → the view's parsed filter, parent chain composed
 --   save_subproject(name, parent, filter_expr) → write a subproject entry to views.json
 --   delete(name)        → remove a view from views.json
+--   parse_command_args(fargs, names) → (mode, name, err) for :PKMView — pure
 -- =============================================================================
 
 local M = {}
@@ -629,6 +630,53 @@ function M.list()
   local names = vim.tbl_keys(get_projects())
   table.sort(names, function(a, b) return a:lower() < b:lower() end)
   return names
+end
+
+--- Interpret `:PKMView` arguments.
+---
+--- Pure — no editor state, no I/O — so the command's contract is testable on
+--- its own, and the same reading serves the interactive and the scripted call.
+---
+--- One command, three meanings, resolved by a rule rather than by guesswork:
+--- **if the arguments spell the name of an existing view, exactly, it means
+--- open it.** Only then are `add` / `remove` read as verbs. A view actually
+--- named "add" therefore keeps working, and a name containing spaces needs no
+--- quoting, because the whole argument list is joined before it is compared.
+---
+---   :PKMView                  → open, no name (the picker)
+---   :PKMView leituras         → open 'leituras'
+---   :PKMView add leituras     → add the current note to 'leituras'
+---   :PKMView remove leituras  → take it out of 'leituras'
+---   :PKMView add              → add the current note, view chosen from a menu
+---
+---@param fargs string[]  Words as Neovim split them (`opts.fargs`)
+---@param names string[]  Existing view names (`M.list()`)
+---@return string       mode  'open' | 'add' | 'remove'
+---@return string|nil   name  The view named, when one was
+---@return string|nil   err   Set when the arguments cannot be read
+function M.parse_command_args(fargs, names)
+  fargs = fargs or {}
+  if #fargs == 0 then return 'open', nil, nil end
+
+  local joined = table.concat(fargs, ' ')
+
+  local known = {}
+  for _, name in ipairs(names or {}) do known[name] = true end
+  if known[joined] then return 'open', joined, nil end
+
+  local verb = fargs[1]:lower()
+  if verb == 'add' or verb == 'remove' then
+    local rest = table.concat(vim.list_slice(fargs, 2, #fargs), ' ')
+    if rest == '' then return verb, nil, nil end
+    if not known[rest] then
+      return verb, rest, string.format("no view named '%s'", rest)
+    end
+    return verb, rest, nil
+  end
+
+  -- Not a verb and not a known view: still an open, so the failure is reported
+  -- by the one place that knows how to report it.
+  return 'open', joined, nil
 end
 
 --- The parsed filter of a view, with its parent chain already composed.

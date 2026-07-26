@@ -4,8 +4,35 @@
 
 ## [Unreleased]
 
-*No entries yet. The sections below are living project state, not release notes:
-they are carried forward from version to version and consulted before any fix.*
+*The sections after **Added** are living project state, not release notes: they
+are carried forward from version to version and consulted before any fix.*
+
+### Added
+-   **`:PKMView add|remove <name>` acts on the note you have open (v1.9.0
+    Ph1).** No new command: the verbs are arguments, so `:PKMView leituras`
+    still opens a view and nothing that worked before reads differently. It is
+    the quick way to give a note the several tags a view requires — the note is
+    born belonging to it instead of being tagged by hand afterwards.
+-   **`views.parse_command_args(fargs, names)`** — pure, so the command's
+    contract is testable on its own and reads the same way for a script.
+    One command carries three meanings, resolved by a rule rather than by
+    guesswork: **if the arguments spell an existing view name exactly, it is an
+    open**; only then are `add` and `remove` read as verbs. A view actually
+    named `add` therefore keeps working, and a name containing spaces needs no
+    quoting, because the argument list is joined before it is compared.
+    Completion follows the same reading: verbs and names before a verb, names
+    only after one.
+-   **`ctx.target` in `tags.view_flow`** — a view the user *named* is an answer,
+    and no menu is shown. It is deliberately a different field from `ctx.view`,
+    which is where the notes came *from* and only ever orders the menu: the
+    v1.8.1 defect was those two being the same thing, and keeping them apart is
+    what stops it growing back. Removing from a view the note is not in reports
+    that instead of writing, and an unknown name is refused before anything is
+    computed.
+-   `test/test_v190_p1.lua` — the argument rule across every shape (bare name,
+    multi-word name, either verb, a verb with no name, an unknown name, and a
+    view actually called `add`), then the flow over a real corpus: a named view
+    opens no menu, a wrong one is refused, and provenance does not override it.
 
 ### Known Bugs (queued)
 

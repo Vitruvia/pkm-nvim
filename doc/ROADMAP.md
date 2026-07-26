@@ -185,7 +185,7 @@ v1.8.1  PATCH  Defects from the v1.8.0 smoke pass  ✅ released 26/7/2026, tagge
         is what ended a bug that had been "fixed" three times.
 
 v1.9.0  MINOR  Views from where you already are             (next)
-        Ph1 :PKMView add|remove <name> on the current note
+        Ph1 :PKMView add|remove <name> on the current note  ✅ done
           Ph2 create a note already inside a view
 v1.10.0 MINOR  Header navigation                           (no deps)
         Ph1 any-level header jumps   (was v1.7.0 Ph3)
@@ -267,16 +267,13 @@ below.
 
 #### v1.9.0 (MINOR) — views from where you already are
 
-**Phase 1 — `:PKMView add|remove <name>` on the current note.** No new command:
-arguments carry it. `:PKMView <name>` still opens the view; `:PKMView add
-<name>` and `:PKMView remove <name>` act on the note in the current buffer. The
-ambiguity resolves deterministically — **if the first argument is exactly the
-name of an existing view, it means open** — and completion covers both the two
-verbs and the view names. It reuses `tags.view_flow({current_note}, kind, {})`,
-writes to disk, and passes through `bufsync` like everything else.
-
-Why it matters: it is the way to give a note several tags at once so it is born
-belonging to a view.
+**Phase 1 — `:PKMView add|remove <name>` on the current note.** ✅ *Shipped; the
+detail is in `doc/CHANGELOG.md`.* The verbs are arguments, not a second
+command, and the ambiguity resolves by rule: **arguments spelling an existing
+view name exactly mean open**. Two decisions carry into Phase 2:
+`views.parse_command_args` is pure and is where any further `:PKMView`
+argument belongs, and `ctx.target` — a view the user named — is a different
+field from `ctx.view`, which only orders.
 
 **Phase 2 — create a note already inside a view.** A new key on the view
 surfaces (`N`, since `n` already creates a *view* in the panel): compute
