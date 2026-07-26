@@ -530,7 +530,9 @@ function M.filename_flow(paths, ctx)
     end
 
     -- The all-or-nothing gate. Every line is shown, plus what it will cost in
-    -- rewritten citing notes, and the answer applies to the whole list.
+    -- rewritten citing notes. The header already says the answer covers the
+    -- whole list, so the closing line states the cost and nothing else — a
+    -- caveat here reads as a warning about a problem, which this is not.
     local lines = {
       string.format('  Rename %d file%s  ·  <CR> apply all  ·  q/<Esc> cancel',
         #planned, #planned == 1 and '' or 's'),
@@ -543,8 +545,10 @@ function M.filename_flow(paths, ctx)
       citers = citers + #require('pkm.export').read_citation_edges(row.key).cited_by
     end
     lines[#lines + 1] = ''
-    lines[#lines + 1] = string.format('  %d citation%s will be rewritten. '
-      .. 'A rename cannot be applied by halves.', citers, citers == 1 and '' or 's')
+    lines[#lines + 1] = citers > 0
+      and string.format('  Also updates %d citation%s in other notes.',
+        citers, citers == 1 and '' or 's')
+      or  '  No other note cites these.'
 
     local keys = {}
     for _, row in ipairs(planned) do keys[#keys + 1] = row.key end
