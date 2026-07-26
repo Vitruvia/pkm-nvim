@@ -26,6 +26,17 @@ are carried forward from version to version and consulted before any fix.*
     menu of impossible choices, and a single candidate still opens no menu at
     all: cutting a menu that decides nothing and cutting the choice itself are
     different things, and conflating them is what caused this.
+-   **The view menu is a Telescope panel, not the command line (v1.8.1 Ph1).**
+    It was reached through a bare `vim.ui.select`, so a Telescope user dropped
+    into the plain command-line list in the middle of an otherwise Telescope
+    flow — and the same happened one screen later, choosing which way out of a
+    filter to take. Both now run through **`picker.choose(rows, opts,
+    on_choice)`**, the generic one-of-N menu this module was missing: it knows
+    nothing about notes or tags, preserves the caller's order exactly (the
+    ranking *is* the information), filters by substring as you type, and shows
+    a preview of the row under the cursor — for a view, which of your selected
+    notes it holds and which it does not. Without Telescope it degrades to the
+    same `vim.ui.select` as before, same rows, same rendering.
 -   **`tags.view_membership(paths)`** — read-only: which of the defined views
     currently hold each of the given notes, as `{ name, paths, total }` rows.
     One index lookup per path and one filter pass per (view, path); it builds no

@@ -183,15 +183,23 @@ views.save('ph9_outra', 'tag:outra')
 ---@return function offered   The labels the menu was given
 local function stub_select(pick)
   local seen, orig = nil, vim.ui.select
-  vim.ui.select = function(labels, _, on_choice)
+  -- These menus now go through `picker.choose`, which hands `vim.ui.select` the
+  -- rows themselves plus a `format_item`; the fallback is what headless sees,
+  -- since Telescope never loads here.
+  vim.ui.select = function(items, opts, on_choice)
+    local labels = {}
+    for i, item in ipairs(items) do
+      labels[i] = opts.format_item and opts.format_item(item) or tostring(item)
+    end
     seen = labels
+
     for i, label in ipairs(labels) do
       if label == pick or label:sub(1, #pick + 2) == pick .. '  ' then
-        on_choice(label, i)
+        on_choice(items[i], i)
         return
       end
     end
-    on_choice(labels[1], 1)
+    on_choice(items[1], 1)
   end
   return function() vim.ui.select = orig end, function() return seen or {} end
 end
@@ -250,20 +258,16 @@ do
   -- Removing is the mirror: satisfy the negation. This filter has two ways out
   -- — drop the tag it requires, or add the one it excludes — so the flow asks
   -- which, and that choice is a judgement it must not make alone.
-  local offered
-  local orig = vim.ui.select
-  vim.ui.select = function(labels, _, on_choice)
-    offered = table.concat(labels, ' | ')
-    on_choice(labels[1], 1)
-  end
+  local restore, offered_labels = stub_select('-projeto')
 
   tags.view_flow({ n1 }, 'remove', { view = 'ph9' })
   vim.wait(500, function() return vim.bo.buftype == 'nofile' end, 10)
-  vim.ui.select = orig
+  restore()
 
+  local offered = table.concat(offered_labels(), ' | ')
   check("both ways out of the view are offered",
-    offered ~= nil and offered:find('-projeto', 1, true) ~= nil
-    and offered:find('+draft', 1, true) ~= nil, tostring(offered))
+    offered:find('-projeto', 1, true) ~= nil
+    and offered:find('+draft', 1, true) ~= nil, offered)
 
   local shown = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
   check("the confirmation names the chosen way out",
@@ -401,6 +405,51 @@ do
     text:find('cannot be satisfied with tags alone', 1, true) ~= nil, text)
   check("and nothing was written",
     #views.match_all('ph9_titulo') == 0, tostring(#views.match_all('ph9_titulo')))
+end
+
+do
+  -- The chooser these menus now run through. Telescope never loads headless,
+  -- so what is exercised here is the fallback contract: rows in, rendered by
+  -- the caller, answered with the row itself.
+  local picker = require('pkm.picker')
+
+  local opened = false
+  local orig = vim.ui.select
+  vim.ui.select = function() opened = true end
+  picker.choose({}, { title = 'vazio', display = tostring }, function() end)
+  vim.ui.select = orig
+  check("choose opens nothing for an empty list", opened == false)
+
+  local answered, rendered
+  orig = vim.ui.select
+  vim.ui.select = function(items, opts, on_choice)
+    rendered = opts.format_item(items[2])
+    on_choice(items[2], 2)
+  end
+  picker.choose({ { name = 'um' }, { name = 'dois' } }, {
+    title   = 'qual',
+    display = function(row) return 'view ' .. row.name end,
+  }, function(row, idx) answered = row.name .. '@' .. idx end)
+  vim.wait(200, function() return answered ~= nil end, 10)
+  vim.ui.select = orig
+
+  check("the caller renders the row and gets it back with its position",
+    rendered == 'view dois' and answered == 'dois@2',
+    tostring(rendered) .. ' / ' .. tostring(answered))
+
+  local went_back = false
+  orig = vim.ui.select
+  vim.ui.select = function(_, _, on_choice) on_choice(nil, nil) end
+  picker.choose({ { name = 'um' } }, {
+    title   = 'qual',
+    display = function(row) return row.name end,
+    on_back = function() went_back = true end,
+  }, function() end)
+  vim.wait(200, function() return went_back end, 10)
+  vim.ui.select = orig
+
+  check("cancelling the fallback goes back when the caller offered a way",
+    went_back)
 end
 
 -- =============================================================================

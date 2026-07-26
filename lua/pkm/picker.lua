@@ -27,6 +27,8 @@
 --   select(paths, opts, on_confirm)   → note picker; on_confirm(string[] paths)
 --   select_tag(rows, opts, on_choice) → tag picker with counts, optionally
 --                                       creating what is typed; on_choice(tag)
+--   choose(rows, opts, on_choice)     → one of N, in the order the caller
+--                                       ranked them; on_choice(row, index)
 --   select_live(opts, on_confirm)     → the prompt *is* the operation: rows are
 --                                       recomputed from what is typed
 --   confirm(opts)                     → scrollable list + <CR>/q; no selection
@@ -290,6 +292,94 @@ local function telescope_select_tag(rows, opts, on_choice)
 end
 
 -- =============================================================================
+-- SECTION: One of N — a menu whose order carries information
+-- =============================================================================
+--
+-- select() knows about notes and select_tag() about tags. A menu that only
+-- ranks its own options — which view, which way out of a filter — needs neither,
+-- and used to fall through to a bare vim.ui.select, which is why a Telescope
+-- user met the plain command-line list in the middle of a Telescope flow.
+--
+-- The caller's order is the answer here, not an accident of insertion: it is
+-- what puts the reachable option first and the pointless one last. So nothing
+-- re-sorts, and the row's original index travels with it.
+
+---@param rows      table[]
+---@param opts      table     { title, display, preview?, preview_title?, on_back? }
+---@param on_choice function(row: table, index: integer)
+local function telescope_choose(rows, opts, on_choice)
+  local pickers      = require('telescope.pickers')
+  local finders      = require('telescope.finders')
+  local actions      = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+  local previewers   = require('telescope.previewers')
+  local sorters      = require('telescope.sorters')
+
+  local items = {}
+  for i, row in ipairs(rows) do
+    items[i] = { row = row, index = i, text = opts.display(row) }
+  end
+
+  --- Exact substring, like the rest of this module — never fuzzy.
+  ---@param prompt string|nil
+  ---@return table[]
+  local function visible(prompt)
+    if not prompt or prompt == '' then return items end
+    local needle, out = prompt:lower(), {}
+    for _, item in ipairs(items) do
+      if item.text:lower():find(needle, 1, true) then out[#out + 1] = item end
+    end
+    return out
+  end
+
+  pickers.new({
+    sorting_strategy = 'ascending',
+    layout_config    = { prompt_position = 'top' },
+  }, {
+    prompt_title = opts.title .. (opts.on_back and '  ·  <C-b> back' or ''),
+
+    finder = finders.new_dynamic({
+      fn = visible,
+      entry_maker = function(item)
+        return { value = item, display = item.text, ordinal = item.text }
+      end,
+    }),
+
+    sorter = sorters.Sorter:new({ scoring_function = function() return 0 end }),
+
+    previewer = opts.preview and previewers.new_buffer_previewer({
+      title = opts.preview_title or 'Preview',
+      define_preview = function(self, entry)
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
+          opts.preview(entry.value.row) or {})
+        vim.api.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
+      end,
+    }) or nil,
+
+    attach_mappings = function(prompt_bufnr, map)
+      if opts.on_back then
+        local function go_back()
+          actions.close(prompt_bufnr)
+          vim.schedule(opts.on_back)
+        end
+        map('i', '<C-b>', go_back)
+        map('n', '<C-b>', go_back)
+      end
+
+      actions.select_default:replace(function()
+        local sel = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        if sel then
+          vim.schedule(function() on_choice(sel.value.row, sel.value.index) end)
+        end
+      end)
+
+      return true
+    end,
+  }):find()
+end
+
+-- =============================================================================
 -- SECTION: Live front-end — the prompt *is* the operation
 -- =============================================================================
 --
@@ -524,6 +614,49 @@ function M.select_tag(rows, opts, on_choice)
     else
       vim.schedule(function() on_choice(item.tag) end)
     end
+  end)
+end
+
+--- Pick one row from a ranked list and hand it back with its position.
+--- The generic menu: no knowledge of notes or tags, so any flow that has
+--- already worked out *which options are worth offering, in what order* can use
+--- the same panel the rest of the operation runs in — a Telescope user should
+--- not meet the command-line list halfway through a Telescope flow.
+---
+--- Order is preserved exactly; typing filters by substring without re-ranking.
+--- Without Telescope it degrades to `vim.ui.select` with the same rows and the
+--- same rendering — where cancelling is the only gesture available, so it is
+--- what triggers `on_back`; under Telescope that is `<C-b>`, and `<Esc>` simply
+--- closes.
+---@param rows      table[]  Anything the caller can render
+---@param opts      table    { title, display = function(row)→string,
+---                            preview? = function(row)→string[],
+---                            preview_title?, on_back? = function }
+---@param on_choice function(row: table, index: integer)
+function M.choose(rows, opts, on_choice)
+  opts = opts or {}
+  opts.title   = opts.title   or 'PKM'
+  opts.display = opts.display or tostring
+
+  if not rows or #rows == 0 then
+    vim.notify('[pkm] nothing to choose from', vim.log.levels.INFO)
+    return
+  end
+
+  if pcall(require, 'telescope') then
+    telescope_choose(rows, opts, on_choice)
+    return
+  end
+
+  vim.ui.select(rows, {
+    prompt      = opts.title,
+    format_item = opts.display,
+  }, function(row, idx)
+    if not row then
+      if opts.on_back then vim.schedule(opts.on_back) end
+      return
+    end
+    vim.schedule(function() on_choice(row, idx) end)
   end)
 end
 

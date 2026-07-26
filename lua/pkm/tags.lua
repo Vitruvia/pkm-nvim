@@ -894,16 +894,12 @@ function M.view_flow(paths, kind, ctx)
     end
 
     -- Several tag sets satisfy the view: which one is a judgement about
-    -- meaning, not something to guess.
-    local labels = {}
-    for _, alt in ipairs(usable) do labels[#labels + 1] = describe_alt(alt) end
-
-    vim.ui.select(labels, {
-      prompt = string.format("%s '%s' — which tags?", verb, name),
-    }, function(_, idx)
-      if not idx then return end
-      vim.schedule(function() apply(usable[idx]) end)
-    end)
+    -- meaning, not something to guess. Same panel as every other screen in the
+    -- flow — a Telescope user should not drop into the command line here.
+    require('pkm.picker').choose(usable, {
+      title   = string.format("%s '%s' — which tags?", verb, name),
+      display = describe_alt,
+    }, apply)
   end
 
   local rows = M.view_membership(paths)
@@ -972,15 +968,39 @@ function M.view_flow(paths, kind, ctx)
     return
   end
 
-  local labels = {}
-  for _, row in ipairs(candidates) do labels[#labels + 1] = label(row) end
+  --- What the row under the cursor means for this selection, spelled out: the
+  --- label can only carry a count, and "which of my notes is it talking about"
+  --- is the question a count raises.
+  ---@param row table
+  ---@return string[]
+  local function preview(row)
+    local inside = {}
+    for _, path in ipairs(row.paths) do
+      inside[path] = true
+    end
 
-  vim.ui.select(labels, {
-    prompt = (kind == 'add') and 'Add to which view?' or 'Remove from which view?',
-  }, function(_, idx)
-    if not idx then return end
-    vim.schedule(function() enter(candidates[idx]) end)
-  end)
+    local lines = { '# ' .. row.name, '' }
+    lines[#lines + 1] = (kind == 'remove')
+      and string.format('%d of %d selected note%s in this view:',
+        #row.paths, row.total, row.total == 1 and ' is' or 's are')
+      or  string.format('%d of %d selected note%s already in this view:',
+        #row.paths, row.total, row.total == 1 and ' is' or 's are')
+    lines[#lines + 1] = ''
+
+    for _, path in ipairs(paths) do
+      lines[#lines + 1] = string.format('  %s %s',
+        inside[path] and '·' or ' ', vim.fn.fnamemodify(path, ':t'))
+    end
+    return lines
+  end
+
+  require('pkm.picker').choose(candidates, {
+    title         = (kind == 'add') and 'Add to which view?' or 'Remove from which view?',
+    display       = label,
+    preview       = preview,
+    preview_title = 'This view, and your selection',
+    on_back       = ctx.on_back,
+  }, enter)
 end
 
 return M
