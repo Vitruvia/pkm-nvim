@@ -1967,6 +1967,17 @@ local _views_panel = panel.create({
       helpers.close()
       vim.schedule(function() new_note_in(name, where) end)
     end,
+    -- `<C-y>` alone must exist wherever the chords do: pressed on its own it
+    -- has to fall through to the plain creation after 'timeoutlen', not sit
+    -- there and do nothing.
+    ['<C-y>'] = function(state, helpers)
+      if state.mode == 'browse' then return end
+      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not name then return end
+      local where = count_target()
+      helpers.close()
+      vim.schedule(function() new_note_in(name, where) end)
+    end,
     ['<C-y><C-v>'] = function(state, helpers)
       if state.mode == 'browse' then return end
       local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
