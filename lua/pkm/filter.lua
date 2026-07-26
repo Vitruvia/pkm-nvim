@@ -44,6 +44,8 @@
 -- Public API:
 --   parse(expr)        → tree, nil  |  nil, error_string
 --   eval(tree, note)   → boolean
+--   tag_sets(tree)     → the tag sets satisfying the expression, with the
+--                        conditions no tag can reach — pure
 --   from_legacy(tbl)   → tree | nil  (converts {tags_any, tags_all, title, text})
 -- =============================================================================
 
@@ -402,6 +404,136 @@ function M.from_legacy(tbl)
   if #parts == 0 then return nil end
   if #parts == 1 then return parts[1] end
   return { type = 'AND', args = parts }
+end
+
+-- =============================================================================
+-- SECTION: Tag satisfiability
+-- =============================================================================
+--
+-- "Put this note in that view" has a precise meaning here: a view is a filter,
+-- so belonging to it means satisfying the filter. Tags are the only part of a
+-- note a bulk operation may safely rewrite for that purpose — a title or a body
+-- cannot be invented — so the question is which *sets of tags* make an
+-- expression true, and which parts of it no tag can reach.
+--
+-- The answer is the expression in disjunctive normal form: a list of
+-- alternatives, any one of which suffices. Each alternative says which tags must
+-- be present, which must be absent, and which non-tag conditions it still
+-- depends on (its blockers). Negation is pushed down as it goes, so `NOT` over a
+-- group becomes De Morgan's dual rather than a special case later.
+
+--- Merge two alternatives. Returns nil when they contradict: a tag required by
+--- one and forbidden by the other makes the combination unsatisfiable, and a
+--- combination that cannot hold is not an alternative at all.
+---@param a table
+---@param b table
+---@return table|nil
+local function merge_alt(a, b)
+  local add, remove = {}, {}
+
+  for tag in pairs(a.add) do add[tag] = true end
+  for tag in pairs(b.add) do
+    if a.remove[tag] then return nil end
+    add[tag] = true
+  end
+  for tag in pairs(a.remove) do remove[tag] = true end
+  for tag in pairs(b.remove) do
+    if a.add[tag] then return nil end
+    remove[tag] = true
+  end
+
+  local blockers = {}
+  vim.list_extend(blockers, a.blockers)
+  vim.list_extend(blockers, b.blockers)
+
+  return { add = add, remove = remove, blockers = blockers }
+end
+
+--- Alternatives satisfying (or, when negated, refuting) one subtree.
+---@param tree    table
+---@param negated boolean
+---@return table[]  each { add = set, remove = set, blockers = string[] }
+local function alternatives(tree, negated)
+  if tree.type == 'PRED' then
+    local value = tostring(tree.value):lower()
+
+    if tree.field == 'tag' then
+      if negated then
+        return { { add = {}, remove = { [value] = true }, blockers = {} } }
+      end
+      return { { add = { [value] = true }, remove = {}, blockers = {} } }
+    end
+
+    -- Any other field describes something tags cannot change.
+    return { {
+      add = {}, remove = {},
+      blockers = { (negated and 'NOT ' or '') .. tree.field .. ':' .. tree.value },
+    } }
+
+  elseif tree.type == 'NOT' then
+    return alternatives(tree.args[1], not negated)
+
+  elseif tree.type == 'AND' or tree.type == 'OR' then
+    -- Under negation the connective flips: NOT(a AND b) is NOT a OR NOT b.
+    local as_union = (tree.type == 'OR') ~= negated
+
+    local out
+    for _, arg in ipairs(tree.args) do
+      local child = alternatives(arg, negated)
+
+      if not out then
+        out = child
+      elseif as_union then
+        vim.list_extend(out, child)
+      else
+        local crossed = {}
+        for _, left in ipairs(out) do
+          for _, right in ipairs(child) do
+            local merged = merge_alt(left, right)
+            if merged then crossed[#crossed + 1] = merged end
+          end
+        end
+        out = crossed
+      end
+    end
+
+    return out or {}
+  end
+
+  return {}
+end
+
+--- The tag sets that make a filter expression true.
+---
+--- Each returned alternative is one way to satisfy the whole expression: apply
+--- its `add` and `remove` to a note and the filter matches — **provided** its
+--- `blockers` are empty. A blocker names a condition no tag can produce
+--- (`title:`, `text:`, `type:`, `filename:`, `any:`), and an alternative
+--- carrying one is reported rather than hidden, so a caller can say *why*
+--- membership is not achievable instead of silently writing tags that will not
+--- make the note match.
+---
+--- An empty result means the expression is self-contradictory (`tag:a AND NOT
+--- tag:a`) and nothing satisfies it.
+---
+--- Pure: no editor state, no I/O.
+---@param tree table  A parse() result
+---@return { add: string[], remove: string[], blockers: string[] }[]
+function M.tag_sets(tree)
+  if not tree then return {} end
+
+  local out = {}
+  for _, alt in ipairs(alternatives(tree, false)) do
+    local add, remove = {}, {}
+    for tag in pairs(alt.add) do add[#add + 1] = tag end
+    for tag in pairs(alt.remove) do remove[#remove + 1] = tag end
+    table.sort(add)
+    table.sort(remove)
+
+    out[#out + 1] = { add = add, remove = remove, blockers = alt.blockers }
+  end
+
+  return out
 end
 
 return M

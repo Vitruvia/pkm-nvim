@@ -54,6 +54,7 @@
 --   get_sidebar_win()   → integer|nil, sidebar window handle or nil
 --   refresh_sidebar_if_open() → refresh sidebar in all open tabpages
 --   save(name, expr)    → write or update a view in views.json
+--   get_tree(name)      → the view's parsed filter, parent chain composed
 --   save_subproject(name, parent, filter_expr) → write a subproject entry to views.json
 --   delete(name)        → remove a view from views.json
 -- =============================================================================
@@ -630,6 +631,16 @@ function M.list()
   return names
 end
 
+--- The parsed filter of a view, with its parent chain already composed.
+--- Exposed so callers can reason about *what a view requires* rather than only
+--- about what it currently matches — see `filter.tag_sets`.
+---@param name string
+---@return table|nil tree
+---@return string|nil err
+function M.get_tree(name)
+  return get_tree(name)
+end
+
 --- Return all note paths matching the named view's filter expression.
 --- Returns an empty array and notifies on error.
 ---@param name string
@@ -1044,6 +1055,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
         end
         vim.schedule(function()
           require('pkm.actions').run(targets, {
+            view    = name,   -- this picker *is* a view: never ask which
             on_back = function() M.open(name) end,
           })
         end)
@@ -1267,6 +1279,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     close()
     vim.schedule(function()
       require('pkm.actions').run(targets, {
+        view    = name,
         on_back = function() M.open(name) end,
       })
     end)
@@ -1597,6 +1610,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
         end
         vim.schedule(function()
           require('pkm.actions').run(paths, {
+            view    = sel.value,
             on_back = function() M.open_views_panel('views') end,
           })
         end)
@@ -2784,12 +2798,13 @@ function M.open_sidebar(name)
     local ct  = get_tab()
     local row = vim.api.nvim_win_get_cursor(ct.win)[1]
 
-    local paths
+    local paths, view
     if ct.mode == 'overview' then
-      local vname = ct.view_lines[row]
-      if not vname then return end
-      paths = M.match_all(vname)
+      view = ct.view_lines[row]
+      if not view then return end
+      paths = M.match_all(view)
     else
+      view  = ct.name          -- the view this list belongs to
       paths = M.marked_in_order(ct.marked, ct.paths)
     end
 
@@ -2797,7 +2812,9 @@ function M.open_sidebar(name)
       vim.notify('[pkm] no notes to act on', vim.log.levels.INFO)
       return
     end
-    require('pkm.actions').run(paths)
+    -- The sidebar always knows which view it is showing, so a view action
+    -- never has to ask.
+    require('pkm.actions').run(paths, { view = view })
   end, ko)
 
   -- <C-v>: open note in a new vertical split (detail mode only)

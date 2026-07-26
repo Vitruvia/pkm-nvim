@@ -135,6 +135,12 @@ reuses `citations.get_citable_items_map()`.
 `any`: bare words and unknown-field tokens; case-insensitive substring over all fields.
 `type`: exact match against `entry.note_type`. `tag`: exact (case-insensitive).
 `from_legacy(tbl)` converts `{tags_any, tags_all, title, text}`.
+`tag_sets(tree)` (v1.8.0 Ph9) answers the inverse question — *what would make
+this match* — as the expression in disjunctive normal form: alternatives of
+`{add, remove, blockers}`, negation pushed down (De Morgan), where a blocker is a
+condition no tag can produce. It is what makes "add this note to that view" a
+computation rather than a guess. `NOT` binds to an atom, so `NOT NOT x` is a
+parse error and `NOT (NOT x)` is the double negative.
 
 **index.lua** — in-memory note index. Entry shape:
 `{path, filename, note_type, title, tags, body, mtime, has_citations}`.
@@ -243,6 +249,10 @@ wording shown before a destructive write is testable, as are `scope_choices` and
 `browse_by_tag()` and `batch_on(paths, kind, ops?, header?)` — a selection that
 already exists, straight to the tag prompt and the confirmation — with
 `batch_flow(kind)` reduced to building a selection for callers that have none.
+`view_flow(paths, kind, ctx)` (v1.8.0 Ph9) adds notes to a view or takes them out
+by tags: it asks `filter.tag_sets` which tag sets satisfy the view's filter — or,
+for removal, its negation — refuses when every alternative depends on a condition
+tags cannot reach, and offers the choice when more than one route exists.
 Consumed by `actions.lua`, `citations.merge_tags`, `notes.create_relative_note`
 and `:PKMTags`.
 

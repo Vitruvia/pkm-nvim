@@ -135,8 +135,8 @@ a view; <S-Tab> marks and steps up), and in the browse mode of |:PKMViews|.
 Over a *view* — in the sidebar's overview or the views list — <C-a> acts on
 every note that view matches; there is nothing to mark there.
 
-The action menu is short: add, remove or rename a tag, change the title, or
-rename the file.
+The action menu is short: add, remove or rename a tag, change the title, rename
+the file, or add the notes to a view / take them out of one.
 
 CHANGING TITLES IN BULK~
 One panel, and what you type is the operation. The field takes the two halves
@@ -172,6 +172,24 @@ the same notes, for when the selection was wrong rather than the expression.
 Notes you have open are kept in step: an unmodified buffer is reloaded after the
 write, and one with unsaved changes is never reloaded behind your back — you are
 asked (y/n) whether to save it first, and only when there is one.
+
+PUTTING NOTES IN A VIEW~
+A view is a filter, so belonging to one means satisfying it — and tags are the
+only part of a note this can rewrite for you. So "Add to a view" works out which
+tags make the view's filter match and applies them, previewed like any other tag
+change. For `tag:projeto AND NOT tag:draft` that means adding `projeto` and
+dropping `draft`.
+
+"Remove from a view" is the same question mirrored: what makes the filter
+*false*. That often has more than one answer — dropping `projeto` or adding
+`draft` both work — and you are asked which, rather than having it guessed.
+
+When a view cannot be satisfied by tags at all, because its filter also demands
+something like `title:seneca` or `type:bib`, the action names that condition and
+writes nothing. Tags that would not make the note match are worse than a refusal.
+
+You are not asked *which* view when the notes came from one: a view's note list,
+the sidebar, and the views picker all carry it.
 
 RENAMING FILES IN BULK~
 Same panel, same `pattern/replacement`, but over the filename — and with one

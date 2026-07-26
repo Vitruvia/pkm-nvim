@@ -61,6 +61,7 @@
 --   browse_by_tag()        → tag picker → browse pre-seeded to tag:<x>
 --   batch_on(paths, kind, ops?, header?) → batch over notes already chosen
 --   batch_flow(kind)       → the same, for callers that must first build one
+--   view_flow(paths, kind, ctx?) → add to / remove from a view, by tags
 -- =============================================================================
 
 local M = {}
@@ -757,6 +758,130 @@ function M.batch_flow(kind)
     }, function(selected)
       M.batch_on(selected, kind)
     end)
+  end)
+end
+
+-- =============================================================================
+-- SECTION: View membership
+-- =============================================================================
+--
+-- A view is a filter, so putting a note in one means making the filter match.
+-- Tags are the only part of a note a bulk operation may rewrite for that —
+-- a title or a body cannot be invented — so this asks `filter.tag_sets` which
+-- tag sets satisfy the view, and applies one of them.
+--
+-- Removing is the same question about the negation: which tag sets make the
+-- filter *false*. Both directions therefore run through the same machinery, and
+-- through the same preview and write as every other tag batch.
+
+--- Human-readable form of one alternative, for the choice menu.
+---@param alt table
+---@return string
+local function describe_alt(alt)
+  local parts = {}
+  for _, tag in ipairs(alt.add) do parts[#parts + 1] = '+' .. tag end
+  for _, tag in ipairs(alt.remove) do parts[#parts + 1] = '-' .. tag end
+  if #parts == 0 then return '(no tag change)' end
+  return table.concat(parts, ', ')
+end
+
+--- Add the selected notes to a view, or take them out of it, by tags.
+--- Reports rather than guesses when the view's filter cannot be satisfied by
+--- tags alone: adding tags that will not make the note match would be worse
+--- than saying so.
+---@param paths string[]
+---@param kind  string     'add' | 'remove'
+---@param ctx   table|nil   { view? = string, on_back? = function }
+function M.view_flow(paths, kind, ctx)
+  ctx = ctx or {}
+
+  if not paths or #paths == 0 then
+    vim.notify('[pkm] no notes selected', vim.log.levels.INFO)
+    return
+  end
+
+  local views = require('pkm.views')
+
+  --- Everything after the view is known, so the caller that already knows it
+  --- (a sidebar, a view's own note list) never asks.
+  ---@param name string
+  local function with_view(name)
+    local tree, err = views.get_tree(name)
+    if not tree then
+      vim.notify('[pkm] ' .. (err or 'view has no filter'), vim.log.levels.ERROR)
+      return
+    end
+
+    -- Removal is satisfying the negation: the same question, mirrored.
+    local target = (kind == 'add') and tree or { type = 'NOT', args = { tree } }
+    local alts   = require('pkm.filter').tag_sets(target)
+
+    local usable = {}
+    for _, alt in ipairs(alts) do
+      if #alt.blockers == 0 and (#alt.add > 0 or #alt.remove > 0) then
+        usable[#usable + 1] = alt
+      end
+    end
+
+    if #usable == 0 then
+      -- Say which condition is in the way; a blocker is the whole reason.
+      local blocker
+      for _, alt in ipairs(alts) do
+        if #alt.blockers > 0 then blocker = alt.blockers[1] break end
+      end
+      vim.notify(blocker
+        and string.format("[pkm] '%s' cannot be satisfied with tags alone — it "
+          .. 'also requires %s', name, blocker)
+        or string.format("[pkm] '%s' has no tag condition to change", name),
+        vim.log.levels.WARN)
+      return
+    end
+
+    local verb = (kind == 'add') and 'Add to' or 'Remove from'
+
+    ---@param alt table
+    local function apply(alt)
+      confirm_and_apply(paths, { add = alt.add, remove = alt.remove },
+        string.format("%s '%s' (%s)", verb, name, describe_alt(alt)))
+    end
+
+    if #usable == 1 then
+      apply(usable[1])
+      return
+    end
+
+    -- Several tag sets satisfy the view: which one is a judgement about
+    -- meaning, not something to guess.
+    local labels = {}
+    for _, alt in ipairs(usable) do labels[#labels + 1] = describe_alt(alt) end
+
+    vim.ui.select(labels, {
+      prompt = string.format("%s '%s' — which tags?", verb, name),
+    }, function(_, idx)
+      if not idx then return end
+      vim.schedule(function() apply(usable[idx]) end)
+    end)
+  end
+
+  if ctx.view then
+    with_view(ctx.view)
+    return
+  end
+
+  local names = views.list()
+  if #names == 0 then
+    vim.notify('[pkm] no views defined', vim.log.levels.INFO)
+    return
+  end
+
+  local counts = views.count_many(names)
+  vim.ui.select(names, {
+    prompt      = (kind == 'add') and 'Add to which view?' or 'Remove from which view?',
+    format_item = function(name)
+      return string.format('%s  (%d)', name, counts[name] or 0)
+    end,
+  }, function(name)
+    if name then vim.schedule(function() with_view(name) end) end
   end)
 end
 

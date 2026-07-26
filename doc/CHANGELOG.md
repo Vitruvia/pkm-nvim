@@ -5,6 +5,35 @@
 ## [Unreleased]
 
 ### Added
+-   **View membership by tags (v1.8.0 Phase 9).** `<C-a>` → *Add to a view* /
+    *Remove from a view*. A view is a filter, so belonging to one means
+    satisfying it — and tags are the only part of a note a bulk operation may
+    rewrite for that purpose, since a title or a body cannot be invented. The
+    action works out which tags to add and which to remove, previews it like any
+    other tag batch, and writes it.
+-   **`filter.tag_sets(tree)`** — pure, and where the whole difficulty lives.
+    It returns the expression in disjunctive normal form: a list of
+    alternatives, any one of which satisfies the filter, each saying which tags
+    must be present, which must be absent, and which conditions **no tag can
+    reach**. Negation is pushed down as it goes, so `NOT (a AND b)` becomes a
+    choice of removals and `NOT (a OR b)` requires both. A combination that
+    contradicts itself (`tag:a AND NOT tag:a`) yields no alternative at all.
+-   **A view tags cannot satisfy says so.** When every alternative depends on a
+    `title:`, `text:`, `type:`, `filename:` or `any:` condition, the action
+    names the condition in the way and writes nothing — adding tags that will
+    not make the note match would be worse than refusing.
+-   **Removal is the same question, mirrored:** the tag sets that make the
+    filter *false*. That often has more than one answer — for
+    `tag:projeto AND NOT tag:draft`, dropping `projeto` and adding `draft` both
+    work — and the choice is offered rather than guessed.
+-   **The view is never asked for twice.** `actions.run(paths, { view })` carries
+    it from wherever the notes were chosen: a view's own note list, the sidebar
+    (in either mode), the views picker. Only a selection from a plain browser
+    asks which view.
+-   `test/test_v180_p9.lua` — the tag algebra (AND, OR, De Morgan under
+    negation, distribution, self-contradiction, every blocker field), then the
+    flow over a real corpus: notes entering a view, leaving it by the chosen
+    route, and a title-only view refusing.
 -   **Bulk file rename (v1.8.0 Phase 8).** `<C-a>` → *Rename the file* is the
     same substitution panel as titles, over the editable part of the filename.
     The `NNNN_type_` prefix is identity, not description: the expression never

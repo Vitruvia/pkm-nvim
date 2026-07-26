@@ -310,13 +310,15 @@ an all-or-nothing gate because renaming rewrites `[[links]]` everywhere.
 `citations.update_references_on_renames` batches the vault scan the way
 `propagate_titles` already did.
 
-**Phase 9 — view membership by tags.** Pure `filter.tag_sets(tree)` → the tag
-sets (OR-separated AND-groups) a view accepts, per Near goals § 3.4. Ships as
-**two rows in the action registry** (`view_add` / `view_remove`), so every panel
-that already has `<C-a>` gains it for free — including the sidebar, which got its
-marking in Ph6. Must report when a view's filter cannot be satisfied by tags
-alone (`title:`/`text:`/`type:` predicates), rather than silently adding tags
-that will not make the note match.
+**Phase 9 — view membership by tags.** ✅ *Shipped; the detail is in
+`doc/CHANGELOG.md`.* `filter.tag_sets(tree)` pure — the expression in
+disjunctive normal form, each alternative carrying the tags to add, the tags to
+remove, and the conditions no tag can reach — plus `view_add` / `view_remove` in
+the action registry, and the view name carried in the action context so it is
+never asked for twice.
+
+**v1.8.0 is complete.** What remains is the release itself: tag after a smoke
+pass over the whole bulk-operation surface.
 
 ---
 

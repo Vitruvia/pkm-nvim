@@ -37,6 +37,8 @@ local M = {}
 --- it needs from there. `ctx.on_back` reopens whatever chose these notes — the
 --- browser, the view, the panel — so an action can offer a way out that lands
 --- where the user actually came from rather than on a narrowed copy of it.
+--- `ctx.view` is the view the notes were chosen from, when there was one: a
+--- view action then never asks which view, because the editor already knows.
 ---@type { id: string, label: string, run: fun(paths: string[], ctx: table) }[]
 local REGISTRY = {
   {
@@ -63,6 +65,16 @@ local REGISTRY = {
     id    = 'rename_files',
     label = 'Rename the file',
     run   = function(paths, ctx) require('pkm.rename').filename_flow(paths, ctx) end,
+  },
+  {
+    id    = 'view_add',
+    label = 'Add to a view',
+    run   = function(paths, ctx) require('pkm.tags').view_flow(paths, 'add', ctx) end,
+  },
+  {
+    id    = 'view_remove',
+    label = 'Remove from a view',
+    run   = function(paths, ctx) require('pkm.tags').view_flow(paths, 'remove', ctx) end,
   },
 }
 
@@ -113,7 +125,7 @@ end
 --- The menu is a small fixed choice set, so it stays `vim.ui.select` — the same
 --- criterion as the Simple/Deep menu of `:PKMExport`.
 ---@param paths string[]  The notes the action will act on
----@param opts  table|nil { prompt? = string, on_back? = function }
+---@param opts  table|nil { prompt? = string, on_back? = function, view? = string }
 function M.run(paths, opts)
   opts = opts or {}
 
@@ -137,7 +149,9 @@ function M.run(paths, opts)
     end
     local action = REGISTRY[idx]
     if action then
-      vim.schedule(function() action.run(paths, { on_back = opts.on_back }) end)
+      vim.schedule(function()
+        action.run(paths, { on_back = opts.on_back, view = opts.view })
+      end)
     end
   end)
 end
