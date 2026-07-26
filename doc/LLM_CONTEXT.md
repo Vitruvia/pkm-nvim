@@ -7,10 +7,14 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.6.1** (released); **v1.8.0 Ph1–Ph7 shipped on `dev`**
+## Current version: **v1.8.0** (released, tagged)
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
+The v1.8.0 entry also carries what never got a release of its own: the counting
+path planned as v1.6.1 Ph3, the index build of v1.6.2 Ph1, and deep export plus
+the relative note (v1.7.0 Ph1–Ph2). Those two numbers were planning labels and
+have no tag; nothing is missing between v1.6.1 and v1.8.0.
 Remaining work is tracked in `doc/ROADMAP.md` § **Release Plan**; the standing
 rules for executing it live in `doc/PRINCIPLES.md`.
 

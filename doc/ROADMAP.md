@@ -172,34 +172,40 @@ form of [Semantic Versioning](https://semver.org/):
 are summarised compactly — see `doc/CHANGELOG.md` for their full detail.*
 
 ```
-v1.5.7  PATCH  Correctness & robustness — Ph1  ✅ shipped
-v1.5.8  PATCH  Correctness & robustness — Ph2  ────────┐  (no deps)
-v1.5.9  PATCH  Correctness & robustness — Ph3          │
-v1.6.0  MINOR  Panels & navigation                     │
-        Ph1 panel infra + tag panel                    │
-          ├─→ Ph2 trash-restore panel                  │
-          └─→ Ph3 views panels + sidebar nav           │
-              Ph4 picker polish                         │
-v1.6.1  PATCH  Correctness batch + :PKMViews latency ───┘  (after v1.6.0)
-        Ph1 fix-now batch  ✅ shipped
-          Ph2 yaml.lua write-retry  ✅ shipped
-            Ph3 :PKMViews open-latency (bench-driven)  ✅ done
-v1.6.2  PATCH  Index build cost (bench-driven)             (after v1.6.1)
-        Ph1 scandir + LuaJIT reader  ✅ done
-v1.7.0  MINOR  Exportation, note creation & header nav     (no deps)
-        Ph1 deep export  ✅ done
-          Ph2 relative note  ✅ done (shipped inside v1.8.0 Ph1)
-            Ph3 header navigation
-v1.8.0  MINOR  Bulk metadata operations                    (no deps)
-        Ph1 tag engine + relative note  ✅ done
-          Ph2 batch tag UI (picker reuse)  ✅ done
-            Ph3 view membership by tags
-              Ph4 bulk rename / title
+v1.5.7 … v1.6.1   ✅ shipped — see doc/CHANGELOG.md
+v1.8.0  MINOR  Bulk metadata operations  ✅ released 25/7/2026, tagged
+        Nine phases; detail in doc/CHANGELOG.md. This release also carries the
+        work planned as v1.6.2 (index build) and v1.7.0 Ph1–Ph2 (deep export,
+        relative note) — those two numbers stayed planning labels and have no
+        tag of their own.
+
+v1.8.1  PATCH  Defects from the v1.8.0 smoke pass          (next)
+        Ph1 view membership offers the wrong views
+          Ph2 confirmation on every removal
+            Ph3 the undo cursor — reproduce, then fix
+v1.9.0  MINOR  Views from where you already are            (after v1.8.1)
+        Ph1 :PKMView add|remove <name> on the current note
+          Ph2 create a note already inside a view
+v1.10.0 MINOR  Header navigation                           (no deps)
+        Ph1 any-level header jumps   (was v1.7.0 Ph3)
 ```
 
-Dependency summary: v1.6.0 Ph1 precedes Ph2 and Ph3 (they build on
-`panel.lua`); v1.6.1 follows v1.6.0 (it tunes the reworked `:PKMViews`);
-everything else floats and may be reordered.
+**Ordering beyond that, decided by the author.** Everything that may *create*
+commands comes first — above all the operations that change internal state
+(citations, frontmatter, the view registry, the index). The reason is explicit:
+an assistant with no command for such an operation edits a note "from the
+outside" and breaks the system, so the command has to exist before the API that
+would call it. Formatting and syntax highlighting are **not** prerequisites —
+an assistant does formatting unaided. Only then comes *Command clearup*
+(deciding which registrations survive as typed commands), and only after that
+`pkm.api` (Near goals 4). Every listed bugfix lands before `pkm.api`; they are
+small, and leaving them under a new public surface is how they become
+permanent.
+
+Dependency summary: v1.9.0 follows v1.8.1, because its Phase 1 calls the
+`view_flow` that v1.8.1 Phase 1 repairs — shipping it first would build a new
+command on the defect. v1.10.0 floats: it touches `markdown.lua` and nothing
+else, and may be reordered freely.
 
 ---
 
@@ -213,29 +219,105 @@ planning or executing a phase.
 
 ---
 
-#### v1.6.1 (PATCH) and v1.6.2 (PATCH) — shipped
+#### Shipped — v1.6.x, v1.7.0's first two phases, and v1.8.0
 
-Correctness batch, `:PKMViews` open latency, and index build cost. Both are
-complete; what they changed and what the measurements were is in
-`doc/CHANGELOG.md`. Kept here only as the reason v1.6.1 follows v1.6.0 in the
-ordering above.
+v1.6.1 and v1.6.2: correctness batch, `:PKMViews` open latency, index build cost.
+v1.7.0 Ph1–Ph2: deep export, and the relative note — Ph2 shipped inside v1.8.0
+Ph1, where the tag engine it seeds from was written. v1.8.0: the bulk-operation
+stack in nine phases, released and tagged 25/7/2026. What each changed is in
+`doc/CHANGELOG.md`.
+
+Three of their decisions still constrain pending work, and are the only reason
+this section survives:
+
+-   **Deep export runs on the picker selection**, not on every filter match, and
+    its two depths are a per-path budget counted from the seeds, mixable in any
+    order.
+-   **`picker.select_live` is the panel shape** any further bulk operation
+    reuses: the prompt *is* the operation, rows recompute per keystroke, the
+    preview shows the result. There is no form and no separate result screen.
+-   **`actions.list()` returns `{ id, label, run }`** — the enumeration that will
+    let `pkm.api` discover bulk operations instead of hard-coding them.
+
+**v1.6.2 and v1.7.0 have no tag.** Their work reached the user inside the v1.8.0
+release and the CHANGELOG entry for v1.8.0 records that; the numbers stayed
+planning labels. Header navigation, the third phase v1.7.0 never got, is v1.10.0
+below.
 
 ---
 
-#### v1.7.0 (MINOR) — Exportation, note creation, and header navigation
+#### v1.8.1 (PATCH) — what the v1.8.0 smoke pass found
 
-*Three independent features from the former Next Steps 1 and 3 and Distant
-Additions 1.2, across disjoint primary files. Grouped into one minor because
-each is small and self-contained; they may equally ship as separate minors if
-preferred.*
+*Three defects, in the order to attack them. No new features — the two
+capabilities the same smoke pass asked for are v1.9.0, not this.*
 
-**Phases 1 and 2 — deep export, and the relative note.** ✅ *Shipped; see
-`doc/CHANGELOG.md`.* Two decisions from Ph1 still constrain later work: the deep
-walk runs on the **picker selection**, not on every filter match, and the two
-depths are a per-path budget counted from the seeds, mixable in any order.
-Ph2 shipped inside v1.8.0 Ph1, where the tag engine it seeds from was written.
+**Phase 1 — view membership offers the wrong views.** Selecting notes inside a
+view today allows only adding them to *that* view (useless — they are already
+there) or removing them from it. Adding them to another view, or removing them
+from a different view that also contains them, is unreachable. The design error
+is mine: "do not make the user repeat what the editor already knows" was applied
+where knowing *where the notes came from* does not determine *what the operation
+acts on*.
 
-**Phase 3 — header navigation.**
+In `lua/pkm/tags.lua` (`view_flow`), `ctx.view` stops deciding and starts merely
+**ordering**:
+
+| Case | Behaviour |
+|---|---|
+| `add` | Offer every view. The context view may appear, but with no privilege — whoever adds is almost always aiming elsewhere. |
+| `remove` | Offer **only the views the selection is actually in**, by evaluating each view's parsed tree (`filter.eval`, `views.get_tree`) against the selected notes' index entries. Removing a note from a view it is not in is not an operation, it is a mistake. |
+| either | The menu appears only when there is a real choice; a single candidate goes straight through. |
+
+Verification: extend `test/test_v180_p9.lua` — a selection inside view A offers
+B and C for `add`; `remove` offers only the views that match; one candidate
+opens no menu.
+
+**Phase 2 — every removal asks first.** A rule for the whole plugin, not for one
+flow: **removal, deletion and exit always confirm.** It coexists with cutting
+one-option menus — a menu asks *what*, a confirmation guards the irreversible —
+and the two must not be conflated again. Audit every removal path (view
+membership, tags, notes, trash, citations) for a confirmation screen whose title
+says plainly that something is being removed, and record the rule in
+`doc/PRINCIPLES.md` § *Standing bug-prevention design rules*.
+
+**Phase 3 — the undo cursor, reproduced before it is fixed.** `u` still lands on
+the frontmatter timestamp sometimes; the suspects and the history are in
+`doc/CHANGELOG.md` § Known Bugs. **The repro comes first** — open a note, edit a
+middle line, `:w`, `u`, assert the cursor line — because the three previous
+fixes were made without one, which is why the bug keeps returning.
+
+---
+
+#### v1.9.0 (MINOR) — views from where you already are
+
+**Phase 1 — `:PKMView add|remove <name>` on the current note.** No new command:
+arguments carry it. `:PKMView <name>` still opens the view; `:PKMView add
+<name>` and `:PKMView remove <name>` act on the note in the current buffer. The
+ambiguity resolves deterministically — **if the first argument is exactly the
+name of an existing view, it means open** — and completion covers both the two
+verbs and the view names. It reuses `tags.view_flow({current_note}, kind, {})`,
+writes to disk, and passes through `bufsync` like everything else.
+
+Why it matters: it is the way to give a note several tags at once so it is born
+belonging to a view.
+
+**Phase 2 — create a note already inside a view.** A new key on the view
+surfaces (`N`, since `n` already creates a *view* in the panel): compute
+`filter.tag_sets` for the view under the cursor and **seed the tags at
+creation** — `notes.create_new_note(type, { tags = … })` already accepts them,
+so the note is born matching the view with no second write. More than one
+alternative asks; a blocker (`title:`, `type:`, …) warns that the note may not
+match.
+
+---
+
+#### v1.10.0 (MINOR) — header navigation
+
+*Was v1.7.0 Ph3, which never shipped; the rest of v1.7.0 went out inside v1.8.0.
+It is self-contained and blocks nothing, which is why it sits after the fixes
+and the view work rather than before them.*
+
+**Phase 1 — any-level header navigation.**
 
 | File | Single-pass changes |
 |---|---|
@@ -245,7 +327,7 @@ Ph2 shipped inside v1.8.0 Ph1, where the tag engine it seeds from was written.
 | `config.lua` | Navigation keymap defaults — consistent with the native same-level motion and existing markdown keymaps (default `false`). |
 | docs | `CHANGELOG` (Added). Record the PKM↔Neovim native-motion integration and note that a previously-created same-level command was dropped in favour of the native one. Promote the "different/any-level header" bullet of Distant goals 1.2 into completed scope; restate that list-component and block navigation remain deferred pending the markdown conventions. |
 
-Verification: `test/test_v170_p3.lua` runs `find_heading_target` over a
+Verification: `test/test_v1100_p1.lua` runs `find_heading_target` over a
 mixed-level fixture and asserts next/prev targets at boundaries (first/last
 heading; no heading → nil). Smoke: navigate a real note's headings.
 
@@ -262,63 +344,6 @@ feat: any-level header navigation
 - test: heading targeting over fixtures, including boundaries
 - docs: changelog; DA 1.2 (any-level header) promoted; native-motion note
 ```
-
----
-
-#### v1.8.0 (MINOR) — Bulk metadata operations
-
-*Gathers the "reduce manual work" family that was scattered across Near goals:
-batch tags (§ 3.3), adding/removing a note from a view (§ 3.4), and bulk
-rename/title (previously unrecorded). They share one primitive — compute a
-metadata change, apply it to N notes — which is why they belong to one version;
-they are split into phases by how far each one's write can reach.*
-
-**Why rename is not in the same phase as tags.** Renaming fires
-`citations.update_references_on_rename` and `propagate_title`, which rewrite
-`[[links]]` and identifiers in every citing note. Multiplying the plugin's
-widest-blast-radius path by N alongside tag edits would violate the
-safe-co-modification principle, so it lands last, on machinery the earlier
-phases have already proven.
-
-**No new commands** beyond `:PKMNewRelative`: batch operations arrive as modes
-of `:PKMTags` and as an action of `:PKMView`, per *Command clearup* (Near goals
-4). The command surface is 45 registrations today.
-
-**Phases 1–7 — done.** ✅ *Shipped; the detail is in `doc/CHANGELOG.md`.*
-Tag engine and `:PKMNewRelative` (Ph1); batch tag UI and the shared note picker
-(Ph2); the rich tag picker with counts and previews (Ph3); bulk actions starting
-from the selection, with `actions.lua` and `<C-a>` in every note-listing surface
-(Ph4); tag naming through the picker, ranked by relevance to the selection (Ph5);
-marking notes in the view surfaces (Ph6); substitution over titles in one live
-panel, plus `bufsync` (Ph7).
-
-Three of those decisions still constrain what is left:
-
-- **`picker.select_live`** is the panel Ph8 must reuse — the prompt is the
-  operation, rows recompute per keystroke, preview shows the result.
-- **`find_collisions` was deliberately not written** in Ph7: two titles may
-  legitimately match, so collision detection has no consumer until filenames.
-- **Batched propagation** (`citations.propagate_titles`) is the pattern Ph8's
-  `update_references_on_renames` must follow; the per-note functions rescan the
-  whole vault.
-
-**Phase 8 — bulk file rename.** ✅ *Shipped; the detail is in `doc/CHANGELOG.md`.*
-The same substitution panel over the editable part of the filename, the
-`NNNN_type_` prefix untouched, consolidated notes only, collisions refused, and
-an all-or-nothing gate because renaming rewrites `[[links]]` everywhere.
-`notes.rename_file` was extracted from `rename_note`, and
-`citations.update_references_on_renames` batches the vault scan the way
-`propagate_titles` already did.
-
-**Phase 9 — view membership by tags.** ✅ *Shipped; the detail is in
-`doc/CHANGELOG.md`.* `filter.tag_sets(tree)` pure — the expression in
-disjunctive normal form, each alternative carrying the tags to add, the tags to
-remove, and the conditions no tag can reach — plus `view_add` / `view_remove` in
-the action registry, and the view name carried in the action context so it is
-never asked for twice.
-
-**v1.8.0 is complete.** What remains is the release itself: tag after a smoke
-pass over the whole bulk-operation surface.
 
 ---
 
