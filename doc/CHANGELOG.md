@@ -8,6 +8,31 @@
 are carried forward from version to version and consulted before any fix.*
 
 ### Fixed
+-   **`D` in the buffer panel threw away unsaved work without asking
+    (v1.8.1 Ph2).** It ran `bdelete!` straight through, so force-closing a
+    modified buffer lost the edits silently — which was the entire difference
+    between `D` and `d`, and the one place in the plugin where something
+    irreversible happened with no screen in front of it. `D` now asks *only*
+    when the buffer is modified: force-closing a saved one still costs nothing
+    and so still asks nothing. The question states what is lost ("close and
+    lose its unsaved changes?") rather than warning about itself, and defaults
+    to Cancel.
+-   **Every removal confirms — now a standing rule**, recorded in
+    `doc/PRINCIPLES.md` § *Standing bug-prevention design rules* after an audit
+    of every path that removes anything. It is the deliberate counterweight to
+    "one panel, not a wizard": **a menu asks *what*, a confirmation guards the
+    *irreversible***, so one-option menus go and confirmations stay. Neither a
+    command called with explicit arguments nor a "force" key is exempt. The
+    audit found the rest already compliant — note deletion, `:PKMEmptyTrash`,
+    both view-deletion paths, and every `tags` batch, whose preview list *is*
+    its confirmation. Deliberately exempt and documented as such: buffer-only
+    changes `u` reverses (`:PKMRemoveTag`), and configured maintenance that
+    reports instead of asking (`trash.max_age_days`).
+-   `views.delete()` documents that it deletes without asking and that the
+    confirmation belongs to its callers — both of which have one.
+-   `test/test_v181_p2.lua` — drives the panel for real: the question is absent
+    on a saved buffer, present on a modified one, cancelling keeps the buffer
+    *and* its edits, discarding closes it, and `d` still offers to save.
 -   **View membership only ever reached the view you came from (v1.8.1 Ph1).**
     Selecting notes inside a view, the only available operations were adding
     them to *that* view — where they already were — and removing them from it.

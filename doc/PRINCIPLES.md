@@ -86,6 +86,33 @@ shrink as work completes, and these do not.
 
 ## Standing bug-prevention design rules
 
+- **Every removal confirms.** Removing, deleting or discarding always presents a
+  screen that says what is about to be lost, and it says so in the *title* of
+  that screen, not only in the body. This holds for the whole plugin: a note, a
+  view, a tag across a batch, a note's membership of a view, the trash, an
+  unsaved buffer.
+
+  It is the deliberate counterweight to principle 4, and the two are constantly
+  confused. **A menu asks *what*; a confirmation guards the *irreversible*.**
+  Cutting a menu that offers a single option removes a step that decides
+  nothing. Cutting a confirmation removes the only chance to stop. So:
+  one-option menus go, confirmations stay — and "the user already told us what
+  they want" is an argument about the first, never about the second.
+
+  Two things are *not* exempted by being fast paths: a command called with
+  explicit arguments (`:PKMViewDelete <name>` confirms exactly as its panel
+  does) and a "force" variant of an existing key. A force key may skip the
+  question when nothing is at stake — closing a saved buffer costs nothing —
+  but never when it is the difference between the key and its gentler sibling.
+  That gap is what `D` in the buffer panel was: `bdelete!` straight through,
+  unsaved edits gone without a word.
+
+  Genuinely exempt, and only these: changes confined to a buffer that `u`
+  reverses (`:PKMRemoveTag` writes nothing to disk), and automatic maintenance
+  the user configured in advance (`trash.max_age_days` purging on startup),
+  which reports rather than asks. A flow whose confirmation *is* its panel — a
+  preview list plus `<CR>`, as every `tags` batch has — already satisfies this;
+  it does not need a second dialog on top, only a title that names the removal.
 - **`winfixbuf` safety net.** Every PKM panel window (sidebar, buffer panel, and
   every panel built on `panel.lua`) sets `winfixbuf = true` immediately after
   its buffer is assigned. This converts the whole class of "a file opened inside

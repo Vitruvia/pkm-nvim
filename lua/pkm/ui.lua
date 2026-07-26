@@ -225,9 +225,11 @@ local _bufpanel = panel.create({
       if vim.bo[bufnr].modified then
         local name  = vim.api.nvim_buf_get_name(bufnr)
         local label = name ~= '' and vim.fn.fnamemodify(name, ':t') or '[No Name]'
+        vim.fn.inputsave()
         local choice = vim.fn.confirm(
           string.format("Save changes to '%s' before closing?", label),
           '&Yes\n&No\n&Cancel', 1)
+        vim.fn.inputrestore()
         if choice ~= 1 and choice ~= 2 then
           return
         end
@@ -253,6 +255,22 @@ local _bufpanel = panel.create({
     ['D'] = function(state, helpers)
       local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
       if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+
+      -- Force-closing a saved buffer costs nothing and so asks nothing.
+      -- Force-closing a modified one throws the edits away — that is the entire
+      -- difference between this key and `d`, and it is stated before it
+      -- happens rather than discovered after.
+      if vim.bo[bufnr].modified then
+        local name  = vim.api.nvim_buf_get_name(bufnr)
+        local label = name ~= '' and vim.fn.fnamemodify(name, ':t') or '[No Name]'
+        vim.fn.inputsave()
+        local choice = vim.fn.confirm(
+          string.format("Close '%s' and lose its unsaved changes?", label),
+          '&Discard\n&Cancel', 2)
+        vim.fn.inputrestore()
+        if choice ~= 1 then return end
+      end
+
       detach_buf_from_wins(bufnr, state.win)
       local ok, err = pcall(vim.cmd, 'bdelete! ' .. bufnr)
       if not ok then
@@ -311,8 +329,9 @@ end
 
 --- Toggle the persistent bottom buffer-list panel.
 --- Opens at the bottom of the screen; closes if already open.
---- <CR> opens buffer in main window. d/D close it. w saves and closes.
---- r refreshes. q/<Esc> closes the panel.
+--- <CR> opens buffer in main window. d closes it, offering to save first;
+--- D force-closes, asking only when that would lose unsaved changes.
+--- w saves and closes. r refreshes. q/<Esc> closes the panel.
 function M.toggle_bufpanel()
   _bufpanel.toggle()
 end

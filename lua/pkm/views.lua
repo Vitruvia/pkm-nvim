@@ -826,6 +826,11 @@ end
 
 --- Remove a named view from views.json.
 --- Config-only views cannot be deleted this way.
+---
+--- Deletes without asking: **the caller owns the confirmation**, and every
+--- caller must have one (`doc/PRINCIPLES.md` § every removal confirms). Both
+--- current callers do — the deletion panel and `:PKMViewDelete <name>` — and a
+--- new one that does not is a bug, not a shortcut.
 ---@param name string
 ---@return boolean success
 function M.delete(name)

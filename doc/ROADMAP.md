@@ -181,7 +181,7 @@ v1.8.0  MINOR  Bulk metadata operations  ✅ released 25/7/2026, tagged
 
 v1.8.1  PATCH  Defects from the v1.8.0 smoke pass          (next)
         Ph1 view membership offers the wrong views  ✅ done
-          Ph2 confirmation on every removal
+          Ph2 confirmation on every removal  ✅ done
             Ph3 the undo cursor — reproduce, then fix
 v1.9.0  MINOR  Views from where you already are            (after v1.8.1)
         Ph1 :PKMView add|remove <name> on the current note
@@ -260,13 +260,11 @@ on only the notes that are in the chosen one. The decision that outlives it:
 conflating the two is what caused the defect, and Phase 2 depends on keeping
 them apart.
 
-**Phase 2 — every removal asks first.** A rule for the whole plugin, not for one
-flow: **removal, deletion and exit always confirm.** It coexists with cutting
-one-option menus — a menu asks *what*, a confirmation guards the irreversible —
-and the two must not be conflated again. Audit every removal path (view
-membership, tags, notes, trash, citations) for a confirmation screen whose title
-says plainly that something is being removed, and record the rule in
-`doc/PRINCIPLES.md` § *Standing bug-prevention design rules*.
+**Phase 2 — every removal asks first.** ✅ *Shipped; the detail is in
+`doc/CHANGELOG.md`.* The rule now lives in `doc/PRINCIPLES.md` § *Standing
+bug-prevention design rules*, with its exemptions written down. The audit found
+one violation — `D` in the buffer panel discarding unsaved edits without a word
+— and it now asks whenever, and only when, something would be lost.
 
 **Phase 3 — the undo cursor, reproduced before it is fixed.** `u` still lands on
 the frontmatter timestamp sometimes; the suspects and the history are in
