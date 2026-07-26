@@ -165,14 +165,15 @@ local defaults = {
     next_header        = "<leader>Mh",   -- :PKMHeaderAppend (writes; not a motion)
     header_level_up    = "<leader>M^",
     header_level_down  = "<leader>M_",
-    -- Header navigation, normal and visual mode, count-aware. Off by default:
-    -- Neovim's native ]] / [[ already jump section to section, and these are
-    -- the complement (count, level restriction, Visual mode, jumplist).
-    -- Suggested if wanted: "<leader>Mj" / "<leader>Mk" and "<leader>MJ" / "<leader>MK".
-    header_next        = false,   -- next header, any level
-    header_prev        = false,   -- previous header, any level
-    header_next_same   = false,   -- next header of the current header's level
-    header_prev_same   = false,   -- previous header of the current header's level
+    -- Header navigation, normal and visual mode, count-aware. j/k for the
+    -- direction, shifted for "stay on this level". They complement Neovim's
+    -- native ]] / [[ rather than replace it: those jump section to section but
+    -- ignore a count, cannot be held to one level, skip the jumplist, and need
+    -- the tree-sitter markdown parser.
+    header_next        = "<leader>Mj",   -- next header, any level
+    header_prev        = "<leader>Mk",   -- previous header, any level
+    header_next_same   = "<leader>MJ",   -- next header of the current header's level
+    header_prev_same   = "<leader>MK",   -- previous header of the current header's level
     renumber_list      = "<leader>Mr",
     convert_list = false,   -- :PKMConvertList (range or paragraph at cursor)
   },

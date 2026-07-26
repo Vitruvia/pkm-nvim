@@ -21,10 +21,10 @@
     no header at all.
 
 -   Commands `:[count]PKMHeaderNext [same|1-6]` and `:[count]PKMHeaderPrev`,
-    and four keymaps, all default `false`: `header_next`, `header_prev`,
-    `header_next_same`, `header_prev_same` — normal **and** visual mode, wired
-    as Lua callbacks so `v:count1` is read at press time and the selection
-    extends instead of collapsing.
+    and four keymaps — `header_next` `<leader>Mj`, `header_prev` `<leader>Mk`,
+    `header_next_same` `<leader>MJ`, `header_prev_same` `<leader>MK`. Normal
+    **and** visual mode, wired as Lua callbacks so `v:count1` is read at press
+    time and the selection extends instead of collapsing.
 
     **What Neovim already does, checked in the runtime rather than assumed.**
     The ROADMAP recorded that Neovim's native motion was *same-level* and that
