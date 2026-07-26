@@ -229,6 +229,55 @@ do
 end
 
 -- =============================================================================
+-- Saving twice must not stop to ask (regression)
+-- =============================================================================
+--
+-- The citation passes write the note on disk after Neovim's own write, which
+-- leaves Neovim's recorded mtime stale; the next `:w` then stops with W11
+-- ("changed since editing started, really write?"). Skipping the post-write
+-- rewrite is what exposed it, and the symptom is a *blocking prompt* — so this
+-- runs in a child Neovim with a deadline rather than here, where a regression
+-- would hang the suite instead of failing it.
+
+do
+  local script = utils.join(vim.fn.stdpath('cache'), 'pkm_p3_child.lua')
+  vim.fn.writefile({
+    "local pkm = require('pkm')",
+    "local utils = require('pkm.utils')",
+    "local d = utils.join(pkm.config.root_path, pkm.config.folders.consolidated)",
+    "vim.fn.mkdir(d, 'p')",
+    "local p = utils.join(d, '3106_note_Repetido.md')",
+    "vim.fn.writefile({'---','title: 3106_note_Repetido','type: note',"
+      .. "'created_on: 2026-07-01T10:00:00','last_updated_on: 2026-07-01T10:00:00',"
+      .. "'tags: []','---','','a','b','c','d'}, p)",
+    "vim.cmd('edit ' .. vim.fn.fnameescape(p))",
+    "for _ = 1, 3 do",
+    "  vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(0), 0 })",
+    "  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('A x<Esc>', true, false, true), 'x', false)",
+    "  vim.cmd('write')",
+    "  vim.wait(700, function() return false end, 20)",
+    "end",
+  }, script)
+
+  -- `pty = true` is what makes this work: with an ordinary pipe on stdin the
+  -- prompt reads EOF and the child sails past it, so the child would pass
+  -- whether or not the bug is present. A pty makes it block, the way a real
+  -- session does, and the deadline turns that block into a failed assertion.
+  local job = vim.fn.jobstart({
+    'nvim', '--headless', '-u', 'test/min_init.lua',
+    '-c', 'luafile ' .. script, '-c', 'qa!',
+  }, { pty = true })
+
+  local result = vim.fn.jobwait({ job }, 30000)[1]
+  if result == -1 then vim.fn.jobstop(job) end
+
+  check("three saves in a row complete without stopping to ask",
+    result == 0,
+    result == -1 and 'timed out — a save is prompting'
+      or ('child exited ' .. tostring(result)))
+end
+
+-- =============================================================================
 
 print(string.format("== %s (%d failure%s) ==",
   failures == 0 and "PASS" or "FAIL", failures, failures == 1 and "" or "s"))

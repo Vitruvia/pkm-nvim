@@ -236,27 +236,38 @@ function M.setup_sync_autocmds()
         vim.api.nvim_buf_call(written_buf, function()
           local view = vim.fn.winsaveview()
           local ok_read, reload_lines = pcall(vim.fn.readfile, filepath)
-          -- Replace only when the file actually differs from the buffer. The
-          -- reload exists for what update_references wrote into *this* note;
-          -- when nothing wrote, replacing the buffer with its own content still
-          -- costs an undo entry, and an undo entry is what drags `u` off the
-          -- user's edit.
-          if ok_read and differs(written_buf, reload_lines) then
-            pcall(vim.api.nvim_buf_set_lines, written_buf, 0, -1, false, reload_lines)
+          if ok_read then
+            -- Replace the buffer only when the file actually differs. The
+            -- reload exists for what update_references wrote into *this* note;
+            -- when nothing wrote, replacing the buffer with its own content
+            -- still costs an undo entry, and an undo entry is what drags `u`
+            -- off the user's edit.
+            if differs(written_buf, reload_lines) then
+              pcall(vim.api.nvim_buf_set_lines, written_buf, 0, -1, false, reload_lines)
+              -- `:undojoin` is deliberately absent: this change is the
+              -- plugin's, not the user's, and merging it into their block is
+              -- the defect this phase exists to remove.
+              --
+              -- Seal it as its own undo block. A buffer mutation made from a
+              -- scheduled callback leaves the block *open* — Neovim closes one
+              -- when a command finishes in the main loop, and there is no
+              -- command here — so without this the next thing the user types is
+              -- absorbed into the reload's state, and a single `u` reverts
+              -- their edit and the reload together, landing on line 1.
+              -- `let &ul = &ul` is the documented way to force the break;
+              -- setting undolevels to -1 and back is *not* the same thing, it
+              -- discards the history entirely.
+              pcall(vim.cmd, 'let &undolevels = &undolevels')
+            end
+
+            -- Write the buffer back even when nothing differed. The citation
+            -- passes above touch the file on disk after Neovim's own write,
+            -- which leaves Neovim's record of this file stale — and a stale
+            -- record makes a later `:w` stop with W11 ("changed since editing
+            -- started, really write?") on a note nothing else edited. Folding
+            -- this into the branch above is exactly what made repeated saves
+            -- start prompting.
             pcall(vim.cmd, 'noautocmd write!')
-            -- `:undojoin` is deliberately absent: this change is the plugin's,
-            -- not the user's, and merging it into their block is the defect
-            -- this phase exists to remove.
-            --
-            -- Seal it as its own undo block. A buffer mutation made from a
-            -- scheduled callback leaves the block *open* — Neovim closes one
-            -- when a command finishes in the main loop, and there is no command
-            -- here — so without this the next thing the user types is absorbed
-            -- into the reload's state, and a single `u` reverts their edit and
-            -- the reload together, landing on line 1. `let &ul = &ul` is the
-            -- documented way to force the break; setting undolevels to -1 and
-            -- back is *not* the same thing, it discards the history entirely.
-            pcall(vim.cmd, 'let &undolevels = &undolevels')
           end
           vim.fn.winrestview(view)
           -- noautocmd e is no longer used, so there's no modeline-scan risk

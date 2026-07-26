@@ -38,15 +38,26 @@ are carried forward from version to version and consulted before any fix.*
     typed next was absorbed into the reload's undo state, and one `u` reverted
     the edit *and* the reload together. The reload now forces the break
     (`let &undolevels = &undolevels`, which unlike setting it to `-1` keeps the
-    history) and no longer joins the user's block at all. It is also skipped
-    entirely when the file on disk already matches the buffer, which is every
+    history) and no longer joins the user's block at all. The buffer *replace*
+    is also skipped when the file on disk already matches it, which is every
     save that did not change a backlink.
+-   **Repeated saves stopped to ask for confirmation** — introduced by that skip
+    and caught in the smoke pass. The citation passes write the note on disk
+    after Neovim's own write, leaving Neovim's record of the file stale, and a
+    stale record makes a later `:w` stop with W11 ("changed since editing
+    started, really write?") on a note nothing else had edited. The buffer is
+    now written back on every save, whether or not the content differed; only
+    the buffer *replace* is conditional. The two are separate concerns and were
+    wrongly folded into one branch.
 -   `test/test_v181_p3.lua` — the reproduction, kept as the regression test:
     edit a body line, save, undo, and ask only where the cursor is. Covers a
     fresh note (whose first save legitimately expands the frontmatter), the
     same buffer in two windows, the steady state of an already-normalised note,
     and the stamp itself — present after release, absent when the note was only
-    read.
+    read. The W11 regression is guarded by a child Neovim started **on a pty**
+    with a deadline: on an ordinary pipe the prompt reads EOF and the child
+    sails past it, so the guard would pass with the bug present. It was checked
+    both ways — failing on the defect, passing on the fix.
 -   **`D` in the buffer panel threw away unsaved work without asking
     (v1.8.1 Ph2).** It ran `bdelete!` straight through, so force-closing a
     modified buffer lost the edits silently — which was the entire difference
