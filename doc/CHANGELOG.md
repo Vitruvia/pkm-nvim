@@ -4,8 +4,110 @@
 
 ## [Unreleased]
 
-*The sections after **Fixed** are living project state, not release notes: they
-are carried forward from version to version and consulted before any fix.*
+*No entries yet. The sections below are living project state, not release notes:
+they are carried forward from version to version and consulted before any fix.*
+
+### Known Bugs (queued)
+
+-   `test/test_phase1_old.lua` — the "parse rejects unknown field" assertion
+    fails. Test drift, not a code defect: the legacy suite predates the filter
+    DSL change that turned an unknown field prefix into an `any:` substring
+    match (`filter.lua:252` documents the current behaviour, and
+    `test_filter.lua` asserts it across 135 cases). `filter.lua` has not
+    changed since v1.5.4. Either update the legacy assertion or retire the file
+    in favour of `test_filter.lua`.
+
+-   `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
+     malformed paths when `bench_dir` is a Unix-style path (e.g.
+     `/tmp/pkm_bench`). Files are still created correctly because
+     `vim.fn.mkdir`/`glob` tolerate mixed separators on WSL. Fix: accept
+     `bench_dir` as-is and join subdirs with the correct separator for the path
+     type, or document that `bench_dir` must use the native separator.
+
+-   `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
+     defined view to build the viewed-path set). Unlike the overview screens
+     fixed in v1.6.1 Ph3, it needs the *paths*, not the counts, so `count_many`
+     does not apply — but it also does not need them **sorted**, and it pays one
+     `index.get_all()` plus one sort per view. A `match_all` variant that skips
+     the sort (or an `each_match(name, fn)` iterator) would remove both; it was
+     left out of Ph3 to keep that phase to a single file. Measured cost at 2000
+     notes × 50 views: ~121 ms for the whole loop. At current real corpus scale
+     (hundreds of notes, tens of views) it stays imperceptible.
+
+-   Error below when ending any file with `ex: <text>`. The current workoround
+    has been to simply avoid ending files that way, or wrapping any `ex:
+    <text>` at the end of some line in `(` `)`.
+
+    ```
+
+    Error executing vim.schedule lua callback:
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: Error
+    executing lua: vim/_editor.lua:445: nvim_exec2()[1]..modelines, line 318:
+    Vim(doaut ocmd):E518: Unknown option: "Será
+    stack traceback:
+    [C]: in function 'nvim_exec2'
+    vim/_editor.lua:445: in function 'cmd'
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:168: in
+    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157>
+    [C]: in function 'nvim_buf_call'
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: in
+    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
+    stack traceback:
+    [C]: in function 'nvim_buf_call'
+    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: in
+    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
+
+    ```
+
+-   `test/test_v160_p3.lua` — the "header mentions the C-f-to-browse hint"
+    assertion fails. Test drift, not a code defect: the check (line 77) requires
+    a single header line containing both `Views` and `browse all`, but the views
+    panel renders the `<C-f>  browse all notes` hint on its own line, separate
+    from the title. The hint is present and functional (`views.lua` ~L913).
+    Fix: relax the test to check the hint line independently of the title.
+    (Pre-existing; confirmed present on `be0ccd8` before the v1.6.x helper
+    dedup, so unrelated to it.)
+
+### Known limitations
+
+- `notes.is_same_file()`'s case-fold fallback is gated on
+  `utils.is_windows`/`utils.is_wsl` (session-level) rather than a per-path
+  filesystem case-sensitivity check, which `pkm.utils` doesn't currently
+  expose. Safe for the current single documented root (`P:/Notes`, NTFS,
+  always case-insensitive); would misbehave if a root were ever pointed at
+  a case-sensitive filesystem from a Windows/WSL session. Revisit only if
+  that assumption changes.
+
+### Benchmarks 
+
+#### Post-index integration (bench_dir on NTFS/WSL, P: drive)
+
+  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
+  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
+  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
+  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
+    filesystem speed, not a regression.
+
+### Views_suite (NTFS/WSL, P: drive, synthetic notes)
+
+  - Scaling is perfectly linear: ms/view is constant across all view counts.
+  - 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
+    → 3087ms  (~3.1ms/view)
+  - 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
+    →  130ms  (~0.13ms/view)
+  - JIT accounts for ~2–3× speedup between cold and warm runs at same note
+    count.
+  - Caching decision: not warranted at current scale. Revisit at ~5k notes or
+    ~200+ views.
+
+---
+---
+
+## [1.9.0] - 26/7/2026
+
+*Views reached from where you already are: `:PKMView add|remove <name>` acting
+on the note in front of you, and a note created already inside a view. Two
+phases, plus the window-placement work the second one turned out to need.*
 
 ### Added
 -   **The new note can say where to open (v1.9.0 Ph2).** `[count]N` puts it in
@@ -109,100 +211,6 @@ are carried forward from version to version and consulted before any fix.*
     buffer it re-reads, which is what the rest of the plugin already did after
     a frontmatter mutation.
 
-### Known Bugs (queued)
-
--   `test/test_phase1_old.lua` — the "parse rejects unknown field" assertion
-    fails. Test drift, not a code defect: the legacy suite predates the filter
-    DSL change that turned an unknown field prefix into an `any:` substring
-    match (`filter.lua:252` documents the current behaviour, and
-    `test_filter.lua` asserts it across 135 cases). `filter.lua` has not
-    changed since v1.5.4. Either update the legacy assertion or retire the file
-    in favour of `test_filter.lua`.
-
--   `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
-     malformed paths when `bench_dir` is a Unix-style path (e.g.
-     `/tmp/pkm_bench`). Files are still created correctly because
-     `vim.fn.mkdir`/`glob` tolerate mixed separators on WSL. Fix: accept
-     `bench_dir` as-is and join subdirs with the correct separator for the path
-     type, or document that `bench_dir` must use the native separator.
-
--   `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
-     defined view to build the viewed-path set). Unlike the overview screens
-     fixed in v1.6.1 Ph3, it needs the *paths*, not the counts, so `count_many`
-     does not apply — but it also does not need them **sorted**, and it pays one
-     `index.get_all()` plus one sort per view. A `match_all` variant that skips
-     the sort (or an `each_match(name, fn)` iterator) would remove both; it was
-     left out of Ph3 to keep that phase to a single file. Measured cost at 2000
-     notes × 50 views: ~121 ms for the whole loop. At current real corpus scale
-     (hundreds of notes, tens of views) it stays imperceptible.
-
--   Error below when ending any file with `ex: <text>`. The current workoround
-    has been to simply avoid ending files that way, or wrapping any `ex:
-    <text>` at the end of some line in `(` `)`.
-
-    ```
-
-    Error executing vim.schedule lua callback:
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: Error
-    executing lua: vim/_editor.lua:445: nvim_exec2()[1]..modelines, line 318:
-    Vim(doaut ocmd):E518: Unknown option: "Será
-    stack traceback:
-    [C]: in function 'nvim_exec2'
-    vim/_editor.lua:445: in function 'cmd'
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:168: in
-    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157>
-    [C]: in function 'nvim_buf_call'
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: in
-    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
-    stack traceback:
-    [C]: in function 'nvim_buf_call'
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: in
-    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
-
-    ```
-
--   `test/test_v160_p3.lua` — the "header mentions the C-f-to-browse hint"
-    assertion fails. Test drift, not a code defect: the check (line 77) requires
-    a single header line containing both `Views` and `browse all`, but the views
-    panel renders the `<C-f>  browse all notes` hint on its own line, separate
-    from the title. The hint is present and functional (`views.lua` ~L913).
-    Fix: relax the test to check the hint line independently of the title.
-    (Pre-existing; confirmed present on `be0ccd8` before the v1.6.x helper
-    dedup, so unrelated to it.)
-
-### Known limitations
-
-- `notes.is_same_file()`'s case-fold fallback is gated on
-  `utils.is_windows`/`utils.is_wsl` (session-level) rather than a per-path
-  filesystem case-sensitivity check, which `pkm.utils` doesn't currently
-  expose. Safe for the current single documented root (`P:/Notes`, NTFS,
-  always case-insensitive); would misbehave if a root were ever pointed at
-  a case-sensitive filesystem from a Windows/WSL session. Revisit only if
-  that assumption changes.
-
-### Benchmarks 
-
-#### Post-index integration (bench_dir on NTFS/WSL, P: drive)
-
-  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
-  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
-  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
-  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
-    filesystem speed, not a regression.
-
-### Views_suite (NTFS/WSL, P: drive, synthetic notes)
-
-  - Scaling is perfectly linear: ms/view is constant across all view counts.
-  - 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
-    → 3087ms  (~3.1ms/view)
-  - 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
-    →  130ms  (~0.13ms/view)
-  - JIT accounts for ~2–3× speedup between cold and warm runs at same note
-    count.
-  - Caching decision: not warranted at current scale. Revisit at ~5k notes or
-    ~200+ views.
-
----
 
 ## [1.8.1] - 26/7/2026
 

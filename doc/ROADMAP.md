@@ -184,10 +184,12 @@ v1.8.1  PATCH  Defects from the v1.8.0 smoke pass  ✅ released 26/7/2026, tagge
         removal, and the undo cursor — reproduced before it was touched, which
         is what ended a bug that had been "fixed" three times.
 
-v1.9.0  MINOR  Views from where you already are             (next)
-        Ph1 :PKMView add|remove <name> on the current note  ✅ done
-          Ph2 create a note already inside a view  ✅ done
-v1.10.0 MINOR  Header navigation                           (no deps)
+v1.9.0  MINOR  Views from where you already are  ✅ released 26/7/2026, tagged
+        :PKMView add|remove <name> on the current note, and a note created
+        already inside a view — plus the window placement the second one
+        turned out to need.
+
+v1.10.0 MINOR  Header navigation                            (next)
         Ph1 any-level header jumps   (was v1.7.0 Ph3)
 ```
 
@@ -220,14 +222,16 @@ planning or executing a phase.
 
 ---
 
-#### Shipped — v1.6.x, v1.7.0's first two phases, v1.8.0 and v1.8.1
+#### Shipped — everything up to v1.9.0
 
 v1.6.1 and v1.6.2: correctness batch, `:PKMViews` open latency, index build cost.
 v1.7.0 Ph1–Ph2: deep export, and the relative note — Ph2 shipped inside v1.8.0
 Ph1, where the tag engine it seeds from was written. v1.8.0: the bulk-operation
 stack in nine phases, released and tagged 25/7/2026. v1.8.1: the three defects
-its smoke pass found, released and tagged 26/7/2026. What each changed is in
+its smoke pass found, released and tagged 26/7/2026. v1.9.0: views reached from
+where you already are, released and tagged 26/7/2026. What each changed is in
 `doc/CHANGELOG.md`.
+
 
 Their decisions still constrain pending work, and are the only reason this
 section survives:
@@ -257,33 +261,18 @@ section survives:
 -   **`last_updated_on` has no consumer.** Recency is the filesystem mtime the
     index stores; read `entry.mtime`. It must not be trusted as a record of
     human editing — Drive sync, restores and checkouts all push mtime forward.
+-   **A key that belongs to "the view surfaces" goes through one helper**, and
+    is wired at all five in the same edit. `<C-a>` took three attempts because
+    each surface was wired separately, and a chord's prefix must itself be a
+    complete mapping or the bare key does nothing.
+-   **`create_new_note` owns the window guard**, not its callers: panels set
+    `winfixbuf`, so opening a buffer from one is E1513. `utils.focus_editing_win`
+    is the single search for a window that may hold a note.
 
 **v1.6.2 and v1.7.0 have no tag.** Their work reached the user inside the v1.8.0
 release and the CHANGELOG entry for v1.8.0 records that; the numbers stayed
 planning labels. Header navigation, the third phase v1.7.0 never got, is v1.10.0
 below.
-
----
-
-#### v1.9.0 (MINOR) — views from where you already are
-
-**Phase 1 — `:PKMView add|remove <name>` on the current note.** ✅ *Shipped; the
-detail is in `doc/CHANGELOG.md`.* The verbs are arguments, not a second
-command, and the ambiguity resolves by rule: **arguments spelling an existing
-view name exactly mean open**. Two decisions carry into Phase 2:
-`views.parse_command_args` is pure and is where any further `:PKMView`
-argument belongs, and `ctx.target` — a view the user named — is a different
-field from `ctx.view`, which only orders.
-
-**Phase 2 — create a note already inside a view.** ✅ *Shipped; the detail is in
-`doc/CHANGELOG.md`.* `N` in the normal-mode surfaces, `<C-y>` in the Telescope
-ones, both reaching a single helper wired at all five view surfaces in one
-pass. The decision that carries: **a key that belongs to "the view surfaces"
-goes through one helper**, because wiring them one at a time is what made
-`<C-a>` take three attempts.
-
-**v1.9.0 is complete.** What remains is the release itself: tag after a smoke
-pass over the view surfaces.
 
 ---
 
