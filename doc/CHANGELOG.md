@@ -7,6 +7,15 @@
 *The sections after **Added** are living project state, not release notes: they
 are carried forward from version to version and consulted before any fix.*
 
+### Fixed
+-   **The frontmatter fold broke after a bulk tag write (v1.9.0 Ph1).** Adding
+    a note to a view changes the frontmatter's line count, and the fold is
+    `foldmethod=manual` — it does not survive a buffer reload at all — so the
+    bottom of the block sat outside its own fold until the next save happened
+    to rebuild it. `bufsync.reload` now calls `syntax.refresh_fold` on every
+    buffer it re-reads, which is what the rest of the plugin already did after
+    a frontmatter mutation.
+
 ### Added
 -   **`:PKMView add|remove <name>` acts on the note you have open (v1.9.0
     Ph1).** No new command: the verbs are arguments, so `:PKMView leituras`
@@ -29,6 +38,20 @@ are carried forward from version to version and consulted before any fix.*
     what stops it growing back. Removing from a view the note is not in reports
     that instead of writing, and an unknown name is refused before anything is
     computed.
+-   **A batch of one note gets a gate, not a note picker.** With a single note
+    there is nothing to narrow, so the ordinary confirmation promised a
+    per-note choice the operation did not have — `:PKMView add` ended in a
+    Telescope list holding one entry. It is now `picker.confirm`: the change on
+    one line, `<CR>` or `q`. And when the user typed the whole operation
+    (`:PKMView add <name>`) there is **no screen at all** — typing was the
+    operation. Removal keeps its gate either way, per `doc/PRINCIPLES.md`.
+-   **An alternative now says what it would *change*, not what the view
+    requires.** `filter.tag_sets` answers "what does this view need", so a
+    choice read `+administração-financeira-orçamentária, +concursos-públicos`
+    even for a note already carrying the first. A tag is dropped from the
+    wording only when it is redundant for **every** note in the batch, so the
+    reduced form stays accurate for all of them; the operation still applies
+    the full set, which is idempotent.
 -   `test/test_v190_p1.lua` — the argument rule across every shape (bare name,
     multi-word name, either verb, a verb with no name, an unknown name, and a
     view actually called `add`), then the flow over a real corpus: a named view

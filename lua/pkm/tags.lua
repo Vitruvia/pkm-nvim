@@ -674,10 +674,22 @@ end
 --- Show the change list for `ops` over `paths`, and write what is confirmed.
 --- The confirmation is the ordinary note picker, so narrowing or marking there
 --- drops notes from the batch; nothing is written until it returns.
+---
+--- A batch of **one** note is a different screen. There is nothing to narrow,
+--- so the note picker would promise a per-note choice the operation does not
+--- have — which is what made `:PKMView add` end in a Telescope list of a single
+--- entry. It gets an all-or-nothing gate instead; and with `opts.typed` — the
+--- user having already named both the operation and its target on the command
+--- line — it gets no screen at all, because typing *was* the operation.
+--- Removal keeps its gate either way (`doc/PRINCIPLES.md`: every removal
+--- confirms).
 ---@param paths  string[]
 ---@param ops    table
 ---@param header string   e.g. "Rename 'draf' to 'draft'"
-local function confirm_and_apply(paths, ops, header)
+---@param opts   table|nil  { typed? = boolean, removal? = boolean }
+local function confirm_and_apply(paths, ops, header, opts)
+  opts = opts or {}
+
   local plan = M.preview(paths, ops)
   if #plan == 0 then
     vim.notify(
@@ -694,15 +706,11 @@ local function confirm_and_apply(paths, ops, header)
     by_path[item.path]    = item
   end
 
-  require('pkm.picker').select(changed, {
-    title     = 'PKMTags ' .. header,
-    hint      = 'apply to listed',
-    display   = function(path) return M.format_change(by_path[path]) end,
-    on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
-  }, function(confirmed)
-    -- Notes open with unsaved edits are asked about before anything is
-    -- written, and every open buffer is re-read afterwards so what is on
-    -- screen agrees with what is on disk.
+  --- Notes open with unsaved edits are asked about before anything is written,
+  --- and every open buffer is re-read afterwards so what is on screen agrees
+  --- with what is on disk.
+  ---@param confirmed string[]
+  local function write(confirmed)
     local bufsync = require('pkm.bufsync')
     bufsync.guard(confirmed, function()
       local applied, errors = M.apply(confirmed, ops)
@@ -713,7 +721,33 @@ local function confirm_and_apply(paths, ops, header)
         errors > 0 and (', ' .. errors .. ' failed') or ''),
         errors > 0 and vim.log.levels.ERROR or vim.log.levels.INFO)
     end)
-  end)
+  end
+
+  if #changed == 1 then
+    if opts.typed and not opts.removal then
+      write(changed)
+      return
+    end
+
+    require('pkm.picker').confirm({
+      title = 'PKMTags ' .. header,
+      lines = {
+        '  ' .. header .. '  ·  <CR> apply  ·  q/<Esc> cancel',
+        '  ' .. string.rep('─', 64),
+        '  ' .. M.format_change(by_path[changed[1]]),
+      },
+      on_cancel  = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
+      on_confirm = function() write(changed) end,
+    })
+    return
+  end
+
+  require('pkm.picker').select(changed, {
+    title     = 'PKMTags ' .. header,
+    hint      = 'apply to listed',
+    display   = function(path) return M.format_change(by_path[path]) end,
+    on_cancel = function() vim.notify('[pkm] cancelled', vim.log.levels.INFO) end,
+  }, write)
 end
 
 --- Run a batch tag operation over notes that are **already chosen** — the marks
@@ -784,6 +818,55 @@ local function describe_alt(alt)
   for _, tag in ipairs(alt.remove) do parts[#parts + 1] = '-' .. tag end
   if #parts == 0 then return '(no tag change)' end
   return table.concat(parts, ', ')
+end
+
+--- The part of an alternative that is not already true of every note in scope.
+---
+--- `filter.tag_sets` answers "what does this view require", so an alternative
+--- lists the whole requirement — including the tags the note already carries.
+--- Offering *"+administração-financeira-orçamentária, +concursos-públicos"* to a
+--- note that already has the first one describes the destination rather than
+--- the change, and makes two alternatives hard to tell apart.
+---
+--- A tag is dropped only when it is redundant for **every** note in scope, so
+--- the reduced form is still accurate for the whole batch. Pure, and display
+--- only: the operation keeps applying the full set, which is idempotent —
+--- `plan()` already leaves a tag that is present exactly where it is.
+---@param alt   table
+---@param scope string[]  The notes the operation will act on
+---@return table  A copy, with the redundant tags removed
+local function narrow_alt(alt, scope)
+  local index = require('pkm.index')
+
+  local carried = {}      -- tag → how many notes in scope have it
+  local counted = 0
+  for _, path in ipairs(scope or {}) do
+    local entry = index.get(path)
+    if entry then
+      counted = counted + 1
+      local seen = {}
+      for _, tag in ipairs(entry.tags or {}) do
+        local norm = M.normalize(tag)
+        if norm and not seen[norm] then
+          seen[norm]    = true
+          carried[norm] = (carried[norm] or 0) + 1
+        end
+      end
+    end
+  end
+
+  if counted == 0 then return alt end
+
+  local out = { add = {}, remove = {}, blockers = alt.blockers }
+  for _, tag in ipairs(alt.add) do
+    -- Every note already has it: adding says nothing.
+    if (carried[tag] or 0) < counted then out.add[#out.add + 1] = tag end
+  end
+  for _, tag in ipairs(alt.remove) do
+    -- No note has it: removing says nothing either.
+    if (carried[tag] or 0) > 0 then out.remove[#out.remove + 1] = tag end
+  end
+  return out
 end
 
 --- Which of the defined views currently hold the given notes.
@@ -888,7 +971,9 @@ function M.view_flow(paths, kind, ctx)
     ---@param alt table
     local function apply(alt)
       confirm_and_apply(scope, { add = alt.add, remove = alt.remove },
-        string.format("%s '%s' (%s)", verb, name, describe_alt(alt)))
+        string.format("%s '%s' (%s)", verb, name,
+          describe_alt(narrow_alt(alt, scope))),
+        { typed = ctx.target ~= nil, removal = (kind == 'remove') })
     end
 
     if #usable == 1 then
@@ -899,9 +984,11 @@ function M.view_flow(paths, kind, ctx)
     -- Several tag sets satisfy the view: which one is a judgement about
     -- meaning, not something to guess. Same panel as every other screen in the
     -- flow — a Telescope user should not drop into the command line here.
+    -- Each is described by what it would *change*, not by what the view
+    -- requires in full.
     require('pkm.picker').choose(usable, {
       title   = string.format("%s '%s' — which tags?", verb, name),
-      display = describe_alt,
+      display = function(alt) return describe_alt(narrow_alt(alt, scope)) end,
     }, apply)
   end
 

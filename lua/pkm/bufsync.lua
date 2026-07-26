@@ -94,6 +94,11 @@ end
 --- Re-read the buffers holding these notes from disk.
 --- Modified buffers are left alone: reloading one would throw away edits the
 --- user has not saved, which no bulk operation is entitled to do.
+---
+--- The frontmatter fold is rebuilt afterwards. It is `foldmethod=manual`, so it
+--- does not survive a reload at all, and a batch that adds a tag changes the
+--- frontmatter's line count — which is how the bottom of the block ended up
+--- outside its own fold until the next save happened to rebuild it.
 ---@param paths string[]
 ---@return integer reloaded
 function M.reload(paths)
@@ -103,6 +108,7 @@ function M.reload(paths)
     local bufnr = M.buffer_for(path)
     if bufnr and not vim.bo[bufnr].modified then
       vim.api.nvim_buf_call(bufnr, function() vim.cmd('silent! edit!') end)
+      pcall(function() require('pkm.syntax').refresh_fold(bufnr) end)
       reloaded = reloaded + 1
     end
   end

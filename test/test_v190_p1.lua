@@ -108,24 +108,20 @@ views.save('v190a', 'tag:alfa')
 views.save('v190b', 'tag:beta')
 
 do
-  -- A named view is an answer: no menu, straight to the confirmation.
+  -- Typing the whole operation *is* the operation: one note, the view named,
+  -- and adding is not a removal, so there is no screen at all.
   local asked = false
   local orig  = vim.ui.select
   vim.ui.select = function() asked = true end
+  local buftype_before = vim.bo.buftype
 
   tags.view_flow({ n1 }, 'add', { target = 'v190a' })
-  vim.wait(500, function() return vim.bo.buftype == 'nofile' end, 10)
+  vim.wait(1000, function() return #views.match_all('v190a') == 1 end, 10)
   vim.ui.select = orig
 
   check("naming the view asks nothing", asked == false)
-
-  local shown = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
-  check("the confirmation names it", shown:find("Add to 'v190a'", 1, true) ~= nil,
-    shown:sub(1, 120))
-
-  vim.api.nvim_feedkeys(
-    vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'x', false)
-  vim.wait(1000, function() return #views.match_all('v190a') == 1 end, 10)
+  check("and opens no panel either", vim.bo.buftype == buftype_before,
+    vim.bo.buftype)
   check("the note joined the named view", #views.match_all('v190a') == 1,
     tostring(#views.match_all('v190a')))
 end
@@ -169,7 +165,8 @@ end
 
 do
   -- ctx.target decides; ctx.view still only orders. Both together must not
-  -- make the provenance win.
+  -- make the provenance win. And removal keeps its gate even when typed —
+  -- doc/PRINCIPLES.md: every removal confirms.
   local asked = false
   local orig  = vim.ui.select
   vim.ui.select = function() asked = true end
@@ -179,9 +176,85 @@ do
   vim.ui.select = orig
 
   check("provenance does not override the named view", asked == false)
+  check("a typed removal still puts a gate in front of it",
+    vim.bo.buftype == 'nofile', vim.bo.buftype)
+
   local shown = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
-  check("the confirmation names the target, not the context",
+  check("the gate names the target, not the context",
     shown:find("Remove from 'v190a'", 1, true) ~= nil, shown:sub(1, 120))
+  check("and it is a gate, not a list promising a choice",
+    shown:find('<CR> apply', 1, true) ~= nil
+    and shown:find('apply to listed', 1, true) == nil, shown:sub(1, 160))
+
+  -- Back out, so the float does not outlive this block and swallow the next
+  -- block's keys.
+  vim.api.nvim_feedkeys(
+    vim.api.nvim_replace_termcodes('q', true, false, true), 'x', false)
+  vim.wait(300, function() return vim.bo.buftype ~= 'nofile' end, 10)
+end
+
+-- =============================================================================
+-- What the alternative says it will change
+-- =============================================================================
+--
+-- `filter.tag_sets` answers "what does this view require", so an alternative
+-- carries the whole requirement — including tags the note already has. Offering
+-- "+afo, +concursos" to a note that already carries `afo` describes the
+-- destination rather than the change.
+
+do
+  local n2 = write_note('4102_note_Meio', { 'afo' })
+  index.rebuild()
+  views.save('v190c', 'tag:afo AND tag:concursos')
+
+  local said = {}
+  local orig_notify = vim.notify
+  vim.notify = function(msg) said[#said + 1] = tostring(msg) end
+
+  tags.view_flow({ n2 }, 'add', { target = 'v190c' })
+  vim.wait(1000, function() return #views.match_all('v190c') == 1 end, 10)
+  vim.notify = orig_notify
+
+  local text = table.concat(said, ' ')
+  check("the tag already carried is not offered again",
+    text:find('+afo', 1, true) == nil, text)
+  check("only the missing one is named",
+    text:find('+concursos', 1, true) ~= nil, text)
+  check("and the note is in the view either way",
+    #views.match_all('v190c') == 1, tostring(#views.match_all('v190c')))
+end
+
+do
+  -- One note, no view named: still a gate rather than a list, because there is
+  -- nothing to narrow.
+  local n3 = write_note('4103_note_Sozinha', {})
+  index.rebuild()
+
+  -- No `target`: the view is chosen from the menu, so this is the `<C-a>`
+  -- path, not the typed one, and the gate must appear.
+  local orig = vim.ui.select
+  vim.ui.select = function(items, opts, on_choice)
+    for i, item in ipairs(items) do
+      local label = opts.format_item and opts.format_item(item) or tostring(item)
+      if label:match('^v190b') then on_choice(item, i) return end
+    end
+    on_choice(items[1], 1)
+  end
+
+  tags.view_flow({ n3 }, 'add', {})
+  vim.wait(500, function() return vim.bo.buftype == 'nofile' end, 10)
+  vim.ui.select = orig
+
+  local shown = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+  check("a single note gets a gate, not a note picker",
+    shown:find('<CR> apply', 1, true) ~= nil
+    and shown:find('apply to listed', 1, true) == nil, shown:sub(1, 160))
+
+  vim.api.nvim_feedkeys(
+    vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'x', false)
+  vim.wait(1000, function() return #views.match_all('v190b') == 1 end, 10)
+  check("and confirming it writes", #views.match_all('v190b') == 1,
+    tostring(#views.match_all('v190b')))
 end
 
 -- =============================================================================
