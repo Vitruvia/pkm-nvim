@@ -4,8 +4,37 @@
 
 ## [Unreleased]
 
-*No entries yet. The sections below are living project state, not release notes:
-they are carried forward from version to version and consulted before any fix.*
+*The sections after **Fixed** are living project state, not release notes: they
+are carried forward from version to version and consulted before any fix.*
+
+### Fixed
+-   **View membership only ever reached the view you came from (v1.8.1 Ph1).**
+    Selecting notes inside a view, the only available operations were adding
+    them to *that* view — where they already were — and removing them from it.
+    Another view was unreachable in both directions, including removing a note
+    from a second view that also contained it. The design error was treating
+    `ctx.view` as an answer: where a selection came from says nothing about
+    where it should go.
+
+    `ctx.view` now **orders the menu and never makes the choice**. *Add* offers
+    every view, with the ones the selection is already wholly in sunk to the
+    bottom and labelled as such, since those are the one useless answer.
+    *Remove* offers **only the views the selection is actually in** — computed
+    per view rather than assumed — with the context view leading, and it acts
+    on exactly the notes that are in the chosen view rather than on the whole
+    selection. A selection belonging to no view says so instead of opening a
+    menu of impossible choices, and a single candidate still opens no menu at
+    all: cutting a menu that decides nothing and cutting the choice itself are
+    different things, and conflating them is what caused this.
+-   **`tags.view_membership(paths)`** — read-only: which of the defined views
+    currently hold each of the given notes, as `{ name, paths, total }` rows.
+    One index lookup per path and one filter pass per (view, path); it builds no
+    sorted path array, because a selection is a handful of notes rather than the
+    vault.
+-   `test/test_v180_p9.lua` grew the cases that would have caught this: the
+    membership rows themselves (including a path absent from the index), adding
+    from inside a view the notes already fill, removing with the notes in two
+    views at once, and removing with them in none.
 
 ### Known Bugs (queued)
 

@@ -172,6 +172,37 @@ index.rebuild()
 
 views.save('ph9', 'tag:projeto AND NOT tag:draft')
 views.save('ph9_titulo', 'title:impossivel')
+-- A third view exists so that "which view?" is a real question: with one view
+-- defined, every ordering rule below would be untestable.
+views.save('ph9_outra', 'tag:outra')
+
+--- Stand in for `vim.ui.select`, recording what it was offered and answering
+--- with the row whose view name is `pick`.
+---@param pick string
+---@return function restore   Put the real `vim.ui.select` back
+---@return function offered   The labels the menu was given
+local function stub_select(pick)
+  local seen, orig = nil, vim.ui.select
+  vim.ui.select = function(labels, _, on_choice)
+    seen = labels
+    for i, label in ipairs(labels) do
+      if label == pick or label:sub(1, #pick + 2) == pick .. '  ' then
+        on_choice(label, i)
+        return
+      end
+    end
+    on_choice(labels[1], 1)
+  end
+  return function() vim.ui.select = orig end, function() return seen or {} end
+end
+
+---@param labels string[]
+---@return string
+local function names_of(labels)
+  local out = {}
+  for i, label in ipairs(labels) do out[i] = label:match('^(%S+)') end
+  return table.concat(out, ' | ')
+end
 
 do
   local tree = views.get_tree('ph9')
@@ -183,12 +214,22 @@ do
 end
 
 do
-  -- Adding: one alternative, so no menu; the confirmation is the float here.
+  -- Adding from inside a view: the context view is not the answer. Every view
+  -- is on offer, because "where these notes came from" says nothing about
+  -- where they should go.
   local before = #views.match_all('ph9')
   check("neither note is in the view yet", before == 0, tostring(before))
 
+  local restore, offered = stub_select('ph9')
   tags.view_flow({ n1, n2 }, 'add', { view = 'ph9' })
   vim.wait(500, function() return vim.bo.buftype == 'nofile' end, 10)
+  restore()
+
+  local labels = offered()
+  check("adding offers every view, not just the one we came from",
+    #labels == 3, names_of(labels))
+  check("with nothing yet in any of them, the order is plain alphabetical",
+    names_of(labels) == 'ph9 | ph9_outra | ph9_titulo', names_of(labels))
 
   local shown = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
   check("the confirmation names the view and the tag change",
@@ -234,19 +275,130 @@ do
 
   check("one note left the view", #views.match_all('ph9') == 1,
     tostring(#views.match_all('ph9')))
+  check("removal asked no view menu when only one view held the note",
+    offered ~= nil and offered:find('ph9_outra', 1, true) == nil,
+    tostring(offered))
+end
+
+-- =============================================================================
+-- Which view — the choice ctx.view used to make on its own (v1.8.1 Ph1)
+-- =============================================================================
+--
+-- The defect: chosen from inside a view, an operation could only reach that
+-- same view. Adding notes to it was pointless (they were already there) and no
+-- other view was reachable at all. `ctx.view` may order the menu; it may not
+-- answer it.
+
+do
+  -- The membership question itself, read-only: n2 is in ph9, nothing is in the
+  -- other two.
+  local rows = tags.view_membership({ n1, n2 })
+  local by_name = {}
+  for _, row in ipairs(rows) do by_name[row.name] = row end
+
+  check("membership reports every defined view", #rows == 3, tostring(#rows))
+  check("ph9 holds exactly the note that stayed in it",
+    #by_name['ph9'].paths == 1 and by_name['ph9'].paths[1] == n2,
+    tostring(#by_name['ph9'].paths))
+  check("a view matching nothing reports nothing",
+    #by_name['ph9_outra'].paths == 0 and by_name['ph9_outra'].total == 2,
+    tostring(#by_name['ph9_outra'].paths))
+  check("an unindexed path is counted in no total",
+    #tags.view_membership({ '/nao/existe.md' })[1].paths == 0
+    and tags.view_membership({ '/nao/existe.md' })[1].total == 0)
 end
 
 do
-  -- A view tags cannot satisfy must say so instead of writing anything.
-  local wrote = false
-  local orig  = vim.ui.select
-  vim.ui.select = function() wrote = true end
+  -- Adding, from inside the view the selection is already wholly in: that view
+  -- is the one useless answer, so it sinks to the bottom instead of being
+  -- assumed.
+  local restore, offered = stub_select('ph9_outra')
+  tags.view_flow({ n2 }, 'add', { view = 'ph9' })
+  vim.wait(500, function() return vim.bo.buftype == 'nofile' end, 10)
+  restore()
 
+  local labels = offered()
+  check("the view the note is already in is offered last",
+    names_of(labels) == 'ph9_outra | ph9_titulo | ph9', names_of(labels))
+  check("and it is labelled as already holding the selection",
+    labels[3]:find('already in', 1, true) ~= nil, labels[3])
+
+  local shown = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+  check("a different view than the context one is reachable",
+    shown:find("Add to 'ph9_outra'", 1, true) ~= nil, shown:sub(1, 120))
+
+  vim.api.nvim_feedkeys(
+    vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'x', false)
+  vim.wait(1000, function() return #views.match_all('ph9_outra') == 1 end, 10)
+  check("the note joined the view it was not chosen from",
+    #views.match_all('ph9_outra') == 1, tostring(#views.match_all('ph9_outra')))
+end
+
+do
+  -- Removing, with the note now in two views: both are offered, the context
+  -- one leads, and a view the note is not in is absent.
+  local restore, offered = stub_select('ph9_outra')
+  tags.view_flow({ n2 }, 'remove', { view = 'ph9' })
+  vim.wait(500, function() return vim.bo.buftype == 'nofile' end, 10)
+  restore()
+
+  local labels = offered()
+  check("removal offers only the views the selection is in",
+    names_of(labels) == 'ph9 | ph9_outra', names_of(labels))
+  check("and says how much of the selection each holds",
+    labels[1]:find('all 1 selected', 1, true) ~= nil, labels[1])
+
+  local shown = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+  check("a view other than the context one can be left",
+    shown:find("Remove from 'ph9_outra'", 1, true) ~= nil, shown:sub(1, 120))
+
+  vim.api.nvim_feedkeys(
+    vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'x', false)
+  vim.wait(1000, function() return #views.match_all('ph9_outra') == 0 end, 10)
+  check("the note left the view it was not chosen from",
+    #views.match_all('ph9_outra') == 0, tostring(#views.match_all('ph9_outra')))
+end
+
+do
+  -- A selection in no view at all: removal has nothing to offer and must say
+  -- so rather than present a menu of impossible choices.
+  local said = {}
+  local orig_notify = vim.notify
+  vim.notify = function(msg) said[#said + 1] = tostring(msg) end
+
+  local opened = false
+  local orig_select = vim.ui.select
+  vim.ui.select = function() opened = true end
+
+  tags.view_flow({ n1 }, 'remove', { view = 'ph9' })
+  vim.wait(300, function() return #said > 0 end, 10)
+
+  vim.ui.select = orig_select
+  vim.notify = orig_notify
+
+  check("removal opens no menu when the notes are in no view", opened == false)
+  check("and says why",
+    table.concat(said, ' '):find('belongs to a view', 1, true) ~= nil,
+    table.concat(said, ' '))
+end
+
+do
+  -- A view tags cannot satisfy must say so instead of writing anything. The
+  -- view is now chosen from the menu like any other, so the refusal has to
+  -- survive that extra hop.
+  local said = {}
+  local orig_notify = vim.notify
+  vim.notify = function(msg) said[#said + 1] = tostring(msg) end
+
+  local restore = stub_select('ph9_titulo')
   tags.view_flow({ n1 }, 'add', { view = 'ph9_titulo' })
-  vim.wait(300, function() return wrote end, 10)
+  vim.wait(300, function() return #said > 0 end, 10)
+  restore()
+  vim.notify = orig_notify
 
-  vim.ui.select = orig
-  check("a title-only view opens no confirmation", wrote == false)
+  local text = table.concat(said, ' ')
+  check("a title-only view names the condition in the way",
+    text:find('cannot be satisfied with tags alone', 1, true) ~= nil, text)
   check("and nothing was written",
     #views.match_all('ph9_titulo') == 0, tostring(#views.match_all('ph9_titulo')))
 end

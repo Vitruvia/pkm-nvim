@@ -61,6 +61,7 @@
 --   browse_by_tag()        → tag picker → browse pre-seeded to tag:<x>
 --   batch_on(paths, kind, ops?, header?) → batch over notes already chosen
 --   batch_flow(kind)       → the same, for callers that must first build one
+--   view_membership(paths) → { {name, paths, total}… } — which views hold them
 --   view_flow(paths, kind, ctx?) → add to / remove from a view, by tags
 -- =============================================================================
 
@@ -785,10 +786,52 @@ local function describe_alt(alt)
   return table.concat(parts, ', ')
 end
 
+--- Which of the defined views currently hold the given notes.
+--- Read-only. One index lookup per path and one filter pass per (view, path),
+--- so it costs V·N evaluations and materialises no sorted path array — the
+--- selection is a handful of notes, not the vault.
+--- `total` counts the paths that could be evaluated at all: a path absent from
+--- the index contributes to neither.
+---@param paths string[]
+---@return { name: string, paths: string[], total: integer }[]  in view order
+function M.view_membership(paths)
+  local views  = require('pkm.views')
+  local index  = require('pkm.index')
+  local filter = require('pkm.filter')
+
+  local entries = {}
+  for _, path in ipairs(paths or {}) do
+    local entry = index.get(path)
+    if entry then entries[#entries + 1] = entry end
+  end
+
+  local rows = {}
+  for _, name in ipairs(views.list()) do
+    -- An unreadable view is not an error here: it simply holds nothing. Saying
+    -- so is `match_all`'s job, and it already notifies.
+    local tree  = views.get_tree(name)
+    local inside = {}
+    if tree then
+      for _, entry in ipairs(entries) do
+        if filter.eval(tree, entry) then inside[#inside + 1] = entry.path end
+      end
+    end
+    rows[#rows + 1] = { name = name, paths = inside, total = #entries }
+  end
+  return rows
+end
+
 --- Add the selected notes to a view, or take them out of it, by tags.
 --- Reports rather than guesses when the view's filter cannot be satisfied by
 --- tags alone: adding tags that will not make the note match would be worse
 --- than saying so.
+---
+--- `ctx.view` — the view the notes were chosen from — **orders the choice, it
+--- never makes it**. Knowing where a selection came from says nothing about
+--- where it should go: from inside a view, adding to *that* view is the one
+--- pointless option, and the note may equally need removing from a different
+--- view that also contains it. So `add` offers every view, and `remove` offers
+--- exactly the views the selection is actually in.
 ---@param paths string[]
 ---@param kind  string     'add' | 'remove'
 ---@param ctx   table|nil   { view? = string, on_back? = function }
@@ -802,10 +845,10 @@ function M.view_flow(paths, kind, ctx)
 
   local views = require('pkm.views')
 
-  --- Everything after the view is known, so the caller that already knows it
-  --- (a sidebar, a view's own note list) never asks.
-  ---@param name string
-  local function with_view(name)
+  --- Everything after the view is known.
+  ---@param name  string
+  ---@param scope string[]  The notes the operation acts on
+  local function with_view(name, scope)
     local tree, err = views.get_tree(name)
     if not tree then
       vim.notify('[pkm] ' .. (err or 'view has no filter'), vim.log.levels.ERROR)
@@ -841,7 +884,7 @@ function M.view_flow(paths, kind, ctx)
 
     ---@param alt table
     local function apply(alt)
-      confirm_and_apply(paths, { add = alt.add, remove = alt.remove },
+      confirm_and_apply(scope, { add = alt.add, remove = alt.remove },
         string.format("%s '%s' (%s)", verb, name, describe_alt(alt)))
     end
 
@@ -863,25 +906,80 @@ function M.view_flow(paths, kind, ctx)
     end)
   end
 
-  if ctx.view then
-    with_view(ctx.view)
-    return
-  end
-
-  local names = views.list()
-  if #names == 0 then
+  local rows = M.view_membership(paths)
+  if #rows == 0 then
     vim.notify('[pkm] no views defined', vim.log.levels.INFO)
     return
   end
 
-  local counts = views.count_many(names)
-  vim.ui.select(names, {
-    prompt      = (kind == 'add') and 'Add to which view?' or 'Remove from which view?',
-    format_item = function(name)
-      return string.format('%s  (%d)', name, counts[name] or 0)
-    end,
-  }, function(name)
-    if name then vim.schedule(function() with_view(name) end) end
+  -- Which views are even candidates. Removing a note from a view it is not in
+  -- is not an operation, it is a mistake, so removal never offers one.
+  local candidates = {}
+  for _, row in ipairs(rows) do
+    if kind ~= 'remove' or #row.paths > 0 then
+      candidates[#candidates + 1] = row
+    end
+  end
+
+  if #candidates == 0 then
+    vim.notify('[pkm] no selected note belongs to a view', vim.log.levels.INFO)
+    return
+  end
+
+  -- Ordering, and only ordering, is where `ctx.view` counts. For removal it is
+  -- the likeliest target, so it leads; for adding it is the one view the notes
+  -- are already in, so it gets no privilege and the views with something left
+  -- to add lead instead. Names break every tie, so the menu is reproducible.
+  table.sort(candidates, function(a, b)
+    if kind == 'remove' then
+      if (a.name == ctx.view) ~= (b.name == ctx.view) then
+        return a.name == ctx.view
+      end
+      if #a.paths ~= #b.paths then return #a.paths > #b.paths end
+    else
+      local a_done = a.total > 0 and #a.paths == a.total
+      local b_done = b.total > 0 and #b.paths == b.total
+      if a_done ~= b_done then return b_done end
+    end
+    return a.name:lower() < b.name:lower()
+  end)
+
+  ---@param row table
+  ---@return string
+  local function label(row)
+    local n = #row.paths
+    if kind == 'remove' then
+      return (n == row.total)
+        and string.format('%s  (all %d selected)', row.name, n)
+        or  string.format('%s  (%d of %d selected)', row.name, n, row.total)
+    end
+    if n == 0 then return row.name end
+    return (n == row.total)
+      and string.format('%s  (all selected already in)', row.name)
+      or  string.format('%s  (%d of %d already in)', row.name, n, row.total)
+  end
+
+  --- Removal acts on the notes that are actually in the view; adding acts on
+  --- everything chosen, since a note already there simply does not change.
+  ---@param row table
+  local function enter(row)
+    with_view(row.name, (kind == 'remove') and row.paths or paths)
+  end
+
+  -- A menu that decides nothing is a step to cut, not a step to keep.
+  if #candidates == 1 then
+    enter(candidates[1])
+    return
+  end
+
+  local labels = {}
+  for _, row in ipairs(candidates) do labels[#labels + 1] = label(row) end
+
+  vim.ui.select(labels, {
+    prompt = (kind == 'add') and 'Add to which view?' or 'Remove from which view?',
+  }, function(_, idx)
+    if not idx then return end
+    vim.schedule(function() enter(candidates[idx]) end)
   end)
 end
 

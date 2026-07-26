@@ -37,8 +37,10 @@ local M = {}
 --- it needs from there. `ctx.on_back` reopens whatever chose these notes — the
 --- browser, the view, the panel — so an action can offer a way out that lands
 --- where the user actually came from rather than on a narrowed copy of it.
---- `ctx.view` is the view the notes were chosen from, when there was one: a
---- view action then never asks which view, because the editor already knows.
+--- `ctx.view` is the view the notes were chosen from, when there was one. It
+--- **orders** a view action's choices and never makes them: where a selection
+--- came from says nothing about where it should go, and treating it as an
+--- answer is what once made "add to another view" unreachable from inside one.
 ---@type { id: string, label: string, run: fun(paths: string[], ctx: table) }[]
 local REGISTRY = {
   {

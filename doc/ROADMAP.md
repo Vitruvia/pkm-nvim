@@ -180,7 +180,7 @@ v1.8.0  MINOR  Bulk metadata operations  ✅ released 25/7/2026, tagged
         tag of their own.
 
 v1.8.1  PATCH  Defects from the v1.8.0 smoke pass          (next)
-        Ph1 view membership offers the wrong views
+        Ph1 view membership offers the wrong views  ✅ done
           Ph2 confirmation on every removal
             Ph3 the undo cursor — reproduce, then fix
 v1.9.0  MINOR  Views from where you already are            (after v1.8.1)
@@ -251,26 +251,14 @@ below.
 *Three defects, in the order to attack them. No new features — the two
 capabilities the same smoke pass asked for are v1.9.0, not this.*
 
-**Phase 1 — view membership offers the wrong views.** Selecting notes inside a
-view today allows only adding them to *that* view (useless — they are already
-there) or removing them from it. Adding them to another view, or removing them
-from a different view that also contains them, is unreachable. The design error
-is mine: "do not make the user repeat what the editor already knows" was applied
-where knowing *where the notes came from* does not determine *what the operation
-acts on*.
-
-In `lua/pkm/tags.lua` (`view_flow`), `ctx.view` stops deciding and starts merely
-**ordering**:
-
-| Case | Behaviour |
-|---|---|
-| `add` | Offer every view. The context view may appear, but with no privilege — whoever adds is almost always aiming elsewhere. |
-| `remove` | Offer **only the views the selection is actually in**, by evaluating each view's parsed tree (`filter.eval`, `views.get_tree`) against the selected notes' index entries. Removing a note from a view it is not in is not an operation, it is a mistake. |
-| either | The menu appears only when there is a real choice; a single candidate goes straight through. |
-
-Verification: extend `test/test_v180_p9.lua` — a selection inside view A offers
-B and C for `add`; `remove` offers only the views that match; one candidate
-opens no menu.
+**Phase 1 — view membership offers the wrong views.** ✅ *Shipped; the detail is
+in `doc/CHANGELOG.md`.* `ctx.view` orders the menu and no longer answers it:
+`add` offers every view with the already-full ones sunk to the bottom, `remove`
+offers only the views the selection is in (via `tags.view_membership`) and acts
+on only the notes that are in the chosen one. The decision that outlives it:
+**cutting a menu that decides nothing is not the same as cutting the choice** —
+conflating the two is what caused the defect, and Phase 2 depends on keeping
+them apart.
 
 **Phase 2 — every removal asks first.** A rule for the whole plugin, not for one
 flow: **removal, deletion and exit always confirm.** It coexists with cutting
