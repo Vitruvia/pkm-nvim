@@ -707,16 +707,22 @@ function M.register()
     require('pkm.markdown').append_next_header()
   end, { desc = 'Duplicate current header with counter incremented, append at EOF' })
 
-  -- :PKMHeaderNext / :PKMHeaderPrev [same|1-6], with an optional count —
+  -- :PKMHeaderNext / :PKMHeaderPrev [same|h1-h6], with an optional count —
   -- :3PKMHeaderNext. Complements Neovim's native ]] / [[ (see markdown.lua
   -- § Header navigation for what those already cover).
+  --
+  -- The level is `h2`, not `2`, because these commands take a count, and Vim
+  -- reads a leading number in the arguments AS the count: `:PKMHeaderNext 6`
+  -- means six headers ahead, and always did. Spelling the level `h6` leaves
+  -- one reading per form instead of two for the same words.
   local function header_motion(dir)
     return function(opts)
       local level = nil
       if opts.args ~= '' then
-        level = (opts.args == 'same') and 'same' or tonumber(opts.args)
-        if level == nil or (level ~= 'same' and (level < 1 or level > 6)) then
-          vim.notify('[pkm] invalid header level: use same, or 1-6',
+        level = (opts.args == 'same') and 'same' or tonumber(opts.args:match('^[hH]([1-6])$'))
+        if level == nil then
+          vim.notify(
+            '[pkm] use same or h1-h6 for the level; a bare number is the count',
             vim.log.levels.WARN)
           return
         end
@@ -729,7 +735,7 @@ function M.register()
     end
   end
 
-  local header_levels = { 'same', '1', '2', '3', '4', '5', '6' }
+  local header_levels = { 'same', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' }
 
   vim.api.nvim_create_user_command('PKMHeaderNext', header_motion('next'), {
     count    = true,

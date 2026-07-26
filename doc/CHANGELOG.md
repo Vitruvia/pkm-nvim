@@ -20,7 +20,7 @@
     a motion that cannot move is not an error — but says so when the buffer has
     no header at all.
 
--   Commands `:[count]PKMHeaderNext [same|1-6]` and `:[count]PKMHeaderPrev`,
+-   Commands `:[count]PKMHeaderNext [same|h1-h6]` and `:[count]PKMHeaderPrev`,
     and keymaps `header_next_same` `]h` and `header_prev_same` `[h` — normal
     **and** visual mode, buffer-local on markdown the way `ftplugin/markdown`
     binds `]]`, wired as Lua callbacks so `v:count1` is read at press time and
@@ -29,6 +29,14 @@
     repeats the editor is a key spent for nothing. Same-level motion has no
     native equivalent, so it is what gets the keys — unmodified, in the bracket
     family the native motion already lives in.
+
+    The level argument is spelled `h2`, not `2`, because these commands take a
+    count and Vim reads a leading number in the arguments **as** the count:
+    `:PKMHeaderNext 6` means six headers ahead and always did. The first
+    self-guiding smoke note is what caught it — the assertion that was supposed
+    to cover it started at a line where both readings gave the same answer, so
+    it had been passing over the defect. See `doc/PRINCIPLES.md` § The smoke
+    note.
 
     **What Neovim already does, checked in the runtime rather than assumed.**
     The ROADMAP recorded that Neovim's native motion was *same-level* and that

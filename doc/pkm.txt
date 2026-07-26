@@ -454,13 +454,17 @@ MARKDOWN EDITING~
                         :PKMHeaderNext only moves; the two were one completion
                         apart.)
 
-:[count]PKMHeaderNext [same|1-6]
+:[count]PKMHeaderNext [same|h1-h6]
                         Jump to the next header. With no argument, any level;
-                        with 1-6, only that level; with `same`, the level of
+                        with h1-h6, only that level; with `same`, the level of
                         the header the cursor sits under. A count that
                         overshoots stops at the last header.
 
-:[count]PKMHeaderPrev [same|1-6]
+                        The level is spelled h2, not 2, because a leading
+                        number in the arguments IS the count: :PKMHeaderNext 6
+                        means six headers ahead, not level six.
+
+:[count]PKMHeaderPrev [same|h1-h6]
                         The same, backwards.
 
                         Neovim's own ]] and [[ already jump section to

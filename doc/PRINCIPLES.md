@@ -153,7 +153,10 @@ Every phase is verified in this order before its commit:
    `:Lazy sync` (or `:Lazy update`) in Neovim, then restart. Lazy.nvim
    installs this plugin from GitHub, not the local working tree — none of
    the steps below can observe a change that hasn't been pushed and pulled
-   first. Tag only after step 5 passes, never before.
+   first. Tag only after step 5 passes, never before. The exception is a smoke
+   session started with `nvim -u test/min_init.lua`: that points runtimepath at
+   this working tree, so it needs neither push nor sync — which is precisely
+   why it cannot stand in for the smoke of step 5, run in the real config.
 1. **Headless sandbox run** against a disposable scratch corpus, never the live
    `Notes` tree:
    `nvim --headless -u test/min_init.lua -c "luafile test/test_<phase>.lua" -c "qa!"`.
@@ -170,6 +173,49 @@ Every phase is verified in this order before its commit:
    in the fixture.
 5. **Manual smoke checklist** — the exact `:PKM*` commands to run and their
    expected outcomes.
+
+### The smoke note — the checklist is the terrain
+
+A phase that needs specific material to be smoke-tested (headers at several
+levels, nested lists, a citation graph) gets that material **written for it in
+advance**, as a note in the test vault `P:\NotesTeste` — never in `P:\Notes`.
+Without it the author either hunts for a note that happens to have the right
+shape or drafts one by hand before being able to test at all.
+
+The note is not a list of instructions with a fixture underneath. It is a
+**route**: performing a step lands the cursor on the text of the next one.
+
+-   **Each landing carries the next step.** Step 3 is written at the place step 2
+    delivers you to, because that is where the eyes already are. A step that
+    lands somewhere with no instruction is a dead end and the route is wrong.
+-   **A route that only completes when the feature works is itself the
+    assertion.** A checklist read top to bottom proves nothing about where the
+    cursor went; a route stalls the moment a jump misses, and the reader knows
+    exactly which step broke without comparing anything against a table.
+-   **Each landing first says what just happened**, naming what should have been
+    skipped and where it was, and only then commands the next move.
+-   **Traps denounce themselves.** A line that must be skipped says so in place:
+    *"se você chegou aqui, o passo 4 não manteve o nível"*. When the trap cannot
+    carry text — the point of the line is that it is *not* a heading — the next
+    landing names it and says how far above it sits.
+-   **Never revisit a landing**, or the reader arrives at an instruction already
+    spent — unless the round trip *is* the step, written as one instruction
+    ("go there, confirm, come back with `<C-o>`"), so the old landing is passed
+    through rather than consulted. Steps that leave the note (a `:enew`, a
+    fresh buffer) go last.
+-   **Say what the smoke cannot see**, in the note, pointing at the headless test
+    that covers it — a case that is deliberately absent must not read as an
+    omission.
+-   **Simulate the route before handing it over.** Execute the real keys and
+    commands over the real file and check that every landing is the intended
+    one. The note is a claim about behaviour; claims get verified, not asserted.
+-   **The note is disposable and says so.** It carries the smoke tag/view, so a
+    later phase reaches its predecessors in one place.
+
+For a feature whose operation does not move the cursor, the landing is whatever
+the operation leaves visible — the panel row, the renamed file, the reloaded
+buffer. The rule is unchanged: the next step must be readable from the state the
+previous step produced.
 
 **What the headless suite cannot see.** Telescope is not on the runtimepath in
 headless, so every Telescope-backed screen is smoke-only; the tests exercise the
