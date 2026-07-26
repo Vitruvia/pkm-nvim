@@ -174,6 +174,28 @@ Every phase is verified in this order before its commit:
 5. **Manual smoke checklist** — the exact `:PKM*` commands to run and their
    expected outcomes.
 
+### What a check has to prove
+
+Learned building the first smoke route, at the cost of a defect that shipped
+past a test written to catch it.
+
+-   **A check must start where the candidate readings diverge.** The assertion
+    for `:PKMHeaderNext`'s level argument started at a line where "the second
+    header ahead" and "the first level-2 header ahead" were the same line. It
+    passed for months of nothing while the command read the level as a count.
+    Before writing an assertion, name the wrong behaviour it is meant to exclude
+    and pick an input where the two answers differ — otherwise the test asserts
+    that the code runs, not that it is right.
+-   **`normal!` ignores mappings.** Verifying a keymap with `vim.cmd('normal!
+    ]h')` exercises the built-in `]` and `h`, never the mapping, and reports a
+    cursor that did not move as if the feature were broken (or, worse, one that
+    did as if it worked). Keymap checks use `normal` without the bang; the
+    function behind the mapping is checked separately.
+-   **A route is an assertion, and a cheaper one than it looks.** Simulating the
+    smoke note found what the test suite did not, because a route only completes
+    when every step lands where it claims — there is no line to compare, so
+    there is nothing to get wrong in the comparison.
+
 ### The smoke note — the checklist is the terrain
 
 A phase that needs specific material to be smoke-tested (headers at several

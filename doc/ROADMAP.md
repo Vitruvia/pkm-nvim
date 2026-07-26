@@ -189,8 +189,12 @@ v1.9.0  MINOR  Views from where you already are  ✅ released 26/7/2026, tagged
         already inside a view — plus the window placement the second one
         turned out to need.
 
-v1.10.0 MINOR  Header navigation                            (next)
-        Ph1 any-level header jumps   (was v1.7.0 Ph3)
+v1.10.0 MINOR  Header navigation  ✅ released 26/7/2026, tagged
+        One phase, the orphan of v1.7.0. Same-level jumps on ]h / [h — the
+        gap Neovim's native ]] / [[ actually leaves — plus the commands,
+        the count, and the level argument.
+
+(next)  Nothing is scheduled. The ordering below decides what comes first.
 ```
 
 **Ordering beyond that, decided by the author.** Everything that may *create*
@@ -205,10 +209,9 @@ an assistant does formatting unaided. Only then comes *Command clearup*
 small, and leaving them under a new public surface is how they become
 permanent.
 
-Dependency summary: v1.9.0 follows v1.8.1, because its Phase 1 calls the
-`view_flow` that v1.8.1 Phase 1 repairs — shipping it first would build a new
-command on the defect. v1.10.0 floats: it touches `markdown.lua` and nothing
-else, and may be reordered freely.
+Dependency summary: v1.9.0 followed v1.8.1, because its Phase 1 calls the
+`view_flow` that v1.8.1 Phase 1 repairs — shipping it first would have built a
+new command on the defect.
 
 ---
 
@@ -222,14 +225,15 @@ planning or executing a phase.
 
 ---
 
-#### Shipped — everything up to v1.9.0
+#### Shipped — everything up to v1.10.0
 
 v1.6.1 and v1.6.2: correctness batch, `:PKMViews` open latency, index build cost.
 v1.7.0 Ph1–Ph2: deep export, and the relative note — Ph2 shipped inside v1.8.0
 Ph1, where the tag engine it seeds from was written. v1.8.0: the bulk-operation
 stack in nine phases, released and tagged 25/7/2026. v1.8.1: the three defects
 its smoke pass found, released and tagged 26/7/2026. v1.9.0: views reached from
-where you already are, released and tagged 26/7/2026. What each changed is in
+where you already are, released and tagged 26/7/2026. v1.10.0: header
+navigation, one phase, released and tagged 26/7/2026. What each changed is in
 `doc/CHANGELOG.md`.
 
 
@@ -268,47 +272,28 @@ section survives:
 -   **`create_new_note` owns the window guard**, not its callers: panels set
     `winfixbuf`, so opening a buffer from one is E1513. `utils.focus_editing_win`
     is the single search for a window that may hold a note.
+-   **Check what the editor already does before planning to add it.** This plan
+    said Neovim's native header motion was *same-level* and that PKM should add
+    the any-level complement. The runtime says the opposite:
+    `ftplugin/markdown.lua` maps `]]`/`[[` to `vim.treesitter._headings.jump`,
+    which moves by **any** level. The complement PKM actually owed was the
+    count, the level restriction, Visual mode, the jumplist entry, and working
+    without the tree-sitter parser. A plan repeated from memory can invert a
+    fact; reading the runtime costs one command.
+-   **A key that repeats the editor is a key spent for nothing.** Any-level
+    jumping is `]]`; only same-level got keys, and unmodified ones (`]h`/`[h`),
+    in the bracket family the native motion lives in — modifier keys are
+    reserved for heavier operations. They are bound buffer-locally on markdown,
+    the way the native ftplugin binds `]]`.
+-   **A count and a numeric argument cannot share a command.** Vim reads a
+    leading number in the arguments as the count, so `:PKMHeaderNext 6` is six
+    headers ahead; the level had to become `h6`. Any future command that takes
+    both needs the non-numeric spelling from the start.
 
 **v1.6.2 and v1.7.0 have no tag.** Their work reached the user inside the v1.8.0
 release and the CHANGELOG entry for v1.8.0 records that; the numbers stayed
-planning labels. Header navigation, the third phase v1.7.0 never got, is v1.10.0
-below.
-
----
-
-#### v1.10.0 (MINOR) — header navigation
-
-*Was v1.7.0 Ph3, which never shipped; the rest of v1.7.0 went out inside v1.8.0.
-It is self-contained and blocks nothing, which is why it sits after the fixes
-and the view work rather than before them.*
-
-**Phase 1 — any-level header navigation.**
-
-| File | Single-pass changes |
-|---|---|
-| `markdown.lua` | Add **any-level** header navigation (jump to next/prev ATX heading regardless of level) via a pure `find_heading_target(lines, cursor, opts) → lnum?`. Neovim already provides **same-level** header motion natively, so PKM adds only the any-level complement; document the native integration. Update the module Public-API header and LuaDoc. *(Optional bundling: Distant goals 1.8's "global next_header" also lives in `markdown.lua` and could ride this same pass if promoted.)* |
-| `commands.lua` | `:PKMNextHeader`-family navigation commands. |
-| `keymaps.lua` | Wire navigation keymaps when set. |
-| `config.lua` | Navigation keymap defaults — consistent with the native same-level motion and existing markdown keymaps (default `false`). |
-| docs | `CHANGELOG` (Added). Record the PKM↔Neovim native-motion integration and note that a previously-created same-level command was dropped in favour of the native one. Promote the "different/any-level header" bullet of Distant goals 1.2 into completed scope; restate that list-component and block navigation remain deferred pending the markdown conventions. |
-
-Verification: `test/test_v1100_p1.lua` runs `find_heading_target` over a
-mixed-level fixture and asserts next/prev targets at boundaries (first/last
-heading; no heading → nil). Smoke: navigate a real note's headings.
-
-Invariants: current Neovim API only; pure targeting function; no global state.
-
-Commit:
-
-```
-feat: any-level header navigation
-
-- markdown: any-level header jumps via a pure find_heading_target (ATX only);
-  document integration with Neovim's native same-level motion
-- commands/keymaps/config: opt-in heading-navigation commands and keymaps
-- test: heading targeting over fixtures, including boundaries
-- docs: changelog; DA 1.2 (any-level header) promoted; native-motion note
-```
+planning labels. Header navigation, the third phase v1.7.0 never got, shipped as
+v1.10.0.
 
 ---
 
