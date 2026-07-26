@@ -117,7 +117,9 @@ Views are named filter expressions stored in `views.json` at your notes root. Th
 
 | Command | Description |
 |---|---|
-| `:PKMNextHeader` | Duplicate current header with its counter incremented, append at EOF |
+| `:PKMHeaderAppend` | Duplicate current header with its counter incremented, append at EOF |
+| `:[count]PKMHeaderNext [same\|1-6]` | Jump to the next header — any level, or the level given |
+| `:[count]PKMHeaderPrev [same\|1-6]` | Same, backwards |
 | `:PKMHeaderLevelUp` / `:PKMHeaderLevelDown` | Shift header level in range (default: whole buffer) |
 | `:PKMRenumberList` | Renumber an ordered sequence in range or current paragraph |
 | `:PKMConvertList` | Convert list style in range or current paragraph |

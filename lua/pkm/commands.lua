@@ -699,9 +699,51 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- Markdown editing
   -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMNextHeader', function()
+  -- Renamed from :PKMNextHeader in v1.10.0. It edits the buffer, while
+  -- :PKMHeaderNext only moves the cursor; under the old pair of names the
+  -- wrong one was a completion away, and the wrong one writes. The keymap
+  -- config key stays `next_header` so existing setups keep working.
+  vim.api.nvim_create_user_command('PKMHeaderAppend', function()
     require('pkm.markdown').append_next_header()
   end, { desc = 'Duplicate current header with counter incremented, append at EOF' })
+
+  -- :PKMHeaderNext / :PKMHeaderPrev [same|1-6], with an optional count —
+  -- :3PKMHeaderNext. Complements Neovim's native ]] / [[ (see markdown.lua
+  -- § Header navigation for what those already cover).
+  local function header_motion(dir)
+    return function(opts)
+      local level = nil
+      if opts.args ~= '' then
+        level = (opts.args == 'same') and 'same' or tonumber(opts.args)
+        if level == nil or (level ~= 'same' and (level < 1 or level > 6)) then
+          vim.notify('[pkm] invalid header level: use same, or 1-6',
+            vim.log.levels.WARN)
+          return
+        end
+      end
+      require('pkm.markdown').goto_heading({
+        dir   = dir,
+        count = opts.count > 0 and opts.count or 1,
+        level = level,
+      })
+    end
+  end
+
+  local header_levels = { 'same', '1', '2', '3', '4', '5', '6' }
+
+  vim.api.nvim_create_user_command('PKMHeaderNext', header_motion('next'), {
+    count    = true,
+    nargs    = '?',
+    complete = function() return header_levels end,
+    desc     = 'Jump to the next header (any level; arg restricts it)',
+  })
+
+  vim.api.nvim_create_user_command('PKMHeaderPrev', header_motion('prev'), {
+    count    = true,
+    nargs    = '?',
+    complete = function() return header_levels end,
+    desc     = 'Jump to the previous header (any level; arg restricts it)',
+  })
 
   vim.api.nvim_create_user_command('PKMHeaderLevelUp', function(opts)
     require('pkm.markdown').shift_header_level('up', opts.line1, opts.line2)

@@ -4,8 +4,50 @@
 
 ## [Unreleased]
 
-*No entries yet. The sections below are living project state, not release notes:
-they are carried forward from version to version and consulted before any fix.*
+### Added
+
+-   **Header navigation** (v1.10.0 Ph1). `markdown.find_heading_target(lines,
+    cursor, opts) → lnum?` is pure: no buffer, no window, no state. It takes a
+    direction, a count, and an optional level — `1`-`6`, or `same`, which
+    resolves to the level of the header the cursor sits under. A count that
+    overshoots stops at the last header rather than refusing to move; nil means
+    there is no header that way at all. Headers inside YAML frontmatter (where
+    `#` opens a comment) and inside fenced code blocks (where it usually opens
+    a shell line) are not targets, nor is a `#hashtag` with no space after it,
+    nor seven hashes; three leading spaces and a bare `#` still count.
+    `markdown.goto_heading(opts)` is the cursor wrapper: it lands on the `#`,
+    leaves a jumplist entry so `<C-o>` returns, and is silent at the boundary —
+    a motion that cannot move is not an error — but says so when the buffer has
+    no header at all.
+
+-   Commands `:[count]PKMHeaderNext [same|1-6]` and `:[count]PKMHeaderPrev`,
+    and four keymaps, all default `false`: `header_next`, `header_prev`,
+    `header_next_same`, `header_prev_same` — normal **and** visual mode, wired
+    as Lua callbacks so `v:count1` is read at press time and the selection
+    extends instead of collapsing.
+
+    **What Neovim already does, checked in the runtime rather than assumed.**
+    The ROADMAP recorded that Neovim's native motion was *same-level* and that
+    PKM should add the any-level complement. That is backwards.
+    `ftplugin/markdown.lua` maps `]]`/`[[` to `vim.treesitter._headings.jump`,
+    which moves to the next/previous heading of **any** level. What it does not
+    do is honour a count (`todo(clason): support count`, in the runtime file),
+    restrict the jump to a level (`jump()` accepts `opts.level`, but the
+    mappings never pass it, so same-level motion is unreachable), leave a
+    jumplist entry, work in Visual mode (there an older regex mapping takes
+    over, and it misses `######`), or work at all without the tree-sitter
+    markdown parser. This ships the complement as it actually stands.
+
+### Changed
+
+-   `:PKMNextHeader` is now **`:PKMHeaderAppend`**. It edits the buffer, while
+    the new `:PKMHeaderNext` only moves the cursor, and under the old pair of
+    names the wrong one was one completion away — and the wrong one writes.
+    Every header command is now `PKMHeader*`. The config key stays
+    `next_header`, so an existing `<leader>Mh` keeps working untouched.
+
+*The sections below are living project state, not release notes: they are
+carried forward from version to version and consulted before any fix.*
 
 ### Known Bugs (queued)
 

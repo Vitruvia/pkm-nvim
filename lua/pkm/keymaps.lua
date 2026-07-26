@@ -222,7 +222,25 @@ function M.register(config)
   -- -------------------------------------------------------------------------- 
   
   -- Header Editing
-  map(k.next_header, "<cmd>PKMNextHeader<cr>", "Next Header (increment counter)")
+  map(k.next_header, "<cmd>PKMHeaderAppend<cr>", "Append Header (increment counter)")
+
+  -- Header navigation. Opt-in: Neovim's own ]] / [[ already jump section to
+  -- section, so these exist for what those do not do — a count, a level
+  -- restriction, Visual mode, and a jumplist entry. Lua callbacks rather than
+  -- <cmd> strings because v:count1 has to be read at press time, and because a
+  -- callback keeps Visual mode active so the motion extends the selection.
+  local function map_motion(lhs, dir, level, desc)
+    if not lhs then return end
+    vim.keymap.set({ 'n', 'x' }, lhs, function()
+      require('pkm.markdown').goto_heading({
+        dir = dir, count = vim.v.count1, level = level })
+    end, { desc = 'PKM: ' .. desc, silent = true })
+  end
+
+  map_motion(k.header_next,      'next', nil,    'next header')
+  map_motion(k.header_prev,      'prev', nil,    'previous header')
+  map_motion(k.header_next_same, 'next', 'same', 'next header of the same level')
+  map_motion(k.header_prev_same, 'prev', 'same', 'previous header of the same level')
 
   if k.header_level_up then
     vim.keymap.set('n', k.header_level_up, '<cmd>PKMHeaderLevelUp<cr>',

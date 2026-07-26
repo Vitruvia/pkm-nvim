@@ -11,6 +11,8 @@
 -- Public API:
 --   append_next_header()                       → Duplicate current header with counter +1, append at EOF
 --   shift_header_level(direction, start, end)  → Shift header '#'-level up or down in line range
+--   find_heading_target(lines, cursor, opts)   → Line of the next/previous ATX heading, or nil (pure)
+--   goto_heading(opts)                         → Move the cursor there; true when it moved
 --   setup_symbols(symbols)                     → Register buffer-local insert-mode keymaps (trigger and key)
 --   renumber_sequence(start_line, end_line)    → Renumber ordered sequence items in line range
 --   renumber_at_cursor()                       → Renumber sequence in paragraph around cursor
@@ -76,6 +78,153 @@ function M.shift_header_level(direction, start_line, end_line)
   end
 
   vim.api.nvim_buf_set_lines(0, start_line - 1, end_line, false, lines)
+end
+
+-- =============================================================================
+-- SECTION: Header navigation
+-- =============================================================================
+--
+-- What Neovim already does, checked in the runtime rather than assumed:
+-- ftplugin/markdown.lua maps `]]` and `[[` to `vim.treesitter._headings.jump`,
+-- which moves to the next/previous heading of **any** level. So the any-level
+-- jump is not the gap. What that motion does not do is: honour a count (the
+-- runtime file says `todo(clason): support count`), restrict the jump to a
+-- level — `jump()` accepts `opts.level` but the mappings never pass it, so
+-- same-level motion is unreachable — leave a jumplist entry, work in Visual
+-- mode (there the older regex mapping takes over, and it misses `######`), or
+-- work at all without the tree-sitter markdown parser. This section fills
+-- exactly those, and leaves `]]`/`[[` alone.
+--
+-- Setext headings (underlined with = or -) are out of scope: PKM notes are
+-- written with ATX headings, and `---` is also the frontmatter delimiter.
+
+--- Every ATX heading in `lines`, in buffer order, as { lnum, level }.
+--- Skips YAML frontmatter (where `# ...` is a comment) and fenced code blocks
+--- (where it is usually shell), so neither can be jumped to.
+---@param lines string[]
+---@return table[]  list of { lnum: integer, level: integer }
+local function scan_headings(lines)
+  local out   = {}
+  local fence = nil     -- opening fence marker while inside a code block
+  local i     = 1
+
+  -- Frontmatter only counts when it opens the very first line.
+  if lines[1] and lines[1]:match('^%-%-%-%s*$') then
+    i = 2
+    while i <= #lines and not lines[i]:match('^[%-%.][%-%.][%-%.]%s*$') do i = i + 1 end
+    i = i + 1
+  end
+
+  while i <= #lines do
+    local line = lines[i]
+
+    if fence then
+      local close = line:match('^%s*([`~]+)%s*$')
+      if close and close:sub(1, 1) == fence:sub(1, 1) and #close >= #fence then
+        fence = nil
+      end
+    else
+      local open = line:match('^%s?%s?%s?([`~][`~][`~]+)')
+      if open then
+        fence = open
+      else
+        -- ATX: up to three leading spaces, 1-6 '#', then a space or line end.
+        -- The required separator is what keeps a `#tag` from being a heading.
+        local hashes = line:match('^%s?%s?%s?(#+)%s') or line:match('^%s?%s?%s?(#+)%s*$')
+        if hashes and #hashes <= 6 then
+          out[#out + 1] = { lnum = i, level = #hashes }
+        end
+      end
+    end
+
+    i = i + 1
+  end
+
+  return out
+end
+
+--- Line number of the heading `count` jumps away from `cursor`, or nil.
+--- Pure: no buffer access, no window access, no state.
+---
+--- When fewer than `count` headings remain in that direction the furthest one
+--- is returned — a count that overshoots lands on the last heading rather than
+--- refusing to move. nil means there is no heading at all that way.
+---@param lines  string[]      Buffer lines, 1-indexed
+---@param cursor integer       Current line, 1-indexed; the line itself never matches
+---@param opts   table|nil     { dir = 'next'|'prev', count = integer, level = integer|'same' }
+---                            level: nil = any; 1-6 = only that level; 'same' = the
+---                            level of the heading the cursor sits under (any, if none)
+---@return integer|nil
+function M.find_heading_target(lines, cursor, opts)
+  opts = opts or {}
+  lines = lines or {}
+
+  local dir   = (opts.dir == 'prev') and 'prev' or 'next'
+  local count = math.max(1, math.floor(tonumber(opts.count) or 1))
+  local heads = scan_headings(lines)
+  if #heads == 0 then return nil end
+
+  local level = tonumber(opts.level)
+  if opts.level == 'same' then
+    -- The enclosing heading — the last one at or before the cursor.
+    for _, h in ipairs(heads) do
+      if h.lnum <= cursor then level = h.level else break end
+    end
+  end
+
+  local function matches(h)
+    return (level == nil or h.level == level)
+  end
+
+  local found, seen = nil, 0
+
+  if dir == 'next' then
+    for _, h in ipairs(heads) do
+      if h.lnum > cursor and matches(h) then
+        found, seen = h.lnum, seen + 1
+        if seen == count then break end
+      end
+    end
+  else
+    for i = #heads, 1, -1 do
+      local h = heads[i]
+      if h.lnum < cursor and matches(h) then
+        found, seen = h.lnum, seen + 1
+        if seen == count then break end
+      end
+    end
+  end
+
+  return found
+end
+
+--- Move the cursor to the heading `find_heading_target` picks.
+--- Silent at the boundary — a motion that cannot move is not an error — but
+--- says so when the buffer holds no heading at all, which is the case a user
+--- would otherwise read as the command being broken.
+---@param opts table|nil  Same shape as find_heading_target's opts
+---@return boolean  true when the cursor moved
+function M.goto_heading(opts)
+  opts = opts or {}
+
+  local win    = vim.api.nvim_get_current_win()
+  local lines  = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local cursor = vim.api.nvim_win_get_cursor(win)[1]
+  local target = M.find_heading_target(lines, cursor, opts)
+
+  if not target then
+    if not M.find_heading_target(lines, 0, { dir = 'next' }) then
+      vim.notify('[pkm] no headers in this buffer', vim.log.levels.WARN)
+    end
+    return false
+  end
+
+  -- Jumplist entry so <C-o> comes back. Normal mode only: `m` is not a
+  -- Visual-mode command, and the mapping runs with Visual still active.
+  if vim.fn.mode() == 'n' then pcall(vim.cmd, "normal! m'") end
+
+  vim.api.nvim_win_set_cursor(win, { target, (lines[target]:find('#') or 1) - 1 })
+  return true
 end
 
 -- =============================================================================

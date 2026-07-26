@@ -285,7 +285,10 @@ deleted_timestamp}`. `trash_note(filepath)` — moves file, does NOT strip backl
 `purge_old()` — auto-purge entries older than `max_age_days`.
 `setup(cfg)` — stores config, schedules `purge_old()` via `vim.defer_fn(fn, 5000)`.
 
-**markdown.lua** — `append_next_header`, `shift_header_level`, `setup_symbols`,
+**markdown.lua** — `append_next_header`, `shift_header_level`,
+`find_heading_target(lines, cursor, opts)` (pure ATX targeting: direction,
+count, level filter; frontmatter and fenced code skipped) and its cursor
+wrapper `goto_heading(opts)`, `setup_symbols`,
 `renumber_sequence` (per-level counter stack; list/list_emph/list_bold_line/
 hdr_prefix/hdr_suffix families; blockquote-aware),
 `renumber_at_cursor`, `convert_list(start, end, direction?)`,
