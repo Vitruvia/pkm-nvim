@@ -815,10 +815,10 @@ destination prompt appears.
       next_header        = "<leader>Mh",   -- :PKMHeaderAppend
       header_level_up    = "<leader>M^",
       header_level_down  = "<leader>M_",
-      header_next        = "<leader>Mj",   -- next header, any level
-      header_prev        = "<leader>Mk",   -- previous header, any level
-      header_next_same   = "<leader>MJ",   -- next header of the current level
-      header_prev_same   = "<leader>MK",   -- previous header of the current level
+      header_next_same   = "]h",   -- next header of the current level
+      header_prev_same   = "[h",   -- previous header of the current level
+      header_next        = false,  -- any level: this is ]] , left to Neovim
+      header_prev        = false,  -- any level: this is [[ , left to Neovim
       renumber_list      = "<leader>Mr",
       convert_list = false,   -- :PKMConvertList (range or paragraph at cursor)
     },
@@ -855,10 +855,10 @@ Default keymaps (all overridable; set to false to disable):
   <leader>M^   :PKMHeaderLevelUp  (normal and visual)
   <leader>M_   :PKMHeaderLevelDown  (normal and visual)
   <leader>Mr   :PKMRenumberList  (normal and visual)
-  <leader>Mj   next header, any level      (normal and visual, count-aware)
-  <leader>Mk   previous header, any level  (normal and visual, count-aware)
-  <leader>MJ   next header of the current header's level
-  <leader>MK   previous header of the current header's level
+  ]h           next header of the current header's level
+  [h           previous header of the current header's level
+               (markdown buffers only, normal and visual, count-aware;
+               any-level jumps are Neovim's own ]] and [[ )
 
 Additional keymaps (default false — assign to enable):
 

@@ -224,23 +224,49 @@ function M.register(config)
   -- Header Editing
   map(k.next_header, "<cmd>PKMHeaderAppend<cr>", "Append Header (increment counter)")
 
-  -- Header navigation. Opt-in: Neovim's own ]] / [[ already jump section to
-  -- section, so these exist for what those do not do — a count, a level
-  -- restriction, Visual mode, and a jumplist entry. Lua callbacks rather than
-  -- <cmd> strings because v:count1 has to be read at press time, and because a
-  -- callback keeps Visual mode active so the motion extends the selection.
-  local function map_motion(lhs, dir, level, desc)
-    if not lhs then return end
-    vim.keymap.set({ 'n', 'x' }, lhs, function()
-      require('pkm.markdown').goto_heading({
-        dir = dir, count = vim.v.count1, level = level })
-    end, { desc = 'PKM: ' .. desc, silent = true })
+  -- Header navigation. Only the same-level pair is bound by default: `]]` and
+  -- `[[` already jump header to header, so a key for that would spend a
+  -- keystroke on what Neovim does. Same-level motion has no native equivalent,
+  -- so it gets the keys — unmodified, in the bracket family the native motion
+  -- already lives in.
+  --
+  -- Buffer-local on markdown, the way ftplugin/markdown.lua binds `]]`: a
+  -- header motion means nothing in a Lua file, and a global mapping would take
+  -- `]h` away everywhere for a command that could only answer "no headers".
+  --
+  -- Lua callbacks rather than <cmd> strings because v:count1 has to be read at
+  -- press time, and because a callback keeps Visual mode active so the motion
+  -- extends the selection.
+  local motions = {
+    { lhs = k.header_next,      dir = 'next', level = nil,    desc = 'next header' },
+    { lhs = k.header_prev,      dir = 'prev', level = nil,    desc = 'previous header' },
+    { lhs = k.header_next_same, dir = 'next', level = 'same', desc = 'next header of the same level' },
+    { lhs = k.header_prev_same, dir = 'prev', level = 'same', desc = 'previous header of the same level' },
+  }
+
+  local function bind_motions(bufnr)
+    for _, m in ipairs(motions) do
+      if m.lhs then
+        vim.keymap.set({ 'n', 'x' }, m.lhs, function()
+          require('pkm.markdown').goto_heading({
+            dir = m.dir, count = vim.v.count1, level = m.level })
+        end, { buffer = bufnr, desc = 'PKM: ' .. m.desc, silent = true })
+      end
+    end
   end
 
-  map_motion(k.header_next,      'next', nil,    'next header')
-  map_motion(k.header_prev,      'prev', nil,    'previous header')
-  map_motion(k.header_next_same, 'next', 'same', 'next header of the same level')
-  map_motion(k.header_prev_same, 'prev', 'same', 'previous header of the same level')
+  vim.api.nvim_create_autocmd('FileType', {
+    group    = vim.api.nvim_create_augroup('PKMHeaderMotions', { clear = true }),
+    pattern  = 'markdown',
+    callback = function(ev) bind_motions(ev.buf) end,
+  })
+
+  -- Buffers already open when setup() runs never see that FileType event.
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].filetype == 'markdown' then
+      bind_motions(buf)
+    end
+  end
 
   if k.header_level_up then
     vim.keymap.set('n', k.header_level_up, '<cmd>PKMHeaderLevelUp<cr>',

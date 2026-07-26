@@ -21,10 +21,14 @@
     no header at all.
 
 -   Commands `:[count]PKMHeaderNext [same|1-6]` and `:[count]PKMHeaderPrev`,
-    and four keymaps — `header_next` `<leader>Mj`, `header_prev` `<leader>Mk`,
-    `header_next_same` `<leader>MJ`, `header_prev_same` `<leader>MK`. Normal
-    **and** visual mode, wired as Lua callbacks so `v:count1` is read at press
-    time and the selection extends instead of collapsing.
+    and keymaps `header_next_same` `]h` and `header_prev_same` `[h` — normal
+    **and** visual mode, buffer-local on markdown the way `ftplugin/markdown`
+    binds `]]`, wired as Lua callbacks so `v:count1` is read at press time and
+    the selection extends instead of collapsing. `header_next` / `header_prev`
+    exist but are unbound: any-level jumping **is** `]]` / `[[`, and a key that
+    repeats the editor is a key spent for nothing. Same-level motion has no
+    native equivalent, so it is what gets the keys — unmodified, in the bracket
+    family the native motion already lives in.
 
     **What Neovim already does, checked in the runtime rather than assumed.**
     The ROADMAP recorded that Neovim's native motion was *same-level* and that

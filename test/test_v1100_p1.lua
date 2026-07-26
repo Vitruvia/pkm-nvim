@@ -193,6 +193,52 @@ check("the jump leaves a jumplist entry, so <C-o> comes back",
   tostring(vim.api.nvim_win_get_cursor(0)[1]))
 
 -- =============================================================================
+-- Keymaps — buffer-local on markdown, and nowhere else
+-- =============================================================================
+
+---@return string  the ]h / [h mappings found, sorted, as one string
+local function motion_maps(bufnr)
+  local found = {}
+  for _, mode in ipairs({ 'n', 'x' }) do
+    local maps = bufnr and vim.api.nvim_buf_get_keymap(bufnr, mode)
+                        or vim.api.nvim_get_keymap(mode)
+    for _, m in ipairs(maps) do
+      -- keytrans: the lhs comes back with raw control bytes, so a plain
+      -- string comparison silently finds nothing (v1.9.0 learned this).
+      local lhs = vim.fn.keytrans(m.lhs)
+      if lhs == ']h' or lhs == '[h' then found[#found + 1] = mode .. lhs end
+    end
+  end
+  table.sort(found)
+  return table.concat(found, ' ')
+end
+
+check("the motions are not global",
+  motion_maps(nil) == '', motion_maps(nil))
+check("nor bound in a buffer that is not markdown",
+  motion_maps(buf) == '', motion_maps(buf))
+
+vim.bo[buf].filetype = 'markdown'
+check("markdown gets them, in normal and visual",
+  motion_maps(buf) == 'n[h n]h x[h x]h', motion_maps(buf))
+
+vim.api.nvim_win_set_cursor(0, { 12, 0 })
+vim.cmd('normal ]h')      -- no bang: `normal!` would ignore the mapping
+check("]h holds the level",
+  vim.api.nvim_win_get_cursor(0)[1] == 20,
+  tostring(vim.api.nvim_win_get_cursor(0)[1]))
+
+vim.cmd('normal [h')
+check("[h holds it too", vim.api.nvim_win_get_cursor(0)[1] == 12,
+  tostring(vim.api.nvim_win_get_cursor(0)[1]))
+
+vim.api.nvim_win_set_cursor(0, { 7, 0 })
+vim.cmd('normal 2]h')
+check("a count reaches the second one of that level",
+  vim.api.nvim_win_get_cursor(0)[1] == 27,
+  tostring(vim.api.nvim_win_get_cursor(0)[1]))
+
+-- =============================================================================
 -- Commands
 -- =============================================================================
 
