@@ -1128,9 +1128,14 @@ end
 --- created with whatever tags do apply, and the condition in the way is named,
 --- because "this will not match until you write the title" is information the
 --- author needs *while* writing the note, not instead of it.
----@param name string        The view the note should belong to
----@param on_done function|nil  Called with the created path, when one was
-function M.new_note_in_view(name, on_done)
+---@param name string  The view the note should belong to
+---@param opts table|nil  { where? = nil|'left'|'right'|integer  which window to
+---                         open it in, see `utils.focus_editing_win`;
+---                         on_done? = function(path) }
+function M.new_note_in_view(name, opts)
+  opts = opts or {}
+  local on_done = opts.on_done
+
   local views = require('pkm.views')
   local notes = require('pkm.notes')
 
@@ -1151,7 +1156,7 @@ function M.new_note_in_view(name, on_done)
         .. 'is true', name, alt.blockers[1]), vim.log.levels.WARN)
     end
 
-    local path = notes.create_new_note(nil, { tags = seeds })
+    local path = notes.create_new_note(nil, { tags = seeds, where = opts.where })
     -- create_new_note returns nil when it still has prompts to run; it finishes
     -- on its own either way, and the caller only ever wants the refresh.
     if on_done then on_done(path) end

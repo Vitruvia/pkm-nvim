@@ -69,42 +69,15 @@ local function browse_complete(arg_lead, _cmd_line, _cursor_pos)
   return out
 end
 
---- If the current window is a PKM panel (sidebar, bufpanel) or netrw,
---- switch focus to the nearest non-panel, non-float main editing window.
---- Falls back to opening a new split. Ensures creation commands never
---- open note buffers inside the sidebar, buffer panel, or file explorer.
-local function focus_main_win()
-  local ft = vim.bo.filetype
-  if ft ~= 'pkm-sidebar' and ft ~= 'pkm-bufpanel' and ft ~= 'netrw' then return end
-
-  local cur = vim.api.nvim_get_current_win()
-  local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
-
-  -- Prefer the alternate window if it is a main editing window.
-  local alt = vim.fn.win_getid(vim.fn.winnr('#'))
-  if alt ~= 0 and alt ~= cur
-  and vim.api.nvim_win_is_valid(alt)
-  and vim.api.nvim_win_get_config(alt).relative == '' then
-    local alt_ft = vim.bo[vim.api.nvim_win_get_buf(alt)].filetype
-    if not _PANELS[alt_ft] then
-      vim.api.nvim_set_current_win(alt)
-      return
-    end
-  end
-
-  -- Fall back to the first non-panel, non-float window.
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if win ~= cur and vim.api.nvim_win_get_config(win).relative == '' then
-      local win_ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
-      if not _PANELS[win_ft] then
-        vim.api.nvim_set_current_win(win)
-        return
-      end
-    end
-  end
-
-  -- No suitable window exists; create one.
-  vim.cmd('noautocmd rightbelow vsplit')
+--- If the current window is a PKM panel (sidebar, bufpanel) or netrw, switch
+--- focus to a real editing window, creating one if the tabpage has none.
+--- Ensures commands never open note buffers inside a panel.
+---
+--- The search itself lives in `pkm.utils` — it was duplicated here and in
+--- `views`, and note creation needed a third copy, which is one copy too many.
+---@param where nil|'left'|'right'|integer  Passed through to utils
+local function focus_main_win(where)
+  require('pkm.utils').focus_editing_win(where)
 end
 
 -- =============================================================================
@@ -117,10 +90,40 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- Note creation
   -- ---------------------------------------------------------------------------
+  -- :PKMNewNote [note|agg|bib] [left|right|N] — the placement is an argument
+  -- rather than a second command. Both are optional and order-free: the type
+  -- comes from a closed set and the placement is a side or a window number, so
+  -- neither can be mistaken for the other.
   vim.api.nvim_create_user_command('PKMNewNote', function(opts)
-    focus_main_win()
-    require('pkm.notes').create_new_note(opts.args ~= '' and opts.args or nil)
-  end, { nargs = '?' })
+    local note_type, where
+    for _, arg in ipairs(opts.fargs) do
+      local low = arg:lower()
+      if low == 'note' or low == 'agg' or low == 'bib' then
+        note_type = low
+      elseif low == 'left' or low == 'right' then
+        where = low
+      elseif low:match('^%d+$') then
+        where = tonumber(low)
+      else
+        vim.notify(string.format("[pkm] don't know what '%s' means here — "
+          .. 'expected a type (note/agg/bib) or a place (left/right/<number>)',
+          arg), vim.log.levels.ERROR)
+        return
+      end
+    end
+
+    require('pkm.notes').create_new_note(note_type, { where = where })
+  end, {
+    nargs    = '*',
+    complete = function(lead)
+      local out = {}
+      for _, tok in ipairs({ 'note', 'agg', 'bib', 'left', 'right' }) do
+        if tok:find(lead:lower(), 1, true) == 1 then out[#out + 1] = tok end
+      end
+      return out
+    end,
+    desc = 'Create a note; optional type and placement (left/right/window number)',
+  })
 
   -- :PKMNewRelative — new note seeded with the current note's tags, so it lands
   -- in the same views without retyping its classification.

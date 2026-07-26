@@ -68,7 +68,7 @@ local function create_in(view, title, pick)
   end
 
   local done = false
-  tags.new_note_in_view(view, function() done = true end)
+  tags.new_note_in_view(view, { on_done = function() done = true end })
   vim.wait(2000, function() return done end, 20)
 
   vim.notify, vim.ui.select, vim.fn.input = orig_notify, orig_select, orig_input
@@ -193,6 +193,42 @@ do
       if m.lhs == 'N' then has_N = true end
     end
     check("and N is bound in it", has_N)
+  end
+end
+
+do
+  -- Creating *from* the sidebar. Panels set `winfixbuf`, so opening the new
+  -- note from one is an E1513 unless something moves to an editing window
+  -- first — which is what this used to hit.
+  -- open_sidebar toggles, and the block above left it open.
+  if not views.is_sidebar_open() then views.open_sidebar() end
+  vim.wait(500, function() return views.is_sidebar_open() end, 10)
+  local sw = views.get_sidebar_win()
+
+  check("the sidebar is available for this case", sw ~= nil)
+  if sw then
+    vim.api.nvim_set_current_win(sw)
+    check("we really are in the sidebar",
+      vim.bo.filetype == 'pkm-sidebar', vim.bo.filetype)
+
+    local said = {}
+    local orig_notify, orig_select = vim.notify, vim.ui.select
+    local orig_input = vim.fn.input
+    vim.notify   = function(msg) said[#said + 1] = tostring(msg) end
+    vim.ui.select = function(items, _, on_choice) on_choice(items[1], 1) end
+    vim.fn.input = function() return 'Nascida Na Sidebar' end
+
+    local ok = pcall(tags.new_note_in_view, 'v190p2_simples')
+    vim.wait(1500, function() return vim.bo.filetype == 'markdown' end, 20)
+
+    vim.notify, vim.ui.select, vim.fn.input = orig_notify, orig_select, orig_input
+
+    check("creating from the sidebar raises nothing", ok,
+      table.concat(said, ' '))
+    check("and the note lands in a window that may hold it",
+      require('pkm.utils').is_editing_win(vim.api.nvim_get_current_win())
+      and vim.api.nvim_buf_get_name(0):match('%.md$') ~= nil,
+      vim.bo.filetype .. ' / ' .. vim.api.nvim_buf_get_name(0))
   end
 end
 

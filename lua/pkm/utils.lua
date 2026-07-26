@@ -20,6 +20,10 @@
 --   notify(msg, level?)   → vim.notify with "[pkm] " prefix
 --   type_prefix(nt)       → compact bracketed note-type label, e.g. "[n]"
 --   strip_display_prefix(filename, nt) → stem without number/type prefix
+--   is_editing_win(win)   → boolean, a window a note may be opened in
+--   editing_wins()        → those windows, left to right
+--   focus_editing_win(where?) → move there (or split / window N), creating one
+--                               if the tabpage has none
 -- =============================================================================
 
 local M = {}
@@ -138,6 +142,107 @@ function M.strip_display_prefix(filename, note_type)
     return filename:match('^%d+_%a+_(.+)$') or filename
   end
   return filename
+end
+
+-- =============================================================================
+-- SECTION: Editing windows
+-- =============================================================================
+--
+-- PKM's panels set `winfixbuf`, which turns "open a file from here" into a hard
+-- error (E1513) rather than a hijacked panel. That is the intended trade, but it
+-- means anything that opens a buffer must first move to a window that may hold
+-- one. Two copies of that search already existed — one in `commands`, one in
+-- `views` — so it lives here now, where both can reach it.
+
+local PANEL_FILETYPES = {
+  ['pkm-sidebar']  = true,
+  ['pkm-bufpanel'] = true,
+  ['netrw']        = true,
+}
+
+--- Is this window one a note may be opened in?
+--- Floats and PKM's own panels are not.
+---@param win integer
+---@return boolean
+function M.is_editing_win(win)
+  if not vim.api.nvim_win_is_valid(win) then return false end
+  if vim.api.nvim_win_get_config(win).relative ~= '' then return false end
+  return not PANEL_FILETYPES[vim.bo[vim.api.nvim_win_get_buf(win)].filetype]
+end
+
+--- Every window in this tabpage a note may be opened in, left to right.
+--- The order is what gives `[count]` its meaning: 1 is the leftmost.
+---@return integer[] wins
+function M.editing_wins()
+  local found = {}
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if M.is_editing_win(win) then
+      found[#found + 1] = { win = win, col = vim.api.nvim_win_get_position(win)[2] }
+    end
+  end
+  table.sort(found, function(a, b) return a.col < b.col end)
+
+  local wins = {}
+  for i, entry in ipairs(found) do wins[i] = entry.win end
+  return wins
+end
+
+--- Move the cursor to a window a note may be opened in, creating one if the
+--- tabpage has none, and return it.
+---
+--- `where` says *which*:
+---   nil / 'current'  the current window when it already qualifies, else the
+---                    alternate one, else the leftmost — "where I was working"
+---   'left','right'   a new vertical split on that side of the above
+---   integer N        the Nth editing window, counted from the left; falls back
+---                    to the default and reports when there is no such window,
+---                    rather than silently rearranging the layout
+---
+--- When nothing qualifies, the new window is placed against the panel we are
+--- leaving: beside a sidebar (a left split), above a buffer panel (a bottom
+--- one), so the result is where the eye expects it either way.
+---@param where nil|'current'|'left'|'right'|integer
+---@return integer win
+function M.focus_editing_win(where)
+  local cur = vim.api.nvim_get_current_win()
+
+  local function base()
+    if M.is_editing_win(cur) then return cur end
+
+    local alt = vim.fn.win_getid(vim.fn.winnr('#'))
+    if alt ~= 0 and alt ~= cur and M.is_editing_win(alt) then return alt end
+
+    local wins = M.editing_wins()
+    if wins[1] then return wins[1] end
+
+    -- None at all: make one, on the side that suits the panel we are in.
+    local from_bufpanel = vim.bo[vim.api.nvim_win_get_buf(cur)].filetype == 'pkm-bufpanel'
+    vim.cmd(from_bufpanel and 'noautocmd aboveleft split'
+                          or 'noautocmd rightbelow vsplit')
+    return vim.api.nvim_get_current_win()
+  end
+
+  if type(where) == 'number' then
+    local wins = M.editing_wins()
+    if wins[where] then
+      vim.api.nvim_set_current_win(wins[where])
+      return wins[where]
+    end
+    M.notify(string.format('no window %d (only %d editing window%s) — using the usual one',
+      where, #wins, #wins == 1 and '' or 's'), vim.log.levels.WARN)
+    where = nil
+  end
+
+  local win = base()
+  vim.api.nvim_set_current_win(win)
+
+  if where == 'left' or where == 'right' then
+    vim.cmd(where == 'left' and 'noautocmd leftabove vsplit'
+                            or 'noautocmd rightbelow vsplit')
+    win = vim.api.nvim_get_current_win()
+  end
+
+  return win
 end
 
 return M

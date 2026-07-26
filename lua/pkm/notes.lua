@@ -140,9 +140,17 @@ end
 --- Create a new consolidated note in the configured consolidated folder.
 --- Prompts for type if not provided, then for title. Handles bib-specific
 --- fields (source_author, source_type) when type is "bib".
+---
+--- The new note is opened in a real editing window, chosen by `opts.where`.
+--- **This function owns that guard**, rather than each caller: it is the one
+--- that opens a buffer, and a caller that forgets gets E1513 from a panel with
+--- `winfixbuf` set — which is exactly what happened to note creation from the
+--- sidebar.
 ---@param note_type string|nil "note", "agg", or "bib" — prompts if nil
 ---@param opts table|nil  { tags = string[] } seeds the new note's frontmatter
 ---                       tags; used by create_relative_note()
+---                       { where = nil|'left'|'right'|integer } which window to
+---                       open it in — see `utils.focus_editing_win`
 ---@return string|nil filepath Absolute path of created note, or nil on cancel
 function M.create_new_note(note_type, opts)
   opts = opts or {}
@@ -244,8 +252,11 @@ function M.create_new_note(note_type, opts)
   
   vim.fn.writefile(frontmatter_lines, filepath)
   require('pkm.index').invalidate(filepath)
+  -- Land in a window that may hold a buffer before opening: called from a
+  -- panel, `edit` would fail on winfixbuf.
+  utils.focus_editing_win(opts.where)
   vim.cmd("edit " .. vim.fn.fnameescape(filepath))
-  
+
   vim.cmd("normal! G")
   
   vim.notify("Created: " .. filename, vim.log.levels.INFO)

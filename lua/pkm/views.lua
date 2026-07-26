@@ -924,15 +924,29 @@ end
 --- failure this file has already had twice: `<C-a>` was missing from the views
 --- picker, then from a view's own note list, and each was found only by using
 --- it. One helper, wired at the same six places, is the guard against a third.
----@param name string|nil
-local function new_note_in(name)
+---
+--- `where` chooses the window the new note opens in, and mirrors what is
+--- already true of *opening* a note: `<C-v>` to the right, `<C-x>` to the left,
+--- `[count]` for the nth window from the left.
+---@param name  string|nil
+---@param where nil|'left'|'right'|integer
+local function new_note_in(name, where)
   if not name or name == '' then
     vim.notify('[pkm] no view here', vim.log.levels.INFO)
     return
   end
-  require('pkm.tags').new_note_in_view(name, function()
-    M.refresh_sidebar_if_open()
-  end)
+  require('pkm.tags').new_note_in_view(name, {
+    where   = where,
+    on_done = function() M.refresh_sidebar_if_open() end,
+  })
+end
+
+--- The window a normal-mode surface's creation key was asked for.
+--- `[count]N` means the nth editing window; a bare `N` means the usual one.
+---@return integer|nil
+local function count_target()
+  local n = vim.v.count
+  return n > 0 and n or nil
 end
 
 ---@param title string
@@ -1131,9 +1145,10 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
         end)
       end
 
-      local function new_in_view()
+      ---@param where nil|'left'|'right'
+      local function new_in_view(where)
         actions.close(prompt_bufnr)
-        vim.schedule(function() new_note_in(name) end)
+        vim.schedule(function() new_note_in(name, where) end)
       end
 
       local function do_help()
@@ -1142,6 +1157,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
           '  <Tab>    mark note',
           '  <C-a>    bulk actions on marked notes (or all listed)',
           '  <C-y>    new note, already in this view',
+          '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
           '  <C-b>    back to views panel',
           '  <C-p>    go to parent view',
           '  <C-s>    go to subviews',
@@ -1162,8 +1178,12 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
 
       map('i', '<C-a>', bulk_actions)
       map('n', '<C-a>', bulk_actions)
-      map('i', '<C-y>', new_in_view)
-      map('n', '<C-y>', new_in_view)
+      map('i', '<C-y>', function() new_in_view() end)
+      map('n', '<C-y>', function() new_in_view() end)
+      map('i', '<C-y><C-v>', function() new_in_view('right') end)
+      map('n', '<C-y><C-v>', function() new_in_view('right') end)
+      map('i', '<C-y><C-x>', function() new_in_view('left') end)
+      map('n', '<C-y><C-x>', function() new_in_view('left') end)
       map('i', '<C-b>', go_back)
       map('n', '<C-b>', go_back)
       map('i', '<C-p>', go_parent)
@@ -1371,12 +1391,18 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
   vim.keymap.set('n', '<C-a>', bulk_actions,   ko)
   -- This float is a normal-mode buffer, so it answers to both spellings: `N`
   -- reads naturally here, `<C-y>` is what the Telescope surfaces must use.
-  local function new_in_view()
+  -- Only `<C-y>` carries the split chords, so a bare `N` fires at once instead
+  -- of waiting out 'timeoutlen' to see whether a `<C-v>` is coming.
+  ---@param where nil|'left'|'right'
+  local function new_in_view(where)
+    local target = where or count_target()
     close()
-    vim.schedule(function() new_note_in(name) end)
+    vim.schedule(function() new_note_in(name, target) end)
   end
-  vim.keymap.set('n', 'N',     new_in_view, ko)
-  vim.keymap.set('n', '<C-y>', new_in_view, ko)
+  vim.keymap.set('n', 'N',          function() new_in_view() end, ko)
+  vim.keymap.set('n', '<C-y>',      function() new_in_view() end, ko)
+  vim.keymap.set('n', '<C-y><C-v>', function() new_in_view('right') end, ko)
+  vim.keymap.set('n', '<C-y><C-x>', function() new_in_view('left') end, ko)
   vim.keymap.set('n', '<C-b>', go_back,        ko)
   vim.keymap.set('n', '<C-p>', go_parent,      ko)
   vim.keymap.set('n', '<C-s>', go_children,    ko)
@@ -1404,7 +1430,8 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       '  <CR>     open note / enter subview',
       '  <Tab>    mark note   (<S-Tab> mark and go up)',
       '  <C-a>    bulk actions on marked notes (or all listed)',
-      '  N        new note, already in this view  (or <C-y>)',
+      '  N        new note, already in this view  ([count]N = window N)',
+      '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
       '  <C-b>    back to views panel',
       '  <C-p>    go to parent view',
       '  <C-s>    go to subviews',
@@ -1705,10 +1732,11 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
       -- A note that starts out matching the view under the cursor. `n` already
       -- means "new view" here, so the note is `N` — and `<C-y>` for the prompt,
       -- where a bare letter would just be typed.
-      local function new_in_view()
+      ---@param where nil|'left'|'right'
+      local function new_in_view(where)
         local sel = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
-        if sel then vim.schedule(function() new_note_in(sel.value) end) end
+        if sel then vim.schedule(function() new_note_in(sel.value, where) end) end
       end
 
       local function do_help()
@@ -1716,6 +1744,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
           '  <CR>     open view',
           '  <C-a>    bulk actions on this view\'s notes',
           '  N        new note, already in this view  (or <C-y>)',
+          '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
           '  <C-f>    browse all notes',
           '  n        new view',
           '  u        update view (rename/reparent/edit filter)',
@@ -1725,9 +1754,13 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
 
       map('i', '<C-a>', bulk_actions)
       map('n', '<C-a>', bulk_actions)
-      map('i', '<C-y>', new_in_view)
-      map('n', '<C-y>', new_in_view)
-      map('n', 'N', new_in_view)
+      map('i', '<C-y>', function() new_in_view() end)
+      map('n', '<C-y>', function() new_in_view() end)
+      map('n', 'N',     function() new_in_view() end)
+      map('i', '<C-y><C-v>', function() new_in_view('right') end)
+      map('n', '<C-y><C-v>', function() new_in_view('right') end)
+      map('i', '<C-y><C-x>', function() new_in_view('left') end)
+      map('n', '<C-y><C-x>', function() new_in_view('left') end)
       map('i', '<C-f>', go_browse)
       map('n', '<C-f>', go_browse)
       map('n', 'n', do_new)
@@ -1930,8 +1963,23 @@ local _views_panel = panel.create({
       if state.mode == 'browse' then return end
       local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
       if not name then return end
+      local where = count_target()
       helpers.close()
-      vim.schedule(function() new_note_in(name) end)
+      vim.schedule(function() new_note_in(name, where) end)
+    end,
+    ['<C-y><C-v>'] = function(state, helpers)
+      if state.mode == 'browse' then return end
+      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not name then return end
+      helpers.close()
+      vim.schedule(function() new_note_in(name, 'right') end)
+    end,
+    ['<C-y><C-x>'] = function(state, helpers)
+      if state.mode == 'browse' then return end
+      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not name then return end
+      helpers.close()
+      vim.schedule(function() new_note_in(name, 'left') end)
     end,
     ['u'] = function(state, helpers)
       if state.mode == 'browse' then return end
@@ -1964,7 +2012,8 @@ local _views_panel = panel.create({
         show_keymap_help(' PKM Views Keymaps ', {
           '  <CR>     open view',
           '  n        new view',
-          '  N        new note, already in this view',
+          '  N        new note, already in this view  ([count]N = window N)',
+          '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
           '  u        update view (rename/reparent/edit filter)',
           '  <C-a>    bulk actions on this view\'s notes',
           '  <C-f>    browse all notes',
@@ -2602,7 +2651,8 @@ local function sidebar_show_help()
     '  2<CR>    open note in the 2nd window  ([count]<CR>, leftmost = 1)',
     '  <Tab>    mark note   (<S-Tab> mark and go up)',
     '  <C-a>    bulk actions on marked notes (or all listed)',
-    '  N        new note, already in this view',
+    '  N        new note, already in this view  ([count]N = window N)',
+    '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
     '  <C-v>    open note in new vertical split',
     '  <C-t>    cycle type filter  (all/n/a/b/j/s)',
     '  T        toggle filename / title labels',
@@ -2930,12 +2980,19 @@ function M.open_sidebar(name)
   end, ko)
 
   -- N: a new note that already matches the view — the one under the cursor in
-  -- overview mode, the one being listed in detail mode.
-  vim.keymap.set('n', 'N', function()
+  -- overview mode, the one being listed in detail mode. `[count]N` puts it in
+  -- the nth window, and the `<C-y>` chords split, exactly as opening does.
+  ---@param where nil|'left'|'right'|integer
+  local function new_here(where)
     local ct  = get_tab()
     local row = vim.api.nvim_win_get_cursor(ct.win)[1]
-    new_note_in(ct.mode == 'overview' and ct.view_lines[row] or ct.name)
-  end, ko)
+    new_note_in(ct.mode == 'overview' and ct.view_lines[row] or ct.name, where)
+  end
+
+  vim.keymap.set('n', 'N',          function() new_here(count_target()) end, ko)
+  vim.keymap.set('n', '<C-y>',      function() new_here(count_target()) end, ko)
+  vim.keymap.set('n', '<C-y><C-v>', function() new_here('right') end, ko)
+  vim.keymap.set('n', '<C-y><C-x>', function() new_here('left')  end, ko)
 
   -- <C-v>: open note in a new vertical split (detail mode only)
   vim.keymap.set('n', '<C-v>', function()

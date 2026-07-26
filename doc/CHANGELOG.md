@@ -4,19 +4,22 @@
 
 ## [Unreleased]
 
-*The sections after **Added** are living project state, not release notes: they
+*The sections after **Fixed** are living project state, not release notes: they
 are carried forward from version to version and consulted before any fix.*
 
-### Fixed
--   **The frontmatter fold broke after a bulk tag write (v1.9.0 Ph1).** Adding
-    a note to a view changes the frontmatter's line count, and the fold is
-    `foldmethod=manual` — it does not survive a buffer reload at all — so the
-    bottom of the block sat outside its own fold until the next save happened
-    to rebuild it. `bufsync.reload` now calls `syntax.refresh_fold` on every
-    buffer it re-reads, which is what the rest of the plugin already did after
-    a frontmatter mutation.
-
 ### Added
+-   **The new note can say where to open (v1.9.0 Ph2).** `[count]N` puts it in
+    the *count*th editing window from the left, exactly as `[count]<CR>` already
+    opens an existing note there; `<C-y><C-v>` and `<C-y><C-x>` put it in a
+    split to the right or the left, mirroring `<C-v>`/`<C-x>`. A bare `N` keeps
+    firing immediately — only `<C-y>` carries the chords, so the common key
+    never waits out `timeoutlen`.
+-   **`:PKMNewNote [note|agg|bib] [left|right|N]`** — the same placements from
+    the command line, as arguments rather than a second command. Both arguments
+    are optional and order-free: the type comes from a closed set and the
+    placement is a side or a number, so neither can be read as the other. An
+    argument that is neither says so instead of being ignored.
+
 -   **A note can be born inside a view (v1.9.0 Ph2).** `N` in the views panel
     and the sidebar — `<C-y>` in the Telescope pickers, where a bare letter
     would just be typed into the prompt — creates a new note whose tags already
@@ -81,6 +84,30 @@ are carried forward from version to version and consulted before any fix.*
     multi-word name, either verb, a verb with no name, an unknown name, and a
     view actually called `add`), then the flow over a real corpus: a named view
     opens no menu, a wrong one is refused, and provenance does not override it.
+
+### Fixed
+-   **Creating a note from a panel crashed with E1513 (v1.9.0 Ph2).** Panels set
+    `winfixbuf`, so `:edit` from one is a hard error rather than a hijacked
+    panel — the intended trade — but `create_new_note` opened the new note in
+    whatever window was current. `:PKMNewNote` guarded itself with its own
+    private `focus_main_win()`; nothing else did, so creating from the sidebar
+    (and `<leader>nn` from the buffer panel) failed at the last step.
+    **`create_new_note` now owns the guard**, since it is the function that
+    opens a buffer, and every caller is covered by construction.
+-   **`utils.focus_editing_win(where)`, `utils.editing_wins()`,
+    `utils.is_editing_win(win)`** — the search for "a window a note may be
+    opened in" existed twice already (`commands`, `views`) and creation needed a
+    third copy. It lives in `utils` now. When no such window exists it makes
+    one **against the panel it is leaving**: beside a sidebar, above a buffer
+    panel, so the result lands where the eye expects it.
+
+-   **The frontmatter fold broke after a bulk tag write (v1.9.0 Ph1).** Adding
+    a note to a view changes the frontmatter's line count, and the fold is
+    `foldmethod=manual` — it does not survive a buffer reload at all — so the
+    bottom of the block sat outside its own fold until the next save happened
+    to rebuild it. `bufsync.reload` now calls `syntax.refresh_fold` on every
+    buffer it re-reads, which is what the rest of the plugin already did after
+    a frontmatter mutation.
 
 ### Known Bugs (queued)
 
