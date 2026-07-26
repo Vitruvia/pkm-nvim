@@ -63,6 +63,7 @@
 --   batch_flow(kind)       → the same, for callers that must first build one
 --   view_membership(paths) → { {name, paths, total}… } — which views hold them
 --   view_flow(paths, kind, ctx?) → add to / remove from a view, by tags
+--   new_note_in_view(name, on_done?) → create a note already inside a view
 -- =============================================================================
 
 local M = {}
@@ -1113,6 +1114,76 @@ function M.view_flow(paths, kind, ctx)
     preview_title = 'This view, and your selection',
     on_back       = ctx.on_back,
   }, enter)
+end
+
+--- Create a note that already belongs to a view.
+---
+--- The same question as `view_flow('add')`, asked before the note exists: which
+--- tags make this view's filter match. Because the note is new it carries none,
+--- so only the tags to *add* matter and there is nothing to remove — and the
+--- tags are seeded at creation rather than written afterwards, so the note is
+--- born matching instead of being edited into place.
+---
+--- A view tags cannot fully satisfy does not block creation: the note is still
+--- created with whatever tags do apply, and the condition in the way is named,
+--- because "this will not match until you write the title" is information the
+--- author needs *while* writing the note, not instead of it.
+---@param name string        The view the note should belong to
+---@param on_done function|nil  Called with the created path, when one was
+function M.new_note_in_view(name, on_done)
+  local views = require('pkm.views')
+  local notes = require('pkm.notes')
+
+  local tree, err = views.get_tree(name)
+  if not tree then
+    vim.notify('[pkm] ' .. (err or 'view has no filter'), vim.log.levels.ERROR)
+    return
+  end
+
+  local alts = require('pkm.filter').tag_sets(tree)
+
+  ---@param alt table|nil
+  local function create(alt)
+    local seeds = alt and alt.add or {}
+    if alt and #alt.blockers > 0 then
+      vim.notify(string.format(
+        "[pkm] '%s' also requires %s — the new note will not match until that "
+        .. 'is true', name, alt.blockers[1]), vim.log.levels.WARN)
+    end
+
+    local path = notes.create_new_note(nil, { tags = seeds })
+    -- create_new_note returns nil when it still has prompts to run; it finishes
+    -- on its own either way, and the caller only ever wants the refresh.
+    if on_done then on_done(path) end
+  end
+
+  -- Tags alone cannot reach it at all: still worth creating, still worth
+  -- saying so.
+  if #alts == 0 then
+    vim.notify(string.format(
+      "[pkm] '%s' cannot be satisfied by tags — creating a plain note", name),
+      vim.log.levels.WARN)
+    create(nil)
+    return
+  end
+
+  -- Prefer the alternatives tags can actually satisfy; fall back to the
+  -- blocked ones so the warning above has something to name.
+  local usable = {}
+  for _, alt in ipairs(alts) do
+    if #alt.blockers == 0 and #alt.add > 0 then usable[#usable + 1] = alt end
+  end
+  if #usable == 0 then usable = alts end
+
+  if #usable == 1 then
+    create(usable[1])
+    return
+  end
+
+  require('pkm.picker').choose(usable, {
+    title   = string.format("New note in '%s' — which tags?", name),
+    display = describe_alt,
+  }, create)
 end
 
 return M

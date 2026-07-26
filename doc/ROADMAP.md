@@ -186,7 +186,7 @@ v1.8.1  PATCH  Defects from the v1.8.0 smoke pass  ✅ released 26/7/2026, tagge
 
 v1.9.0  MINOR  Views from where you already are             (next)
         Ph1 :PKMView add|remove <name> on the current note  ✅ done
-          Ph2 create a note already inside a view
+          Ph2 create a note already inside a view  ✅ done
 v1.10.0 MINOR  Header navigation                           (no deps)
         Ph1 any-level header jumps   (was v1.7.0 Ph3)
 ```
@@ -275,13 +275,15 @@ view name exactly mean open**. Two decisions carry into Phase 2:
 argument belongs, and `ctx.target` — a view the user named — is a different
 field from `ctx.view`, which only orders.
 
-**Phase 2 — create a note already inside a view.** A new key on the view
-surfaces (`N`, since `n` already creates a *view* in the panel): compute
-`filter.tag_sets` for the view under the cursor and **seed the tags at
-creation** — `notes.create_new_note(type, { tags = … })` already accepts them,
-so the note is born matching the view with no second write. More than one
-alternative asks; a blocker (`title:`, `type:`, …) warns that the note may not
-match.
+**Phase 2 — create a note already inside a view.** ✅ *Shipped; the detail is in
+`doc/CHANGELOG.md`.* `N` in the normal-mode surfaces, `<C-y>` in the Telescope
+ones, both reaching a single helper wired at all five view surfaces in one
+pass. The decision that carries: **a key that belongs to "the view surfaces"
+goes through one helper**, because wiring them one at a time is what made
+`<C-a>` take three attempts.
+
+**v1.9.0 is complete.** What remains is the release itself: tag after a smoke
+pass over the view surfaces.
 
 ---
 

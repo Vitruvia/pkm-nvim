@@ -17,6 +17,31 @@ are carried forward from version to version and consulted before any fix.*
     a frontmatter mutation.
 
 ### Added
+-   **A note can be born inside a view (v1.9.0 Ph2).** `N` in the views panel
+    and the sidebar — `<C-y>` in the Telescope pickers, where a bare letter
+    would just be typed into the prompt — creates a new note whose tags already
+    satisfy the view under the cursor. It is the same question `view_flow`
+    asks, put before the note exists: because a new note carries no tags, only
+    the tags to *add* matter, and they are **seeded at creation**
+    (`notes.create_new_note(type, { tags = … })`) rather than written
+    afterwards. The note is born matching instead of being edited into place.
+-   **`tags.new_note_in_view(name, on_done?)`** — one alternative goes straight
+    through, several ask which. A view tags cannot fully reach does **not**
+    block creation: the note is created with whatever tags do apply and the
+    condition in the way is named, because "this will not match until you write
+    the title" is something the author needs to know *while* writing the note,
+    not instead of it.
+-   **Wired at every view surface in one pass**, through a single helper: the
+    Telescope views tree, a view's own note list in both back-ends, the
+    no-Telescope views panel, and the sidebar in both modes. Browse-all-notes
+    is deliberately excluded — there is no view under the cursor there. This is
+    the sweep `<C-a>` needed three attempts to get right, and the helper exists
+    so it stays one edit rather than six.
+-   `test/test_v190_p2.lua` — seeding for a single tag, for two, and for a
+    chosen branch of an `OR`; the partially-reachable view (tag seeded, blocker
+    named, note still created); the title-only view; an unknown view creating
+    nothing; and the two surfaces that are plain buffers actually carrying the
+    key. The Telescope panels stay smoke-only, as always.
 -   **`:PKMView add|remove <name>` acts on the note you have open (v1.9.0
     Ph1).** No new command: the verbs are arguments, so `:PKMView leituras`
     still opens a view and nothing that worked before reads differently. It is

@@ -918,6 +918,23 @@ end
 --- built-in '?' which-key float (which shows every custom map() binding as
 --- "anonymous", since none of them were given a description) with a
 --- curated list instead.
+--- Create a note that already belongs to `name`, then refresh what is open.
+---
+--- Shared by every view surface, because a key wired into some of them is the
+--- failure this file has already had twice: `<C-a>` was missing from the views
+--- picker, then from a view's own note list, and each was found only by using
+--- it. One helper, wired at the same six places, is the guard against a third.
+---@param name string|nil
+local function new_note_in(name)
+  if not name or name == '' then
+    vim.notify('[pkm] no view here', vim.log.levels.INFO)
+    return
+  end
+  require('pkm.tags').new_note_in_view(name, function()
+    M.refresh_sidebar_if_open()
+  end)
+end
+
 ---@param title string
 ---@param lines string[]  Already-formatted "  <key>   description" lines
 local function show_keymap_help(title, lines)
@@ -1114,11 +1131,17 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
         end)
       end
 
+      local function new_in_view()
+        actions.close(prompt_bufnr)
+        vim.schedule(function() new_note_in(name) end)
+      end
+
       local function do_help()
         show_keymap_help(' PKMView Keymaps ', {
           '  <CR>     open note / enter subview',
           '  <Tab>    mark note',
           '  <C-a>    bulk actions on marked notes (or all listed)',
+          '  <C-y>    new note, already in this view',
           '  <C-b>    back to views panel',
           '  <C-p>    go to parent view',
           '  <C-s>    go to subviews',
@@ -1139,6 +1162,8 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
 
       map('i', '<C-a>', bulk_actions)
       map('n', '<C-a>', bulk_actions)
+      map('i', '<C-y>', new_in_view)
+      map('n', '<C-y>', new_in_view)
       map('i', '<C-b>', go_back)
       map('n', '<C-b>', go_back)
       map('i', '<C-p>', go_parent)
@@ -1344,6 +1369,14 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
   vim.keymap.set('n', '<Tab>',   function() toggle_mark_at_cursor(1)  end, ko)
   vim.keymap.set('n', '<S-Tab>', function() toggle_mark_at_cursor(-1) end, ko)
   vim.keymap.set('n', '<C-a>', bulk_actions,   ko)
+  -- This float is a normal-mode buffer, so it answers to both spellings: `N`
+  -- reads naturally here, `<C-y>` is what the Telescope surfaces must use.
+  local function new_in_view()
+    close()
+    vim.schedule(function() new_note_in(name) end)
+  end
+  vim.keymap.set('n', 'N',     new_in_view, ko)
+  vim.keymap.set('n', '<C-y>', new_in_view, ko)
   vim.keymap.set('n', '<C-b>', go_back,        ko)
   vim.keymap.set('n', '<C-p>', go_parent,      ko)
   vim.keymap.set('n', '<C-s>', go_children,    ko)
@@ -1371,6 +1404,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       '  <CR>     open note / enter subview',
       '  <Tab>    mark note   (<S-Tab> mark and go up)',
       '  <C-a>    bulk actions on marked notes (or all listed)',
+      '  N        new note, already in this view  (or <C-y>)',
       '  <C-b>    back to views panel',
       '  <C-p>    go to parent view',
       '  <C-s>    go to subviews',
@@ -1668,10 +1702,20 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
           })
         end)
       end
+      -- A note that starts out matching the view under the cursor. `n` already
+      -- means "new view" here, so the note is `N` — and `<C-y>` for the prompt,
+      -- where a bare letter would just be typed.
+      local function new_in_view()
+        local sel = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        if sel then vim.schedule(function() new_note_in(sel.value) end) end
+      end
+
       local function do_help()
         show_keymap_help(' PKM Views Keymaps ', {
           '  <CR>     open view',
           '  <C-a>    bulk actions on this view\'s notes',
+          '  N        new note, already in this view  (or <C-y>)',
           '  <C-f>    browse all notes',
           '  n        new view',
           '  u        update view (rename/reparent/edit filter)',
@@ -1681,6 +1725,9 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
 
       map('i', '<C-a>', bulk_actions)
       map('n', '<C-a>', bulk_actions)
+      map('i', '<C-y>', new_in_view)
+      map('n', '<C-y>', new_in_view)
+      map('n', 'N', new_in_view)
       map('i', '<C-f>', go_browse)
       map('n', '<C-f>', go_browse)
       map('n', 'n', do_new)
@@ -1876,6 +1923,16 @@ local _views_panel = panel.create({
       helpers.close()
       vim.schedule(function() vim.cmd('PKMViewNew') end)
     end,
+    -- `n` is a new *view*, so a new *note* — one that starts out matching the
+    -- view under the cursor — is `N`. Only in the views mode: browse mode has
+    -- notes under the cursor, not views.
+    ['N'] = function(state, helpers)
+      if state.mode == 'browse' then return end
+      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not name then return end
+      helpers.close()
+      vim.schedule(function() new_note_in(name) end)
+    end,
     ['u'] = function(state, helpers)
       if state.mode == 'browse' then return end
       local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
@@ -1907,6 +1964,7 @@ local _views_panel = panel.create({
         show_keymap_help(' PKM Views Keymaps ', {
           '  <CR>     open view',
           '  n        new view',
+          '  N        new note, already in this view',
           '  u        update view (rename/reparent/edit filter)',
           '  <C-a>    bulk actions on this view\'s notes',
           '  <C-f>    browse all notes',
@@ -2541,9 +2599,10 @@ end
 local function sidebar_show_help()
   local lines = {
     '  <CR>     open note / enter view',
-    '  N<CR>    open note in window N (leftmost = 1)',
+    '  2<CR>    open note in the 2nd window  ([count]<CR>, leftmost = 1)',
     '  <Tab>    mark note   (<S-Tab> mark and go up)',
     '  <C-a>    bulk actions on marked notes (or all listed)',
+    '  N        new note, already in this view',
     '  <C-v>    open note in new vertical split',
     '  <C-t>    cycle type filter  (all/n/a/b/j/s)',
     '  T        toggle filename / title labels',
@@ -2868,6 +2927,14 @@ function M.open_sidebar(name)
     -- The sidebar always knows which view it is showing, so a view action
     -- never has to ask.
     require('pkm.actions').run(paths, { view = view })
+  end, ko)
+
+  -- N: a new note that already matches the view — the one under the cursor in
+  -- overview mode, the one being listed in detail mode.
+  vim.keymap.set('n', 'N', function()
+    local ct  = get_tab()
+    local row = vim.api.nvim_win_get_cursor(ct.win)[1]
+    new_note_in(ct.mode == 'overview' and ct.view_lines[row] or ct.name)
   end, ko)
 
   -- <C-v>: open note in a new vertical split (detail mode only)
