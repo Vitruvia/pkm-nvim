@@ -182,7 +182,7 @@ v1.8.0  MINOR  Bulk metadata operations  ✅ released 25/7/2026, tagged
 v1.8.1  PATCH  Defects from the v1.8.0 smoke pass          (next)
         Ph1 view membership offers the wrong views  ✅ done
           Ph2 confirmation on every removal  ✅ done
-            Ph3 the undo cursor — reproduce, then fix
+            Ph3 the undo cursor — reproduce, then fix  ✅ done
 v1.9.0  MINOR  Views from where you already are            (after v1.8.1)
         Ph1 :PKMView add|remove <name> on the current note
           Ph2 create a note already inside a view
@@ -266,11 +266,25 @@ bug-prevention design rules*, with its exemptions written down. The audit found
 one violation — `D` in the buffer panel discarding unsaved edits without a word
 — and it now asks whenever, and only when, something would be lost.
 
-**Phase 3 — the undo cursor, reproduced before it is fixed.** `u` still lands on
-the frontmatter timestamp sometimes; the suspects and the history are in
-`doc/CHANGELOG.md` § Known Bugs. **The repro comes first** — open a note, edit a
-middle line, `:w`, `u`, assert the cursor line — because the three previous
-fixes were made without one, which is why the bug keeps returning.
+**Phase 3 — the undo cursor.** ✅ *Shipped; the detail is in
+`doc/CHANGELOG.md`.* The reproduction came first, and it is what ended the
+cycle: Neovim recomputes the post-`u` cursor from the changed region, so every
+previous fix — all of which adjusted the cursor — could not have worked.
+`BufWritePre` no longer touches the buffer; `last_updated_on` is stamped onto
+the file when the note is released.
+
+Three decisions from it constrain later work:
+
+-   **Nothing the plugin does may enter the user's undo block.** A buffer
+    mutation during the write cycle drags `u` off the edit, and no cursor
+    handling repairs it.
+-   **A mutation from a scheduled callback leaves the undo block open** and
+    absorbs whatever the user types next. Force the break with
+    `let &undolevels = &undolevels`; setting it to `-1` discards the history.
+-   **`last_updated_on` has no consumer.** Recency is the filesystem mtime the
+    index stores. Anything tempted to read the field should read `entry.mtime`
+    instead — and must not trust it as a record of human editing, since Drive
+    sync, restores and checkouts all push mtime forward.
 
 ---
 

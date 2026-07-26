@@ -24,6 +24,13 @@ local M = {}
 -- Populated by BufWritePre before any buffer modification; consumed by BufWritePost.
 local _pre_write_fold_states = {}
 
+-- Notes saved at least once since they were opened: bufnr → true.
+-- `last_updated_on` is stamped onto the *file* when such a buffer is released
+-- (see stamp_on_release), never into the buffer while it is being edited —
+-- writing it during the write cycle is what dragged `u` into the frontmatter.
+-- The flag is what keeps a note that was merely opened and closed untouched.
+local _saved_since_open = {}
+
 -- =============================================================================
 -- SECTION: Setup
 -- =============================================================================
@@ -59,15 +66,82 @@ end
 -- =============================================================================
 -- SECTION: Sync autocmds
 -- =============================================================================
+
+--- Is this path a note inside the PKM root?
+---@param filepath string
+---@return boolean
+local function in_root(filepath)
+  if not filepath or filepath == '' then return false end
+  local norm_path = filepath:gsub('\\', '/')
+  local norm_root = (M.config.root_path or ''):gsub('\\', '/')
+  if norm_root == '' then return false end
+  return norm_path:lower():find(norm_root:lower(), 1, true) ~= nil
+end
+
+--- Does the buffer's content differ from these lines?
+--- Cheap enough to run on every save: it stops at the first difference, and
+--- the common case (identical) is one pass over lines already in memory.
+---@param bufnr integer
+---@param lines string[]
+---@return boolean
+local function differs(bufnr, lines)
+  local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  if #buf_lines ~= #lines then return true end
+  for i = 1, #lines do
+    if buf_lines[i] ~= lines[i] then return true end
+  end
+  return false
+end
+
+--- Write `last_updated_on` into the note **on disk**, for a buffer that is
+--- being released.
+---
+--- This is where the field is maintained, and the timing is the whole point.
+--- Writing it during the write cycle — as `BufWritePre` used to — puts the
+--- frontmatter rewrite in the same undo block as the user's edit, and Neovim
+--- positions the cursor after `u` on the *first changed line of the block*.
+--- The frontmatter sits above the body, so `u` always landed there. No amount
+--- of saving and restoring the cursor changes that: the position is recomputed
+--- from the changed region, which is why three previous attempts at this bug
+--- failed. The only fix is not to touch the buffer while it is being edited.
+---
+--- The buffer is on its way out, so writing the file behind it cannot
+--- desynchronise anything the user is looking at, and nothing in the plugin
+--- reads this field — recency comes from the filesystem mtime the index
+--- already stores.
+---@param bufnr integer
+local function stamp_on_release(bufnr)
+  if not _saved_since_open[bufnr] then return end
+  _saved_since_open[bufnr] = nil
+
+  local ok, filepath = pcall(vim.api.nvim_buf_get_name, bufnr)
+  if not ok or not in_root(filepath) or not filepath:match('%.md$') then return end
+  if vim.fn.filereadable(filepath) ~= 1 then return end   -- trashed or renamed
+
+  local lines_ok, lines = pcall(vim.fn.readfile, filepath)
+  if not lines_ok or not lines or lines[1] ~= '---' then return end
+
+  local yaml_m = require('pkm.yaml')
+  local frontmatter, content_start = yaml_m.parse_frontmatter(lines)
+  if not frontmatter then return end
+  if frontmatter.cites and type(frontmatter.cites) ~= 'table' then return end
+
+  frontmatter.last_updated_on = require('pkm.timestamp').to_iso8601()
+  pcall(yaml_m.save_frontmatter, frontmatter, content_start, filepath)
+  pcall(function() require('pkm.index').invalidate(filepath) end)
+end
+
 --- Register BufWritePost and BufReadPost autocmds for the PKMSync augroup.
---- BufWritePost: updates last_updated_on, syncs journal filename to created_on, updates citations.
+--- BufWritePost: syncs journal filename to created_on, updates citations.
+--- BufDelete/VimLeavePre: stamps last_updated_on onto released notes.
 --- BufReadPost: registers buffer-local symbol abbreviations for PKM notes.
 --- Only fires for .md files within M.config.root_path.
 function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
 
-  -- Update last_updated_on in the buffer before the write.
-  -- Neovim then writes the updated buffer to disk in the normal save cycle.
+  -- Before the write: capture fold state, and remember that this note was
+  -- saved. The frontmatter is deliberately NOT touched here — see
+  -- stamp_on_release() for where `last_updated_on` is written and why.
   vim.api.nvim_create_autocmd("BufWritePre", {
     group = augroup, pattern = "*.md",
     callback = function()
@@ -76,9 +150,11 @@ function M.setup_sync_autocmds()
       local norm_root = M.config.root_path:gsub("\\", "/")
       if not norm_path:lower():find(norm_root:lower(), 1, true) then return end
 
+      local pre_buf = vim.api.nvim_get_current_buf()
+      _saved_since_open[pre_buf] = true
+
       -- Capture fold states before any buffer modification so BufWritePost can
       -- restore them even if sync parser:parse() or noautocmd e closes them.
-      local pre_buf = vim.api.nvim_get_current_buf()
       if require('pkm.mode').is_active() then
         local fold_capture = {}
         for _, win in ipairs(vim.fn.win_findbuf(pre_buf)) do
@@ -89,35 +165,24 @@ function M.setup_sync_autocmds()
         end
         _pre_write_fold_states[pre_buf] = fold_capture
       end
-    
-      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-      if not lines or lines[1] ~= "---" then return end
+    end,
+  })
 
-      local yaml_m      = require('pkm.yaml')
-      local timestamp_m = require('pkm.timestamp')
-      local frontmatter, content_start = yaml_m.parse_frontmatter(lines)
-      if not frontmatter then return end
-      if frontmatter.cites and type(frontmatter.cites) ~= "table" then return end
+  -- The note is leaving: stamp it now, when no undo history is at stake.
+  -- BufDelete rather than BufUnload, because `:edit` unloads and reloads a
+  -- buffer that is not going anywhere, and stamping there would write the file
+  -- underneath a reload already in progress.
+  vim.api.nvim_create_autocmd('BufDelete', {
+    group = augroup, pattern = '*.md',
+    callback = function(ev) stamp_on_release(ev.buf) end,
+  })
 
-      frontmatter.last_updated_on = timestamp_m.to_iso8601()
-      -- Capture the cursor position before the frontmatter rewrite below.
-      -- Undo restores the cursor to wherever the LAST buffer mutation in
-      -- the merged undo step happened -- since save_frontmatter() runs
-      -- after the user's own edit (below), an unguarded undo would land
-      -- on the timestamp instead of what the user actually changed.
-      local cursor_before = vim.api.nvim_win_get_cursor(0)
-      -- Merge into the same undo block as the user's last edit so `u` doesn't
-      -- need an extra press to reach it. pcall guards E790 (undojoin not allowed
-      -- right after undo/redo) and the case where there's no prior change to
-      -- join (e.g. :w immediately after opening the file, no edits yet).
-      pcall(vim.cmd, 'undojoin')
-      yaml_m.save_frontmatter(frontmatter, content_start)  -- Case A: buffer update, no disk write
-      -- Restore the cursor to the user's edit location so a later undo
-      -- seals that position, not wherever the frontmatter rewrite left it.
-      -- Clamped: the frontmatter block's own line count can change.
-      local last_line = vim.api.nvim_buf_line_count(0)
-      pcall(vim.api.nvim_win_set_cursor, 0,
-        { math.min(cursor_before[1], last_line), cursor_before[2] })
+  vim.api.nvim_create_autocmd('VimLeavePre', {
+    group = augroup,
+    callback = function()
+      for bufnr in pairs(_saved_since_open) do
+        if vim.api.nvim_buf_is_valid(bufnr) then stamp_on_release(bufnr) end
+      end
     end,
   })
 
@@ -171,10 +236,27 @@ function M.setup_sync_autocmds()
         vim.api.nvim_buf_call(written_buf, function()
           local view = vim.fn.winsaveview()
           local ok_read, reload_lines = pcall(vim.fn.readfile, filepath)
-          if ok_read then
-            pcall(vim.cmd, 'undojoin')
+          -- Replace only when the file actually differs from the buffer. The
+          -- reload exists for what update_references wrote into *this* note;
+          -- when nothing wrote, replacing the buffer with its own content still
+          -- costs an undo entry, and an undo entry is what drags `u` off the
+          -- user's edit.
+          if ok_read and differs(written_buf, reload_lines) then
             pcall(vim.api.nvim_buf_set_lines, written_buf, 0, -1, false, reload_lines)
             pcall(vim.cmd, 'noautocmd write!')
+            -- `:undojoin` is deliberately absent: this change is the plugin's,
+            -- not the user's, and merging it into their block is the defect
+            -- this phase exists to remove.
+            --
+            -- Seal it as its own undo block. A buffer mutation made from a
+            -- scheduled callback leaves the block *open* — Neovim closes one
+            -- when a command finishes in the main loop, and there is no command
+            -- here — so without this the next thing the user types is absorbed
+            -- into the reload's state, and a single `u` reverts their edit and
+            -- the reload together, landing on line 1. `let &ul = &ul` is the
+            -- documented way to force the break; setting undolevels to -1 and
+            -- back is *not* the same thing, it discards the history entirely.
+            pcall(vim.cmd, 'let &undolevels = &undolevels')
           end
           vim.fn.winrestview(view)
           -- noautocmd e is no longer used, so there's no modeline-scan risk

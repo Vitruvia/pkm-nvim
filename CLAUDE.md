@@ -41,8 +41,12 @@ conflict, say so explicitly rather than silently choosing one.
 ## Fixed facts (never reconstruct from memory)
 
 - Repo root — WSL: `/mnt/p/Active/pkm-nvim`  ·  Windows: `P:\Active\pkm-nvim`
-- Git remote name: `pkm-nvim` (**not** `origin`). Dev branch: `dev`. Release
-  branch: `main`.
+- Git remote name: `pkm-nvim` (**not** `origin`). **All development happens on
+  `dev`**, including releases: a version is closed and tagged on `dev`. `main`
+  is **not** a release line — it holds periodic stable backups of `dev`, merged
+  via the `pkm-merge` alias, and only when the user asks. `push.followTags` is
+  set on this repo, so an annotated tag rides along with the user's ordinary
+  `git push`; the tag is still mine to create, the push still theirs.
 - Reference materials (read-only): `/mnt/p/Recursos/<subpasta>` /
   `P:\Recursos\<subpasta>` — e.g. *Programming in Lua, 4th ed.* Consult for
   language semantics; the Lua 5.4 manual remains the higher authority.

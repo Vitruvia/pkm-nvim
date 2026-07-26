@@ -8,6 +8,45 @@
 are carried forward from version to version and consulted before any fix.*
 
 ### Fixed
+-   **`u` landed on the frontmatter timestamp (v1.8.1 Ph3).** Fixed three times
+    before and back every time, because every attempt adjusted the cursor. The
+    reproduction settles it: Neovim positions the cursor after `u` on the
+    **first changed line of the undo block**, recomputed from the changed
+    region — so saving and restoring the cursor around the rewrite, which is
+    what `BufWritePre` did, provably cannot work. Measured on all four
+    strategies: `undojoin` → frontmatter; no join → frontmatter; cursor
+    restored first → frontmatter; `undolevels = -1` → right cursor but the undo
+    history is **discarded**, which is worse than the bug.
+
+    The cause was structural: `yaml.save_frontmatter` replaces the *whole*
+    frontmatter block, and `BufWritePre` merged that into the user's undo block
+    on every save. The frontmatter sits above the body, so `u` always landed
+    there. **`BufWritePre` no longer touches the buffer.**
+-   **`last_updated_on` is now written to the file when the note is released**
+    (`BufDelete`, `VimLeavePre`), and only for notes actually saved during the
+    session — opening a note and closing it leaves it untouched. The buffer is
+    never rewritten while it is being edited, so buffer and disk stay identical
+    throughout, and `u` lands on the edit at the first press. Nothing in the
+    plugin reads this field: recency comes from the filesystem mtime the index
+    already stores (`index.lua`), which is what `:PKMBrowseRecent` and the
+    sidebar sort by. `yaml.update_timestamp()` remains dead code — it had no
+    callers before this change either.
+-   **The post-write reload was swallowing the user's next edit (found while
+    fixing the above).** After the reload replaced the buffer, the undo block
+    was left *open* — Neovim closes one when a command finishes in the main
+    loop, and a scheduled callback is not a command — so whatever the user
+    typed next was absorbed into the reload's undo state, and one `u` reverted
+    the edit *and* the reload together. The reload now forces the break
+    (`let &undolevels = &undolevels`, which unlike setting it to `-1` keeps the
+    history) and no longer joins the user's block at all. It is also skipped
+    entirely when the file on disk already matches the buffer, which is every
+    save that did not change a backlink.
+-   `test/test_v181_p3.lua` — the reproduction, kept as the regression test:
+    edit a body line, save, undo, and ask only where the cursor is. Covers a
+    fresh note (whose first save legitimately expands the frontmatter), the
+    same buffer in two windows, the steady state of an already-normalised note,
+    and the stamp itself — present after release, absent when the note was only
+    read.
 -   **`D` in the buffer panel threw away unsaved work without asking
     (v1.8.1 Ph2).** It ran `bdelete!` straight through, so force-closing a
     modified buffer lost the edits silently — which was the entire difference
@@ -73,19 +112,6 @@ are carried forward from version to version and consulted before any fix.*
     views at once, and removing with them in none.
 
 ### Known Bugs (queued)
-
--   **`u` still lands on the frontmatter timestamp, partially.** Reported again
-    after v1.5.9's fix: undoing an edit sometimes moves the cursor to the
-    `last_updated_on` line instead of the text that was undone, losing sight of
-    what the undo did. `BufWritePre` (which rewrites the timestamp) already
-    saves and restores the cursor around its mutation and looks sound; the
-    remaining suspect is the `BufWritePost` reload in `init.lua`, where
-    `winsaveview`/`winrestview` run inside `nvim_buf_call` — so they may act on
-    a window other than the one showing the written buffer — and the
-    full-buffer `nvim_buf_set_lines` is the *last* mutation of the joined undo
-    block, which is the position `u` restores. **Reproduce headlessly before
-    changing anything:** the three previous fixes were made without a repro,
-    which is why it keeps coming back. Queued for v1.8.1.
 
 -   `test/test_phase1_old.lua` — the "parse rejects unknown field" assertion
     fails. Test drift, not a code defect: the legacy suite predates the filter
