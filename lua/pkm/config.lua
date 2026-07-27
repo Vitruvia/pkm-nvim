@@ -22,6 +22,13 @@ local utils = require('pkm.utils')
 local defaults = {
   root_path = nil,
 
+  -- Directory the vaults sit in as siblings, holding `vaults.json` — the
+  -- registry that maps a number and a name to each vault folder (pkm.vault).
+  -- Optional: left unset it is taken to be root_path's parent, which is the
+  -- shape the vaults have on disk. A root with no registry beside it keeps
+  -- working exactly as it always has.
+  vaults_path = nil,
+
   folders = {
     consolidated = "03-Consolidated",
     journal      = "02-Journal",
@@ -197,6 +204,15 @@ function M.resolve(user_config)
   end
 
   cfg.root_path = utils.normalize(vim.fn.expand(cfg.root_path))
+
+  -- Only normalised when it was given. It is deliberately not derived here:
+  -- for a root that is nobody's sibling the derived answer would be its parent
+  -- directory, and recording that in the config would state as a fact what is
+  -- only a guess. pkm.vault guesses it at call time instead, where an absent
+  -- registry is a supported answer rather than a broken path.
+  if cfg.vaults_path then
+    cfg.vaults_path = utils.normalize(vim.fn.expand(cfg.vaults_path))
+  end
 
   -- Validation
   if vim.fn.isdirectory(cfg.root_path) == 0 then
