@@ -45,6 +45,16 @@
 --   validate(data)         → boolean, err?
 --   save(data)             → boolean, err?
 --   invalidate()           → drop the cached copy
+--
+-- Lifecycle — each returns (ok, err) and leaves folder and registry agreeing:
+--   unregistered_dir()     → string|nil   where a vault goes to stop being one
+--   next_number()          → integer      lowest number nobody holds
+--   scaffold(path)         → the folder skeleton, named from config.folders
+--   create(name, opts?)    → folder + skeleton + registry entry
+--   rename(from, to)       → keeps the number, moves the folder
+--   renumber(name, n)      → keeps the name, moves the folder
+--   unregister(name)       → moves the folder to Unregistered/, deletes nothing
+--   adopt(folder, opts?)   → the way back; takes the contents as they stand
 -- =============================================================================
 
 local M = {}
@@ -517,6 +527,490 @@ function M.save(data)
   -- the first one back.
   M.invalidate()
   return true
+end
+
+-- =============================================================================
+-- SECTION: Lifecycle
+-- =============================================================================
+--
+-- Creating, renaming, renumbering, unregistering and adopting a vault. All five
+-- are the same operation seen from different sides: the folder name is derived
+-- from the number and the name, so changing either *is* moving the folder, and
+-- no note is touched by any of it.
+--
+-- Every one of them writes the folder first and the registry second, and puts
+-- the folder back if the registry write fails. The registry is the record of
+-- what exists; a folder that moved without the record following it is the one
+-- state that cannot be read back correctly.
+
+--- Where a vault goes when it stops being one. Notes are never left without a
+--- place: unregistering moves the folder here intact, and `adopt()` is the way
+--- back. There is no path through these functions that deletes a note.
+---@return string|nil
+function M.unregistered_dir()
+  local dir = M.vaults_root()
+  if not dir then return nil end
+  return utils.join(dir, 'Unregistered')
+end
+
+--- The lowest number no vault holds.
+---@return integer
+function M.next_number()
+  local used = {}
+  for _, v in ipairs(M.list()) do used[v.number] = true end
+
+  local n = 0
+  while used[n] do n = n + 1 end
+  return n
+end
+
+--- The registry as a table safe to mutate and hand to save().
+local function registry_copy()
+  local data   = vim.deepcopy(load())
+  data.vaults  = data.vaults or {}
+  data.history = data.history or {}
+  return data
+end
+
+--- Append a history record. Never read back to resolve a name — see history().
+local function push_history(data, event, fields)
+  local h = { at = require('pkm.timestamp').to_iso8601(), event = event }
+  for k, v in pairs(fields or {}) do h[k] = v end
+  data.history[#data.history + 1] = h
+end
+
+--- The vault holding this name, ignoring one number (the vault being changed).
+local function name_taken(name, except_number)
+  for _, v in ipairs(M.list()) do
+    if v.name:lower() == name:lower() and v.number ~= except_number then return v end
+  end
+  return nil
+end
+
+--- The vault holding this number, ignoring one name.
+local function number_taken(n, except_name)
+  for _, v in ipairs(M.list()) do
+    if v.number == n
+    and (not except_name or v.name:lower() ~= except_name:lower()) then return v end
+  end
+  return nil
+end
+
+--- Every loaded buffer whose file sits inside this directory.
+---@param path string
+---@return integer[]
+local function buffers_under(path)
+  local pref = comparable(slashed(path))
+  pref = (pref:gsub('/+$', ''))
+
+  local out = {}
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(b) then
+      local nm = vim.api.nvim_buf_get_name(b)
+      if nm ~= '' and comparable(slashed(nm)):sub(1, #pref + 1) == pref .. '/' then
+        out[#out + 1] = b
+      end
+    end
+  end
+  return out
+end
+
+--- Move a vault's folder, carrying its open buffers to the new path.
+---
+--- Refused while any buffer under it is modified. After the move that buffer
+--- would still name a file in a folder that no longer exists, and `:w` would
+--- recreate the folder to hold it — the vault resurrected as a ghost with one
+--- note in it, registered nowhere. Saving first is the only correct order, and
+--- it is the user's to do.
+---@param from string
+---@param to string
+---@return boolean ok
+---@return string|nil err
+---@return string[] carried  buffer names that were re-pointed
+local function move_folder(from, to)
+  local uv = vim.uv or vim.loop
+
+  local open, modified = buffers_under(from), {}
+  for _, b in ipairs(open) do
+    if vim.bo[b].modified then
+      modified[#modified + 1] = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(b), ':t')
+    end
+  end
+  if #modified > 0 then
+    return false, 'unsaved changes in ' .. table.concat(modified, ', ')
+      .. ' — save or discard them first', {}
+  end
+
+  if uv.fs_stat(to) then return false, to .. ' already exists', {} end
+
+  local moved, merr = uv.fs_rename(from, to)
+  if not moved then return false, tostring(merr), {} end
+
+  local carried = {}
+  for _, b in ipairs(open) do
+    local nm  = slashed(vim.api.nvim_buf_get_name(b))
+    local rel = nm:sub(#slashed(from) + 2)
+    local new = utils.normalize(slashed(to) .. '/' .. rel)
+    if pcall(vim.api.nvim_buf_set_name, b, new) then
+      pcall(vim.api.nvim_buf_call, b, function() vim.cmd('silent! edit!') end)
+      carried[#carried + 1] = vim.fn.fnamemodify(new, ':t')
+    end
+  end
+
+  return true, nil, carried
+end
+
+--- If the active root was inside the folder that moved, follow it.
+---
+--- Mutating `root_path` **in place** is what makes this propagate: the eight
+--- modules that keep config hold this same table, and both `trash.trash_dir()`
+--- and the sync autocmd read the root at call time. Replacing the table instead
+--- would leave every one of them on the old path.
+local function carry_active_root(old_path, new_path)
+  local cfg  = get_config()
+  local root = slashed(cfg.root_path or '')
+  local oldp = (slashed(old_path):gsub('/+$', ''))
+  if root == '' then return false end
+
+  if comparable(root) == comparable(oldp) then
+    cfg.root_path = utils.normalize(new_path)
+    return true
+  end
+  if comparable(root):sub(1, #oldp + 1) == comparable(oldp) .. '/' then
+    cfg.root_path = utils.normalize(slashed(new_path) .. '/' .. root:sub(#oldp + 2))
+    return true
+  end
+  return false
+end
+
+--- Move a vault's folder and rewrite its registry entry, or do neither.
+local function apply_move(entry, target, event, fields)
+  local uv       = vim.uv or vim.loop
+  local old_path = M.path_of(entry)
+  local new_path = M.path_of(target)
+
+  local carried = {}
+  local folder_existed = uv.fs_stat(old_path) ~= nil
+  if folder_existed then
+    local moved, merr, names = move_folder(old_path, new_path)
+    if not moved then return false, merr end
+    carried = names
+  else
+    utils.notify(string.format('%s had no folder — the registry entry alone was changed',
+      M.folder_of(entry)), vim.log.levels.WARN)
+  end
+
+  local data = registry_copy()
+  for _, v in ipairs(data.vaults) do
+    if v.number == entry.number and v.name == entry.name then
+      v.number, v.name = target.number, target.name
+    end
+  end
+  push_history(data, event, fields)
+
+  local saved, serr = M.save(data)
+  if not saved then
+    -- The registry is unchanged, so the folder must be too.
+    if folder_existed then uv.fs_rename(new_path, old_path) end
+    return false, serr
+  end
+
+  if carry_active_root(old_path, new_path) then
+    utils.notify(string.format('the active vault moved with it — root is now %s',
+      get_config().root_path), vim.log.levels.INFO)
+  end
+  if #carried > 0 then
+    utils.notify(string.format('%d open note%s followed the move: %s',
+      #carried, #carried == 1 and '' or 's', table.concat(carried, ', ')),
+      vim.log.levels.INFO)
+  end
+
+  return true
+end
+
+--- The folder skeleton a new vault starts with.
+---
+--- The subfolder names come from `config.folders` rather than from constants,
+--- so a vault is created shaped like the ones the user already has. Nothing
+--- here is created on demand elsewhere except `templates` and `.pkm-trash`;
+--- the rest a user has had to make by hand until now.
+---@param path string
+function M.scaffold(path)
+  local folders = get_config().folders or {}
+
+  for _, key in ipairs({ 'scratchpad', 'journal', 'consolidated', 'templates' }) do
+    if folders[key] then utils.ensure_dir(utils.join(path, folders[key])) end
+  end
+
+  local views = utils.join(path, 'views.json')
+  if vim.fn.filereadable(views) == 0 then
+    pcall(vim.fn.writefile, { '{}' }, views)
+  end
+
+  local ignore = utils.join(path, '.gitignore')
+  if vim.fn.filereadable(ignore) == 0 then
+    pcall(vim.fn.writefile, {
+      '# Soft-deleted notes, recoverable with :PKMRestoreNote.',
+      '# Transient state, not history — the notes themselves are versioned.',
+      '.pkm-trash/',
+    }, ignore)
+  end
+end
+
+local function git_init(path)
+  if vim.fn.executable('git') ~= 1 then
+    utils.notify('git is not on PATH — the vault was created without a repository',
+      vim.log.levels.WARN)
+    return false
+  end
+
+  local out = vim.fn.systemlist({ 'git', '-C', path, 'init' })
+  if vim.v.shell_error ~= 0 then
+    utils.notify('git init failed — ' .. table.concat(out, ' '), vim.log.levels.WARN)
+    return false
+  end
+  return true
+end
+
+--- Create a vault: the folder, its skeleton, and the registry entry.
+---@param name string
+---@param opts table|nil  { number?, git? = boolean (default true),
+---                         scaffold? = boolean (default true) }
+---@return boolean ok
+---@return string|nil err
+function M.create(name, opts)
+  opts = opts or {}
+
+  local ok, err = M.validate_name(name)
+  if not ok then return false, err end
+
+  if not M.vaults_root() then
+    return false, 'no vaults directory is known — set vaults_path, or a root_path inside one'
+  end
+
+  local held = name_taken(name)
+  if held then
+    return false, string.format('%q is already vault %02d', name, held.number)
+  end
+
+  local number = opts.number or M.next_number()
+  local ok_n, err_n = M.validate_number(number)
+  if not ok_n then return false, err_n end
+
+  local held_n = number_taken(number)
+  if held_n then
+    return false, string.format('number %d is already held by %q', number, held_n.name)
+  end
+
+  local entry = { number = number, name = name }
+  local path  = M.path_of(entry)
+  local uv    = vim.uv or vim.loop
+
+  if uv.fs_stat(path) then
+    return false, string.format('%s already exists — :PKMVaultAdopt takes a folder as it stands',
+      path)
+  end
+  if not utils.ensure_dir(path) then return false, 'cannot create ' .. path end
+
+  if opts.scaffold ~= false then M.scaffold(path) end
+
+  local data = registry_copy()
+  data.vaults[#data.vaults + 1] = entry
+  push_history(data, 'new', { number = number, name = name })
+
+  local saved, serr = M.save(data)
+  if not saved then
+    -- The folder stays. It holds nothing, but removing a directory is still
+    -- removing a directory, and saying where it is costs the user one command.
+    return false, string.format('%s — the folder at %s was created and is not registered',
+      serr, path)
+  end
+
+  if opts.git ~= false then git_init(path) end
+  return true
+end
+
+--- Rename a vault. The number is kept, so the folder moves and nothing else
+--- about the vault's identity changes.
+---
+--- There are no aliases: the old name stops meaning anything the moment this
+--- returns. Keeping it as a second name is what would let vault 01 be renamed
+--- to vault 02's old name and answer to it — the collision this refuses.
+---@param from string
+---@param to string
+---@return boolean ok
+---@return string|nil err
+function M.rename(from, to)
+  local entry = M.get(from)
+  if not entry then return false, string.format('no vault is named %q', from) end
+
+  local ok, err = M.validate_name(to)
+  if not ok then return false, err end
+
+  if entry.name == to then
+    return false, string.format('%q is already its name', to)
+  end
+
+  local held = name_taken(to, entry.number)
+  if held then
+    return false, string.format('the name %q is already held by vault %02d', to, held.number)
+  end
+
+  return apply_move(entry, { number = entry.number, name = to },
+    'rename', { number = entry.number, from = entry.name, to = to })
+end
+
+--- Renumber a vault. The name is kept.
+---@param name string
+---@param number integer
+---@return boolean ok
+---@return string|nil err
+function M.renumber(name, number)
+  local entry = M.get(name)
+  if not entry then return false, string.format('no vault is named %q', name) end
+
+  local ok, err = M.validate_number(number)
+  if not ok then return false, err end
+
+  if entry.number == number then
+    return false, string.format('%q is already vault %02d', entry.name, number)
+  end
+
+  local held = number_taken(number, entry.name)
+  if held then
+    return false, string.format('number %d is already held by %q', number, held.name)
+  end
+
+  return apply_move(entry, { number = number, name = entry.name },
+    'renumber', { name = entry.name, from = entry.number, to = number })
+end
+
+--- Take a vault out of the registry, moving its folder to `Unregistered/`.
+---
+--- The notes are not deleted and are not offered for deletion: each vault is a
+--- git repository, and the file manager removes one visibly and into the
+--- system's own recycle bin. What this does is exactly reversible by adopt().
+---@param name string
+---@return boolean ok
+---@return string|nil err
+function M.unregister(name)
+  local entry = M.get(name)
+  if not entry then return false, string.format('no vault is named %q', name) end
+
+  local act = M.active()
+  if act and act.number == entry.number and act.name == entry.name then
+    return false, string.format(
+      '%q is the active vault — moving it out from under the session would leave '
+      .. 'every open path naming nothing; switch away first', entry.name)
+  end
+
+  local dest_dir = M.unregistered_dir()
+  if not dest_dir or not utils.ensure_dir(dest_dir) then
+    return false, 'cannot create ' .. tostring(dest_dir)
+  end
+
+  local uv   = vim.uv or vim.loop
+  local dest = utils.join(dest_dir, entry.name)
+  if uv.fs_stat(dest) then
+    return false, string.format('%s already exists — a previous %q is still there',
+      dest, entry.name)
+  end
+
+  local from = M.path_of(entry)
+  local moved_folder = uv.fs_stat(from) ~= nil
+  if moved_folder then
+    local moved, merr = move_folder(from, dest)
+    if not moved then return false, merr end
+  end
+
+  local data, kept = registry_copy(), {}
+  for _, v in ipairs(data.vaults) do
+    if not (v.number == entry.number and v.name == entry.name) then
+      kept[#kept + 1] = v
+    end
+  end
+  data.vaults = kept
+  push_history(data, 'unregister', { number = entry.number, name = entry.name })
+
+  local saved, serr = M.save(data)
+  if not saved then
+    if moved_folder then uv.fs_rename(dest, from) end
+    return false, serr
+  end
+
+  return true
+end
+
+--- Register a folder that is not a vault, without changing what is inside it.
+---
+--- Looks under `Unregistered/` first, then beside the vaults. A folder already
+--- shaped `NN - Name` proposes its own number and name; anything else takes the
+--- next free number and its own folder name. The contents are taken exactly as
+--- they stand — no skeleton is imposed on notes that already have a shape.
+---@param folder string  Folder name, not a path
+---@param opts table|nil { number?, name? }
+---@return boolean ok
+---@return string|nil err
+---@return table|nil entry  the vault it became, for the caller to report
+function M.adopt(folder, opts)
+  opts = opts or {}
+
+  local dir = M.vaults_root()
+  if not dir then
+    return false, 'no vaults directory is known — set vaults_path, or a root_path inside one'
+  end
+
+  local uv  = vim.uv or vim.loop
+  local src = utils.join(M.unregistered_dir(), folder)
+  if not uv.fs_stat(src) then
+    src = utils.join(dir, folder)
+    if not uv.fs_stat(src) then
+      return false, string.format('no folder %q under Unregistered/ or beside the vaults', folder)
+    end
+  end
+
+  local folder_number, folder_name = M.parse_folder(folder)
+  local name   = opts.name   or folder_name   or folder
+  local number = opts.number or folder_number or M.next_number()
+
+  local ok, err = M.validate_name(name)
+  if not ok then return false, err end
+
+  local ok_n, err_n = M.validate_number(number)
+  if not ok_n then return false, err_n end
+
+  local held = name_taken(name)
+  if held then
+    return false, string.format('the name %q is already held by vault %02d', name, held.number)
+  end
+
+  local held_n = number_taken(number)
+  if held_n then
+    return false, string.format('number %d is already held by %q — adopt it under another',
+      number, held_n.name)
+  end
+
+  local entry = { number = number, name = name }
+  local dest  = M.path_of(entry)
+
+  local moved_folder = comparable(slashed(src)) ~= comparable(slashed(dest))
+  if moved_folder then
+    if uv.fs_stat(dest) then return false, dest .. ' already exists' end
+    local moved, merr = move_folder(src, dest)
+    if not moved then return false, merr end
+  end
+
+  local data = registry_copy()
+  data.vaults[#data.vaults + 1] = entry
+  push_history(data, 'adopt', { number = number, name = name, from = folder })
+
+  local saved, serr = M.save(data)
+  if not saved then
+    if moved_folder then uv.fs_rename(dest, src) end
+    return false, serr
+  end
+
+  return true, nil, entry
 end
 
 return M
