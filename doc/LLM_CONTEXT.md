@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.11.0** (released, tagged — smoke route passed)
+## Current version: **v1.11.1** (released, tagged) · v1.11.0 carried the vaults
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
@@ -29,15 +29,15 @@ timestamp, citations, notes, journal, ui, telescope, templates, export, filter,
 index, views, panel, mode, syntax, trash, markdown, bench, tags, picker, actions,
 rename, bufsync, vault`.
 
-`vault` (v1.11.0) owns the registry `vaults.json` — which vaults exist, and
-which one a path belongs to. Nothing in it is required: a `root_path` with no
-registry beside it answers an empty list and a nil vault, which is the state
-every test file and `min_init` runs in.
+`tags`, `picker`, `actions`, `rename` and `bufsync` are the bulk-operation stack
+(v1.8.0): `tags` and `rename` hold the rules and the writes, `picker` owns every
+selection screen, `actions` is the registry every panel's `<C-a>` opens, and
+`bufsync` keeps open buffers in step with what a batch wrote.
 
-The last five are the bulk-operation stack (v1.8.0): `tags` and `rename` hold the
-rules and the writes, `picker` owns every selection screen, `actions` is the
-registry every panel's `<C-a>` opens, and `bufsync` keeps open buffers in step
-with what a batch wrote.
+`vault` (v1.11.0) owns the registry `vaults.json` — which vaults exist, which
+one a path belongs to, and which one opens by default. Nothing in it is
+required: a `root_path` with no registry beside it answers an empty list and a
+nil vault, which is the state every test file and `min_init` runs in.
 
 ---
 

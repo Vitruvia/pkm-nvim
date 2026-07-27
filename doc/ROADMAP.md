@@ -201,9 +201,30 @@ v1.11.0 MINOR  The vaults are enumerated, not hardcoded  ✅ released 27/7/2026,
         :PKMVault with its three guards). Nothing outside the registry names a
         vault. Detail in doc/CHANGELOG.md.
 
-(next)  v1.11.1 — the indicator, finished: the vault visible in the buffer
-        panel and in the statusline. Then v1.12.0, typed forms.
+v1.11.1 PATCH  The indicator, finished  ✅ the vault in the buffer panel (V01
+        per row, the active one in the header) and pkm.vault.statusline(),
+        which also calls out a buffer belonging to another vault.
+
+(next)  v1.12.0 — typed forms for every state-writing operation.
 ```
+
+**The order from here, and why it is this order.**
+
+1.  **v1.12.0 — typed forms.** Everything that writes state gets a form that
+    takes arguments instead of prompting. This is the last version that *adds*
+    commands in bulk, which is why it precedes the clearup.
+2.  **Features from Near/Distant goals that create commands** — `next_header`
+    global, list-component navigation, the index panel, syntax and commands
+    outside PKM, structure-aware autowrap. Each is born with both forms.
+3.  **Merge, then split.** Pulled forward the moment a real `Unregistered/`
+    folder needs them; otherwise they wait here, because they are the only
+    vault operations that renumber notes.
+4.  **Command clearup.** Only once nothing new is arriving, so the conversion
+    happens once. Two versions: introduce contexts with aliases, then delete
+    the aliases — the `:PKM<TAB>` list only shrinks at the second one.
+5.  **`pkm.api`, `doc/AGENT_PROTOCOL.md`, the skill.** Last, so the text
+    describes a surface that has stopped moving. Evaluations run *before* the
+    documentation, as soon as v1.12.0 closes.
 
 **v1.12.0 (MINOR) — every state write has a typed form.** The interactive and
 the programmatic form are the *same command* (Design Question 4.d): no argument
@@ -221,13 +242,125 @@ Ph5 `:PKMCheck` (new `lua/pkm/check.lua`, pure, no UI) — frontmatter validity,
 collisions, plus two the vaults add: a `[Nome::note{...}]` naming a vault that
 does not exist, and notes stranded in `Unregistered/`.
 
-**Deferred: `PKMVaultSplit` / `PKMVaultMerge`.** Kept out of v1.11.0 on purpose.
-Merging collides numbering (two vaults each have a note 0042) and forces
-renumbering the incoming notes plus rewriting citations on **both** sides of the
-graph. The batched machine already exists —
-`citations.update_references_on_renames`, which operates on `config.root_path`
-and therefore runs at the destination after the move. A phase of its own, pulled
-in when a real `Unregistered/` folder asks for it.
+---
+
+#### Merging and splitting vaults — future, and split is further
+
+Both are deferred on purpose. They are the only vault operations that renumber
+notes, and renumbering means rewriting citations, which is why they wait until a
+real `Unregistered/` folder asks for them. The batched machine they need already
+exists: `citations.update_references_on_renames(renames)` (`citations.lua`),
+which operates on `config.root_path` and therefore runs at the destination once
+the files are there.
+
+**Merge — the cheaper of the two, and the one to build first.** The author's
+rule: incoming notes are **appended**. They are renumbered starting at the
+receiving vault's next free number — its highest note plus one — and the
+receiving vault is not renumbered at all. `prepend` is an option, not the
+default. Only one side of the graph moves, so only the incoming notes' citations
+are rewritten, plus any citation *into* them from notes that came along. Notes
+that stay behind never change.
+
+**Split — genuinely harder, and it is the selection that makes it so.** The
+author's rule: the extracted notes are renumbered **from 01 in both vaults** —
+both the new vault and what remains. That is the expensive part and it should be
+stated plainly: renumbering the source vault rewrites every citation in it, not
+only those touching the notes that left. It is a whole-vault rewrite of a live
+knowledge graph, and it wants a dry run and a backup gate before it wants a
+keymap.
+
+The other half is telling it *which* notes to extract, and that machinery is
+already built for other purposes: the filter DSL, `:PKMExport`'s selection, and
+the marks in the views panels. Split should reuse them rather than invent a
+selection UI — it is, mechanically, export → mass delete → mass renumber on both
+sides, and each of those three already exists in some form.
+
+Order: merge lands first and teaches the renumber-plus-rewrite path on the easy
+side; split follows once that path is proven on real notes.
+
+---
+
+#### Command clearup — contexts and verbs (Design Question 4, resolved)
+
+*The author proposed collapsing the command set into contexts, with the action
+carried as a flag: `:PKMNote -n`, `:PKMVault -a`. The diagnosis is right and the
+direction is right; the honest assessment below changes the notation and names
+what it costs.*
+
+**The problem is real and measurable.** 55 command names are registered today.
+`:PKM<TAB>` is not discovery at that size — it is a wall. Grouped by subject
+they are **11 contexts**: `Note` (14), `View` (8), `Vault` (6), `Cite` (7),
+`Header` (5), `Tag` (4), `Find` (3), `Panel` (3), `List` (2), `Trash` (2),
+`Export` (2). Eleven names is a surface a person can hold in their head and an
+agent can be told about in a paragraph.
+
+**Verbs, not flags.** `:PKMVault adopt <folder>`, not `:PKMVault -a <folder>`.
+Four reasons, in order of weight:
+
+1.  **Completion becomes a tree.** `complete=customlist` receives the whole
+    command line, so `:PKMVault <TAB>` can offer `adopt new rename renumber
+    unregister`, and `:PKMVault adopt <TAB>` can then offer the adoptable
+    folders. A flag cannot do the second half: `-a` says nothing about what
+    follows it, so position 2 has nothing to complete from. Verbs make the
+    surface self-documenting at the moment of typing, which is the only moment
+    documentation is actually read.
+2.  **It is Vim's idiom.** `:Lazy sync`, `:Telescope find_files`, `:Git commit`,
+    `:Mason install`. Flags are a shell convention; in Vim the established
+    modifier channels are `!`, `[range]` and `[count]`, all of which this
+    codebase already uses correctly.
+3.  **Single letters run out.** With ~12 actions in `Note`, `-a` is add, adopt
+    or all depending on context, and the mapping becomes arbitrary exactly where
+    it needs to be memorable. Long flags (`-adopt`) are verbs paying a dash tax.
+4.  **The agent is the destination.** A skill emitting `:PKMVault adopt "01 -
+    Vitruvia"` is far likelier to be right than one emitting `-a`, because verbs
+    are semantically anchored and flag letters are per-tool trivia. And a wrong
+    verb fails loudly — *unknown action "adpot"; did you mean "adopt"?* — where
+    a wrong flag silently performs a different action.
+
+**Where flags do belong: modifiers, never actions.** The grammar:
+
+```
+:PKM<Context>[!] <verb> [positional] [key=value ...]
+```
+
+`key=value` is already the decided form for values (Design Question 4.d, and
+v1.12.0 Ph1 builds `:PKMNewNote … title=<text>` on it). `!` stays what it is
+today — the force or destructive variant. Nothing else is needed.
+
+**Two costs to state before agreeing to this.**
+
+-   **The `:PKM<TAB>` list does not shrink when the contexts arrive.** It shrinks
+    when the old names are *deleted*. A user command cannot be hidden from
+    command completion, so a deprecation window of aliases means 55 names plus
+    11 for its duration. The benefit is real but deferred to the removal, and
+    the plan must budget two versions: introduce with aliases, then delete.
+-   **Every keymap, every doc and every smoke note names the old commands.** The
+    aliases must therefore work, silently, for a full version, printing a
+    one-time hint naming the new form rather than a warning on every use.
+
+**One deliberate exception.** A handful of commands are typed or mapped daily —
+`:PKMBrowse`, `:PKMView <name>`, `:PKMNewNote`. These keep permanent top-level
+names, documented as shortcuts rather than as deprecated aliases. A pure
+taxonomy is more elegant and worse to use, and the daily path is not where the
+discovery problem lives.
+
+**One prerequisite, and it is a phase of its own.** Today each command parses
+its own `opts.fargs`. Eleven contexts each growing a private parser would move
+the inconsistency rather than remove it. The version opens with a shared
+argument module — one place that turns `fargs` into
+`{ verb, positional, named, bang }`, produces consistent errors, and drives the
+completion from the *same* table that declares the verbs, so a verb cannot exist
+without completing and cannot complete without existing.
+
+**Ambiguity, and its fix.** `:PKMVault Vitruvia` must keep switching. So
+position 1 is read as a verb only when it matches a declared one, and otherwise
+as the default verb's argument. That is safe only if a vault cannot be named
+after a verb — so `validate_name` gains the verb list as reserved words, exactly
+as it already reserves `Unregistered`.
+
+**Where it sits in the order, unchanged:** after every version that *creates*
+commands (converting twice is waste), and before `pkm.api` and the skill (so the
+documented surface is the final one).
 
 **Ordering beyond that, decided by the author.** Everything that may *create*
 commands comes first — above all the operations that change internal state

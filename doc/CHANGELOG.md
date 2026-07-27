@@ -60,6 +60,39 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
+## [1.11.1] - 27/7/2026
+
+*The v1.11.0 indicator reached the sidebar title, the vault picker and
+`vim.g.pkm_vault`. It did not reach the two places a note is actually looked
+at.*
+
+### Added
+
+-   **The buffer panel shows which vault each note is in.** `V01` per row, and
+    the active vault named in the header — where you are, and where each buffer
+    is, read by comparing two numbers rather than by learning a symbol. The
+    column appears only when more than one vault is registered: with one it is
+    noise on every row, and it starts meaning something exactly when confusion
+    becomes possible. A file in no vault keeps the column blank rather than
+    borrowing a number, so the type prefixes stay in one column.
+
+-   **`pkm.vault.statusline()`**, returning `V01 Vitruvia`, and appending
+    `[buf V02]` when the buffer in front of you belongs to a different vault.
+    That second half is the part worth having: such a buffer sits outside the
+    root, so `in_root` answers false and saving it stops stamping the timestamp,
+    syncing citations and touching the index — it still looks like a note and
+    has stopped being treated as one. The one state where the screen and the
+    truth disagree, said continuously rather than at the moment of a switch.
+
+### Known limitations
+
+-   A note from **another** vault renders in the buffer panel as `[f]` with its
+    filename rather than `[n]` with its title, because the index is per vault
+    and that note genuinely is not in it. Honest, and it reinforces the signal,
+    but it is a consequence rather than a decision.
+
+---
+
 ## [1.11.0] - 27/7/2026
 
 *Smoke route passed in full
