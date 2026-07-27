@@ -155,6 +155,20 @@ Renaming and renumbering move the folder and touch no note. Unregistering moves
 the folder intact — **no command here deletes a note**; `:PKMVaultAdopt` is the
 way back. Both refuse while a buffer under the vault has unsaved changes.
 
+With more than one vault registered, the buffer panel prefixes each note with
+its vault (`V01`) and names the active one in its header, and the views sidebar
+carries it in its title. For a statusline, `require('pkm.vault').statusline`
+returns `V01 Vitruvia` — and appends `[buf V02]` when the buffer in front of you
+belongs to a different vault, which is the one state where the screen and the
+truth disagree: that buffer is outside the root, so saving it no longer stamps
+its timestamp, syncs its citations or touches the index.
+
+~~~lua
+require('lualine').setup({
+  sections = { lualine_x = { require('pkm.vault').statusline } },
+})
+~~~
+
 ## Configuration
 
 ~~~lua

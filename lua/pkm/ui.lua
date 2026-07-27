@@ -103,7 +103,25 @@ local function bufpanel_build_lines(state)
     return (_open_order[a] or 0) > (_open_order[b] or 0)
   end)
 
-  local lines   = { '  Buffers  (' .. #listed .. ')  <CR> open  d close  D force  w save+close  r refresh  T title  q close' }
+  -- Which vault each buffer is in, shown only when there is more than one to
+  -- confuse. With a single vault the column is noise on every row; with several
+  -- it answers the question that matters here, because a buffer from a vault
+  -- other than the active one sits outside the root — saving it no longer
+  -- stamps its timestamp, syncs its citations or touches the index. It looks
+  -- like a note and has stopped being treated as one, and this panel is where
+  -- that buffer is visible at all.
+  --
+  -- The header says where *you* are, each row says where *it* is, so a mismatch
+  -- is read by comparing two numbers rather than by learning a new symbol.
+  local vault      = require('pkm.vault')
+  local show_vault = #vault.list() > 1
+
+  local header = '  Buffers  (' .. #listed .. ')'
+  if show_vault and vault.indicator() ~= '' then
+    header = header .. '  · ' .. vault.indicator()
+  end
+  local lines   = { header ..
+    '  <CR> open  d close  D force  w save+close  r refresh  T title  q close' }
   local buf_map = {}
 
   for _, bufnr in ipairs(listed) do
@@ -113,6 +131,15 @@ local function bufpanel_build_lines(state)
                      and (' ' .. table.concat(win_labels[bufnr], ','))
                      or ''
     local entry    = index.get(name)
+
+    -- Blank-but-aligned for a file in no vault, so the type prefixes stay in
+    -- one column and the eye can still scan them.
+    local vlabel = ''
+    if show_vault then
+      local owner = vault.of(name)
+      vlabel = (owner and string.format('V%02d', owner.number) or '   ') .. ' '
+    end
+
     local display
     if entry then
       local label
@@ -121,11 +148,11 @@ local function bufpanel_build_lines(state)
       else
         label = utils.strip_display_prefix(entry.filename, entry.note_type)
       end
-      display = string.format('  %s %s%s%s',
-        utils.type_prefix(entry.note_type), label, wlabel, modified)
+      display = string.format('  %s%s %s%s%s',
+        vlabel, utils.type_prefix(entry.note_type), label, wlabel, modified)
     else
-      display = string.format('  %s %s%s%s',
-        utils.type_prefix('file'), vim.fn.fnamemodify(name, ':t'), wlabel, modified)
+      display = string.format('  %s%s %s%s%s',
+        vlabel, utils.type_prefix('file'), vim.fn.fnamemodify(name, ':t'), wlabel, modified)
     end
     lines[#lines + 1] = display
     buf_map[#lines]   = bufnr

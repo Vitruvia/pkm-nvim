@@ -62,6 +62,8 @@
 --                               cannot invalidate it and a renumber rewrites it
 --   set_default(name)         → boolean, err?
 --   indicator()               → string  "01 Vitruvia", or "" — never nil
+--   statusline()              → string  "V01 Vitruvia", plus "[buf V03]" when
+--                               the current buffer belongs to another vault
 --   select(name, opts?)       → switch the active vault, invalidating what the
 --                               old root produced; refuses on unsaved work
 --   apply_startup_selection() → $PKM_VAULT, else config.vault, else default()
@@ -1096,6 +1098,41 @@ end
 --- Publish the active vault where a statusline and the panels can read it.
 local function publish()
   vim.g.pkm_vault = M.indicator()
+end
+
+--- A statusline component: the active vault, and a warning when the buffer in
+--- front of you belongs to a different one.
+---
+--- That second half is the part worth having. A buffer from another vault sits
+--- outside the root, so `in_root` answers false and saving it stops stamping
+--- the timestamp, stops syncing citations and stops touching the index — it
+--- still looks like a note and has stopped being treated as one. It is the one
+--- state where the screen and the truth disagree, and a statusline is where
+--- that can be said continuously rather than at the moment of a switch.
+---
+--- Safe to call on every redraw: the registry is cached against the file's
+--- stat, and every failure path returns a string.
+---
+--- Empty when no registered vault holds the root, so it can be concatenated
+--- without a guard. With lualine:
+---
+---     sections = { lualine_x = { require('pkm.vault').statusline } }
+---@return string
+function M.statusline()
+  local here = M.active()
+  if not here then return '' end
+
+  local label = string.format('V%02d %s', here.number, here.name)
+
+  local ok, buf = pcall(vim.api.nvim_buf_get_name, 0)
+  if ok and buf ~= '' then
+    local owner = M.of(buf)
+    if owner and owner.number ~= here.number then
+      return string.format('%s [buf V%02d]', label, owner.number)
+    end
+  end
+
+  return label
 end
 
 --- Point the plugin at another vault.
