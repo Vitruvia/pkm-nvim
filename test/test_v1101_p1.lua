@@ -35,26 +35,31 @@ local pkm = require('pkm')
 -- Control: modelines are on, and they fire outside the PKM root
 -- =============================================================================
 
+-- `numberwidth`, not `shiftwidth`, and the smoke pass is what taught the
+-- difference. Neovim's own markdown ftplugin ends with
+--   setlocal expandtab tabstop=4 softtabstop=4 shiftwidth=4
+-- and it runs *after* the modeline, so on a real session `shiftwidth` reports
+-- 4 from markdown.vim whether or not the modeline fired: the expected value
+-- and the unexpected one both arrive from the wrong author. `numberwidth` is
+-- touched by no ftplugin, so it answers the question actually being asked —
+-- did the modeline apply. Verified: same buffer, same moment, nuw=7 sourced
+-- from the modeline while sw=4 is sourced from markdown.vim.
 local outside = vim.fn.tempname() .. '.md'
-vim.fn.writefile({ '# fora do vault', '', 'texto', '', 'um exemplo vim: sw=9' }, outside)
+vim.fn.writefile({ '# fora do vault', '', 'texto', '', 'um exemplo vim: nuw=7' }, outside)
 vim.cmd('edit ' .. vim.fn.fnameescape(outside))
+
+local function nuw_source()
+  return (vim.fn.execute('verbose set numberwidth?'):match('Last set from ([^\n]*)') or '')
+end
 
 -- vim.go, not vim.o: 'modeline' is local to buffer, so vim.o reports the
 -- current buffer's effective value — which is exactly what PKM turns off.
 check("modelines are enabled in this session at all",
   vim.go.modeline == true, tostring(vim.go.modeline))
 check("and they fire on a file outside the PKM root",
-  vim.bo.shiftwidth == 9, tostring(vim.bo.shiftwidth))
-
--- The value alone is a weak witness, and the v1.10.1 smoke pass proved it:
--- markdown's own ftplugin also writes 'shiftwidth', so a value that is *not* 9
--- cannot tell "the modeline never fired" from "it fired and something wrote
--- afterwards". `:verbose` names the source, which is the thing being claimed.
-local function sw_source()
-  return (vim.fn.execute('verbose set shiftwidth?'):match('Last set from ([^\n]*)') or '')
-end
+  vim.wo.numberwidth == 7, tostring(vim.wo.numberwidth))
 check("and the source Vim reports for it is the modeline",
-  sw_source():find('modeline', 1, true) ~= nil, sw_source())
+  nuw_source():find('modeline', 1, true) ~= nil, nuw_source())
 
 vim.cmd('bwipeout!')
 
@@ -80,17 +85,18 @@ local function make_note(name, last)
   return path
 end
 
--- `sw=9` rather than a bogus option: a wrong option name only proves an error,
--- while a real one proves whether the modeline was *applied*.
-local applied = make_note('0001_note_modeline_applied.md', 'um exemplo vim: sw=9')
-vim.bo.shiftwidth = 4
+-- A real option rather than a bogus one: a wrong option name proves only that
+-- an error was raised, while a real one proves whether the modeline was
+-- *applied*. `numberwidth` for the reason given at the control above.
+local applied = make_note('0001_note_modeline_applied.md', 'um exemplo vim: nuw=7')
+vim.wo.numberwidth = 4
 local ok_open = pcall(vim.cmd, 'edit ' .. vim.fn.fnameescape(applied))
 
 check("opening a note does not error", ok_open, "pcall failed")
 check("and the note's text was not applied as configuration",
-  vim.bo.shiftwidth ~= 9, 'shiftwidth=' .. tostring(vim.bo.shiftwidth))
+  vim.wo.numberwidth ~= 7, 'numberwidth=' .. tostring(vim.wo.numberwidth))
 check("and Vim does not name a modeline as the source",
-  sw_source():find('modeline', 1, true) == nil, sw_source())
+  nuw_source():find('modeline', 1, true) == nil, nuw_source())
 
 -- The reported case: an unknown option name, which is what raised E518.
 local broken = make_note('0002_note_modeline_error.md', 'um exemplo ex: Será')

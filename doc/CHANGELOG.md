@@ -74,6 +74,40 @@
     also what unblocks vault switching. `test_v160_p2` was matching entries by
     the raw field and now goes through `resolve_original` — the contract.
 
+-   **Emptying the trash no longer opens a file that is not there** (v1.10.1
+    Ph5). `citations.cleanup_deleted_note()` took one path and used it for two
+    different things: the note's *identity*, read off the filename, and the
+    place its *text* can be read, to learn what it cited. For a note deleted in
+    place those coincide; for a trashed note they do not — it has already left
+    its original path, and its content sits in `.pkm-trash/`. So `readfile()`
+    raised `E484: Can't open file`, which took down step 2 as well — the part
+    that strips references *to* the deleted note. `trash.empty()` aborted on
+    its first entry with the manifest and the trashed files untouched, and
+    `purge_old()`, which runs by itself five seconds after `setup()` whenever
+    `trash.max_age_days > 0`, failed in the background the same way.
+
+    The function now takes an optional second argument, where the text can be
+    read, and the trash passes the copy it still holds; an unreadable one skips
+    step 1 instead of aborting. The phase test asserts the thing that separates
+    a fix from a silencer: the cited note must actually **lose its backlink**,
+    which can only happen if the frontmatter was read — from the copy. The
+    graph it checks is built by the plugin's own `update_references`, not by
+    hand.
+
+-   **A modeline probe must not measure an option someone else writes**
+    (v1.10.1 Ph1 follow-up). The Ph1 control asserted that a modeline had
+    fired by reading `shiftwidth`, and Neovim's markdown ftplugin ends with
+    `setlocal expandtab tabstop=4 softtabstop=4 shiftwidth=4`, running *after*
+    the modeline. On a real session `shiftwidth` therefore reports 4 from
+    `markdown.vim` whether the modeline fired or not — the expected value and
+    the unexpected one both arrive from the wrong author, and `:verbose` names
+    that author either way. The control and the smoke note now use
+    `numberwidth`, which no ftplugin touches. Verified in one buffer at one
+    moment: `nuw=7` sourced from the modeline while `sw=4` is sourced from
+    `markdown.vim`. Found by the author running the smoke in his own config,
+    where the ftplugin is active; headless had passed for the right reason and
+    so could not see it.
+
 *The sections below are living project state, not release notes: they are
 carried forward from version to version and consulted before any fix.*
 
@@ -83,22 +117,6 @@ carried forward from version to version and consulted before any fix.*
 Ph1, the two test drifts in Ph2, and `:PKMOrphans` plus the `bench.lua`
 separator in Ph3. The two below were found while evaluating multi-vault
 support.)*
-
--   **`trash.empty()` and `purge_old()` throw `E484` on any genuinely trashed
-    note.** Both call `citations.cleanup_deleted_note(original_path)`, which
-    opens that path with `vim.fn.readfile()` — and a trashed note is precisely
-    a note that is no longer there; the copy lives in `.pkm-trash/`. Verified
-    against a disposable root: trash one note, call `empty()`, and it aborts on
-    the first entry with `Vim:E484: Can't open file …`, leaving the manifest
-    and the trash files untouched. `purge_old()` runs **automatically** five
-    seconds after `setup()` whenever `trash.max_age_days > 0`, so this fails in
-    the background as well. The comment that stood at the `purge_old()` call
-    site asserted the opposite ("the file need not exist at original_path for
-    this to work"); it has been corrected in place. Not fixed with v1.10.1 Ph4,
-    which touched the same two call sites, because the fix is a decision about
-    *where the backlink scan should read from* — the trash copy still has the
-    frontmatter, so pointing it there would make the cleanup actually happen
-    rather than merely stop erroring. Found 27/7/2026.
 
 -   **`PKMCitation` highlighting never matches anything.** The `matchadd`
     pattern in `syntax.lua` is

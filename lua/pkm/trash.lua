@@ -355,8 +355,11 @@ function M.empty()
   local count = 0
 
   for _, entry in ipairs(manifest) do
-    citations.cleanup_deleted_note(M.resolve_original(entry))
+    -- The note's identity is where it came from; its *text* is the copy still
+    -- sitting in the trash. Cleanup needs both, and the read happens before
+    -- the file is deleted just below.
     local trash_file = utils.join(get_trash_dir(), entry.filename)
+    citations.cleanup_deleted_note(M.resolve_original(entry), trash_file)
     if vim.fn.filereadable(trash_file) == 1 then
       vim.fn.delete(trash_file)
     end
@@ -399,13 +402,11 @@ function M.purge_old()
     end
 
     if deleted_time and deleted_time < cutoff then
-      -- NOTE: the comment that stood here claimed the file need not exist at
-      -- this path. It must: cleanup_deleted_note() opens it with readfile(),
-      -- which throws E484 on a trashed note — see Known Bugs. Left as it is,
-      -- resolved rather than raw, because the fix is a decision about where
-      -- the backlink scan should read from, not a correction to this call.
-      citations.cleanup_deleted_note(M.resolve_original(entry))
+      -- Identity from where it came from, text from the copy in the trash —
+      -- the note is not at the former any more, which is what used to throw
+      -- E484 here and abort the whole purge. Read before the delete below.
       local trash_file = utils.join(get_trash_dir(), entry.filename)
+      citations.cleanup_deleted_note(M.resolve_original(entry), trash_file)
       if vim.fn.filereadable(trash_file) == 1 then
         vim.fn.delete(trash_file)
       end

@@ -20,7 +20,9 @@
 --   goto_citation()                  → jump to note under cursor
 --   update_references_on_rename(old, new, title?) → propagate rename/deletion across wiki
 --   propagate_title(note_path)       → rewrite title in referencing notes' cites/cited_by entries
---   cleanup_deleted_note(filepath)   → remove all references to a deleted note
+--   cleanup_deleted_note(path, content_path?) → remove all references to a
+--                                      deleted note; content_path is where its
+--                                      text can still be read (the trash copy)
 --   merge_tags(source_tags, target_tag) → rewrite tags across all notes
 -- =============================================================================
 local M = {}
@@ -990,13 +992,24 @@ end
 --- Remove all frontmatter references to a deleted note across the entire wiki.
 --- Removes entries from cites and cited_by in every affected file.
 --- Also strikes through inline [[wiki-links]] in note bodies.
----@param filepath string Absolute path of the note being deleted
-function M.cleanup_deleted_note(filepath)
+---
+--- Two different things are needed here, and they used to be conflated into
+--- one argument: **which note this is** (its identity, read off the filename)
+--- and **where its text can still be found** (to learn what it cited). For a
+--- note being deleted in place they are the same path. For a *trashed* note
+--- they are not: it has already left `filepath`, and its content sits in
+--- `.pkm-trash/`. Passing only the first made step 1 below open a file that by
+--- definition was no longer there, throwing E484 and taking step 2 — the part
+--- that strips references *to* the deleted note — down with it.
+---@param filepath     string  Path the note is known by; identity, need not exist
+---@param content_path string|nil  Where its text can be read; defaults to filepath
+function M.cleanup_deleted_note(filepath, content_path)
     -- 1. Get the list of notes that the deleted note cited
     -- (We need to remove the "Cited by" backlink from them)
-    local content = vim.fn.readfile(filepath)
-    local fm = yaml.parse_frontmatter(content)
-    
+    local ok_read, content = pcall(vim.fn.readfile, content_path or filepath)
+    local fm = ok_read and type(content) == 'table'
+      and yaml.parse_frontmatter(content) or nil
+
     if fm and fm.cites then
         local items_map = M.get_citable_items_map()
         local groups = {"notes", "bib", "journal", "scratch"}
