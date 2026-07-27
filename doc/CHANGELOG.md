@@ -58,9 +58,34 @@ carried forward from version to version and consulted before any fix.*
 
 ### Known Bugs (queued)
 
-*(Empty — the four entries that stood here were closed in v1.10.1: the `ex:`
-modeline in Ph1, the two test drifts in Ph2, and `:PKMOrphans` plus the
-`bench.lua` separator in Ph3.)*
+*(The four entries that stood here were closed in v1.10.1: the `ex:` modeline in
+Ph1, the two test drifts in Ph2, and `:PKMOrphans` plus the `bench.lua`
+separator in Ph3. The two below were found while evaluating multi-vault
+support.)*
+
+-   **The trash manifest stores `original_path` as an absolute path, so a
+    copied or moved vault restores into the *other* vault.** `trash.lua`
+    records the full path at deletion and `restore_note()` writes the file back
+    to it, checking only that the target is not already occupied. `NotesTeste`
+    was copied from the primary vault and its manifest still carries
+    `P:\Notes\03-Consolidated\…` entries whose files are present in
+    `.pkm-trash/`: restoring one of them from the test vault writes into the
+    **primary** vault. This is a live hazard today, not only under multi-vault,
+    and it is the blocker for vault switching — a root-relative `original_path`
+    (reading both forms for back-compat) makes copy, rename and switch all safe
+    at once. Found 27/7/2026 while evaluating the vault proposal.
+
+-   **`PKMCitation` highlighting never matches anything.** The `matchadd`
+    pattern in `syntax.lua` is
+    `\v<(note|bib|journal|scratch)\[[\w\-_]+\>`, and it fails twice over: in a
+    Vim collection `\w` is not a character class (`[\w]` does not match a
+    digit), and under `\v` the `>` is *already* the word boundary, so `\>` is a
+    literal `>`. Verified: the pattern returns no match for `note[0042]`,
+    `note[abc]` or `note[0042]>`, while
+    `\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]` matches `note[0042]` and
+    correctly rejects `nota[0042]`. It fails silently because `matchadd`
+    accepts the regex — it simply never fires. Found 27/7/2026; not fixed,
+    because it was not what was being worked on.
 
 ### Known limitations
 
