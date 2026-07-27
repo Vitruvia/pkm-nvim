@@ -15,7 +15,11 @@
 -- Manifest entry shape:
 --   { filename, original_path, title, deleted_at, deleted_timestamp }
 --   filename         — name of the file in .pkm-trash/ (may differ if collision)
---   original_path    — absolute path before deletion; used for restore and numbering
+--   original_path    — where the note came from, stored **relative to the root**
+--                      with `/` separators. Read it through resolve_original(),
+--                      never raw: entries written by older versions hold an
+--                      absolute path, which may name another vault entirely if
+--                      the tree was copied. Used for restore and numbering
 --   title            — frontmatter title at deletion time; used in picker display
 --   deleted_at       — ISO 8601 UTC string; display only
 --   deleted_timestamp — Unix timestamp (os.time()); used for autoclear comparison
@@ -23,7 +27,8 @@
 -- Public API:
 --   setup(config)         → store config; schedule autoclear if max_age_days > 0
 --   trash_note(filepath)  → move note to trash; true on success
---   restore_note(entry)   → move note back to original_path; true on success
+--   restore_note(entry)   → move note back to its place in this root; true on success
+--   resolve_original(e)   → absolute path under the current root for entry e
 --   list()                → array of manifest entries
 --   empty()               → permanently delete all trash and strip backlinks
 --   purge_old()           → permanently delete entries older than max_age_days
@@ -54,6 +59,107 @@ local function ensure_trash_dir()
   if vim.fn.isdirectory(dir) == 0 then
     vim.fn.mkdir(dir, 'p')
   end
+end
+
+-- =============================================================================
+-- SECTION: Recorded location
+-- =============================================================================
+--
+-- A manifest entry records where its note came from. That used to be an
+-- absolute path, which quietly tied the trash to one directory: copy a vault
+-- and its manifest still points at the original, so restoring from the copy
+-- writes into the vault it was copied from. `NotesTeste` was in exactly that
+-- state — entries reading `P:\Notes\03-Consolidated\…` with the files present
+-- in its own `.pkm-trash/`.
+--
+-- The location is therefore stored **relative to the root**, with `/`
+-- separators so a manifest is portable between platforms, and read back
+-- through resolve_original(), which re-roots whatever form it finds. Copy,
+-- rename and (later) vault switching all become safe at once, and no existing
+-- manifest needs rewriting.
+
+--- The folders a note can live under, for recognising a legacy absolute path
+--- that came from a different root.
+---@return string[]
+local function note_folders()
+  local f = _config.folders or {}
+  return { f.consolidated, f.journal, f.scratchpad, f.templates }
+end
+
+--- Path separators normalised to `/`, for comparison and for storage.
+---@param p string
+---@return string
+local function slashed(p)
+  return (p:gsub('\\', '/'))
+end
+
+--- Compare-form of a path: case-folded where the filesystem folds case.
+---@param p string
+---@return string
+local function comparable(p)
+  if utils.is_windows or utils.is_wsl then return p:lower() end
+  return p
+end
+
+--- The form a location is stored in: relative to the root, `/`-separated.
+--- A path that is not under the root is stored unchanged — resolve_original()
+--- is what re-roots it, so nothing is lost by recording what was seen.
+---@param abs string  Absolute path of the note
+---@return string
+local function to_relative(abs)
+  local p    = slashed(abs)
+  local root = slashed(_config.root_path):gsub('/$', '')
+  if comparable(p):sub(1, #root + 1) == comparable(root) .. '/' then
+    return p:sub(#root + 2)
+  end
+  return p
+end
+
+--- Absolute path, under the **current** root, for a manifest entry's recorded
+--- location — whichever form it was written in.
+---
+--- Resolution order, first match wins:
+---   1. relative (the current form)      → joined onto the current root;
+---   2. absolute and already under it    → taken as it stands;
+---   3. absolute from elsewhere          → re-rooted from the first recognised
+---      note folder onwards, which is what makes a copied or moved vault
+---      restore into itself instead of into the vault it came from;
+---   4. nothing recognisable             → the consolidated folder, keeping the
+---      filename. A note stored at the root of another vault lands one level
+---      deeper here; that is the documented cost of never writing outside the
+---      current root.
+---@param entry table  Manifest entry
+---@return string|nil  Absolute path, or nil when the entry records nothing
+function M.resolve_original(entry)
+  local stored = entry and entry.original_path or ''
+  if stored == '' then return nil end
+
+  local p    = slashed(stored)
+  local root = slashed(_config.root_path):gsub('/$', '')
+
+  local is_absolute = p:match('^%a:/') ~= nil or p:sub(1, 1) == '/'
+  if not is_absolute then
+    return utils.normalize(root .. '/' .. p)
+  end
+
+  if comparable(p):sub(1, #root + 1) == comparable(root) .. '/' then
+    return utils.normalize(p)
+  end
+
+  local known = {}
+  for _, name in ipairs(note_folders()) do
+    if type(name) == 'string' and name ~= '' then known[comparable(name)] = true end
+  end
+
+  local segs = vim.split(p, '/', { plain = true })
+  for i = 1, #segs do
+    if known[comparable(segs[i] or '')] then
+      return utils.normalize(root .. '/' .. table.concat(segs, '/', i))
+    end
+  end
+
+  local consolidated = (_config.folders or {}).consolidated or ''
+  return utils.normalize(root .. '/' .. consolidated .. '/' .. (segs[#segs] or ''))
 end
 
 local function load_manifest()
@@ -165,7 +271,7 @@ function M.trash_note(filepath)
   local manifest = load_manifest()
   manifest[#manifest + 1] = {
     filename          = vim.fn.fnamemodify(trash_dst, ':t'),
-    original_path     = filepath,
+    original_path     = to_relative(filepath),
     title             = title,
     deleted_at        = os.date('!%Y-%m-%dT%H:%M:%SZ', now),
     deleted_timestamp = now,
@@ -186,14 +292,24 @@ function M.restore_note(entry)
     return false
   end
 
-  if vim.fn.filereadable(entry.original_path) == 1 then
-    vim.notify(
-      '[pkm] restore: target path already occupied: ' .. entry.original_path,
+  -- Resolved, never the raw field: the entry may have been written by an older
+  -- version, or copied in with the vault, and its absolute path may name a
+  -- directory outside this root. Restoring must land inside the current vault.
+  local target = M.resolve_original(entry)
+  if not target then
+    vim.notify('[pkm] restore: entry records no original location',
       vim.log.levels.ERROR)
     return false
   end
 
-  local parent_dir = vim.fn.fnamemodify(entry.original_path, ':h')
+  if vim.fn.filereadable(target) == 1 then
+    vim.notify(
+      '[pkm] restore: target path already occupied: ' .. target,
+      vim.log.levels.ERROR)
+    return false
+  end
+
+  local parent_dir = vim.fn.fnamemodify(target, ':h')
   if vim.fn.isdirectory(parent_dir) == 0 then
     vim.fn.mkdir(parent_dir, 'p')
   end
@@ -204,7 +320,7 @@ function M.restore_note(entry)
     return false
   end
 
-  if not pcall(vim.fn.writefile, data, entry.original_path, 'b') then
+  if not pcall(vim.fn.writefile, data, target, 'b') then
     vim.notify('[pkm] restore: could not write to original location',
       vim.log.levels.ERROR)
     return false
@@ -225,7 +341,7 @@ function M.restore_note(entry)
 
   -- Re-add to index; backlinks were never stripped, so the citation graph
   -- requires no additional reconstruction.
-  require('pkm.index').invalidate(entry.original_path)
+  require('pkm.index').invalidate(target)
   return true
 end
 
@@ -239,7 +355,7 @@ function M.empty()
   local count = 0
 
   for _, entry in ipairs(manifest) do
-    citations.cleanup_deleted_note(entry.original_path)
+    citations.cleanup_deleted_note(M.resolve_original(entry))
     local trash_file = utils.join(get_trash_dir(), entry.filename)
     if vim.fn.filereadable(trash_file) == 1 then
       vim.fn.delete(trash_file)
@@ -283,9 +399,12 @@ function M.purge_old()
     end
 
     if deleted_time and deleted_time < cutoff then
-      -- cleanup_deleted_note derives the note identifier from the path stem;
-      -- the file need not exist at original_path for this to work.
-      citations.cleanup_deleted_note(entry.original_path)
+      -- NOTE: the comment that stood here claimed the file need not exist at
+      -- this path. It must: cleanup_deleted_note() opens it with readfile(),
+      -- which throws E484 on a trashed note — see Known Bugs. Left as it is,
+      -- resolved rather than raw, because the fix is a decision about where
+      -- the backlink scan should read from, not a correction to this call.
+      citations.cleanup_deleted_note(M.resolve_original(entry))
       local trash_file = utils.join(get_trash_dir(), entry.filename)
       if vim.fn.filereadable(trash_file) == 1 then
         vim.fn.delete(trash_file)

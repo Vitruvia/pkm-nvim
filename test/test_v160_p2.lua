@@ -42,10 +42,21 @@ do
   check("original file gone after trashing", vim.fn.filereadable(note_path) == 0)
   check("manifest grew by one entry", #trash.list() == before_count + 1)
 
-  -- Locate the manifest entry we just created.
+  -- Locate the manifest entry we just created. Since v1.10.1 Ph4 the manifest
+  -- records a location *relative to the root*, so the entry is found through
+  -- resolve_original() — the contract — rather than by comparing the stored
+  -- field to an absolute path. The comparison also normalises separators:
+  -- note_path is built with a '/' onto a root that uses '\' on Windows.
+  local tutils = require('pkm.utils')
+  local function same_path(a, b)
+    a, b = tutils.normalize(a or ''), tutils.normalize(b or '')
+    if tutils.is_windows or tutils.is_wsl then a, b = a:lower(), b:lower() end
+    return a == b
+  end
+
   local entry = nil
   for _, e in ipairs(trash.list()) do
-    if e.original_path == note_path then entry = e end
+    if same_path(trash.resolve_original(e), note_path) then entry = e end
   end
   check("manifest entry for our note exists", entry ~= nil)
 

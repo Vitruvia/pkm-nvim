@@ -53,6 +53,27 @@
     that created files and found them would have passed with the bug still in
     place. The check is on the resolved string.
 
+-   **The trash remembers a place in the vault, not a place on the disk**
+    (v1.10.1 Ph4). A manifest entry recorded an absolute `original_path`, which
+    tied the trash to one directory: copy a vault and the copy's manifest still
+    points at the original, so restoring from the copy writes into the vault it
+    was copied from. `NotesTeste` was in exactly that state — entries reading
+    `P:\Notes\03-Consolidated\…` with the files sitting in its own
+    `.pkm-trash/`. The location is now stored **relative to the root**, with
+    `/` separators so a manifest travels between platforms, and read back
+    through the new `trash.resolve_original(entry)`, which re-roots whichever
+    form it finds: relative onto the current root; absolute-and-already-inside
+    taken as it stands; absolute-from-elsewhere re-rooted from the first
+    recognised note folder; and anything unrecognisable placed in the
+    consolidated folder, because writing outside the current root is the one
+    thing restore must never do. No existing manifest needs rewriting.
+
+    Measured against the real entry still in `NotesTeste`: the old target was
+    `P:\Notes\03-Consolidated\0131_note_test2.md` (outside the session's root),
+    the new one is `P:\NotesTeste\03-Consolidated\0131_note_test2.md`. This is
+    also what unblocks vault switching. `test_v160_p2` was matching entries by
+    the raw field and now goes through `resolve_original` — the contract.
+
 *The sections below are living project state, not release notes: they are
 carried forward from version to version and consulted before any fix.*
 
@@ -63,17 +84,21 @@ Ph1, the two test drifts in Ph2, and `:PKMOrphans` plus the `bench.lua`
 separator in Ph3. The two below were found while evaluating multi-vault
 support.)*
 
--   **The trash manifest stores `original_path` as an absolute path, so a
-    copied or moved vault restores into the *other* vault.** `trash.lua`
-    records the full path at deletion and `restore_note()` writes the file back
-    to it, checking only that the target is not already occupied. `NotesTeste`
-    was copied from the primary vault and its manifest still carries
-    `P:\Notes\03-Consolidated\…` entries whose files are present in
-    `.pkm-trash/`: restoring one of them from the test vault writes into the
-    **primary** vault. This is a live hazard today, not only under multi-vault,
-    and it is the blocker for vault switching — a root-relative `original_path`
-    (reading both forms for back-compat) makes copy, rename and switch all safe
-    at once. Found 27/7/2026 while evaluating the vault proposal.
+-   **`trash.empty()` and `purge_old()` throw `E484` on any genuinely trashed
+    note.** Both call `citations.cleanup_deleted_note(original_path)`, which
+    opens that path with `vim.fn.readfile()` — and a trashed note is precisely
+    a note that is no longer there; the copy lives in `.pkm-trash/`. Verified
+    against a disposable root: trash one note, call `empty()`, and it aborts on
+    the first entry with `Vim:E484: Can't open file …`, leaving the manifest
+    and the trash files untouched. `purge_old()` runs **automatically** five
+    seconds after `setup()` whenever `trash.max_age_days > 0`, so this fails in
+    the background as well. The comment that stood at the `purge_old()` call
+    site asserted the opposite ("the file need not exist at original_path for
+    this to work"); it has been corrected in place. Not fixed with v1.10.1 Ph4,
+    which touched the same two call sites, because the fix is a decision about
+    *where the backlink scan should read from* — the trash copy still has the
+    frontmatter, so pointing it there would make the cleanup actually happen
+    rather than merely stop erroring. Found 27/7/2026.
 
 -   **`PKMCitation` highlighting never matches anything.** The `matchadd`
     pattern in `syntax.lua` is
