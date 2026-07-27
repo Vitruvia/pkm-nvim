@@ -213,6 +213,20 @@ check("the configured directory is used whatever the root is",
 check("the registry is still found", #vault.list() == 2, '#=' .. #vault.list())
 check("but the root is in no vault, and active() says so", vault.active() == nil)
 
+-- Written with a trailing separator, which is the natural way to spell a
+-- directory. Every path built from it would otherwise be `dir//child`: nothing
+-- errors, the OS opens it, and `of()` compares one separator against two and
+-- stops recognising the vault at all.
+local a_note = alpha .. '/03-Consolidated/9601_note_a.md'
+pkm.setup({ root_path = alpha, vaults_path = nvroot .. '/' })
+check("a trailing separator does not double up in registry_path",
+  same(vault.registry_path(), registry), vault.registry_path())
+check("nor in path_of", same(vault.path_of(vault.get('Alpha')), alpha),
+  vault.path_of(vault.get('Alpha')))
+check("and of() still recognises the vault", (vault.of(a_note) or {}).name == 'Alpha')
+check("and root_path is stripped the same way",
+  pkm.config.root_path == utils.normalize(alpha), pkm.config.root_path)
+
 print("\n== a root with no registry anywhere behaves as it always has ==")
 
 -- The regression this phase most has to avoid: 29 test files and min_init pass

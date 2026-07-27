@@ -217,6 +217,13 @@ function M.resolve(user_config)
 
   cfg.root_path = utils.normalize(vim.fn.expand(cfg.root_path))
 
+  -- A trailing separator is a natural way to write a directory and it makes
+  -- every path built from the root `root//folder`. Nothing errors — the OS
+  -- opens it — but every comparison against a real note path is then off by one
+  -- character, which is how a path stops matching itself.
+  cfg.root_path = (cfg.root_path:gsub('[/\\]+$', ''))
+  if cfg.root_path == '' then cfg.root_path = utils.sep end
+
   -- Only normalised when it was given. It is deliberately not derived here:
   -- for a root that is nobody's sibling the derived answer would be its parent
   -- directory, and recording that in the config would state as a fact what is

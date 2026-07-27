@@ -117,7 +117,18 @@ function M.vaults_root()
   local cfg = get_config()
 
   if type(cfg.vaults_path) ~= 'string' or cfg.vaults_path == '' then return nil end
-  return utils.normalize(vim.fn.expand(cfg.vaults_path))
+
+  -- A trailing separator is the natural way to write a directory, and it makes
+  -- every path built from here `dir//child`. Windows opens such a path happily,
+  -- so nothing errors — but `of()` compares it against a note path that has one
+  -- separator, the prefix does not match, and the vault silently stops being
+  -- recognised: no indicator, no active vault, and `:PKMVault` unable to say
+  -- where you are. Stripped here rather than at every use.
+  local dir = utils.normalize(vim.fn.expand(cfg.vaults_path))
+  dir = (dir:gsub('[/\\]+$', ''))
+  if dir == '' then return utils.sep end   -- the filesystem root, spelled "/"
+
+  return dir
 end
 
 --- The registry file itself.
