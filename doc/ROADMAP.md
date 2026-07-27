@@ -194,8 +194,40 @@ v1.10.0 MINOR  Header navigation  ✅ released 26/7/2026, tagged
         gap Neovim's native ]] / [[ actually leaves — plus the commands,
         the count, and the level argument.
 
-(next)  Nothing is scheduled. The ordering below decides what comes first.
+v1.11.0 MINOR  The vaults are enumerated, not hardcoded  ⏳ code complete on
+        `dev`, awaiting its smoke route (note 0270 in the test vault); tag
+        after it passes. Three phases: the registry `vaults.json` and vault
+        identity by path; the lifecycle (:PKMVaultNew / Rename / Renumber /
+        Unregister / Adopt); and choosing (`vault = "<name>"`, $PKM_VAULT,
+        :PKMVault with its three guards). Detail in doc/CHANGELOG.md.
+
+(next)  v1.12.0 — typed forms for every state-writing operation. Was v1.11.0;
+        renumbered when the vaults took a version of their own.
 ```
+
+**v1.12.0 (MINOR) — every state write has a typed form.** The interactive and
+the programmatic form are the *same command* (Design Question 4.d): no argument
+gives the friendly path, an argument makes it deterministic and script-callable.
+Ph1 note lifecycle (`:PKMNewNote … title=`, `:PKMSetTitle`, `:PKMRenameNote` —
+today all three only prompt). Ph2 citations both ways: `cite` / `uncite`, the
+second of which does not exist. Ph3 tags and views acting on a *named* note —
+`:PKMAddTag`/`:PKMRemoveTag` are buffer-only by design — plus
+`:PKMView add|remove <view> [note]`. Ph4 authorship, `NNNN_<tipo>_ByClaude_<slug>.md`
+(the existing `^(%d+)_([a-z]+)_(.+)$` parser already tolerates the extra
+segment); with `LLM-Claude` the prefix stops being the only defence, since
+Claude's default root becomes its own and writing elsewhere is an explicit act.
+Ph5 `:PKMCheck` (new `lua/pkm/check.lua`, pure, no UI) — frontmatter validity,
+`cites`/`cited_by` symmetry, citations pointing at notes that exist, numbering
+collisions, plus two the vaults add: a `[Nome::note{...}]` naming a vault that
+does not exist, and notes stranded in `Unregistered/`.
+
+**Deferred: `PKMVaultSplit` / `PKMVaultMerge`.** Kept out of v1.11.0 on purpose.
+Merging collides numbering (two vaults each have a note 0042) and forces
+renumbering the incoming notes plus rewriting citations on **both** sides of the
+graph. The batched machine already exists —
+`citations.update_references_on_renames`, which operates on `config.root_path`
+and therefore runs at the destination after the move. A phase of its own, pulled
+in when a real `Unregistered/` folder asks for it.
 
 **Ordering beyond that, decided by the author.** Everything that may *create*
 commands comes first — above all the operations that change internal state

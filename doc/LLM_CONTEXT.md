@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.10.1** (released, tagged)
+## Current version: **v1.10.1** (released, tagged) · **v1.11.0** code complete on `dev`, untagged
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
@@ -27,7 +27,12 @@ Full module-by-module detail (role, key functions, invariants) is owned by
 quick orientation. Module list: `init, config, utils, commands, keymaps, yaml,
 timestamp, citations, notes, journal, ui, telescope, templates, export, filter,
 index, views, panel, mode, syntax, trash, markdown, bench, tags, picker, actions,
-rename, bufsync`.
+rename, bufsync, vault`.
+
+`vault` (v1.11.0) owns the registry `vaults.json` — which vaults exist, and
+which one a path belongs to. Nothing in it is required: a `root_path` with no
+registry beside it answers an empty list and a nil vault, which is the state
+every test file and `min_init` runs in.
 
 The last five are the bulk-operation stack (v1.8.0): `tags` and `rename` hold the
 rules and the writes, `picker` owns every selection screen, `actions` is the
@@ -47,7 +52,11 @@ with what a batch wrote.
 | Never use deprecated Neovim APIs | Use `nvim_set_option_value`, `vim.keymap.set` |
 | Never reference `M` from another module | Each file's `M` is its own table; cross-module calls use `require` |
 | Commands calling `init.lua` must use `require('pkm')` | `M` in `commands.lua` is not `init.lua`'s `M` |
-| Never physically separate notes for project organisation | Projects are views, not folders; all notes share one namespace |
+| Never physically separate notes for project organisation | Projects are views, not folders; all notes share one namespace **within a vault**. Vaults (v1.11.0) are separate namespaces that never communicate — not a way to organise projects |
+| Never compare a vault path with a Lua pattern | Every vault folder is `NN - Name`; as a pattern the `-` is a lazy quantifier, so `00 - Alpha` matches `00 Alpha` and *not* `00 - Alpha`. Always `find(..., 1, true)` |
+| Never switch the active vault without dropping what the old root produced | The index and **both** `views` caches — `views.json` lives *inside* the root, so a stale sidecar resolves one vault's views against another's notes |
+| Never move or switch away from a vault with a modified buffer under it | The buffer would name a file in a folder that is gone; `:w` recreates the folder and resurrects the vault as a ghost. `vault.select` and `move_folder` both refuse |
+| Never store an absolute vault path in the registry | `vaults.json` holds `{ number, name }`; the folder `NN - Name` is derived. Storing it is what makes a rename a search-and-replace |
 | Never optimize without benchmarking first | Baseline measurements required; `bench.lua` is the gate |
 | Never register `UndoPost` autocmd | Event does not exist in Neovim ≤ 0.11.x; tree-sitter tracks buffer changes via on_bytes |
 | Never call `index.invalidate` from buffer-only metadata commands | No disk write occurred; re-index happens on user's next `:w` |

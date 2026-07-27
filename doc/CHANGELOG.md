@@ -60,6 +60,109 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
+## [1.11.0] - 27/7/2026 — code complete on `dev`, **not tagged**
+
+*Awaiting the smoke route in
+`00 - NotesTeste/03-Consolidated/0270_note_smoke-v1110-os-vaults-sao-enumerados.md`,
+whose three Telescope screens the headless suite structurally cannot see. The
+tag is cut after it passes, not before.*
+
+*The active vault stopped being a path written into `init.lua`. A registry
+beside the vaults maps a number to a name, the folder is derived from the pair,
+and everything that depends on the path feeds from that instead of from a
+constant. Three phases: the registry and identity, the lifecycle, and choosing.*
+
+### Added
+
+-   **`lua/pkm/vault.lua` — the registry and vault identity** (v1.11.0 Ph1).
+    `vaults.json` sits one level above the vaults and holds
+    `{ number, name }` per vault; the folder `NN - Name` is **derived** and
+    never stored, so renaming and renumbering are moves and neither touches a
+    note. A note belongs to a vault **by path** — nothing is written into the
+    note — so the 897 existing notes needed no migration, and moving a note
+    between folders moves it between vaults, which is correct for something
+    that *is* a folder.
+
+    `of(path)` compares plainly, never as a Lua pattern: `00 - Alpha` read as a
+    pattern is "00, then any spaces, then ` Alpha`", which matches the folder
+    `00 Alpha` and fails to match `00 - Alpha` itself — wrong in both
+    directions, and every vault folder carries the hyphen. Verified against the
+    interpreter, and pinned by `test/test_v1110_p1.lua`.
+
+    `Note-Vault/` is not a git repository (each vault is), so `vaults.json` is
+    the one piece of state nothing can rebuild: written to a temp file and
+    renamed over the original, keeping the copy it replaced as `.bak`, and
+    validated before any of it reaches disk. New config key `vaults_path`;
+    **`root_path` alone keeps working exactly as before**, which the other 29
+    test files and `min_init` all depend on.
+
+-   **The vault lifecycle, five commands** (v1.11.0 Ph2). `:PKMVaultNew`
+    (folder, skeleton named from `config.folders`, `views.json`, `.gitignore`,
+    `git init` unless `!`), `:PKMVaultRename` (keeps the number),
+    `:PKMVaultRenumber` (keeps the name), `:PKMVaultUnregister` (moves the
+    folder to `Unregistered/`, always confirms) and `:PKMVaultAdopt` (the way
+    back, and the way a Note-Vault that predates the registry acquires one —
+    contents taken as they stand).
+
+    **Deleting a note is not reachable from any of them.** Unregistering moves
+    the folder intact, because each vault is a git repository and a file manager
+    removes one visibly and into the system's recycle bin. So there is no note
+    orphaned from every vault, only one waiting in `Unregistered/`.
+
+    The folder moves first and the registry second; a failed registry write puts
+    the folder back. A move is refused while any buffer under the vault is
+    unsaved — afterwards that buffer would still name a file in a folder that no
+    longer exists, and `:w` would recreate the folder to hold it, resurrecting
+    the vault as a ghost with one note in it. Renaming the vault you are working
+    in is safe: `root_path` is mutated **in place**, which is what reaches the
+    eight modules holding that same table, and open notes are re-pointed.
+
+-   **`vault = "<name>"` at startup, and `:PKMVault` at runtime** (v1.11.0 Ph3).
+    The name resolves through the registry into `root_path` before any module is
+    handed that table — nothing derived exists yet, which is why the startup form
+    needs none of the invalidation the runtime one does. `$PKM_VAULT` outranks
+    the config for one session, which is what lets the ordinary configuration run
+    against the test vault without being edited.
+
+    `:PKMVault` has three guards. What the old root produced is discarded
+    together — the index and **both** view caches, because `views.json` lives
+    *inside* the root and a sidecar held across a switch resolves one vault's
+    saved views against another vault's notes. The switch is refused while the
+    vault being left holds unsaved work (`force` overrides; the refusal is a
+    guard, not a wall). And the indicator, which the other two rest on: after a
+    switch the two vaults are identical on screen and every destructive command
+    acts on "the vault", so it is published to `vim.g.pkm_vault`, shown in the
+    sidebar title, and marked in the `:PKMVault` list.
+
+### Design notes
+
+-   **No aliases.** A rename does not keep the old name as a second name; the
+    old name stops meaning anything immediately. Keeping it is exactly what
+    would let vault 01 be renamed to vault 02's old name and answer to it.
+    Accepted consequence: a `[NomeAntigo::note{0042}]` written before a rename
+    can, once someone reuses that name, point at the wrong vault silently.
+    `history` records renames so a later `:PKMCheck` can say so, and is **never**
+    consulted to resolve a name — not being a namespace is what stops it
+    colliding with one.
+
+-   **This is multi-wiki, and `doc/PHILOSOPHY.md` §2 says multi-wiki is out of
+    scope.** The substance of the principle is intact — *within* a vault,
+    projects are still views and never folders — but the wording is now
+    literally false, and the vaults exist for reasons that are not project
+    organisation (a disposable test vault; a vault of Claude's own, which turns
+    "be careful where you write" from a norm into a structural fact). Flagged
+    for the author; PHILOSOPHY is not amended without them.
+
+### Fixed
+
+-   **`:PKMVaultAdopt` could not find the folders it accepts.** It already took
+    a folder sitting beside the vaults — the bootstrap path, since the existing
+    vaults are already in their folders and must not move to be registered — but
+    completion offered only `Unregistered/`. For a first use, invisible and
+    missing are the same thing.
+
+---
+
 ## [1.10.1] - 27/7/2026
 
 *The defect queue, five phases. A note’s text stopped being read as
