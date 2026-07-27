@@ -1191,6 +1191,46 @@ function M.set_default(name)
   return M.save(data)
 end
 
+--- Say what is missing when a vaults_path is configured but no vault opens.
+---
+--- This is the first run, and the only useful message names the folders that
+--- are already sitting there. Reporting the root instead — which at this point
+--- is the plugin's own `~/Notes` placeholder — describes a path the user never
+--- chose and does not mention the one command that fixes it.
+---
+--- A warning rather than an error: nothing is broken, the setup is simply not
+--- finished, and it stops the moment a vault is registered.
+function M.report_no_default()
+  local dir = M.vaults_root()
+  if not dir then return end
+
+  if #M.list() > 0 then
+    utils.notify(string.format(
+      'no default vault — :PKMVault! <name> picks the one to open (registered: %s)',
+      table.concat(vim.tbl_map(function(v) return v.name end, M.list()), ', ')),
+      vim.log.levels.WARN)
+    return
+  end
+
+  local found = {}
+  for _, path in ipairs(vim.fn.glob(dir .. '/*', false, true)) do
+    local leaf = vim.fn.fnamemodify(path, ':t')
+    if vim.fn.isdirectory(path) == 1 and leaf ~= 'Unregistered' then
+      found[#found + 1] = string.format('%q', leaf)
+    end
+  end
+
+  if #found > 0 then
+    utils.notify(string.format(
+      'no vault is registered yet — :PKMVaultAdopt registers what is already in %s (%s)',
+      dir, table.concat(found, ', ')), vim.log.levels.WARN)
+  else
+    utils.notify(string.format(
+      'no vault is registered, and %s holds no folder to adopt — :PKMVaultNew <name> makes one',
+      dir), vim.log.levels.WARN)
+  end
+end
+
 --- Resolve a vault chosen by name into the active root, once, at startup.
 ---
 --- `$PKM_VAULT` outranks `config.vault`: pointing the real configuration at the
@@ -1212,14 +1252,16 @@ function M.apply_startup_selection()
   if name == nil or name == '' then name = cfg.vault end
 
   if type(name) ~= 'string' or name == '' then
-    -- No registry means no default, and a plain root_path is a supported
-    -- configuration — so this is silence, not an error.
+    -- No vaults_path at all is a plain root_path configuration, which is
+    -- supported and says nothing. A vaults_path with no default is the first
+    -- run, and it is the one moment the user needs to be told what to do.
     if not M.vaults_root() then
       publish()
       return false
     end
     local fallback = M.default()
     if not fallback then
+      M.report_no_default()
       publish()
       return false
     end

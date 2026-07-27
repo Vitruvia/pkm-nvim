@@ -95,6 +95,55 @@ check("an unknown vault name leaves the root where it was",
   (pkm.config.root_path:gsub('\\', '/')) == (utils.normalize(a_path):gsub('\\', '/')),
   pkm.config.root_path)
 
+print("\n== the first run: a vaults_path and nothing else ==")
+
+-- The whole configuration on a first run, before any vault is registered. The
+-- root is then the plugin's own `~/Notes` placeholder — a path the user never
+-- chose — so complaining about *that* buries the only message that helps.
+local virgin = vim.fn.tempname() .. '/Note-Vault'
+vim.fn.mkdir(virgin .. '/01 - Vitruvia/03-Consolidated', 'p')
+
+local msgs = {}
+local real_notify = vim.notify
+vim.notify = function(m, l) msgs[#msgs + 1] = tostring(m); real_notify(m, l) end
+pkm.setup({ vaults_path = virgin })
+vim.notify = real_notify
+
+local all = table.concat(msgs, '\n')
+check("no complaint about the ~/Notes placeholder nobody chose",
+  not all:find('Root path does not exist', 1, true), all)
+check("instead it says no vault is registered",
+  all:find('no vault is registered', 1, true) ~= nil, all)
+check("and names the folder sitting there, ready to adopt",
+  all:find('01 - Vitruvia', 1, true) ~= nil, all)
+check("and names the command that does it",
+  all:find('PKMVaultAdopt', 1, true) ~= nil, all)
+
+-- Registered, but nobody said which one opens: a different question, and it
+-- gets a different answer.
+vault.save({ version = 1, history = {}, vaults = { { number = 1, name = 'Vitruvia' } } })
+msgs = {}
+vim.notify = function(m, l) msgs[#msgs + 1] = tostring(m); real_notify(m, l) end
+pkm.setup({ vaults_path = virgin })
+vim.notify = real_notify
+all = table.concat(msgs, '\n')
+check("with a vault registered but no default, it says so",
+  all:find('no default vault', 1, true) ~= nil, all)
+check("and lists what there is to choose from",
+  all:find('Vitruvia', 1, true) ~= nil, all)
+
+-- And once a default exists, the first run is over and startup is silent.
+vault.set_default('Vitruvia')
+msgs = {}
+vim.notify = function(m, l) msgs[#msgs + 1] = tostring(m); real_notify(m, l) end
+pkm.setup({ vaults_path = virgin })
+vim.notify = real_notify
+all = table.concat(msgs, '\n')
+check("with a default set, startup says nothing at all",
+  not all:find('no vault', 1, true) and not all:find('no default', 1, true), all)
+check("and it opened in it",
+  (pkm.config.root_path:gsub('\\', '/')):find('01 %- Vitruvia') ~= nil, pkm.config.root_path)
+
 print("\n== the default lives in the registry, so a rename cannot break it ==")
 
 -- The point of storing it there rather than in the user's config: the registry

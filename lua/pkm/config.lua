@@ -236,11 +236,13 @@ function M.resolve(user_config)
     cfg.vaults_path = utils.normalize(vim.fn.expand(cfg.vaults_path))
   end
 
-  -- Validation. Silent when a vault was named: root_path is then a placeholder
-  -- about to be replaced by the registry, and complaining about a path nobody
-  -- chose would bury the message that matters — which pkm.vault emits if the
-  -- named vault turns out not to be registered.
-  if vim.fn.isdirectory(cfg.root_path) == 0 and not cfg.vault and not vim.env.PKM_VAULT then
+  -- Validation. Silent whenever the root is the registry's to supply — a named
+  -- vault, $PKM_VAULT, or merely a vaults_path, which on a first run is the
+  -- whole configuration. root_path is then a placeholder nobody chose, and
+  -- complaining about it buries the message that matters: pkm.vault says what
+  -- is actually missing, and how to fix it.
+  if vim.fn.isdirectory(cfg.root_path) == 0
+  and not cfg.vault and not cfg.vaults_path and not vim.env.PKM_VAULT then
     vim.notify("PKM Critical: Root path does not exist: " .. cfg.root_path, vim.log.levels.ERROR)
   end
 
