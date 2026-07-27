@@ -225,7 +225,7 @@ planning or executing a phase.
 
 ---
 
-#### Shipped — everything up to v1.10.0
+#### Shipped — everything up to v1.10.1
 
 v1.6.1 and v1.6.2: correctness batch, `:PKMViews` open latency, index build cost.
 v1.7.0 Ph1–Ph2: deep export, and the relative note — Ph2 shipped inside v1.8.0
@@ -233,7 +233,8 @@ Ph1, where the tag engine it seeds from was written. v1.8.0: the bulk-operation
 stack in nine phases, released and tagged 25/7/2026. v1.8.1: the three defects
 its smoke pass found, released and tagged 26/7/2026. v1.9.0: views reached from
 where you already are, released and tagged 26/7/2026. v1.10.0: header
-navigation, one phase, released and tagged 26/7/2026. What each changed is in
+navigation, one phase, released and tagged 26/7/2026. v1.10.1: the defect
+queue in five phases, released and tagged 27/7/2026. What each changed is in
 `doc/CHANGELOG.md`.
 
 
@@ -289,6 +290,24 @@ section survives:
     leading number in the arguments as the count, so `:PKMHeaderNext 6` is six
     headers ahead; the level had to become `h6`. Any future command that takes
     both needs the non-numeric spelling from the start.
+-   **Vault state never holds an absolute path.** The vault gets copied, moved
+    and — from v1.11.0 — switched, and a stored absolute path points at
+    whichever vault was open when it was written. `NotesTeste` was carrying
+    trash entries that would have restored into `P:\Notes`. Anything the plugin
+    writes *inside* a root is relative to that root and re-rooted on read; this
+    is what unblocked multi-vault, and it applies to every future sidecar.
+-   **One value, one job.** `cleanup_deleted_note` used a single path as both
+    the note's identity and the place to read its text. For a note deleted in
+    place those coincide, which is why it survived; for a trashed note they do
+    not, and the whole operation aborted on a file that had by definition moved.
+    Where two meanings ride on one argument, the case that separates them is
+    already a bug waiting.
+-   **Assert the source, not the value, when someone else writes the same
+    state.** The modeline control measured `shiftwidth`, which Neovim's markdown
+    ftplugin sets *after* modelines run — so the option reported the same number
+    whether or not the fix worked. Found by the author's smoke pass; the
+    headless suite had passed for the right reason and was blind to it. Probes
+    now use `numberwidth`, which no ftplugin touches.
 
 **v1.6.2 and v1.7.0 have no tag.** Their work reached the user inside the v1.8.0
 release and the CHANGELOG entry for v1.8.0 records that; the numbers stayed

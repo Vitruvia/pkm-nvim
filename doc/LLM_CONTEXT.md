@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.10.0** (released, tagged)
+## Current version: **v1.10.1** (released, tagged)
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
@@ -59,6 +59,9 @@ with what a batch wrote.
 | Never give a command both a count and a numeric argument | Vim reads a leading number in the arguments **as** the count: `:PKMHeaderNext 6` is six headers ahead, never level six. Spell such arguments non-numerically (`h6`) |
 | Never verify a keymap with `normal!` | The bang skips mappings, so the check exercises the built-in keys and reports the feature broken (or working) for the wrong reason; use `normal` |
 | Never write an assertion where the wrong behaviour gives the same answer | Name the reading it must exclude, then pick an input where the two diverge — see `doc/PRINCIPLES.md` § What a check has to prove |
+| Never store an absolute path in vault state | The vault gets copied, moved and (soon) switched. `.pkm-trash/manifest.json` records `original_path` relative to the root; read it with `trash.resolve_original`. An absolute path in vault state is a pointer at whichever vault happened to be open when it was written |
+| Never assert on an option a ftplugin also writes | Neovim's markdown ftplugin ends with `setlocal … shiftwidth=4` and runs after modelines, so `shiftwidth` reports 4 from `markdown.vim` whether or not the thing under test happened. Probe `numberwidth`, which no ftplugin touches, or assert the source `:verbose` names |
+| Never give one path two jobs | `cleanup_deleted_note` used one argument as both the note's identity and the place to read its text; for a trashed note those differ, and `readfile` threw E484 on a path the note had already left (v1.10.1 Ph5) |
 
 ---
 
@@ -162,12 +165,18 @@ cited_by:
 ```lua
 {
   filename          : string  -- file name in .pkm-trash/ (may differ from original on collision)
-  original_path     : string  -- absolute path before deletion; used for restore + numbering
+  original_path     : string  -- where it came from, RELATIVE to the root, '/'-separated
   title             : string  -- frontmatter title at deletion time; picker display
   deleted_at        : string  -- ISO 8601 UTC string; display only
   deleted_timestamp : number  -- os.time(); used for autoclear comparison
 }
 ```
+
+`original_path` is **relative since v1.10.1 Ph4** and must be read through
+`trash.resolve_original(entry)`, never raw. Entries written by earlier versions
+hold an absolute path, and if the tree was ever copied that path names a
+different vault — which is how a restore from `NotesTeste` came to target
+`P:\Notes`. `resolve_original` re-roots every form onto the current root.
 
 ---
 

@@ -4,6 +4,71 @@
 
 ## [Unreleased]
 
+*The sections below are living project state, not release notes: they are
+carried forward from version to version and consulted before any fix.*
+
+### Known Bugs (queued)
+
+*(Six entries were closed in v1.10.1: the `ex:` modeline in Ph1, the two test
+drifts in Ph2, `:PKMOrphans` and the `bench.lua` separator in Ph3, the absolute
+`original_path` in Ph4 and the `E484` on emptying the trash in Ph5 — the last
+two found while evaluating multi-vault support, along with the one below.)*
+
+-   **`PKMCitation` highlighting never matches anything.** The `matchadd`
+    pattern in `syntax.lua` is
+    `\v<(note|bib|journal|scratch)\[[\w\-_]+\>`, and it fails twice over: in a
+    Vim collection `\w` is not a character class (`[\w]` does not match a
+    digit), and under `\v` the `>` is *already* the word boundary, so `\>` is a
+    literal `>`. Verified: the pattern returns no match for `note[0042]`,
+    `note[abc]` or `note[0042]>`, while
+    `\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]` matches `note[0042]` and
+    correctly rejects `nota[0042]`. It fails silently because `matchadd`
+    accepts the regex — it simply never fires. Found 27/7/2026; not fixed,
+    because it was not what was being worked on.
+
+### Known limitations
+
+- `notes.is_same_file()`'s case-fold fallback is gated on
+  `utils.is_windows`/`utils.is_wsl` (session-level) rather than a per-path
+  filesystem case-sensitivity check, which `pkm.utils` doesn't currently
+  expose. Safe for the current single documented root (`P:/Notes`, NTFS,
+  always case-insensitive); would misbehave if a root were ever pointed at
+  a case-sensitive filesystem from a Windows/WSL session. Revisit only if
+  that assumption changes.
+
+### Benchmarks 
+
+#### Post-index integration (bench_dir on NTFS/WSL, P: drive)
+
+  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
+  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
+  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
+  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
+    filesystem speed, not a regression.
+
+### Views_suite (NTFS/WSL, P: drive, synthetic notes)
+
+  - Scaling is perfectly linear: ms/view is constant across all view counts.
+  - 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
+    → 3087ms  (~3.1ms/view)
+  - 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
+    →  130ms  (~0.13ms/view)
+  - JIT accounts for ~2–3× speedup between cold and warm runs at same note
+    count.
+  - Caching decision: not warranted at current scale. Revisit at ~5k notes or
+    ~200+ views.
+
+---
+
+## [1.10.1] - 27/7/2026
+
+*The defect queue, five phases. A note’s text stopped being read as
+configuration; two assertions that had outlived what they described were
+retired; `:PKMOrphans` stopped rebuilding and sorting a set it only tests
+membership on; and the trash learned twice over that it holds a place in the
+vault rather than a place on the disk — once for where a note came from, once
+for where its text can still be read.*
+
 ### Fixed
 
 -   **A note's text is no longer read as configuration** (v1.10.1 Ph1). A line
@@ -107,60 +172,6 @@
     `markdown.vim`. Found by the author running the smoke in his own config,
     where the ftplugin is active; headless had passed for the right reason and
     so could not see it.
-
-*The sections below are living project state, not release notes: they are
-carried forward from version to version and consulted before any fix.*
-
-### Known Bugs (queued)
-
-*(The four entries that stood here were closed in v1.10.1: the `ex:` modeline in
-Ph1, the two test drifts in Ph2, and `:PKMOrphans` plus the `bench.lua`
-separator in Ph3. The two below were found while evaluating multi-vault
-support.)*
-
--   **`PKMCitation` highlighting never matches anything.** The `matchadd`
-    pattern in `syntax.lua` is
-    `\v<(note|bib|journal|scratch)\[[\w\-_]+\>`, and it fails twice over: in a
-    Vim collection `\w` is not a character class (`[\w]` does not match a
-    digit), and under `\v` the `>` is *already* the word boundary, so `\>` is a
-    literal `>`. Verified: the pattern returns no match for `note[0042]`,
-    `note[abc]` or `note[0042]>`, while
-    `\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]` matches `note[0042]` and
-    correctly rejects `nota[0042]`. It fails silently because `matchadd`
-    accepts the regex — it simply never fires. Found 27/7/2026; not fixed,
-    because it was not what was being worked on.
-
-### Known limitations
-
-- `notes.is_same_file()`'s case-fold fallback is gated on
-  `utils.is_windows`/`utils.is_wsl` (session-level) rather than a per-path
-  filesystem case-sensitivity check, which `pkm.utils` doesn't currently
-  expose. Safe for the current single documented root (`P:/Notes`, NTFS,
-  always case-insensitive); would misbehave if a root were ever pointed at
-  a case-sensitive filesystem from a Windows/WSL session. Revisit only if
-  that assumption changes.
-
-### Benchmarks 
-
-#### Post-index integration (bench_dir on NTFS/WSL, P: drive)
-
-  - 10k notes: raw 1966ms, build 1510ms, query 0.20ms, filter 6.6ms
-  - Post-index query + filter: ~6.8ms vs ~1966ms raw (~290× improvement)
-  - 100k projection (raw scan): ~14.2s; post-index: ~65ms
-  - Previous run used Linux tmpfs (raw ~1449ms at 10k); difference is
-    filesystem speed, not a regression.
-
-### Views_suite (NTFS/WSL, P: drive, synthetic notes)
-
-  - Scaling is perfectly linear: ms/view is constant across all view counts.
-  - 10k notes: single 3.5ms,  50 views → 158ms,  300 views → 935ms,  1000 views
-    → 3087ms  (~3.1ms/view)
-  - 1k notes (post-JIT):      50 views →   7ms,  300 views →  40ms,  1000 views
-    →  130ms  (~0.13ms/view)
-  - JIT accounts for ~2–3× speedup between cold and warm runs at same note
-    count.
-  - Caching decision: not warranted at current scale. Revisit at ~5k notes or
-    ~200+ views.
 
 ---
 
