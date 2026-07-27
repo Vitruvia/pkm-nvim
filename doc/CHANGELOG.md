@@ -4,8 +4,28 @@
 
 ## [Unreleased]
 
-*No entries yet. The sections below are living project state, not release notes:
-they are carried forward from version to version and consulted before any fix.*
+### Fixed
+
+-   **A note's text is no longer read as configuration** (v1.10.1 Ph1). A line
+    like `um exemplo ex: Será` is a Vim modeline — text, whitespace, the `ex:`
+    marker, and what Vim then takes for an option name — so opening or saving
+    such a note raised `E518: Unknown option`. Two triggers, closed separately:
+    Neovim applies modelines when it reads the file, and PKM re-fired them on
+    **every save**, because `:doautocmd` applies modelines unless given
+    `<nomodeline>` and the Syntax refire in `BufWritePost` did not give it.
+    Notes now carry `modeline = false` buffer-locally (set on `BufReadPre` /
+    `BufNewFile` under the root, the last moment that can prevent them), and the
+    refire is `doautocmd <nomodeline> Syntax`. The global option is untouched:
+    files outside the vault keep their modelines.
+
+    The comment in `init.lua` claimed this risk had left with `noautocmd e`. It
+    had not — `:e` was one trigger, the refire was the other. The bug also
+    reproduces only in the form that has text *before* the marker: a line
+    starting with `ex:` is not a modeline, which is why a first reproduction
+    attempt wrongly suggested the defect was already gone.
+
+*The sections below are living project state, not release notes: they are
+carried forward from version to version and consulted before any fix.*
 
 ### Known Bugs (queued)
 
@@ -33,31 +53,6 @@ they are carried forward from version to version and consulted before any fix.*
      left out of Ph3 to keep that phase to a single file. Measured cost at 2000
      notes × 50 views: ~121 ms for the whole loop. At current real corpus scale
      (hundreds of notes, tens of views) it stays imperceptible.
-
--   Error below when ending any file with `ex: <text>`. The current workoround
-    has been to simply avoid ending files that way, or wrapping any `ex:
-    <text>` at the end of some line in `(` `)`.
-
-    ```
-
-    Error executing vim.schedule lua callback:
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: Error
-    executing lua: vim/_editor.lua:445: nvim_exec2()[1]..modelines, line 318:
-    Vim(doaut ocmd):E518: Unknown option: "Será
-    stack traceback:
-    [C]: in function 'nvim_exec2'
-    vim/_editor.lua:445: in function 'cmd'
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:168: in
-    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157>
-    [C]: in function 'nvim_buf_call'
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: in
-    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
-    stack traceback:
-    [C]: in function 'nvim_buf_call'
-    ...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:157: in
-    function <...e/AppData/Local/nvim-data/lazy/pkm-nvim/lua/pkm/init.lua:117>
-
-    ```
 
 -   `test/test_v160_p3.lua` — the "header mentions the C-f-to-browse hint"
     assertion fails. Test drift, not a code defect: the check (line 77) requires

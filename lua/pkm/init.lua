@@ -139,6 +139,21 @@ end
 function M.setup_sync_autocmds()
   local augroup = vim.api.nvim_create_augroup("PKMSync", { clear = true })
 
+  -- A note is prose, so its text is not configuration. "um exemplo ex: Será" is
+  -- a line someone wrote, but Vim reads text + whitespace + `ex:` as a modeline
+  -- and `Será` as an option name — E518 on open, and again on every save. The
+  -- option is buffer-local, so this immunises notes without touching how the
+  -- rest of the user's editing works. BufReadPre because modelines are applied
+  -- after the read, so this is the last moment that can prevent them.
+  vim.api.nvim_create_autocmd({ 'BufReadPre', 'BufNewFile' }, {
+    group = augroup, pattern = '*.md',
+    callback = function(ev)
+      if in_root(vim.api.nvim_buf_get_name(ev.buf)) then
+        vim.api.nvim_set_option_value('modeline', false, { buf = ev.buf })
+      end
+    end,
+  })
+
   -- Before the write: capture fold state, and remember that this note was
   -- saved. The frontmatter is deliberately NOT touched here — see
   -- stamp_on_release() for where `last_updated_on` is written and why.
@@ -270,9 +285,12 @@ function M.setup_sync_autocmds()
             pcall(vim.cmd, 'noautocmd write!')
           end
           vim.fn.winrestview(view)
-          -- noautocmd e is no longer used, so there's no modeline-scan risk
-          -- to guard against — this Syntax refire is now a no-op, kept as-is.
-          vim.cmd('doautocmd Syntax')
+          -- `<nomodeline>` is load-bearing: :doautocmd applies modelines unless
+          -- told not to, so without it this refire re-read the note's own text
+          -- as configuration on every single save. (An earlier comment here
+          -- claimed the risk left with `noautocmd e`. It did not: `:e` was one
+          -- trigger, this was the other.)
+          vim.cmd('doautocmd <nomodeline> Syntax')
           -- Restart PKM tree-sitter if active; harmless no-op now that the
           -- highlighter is never actually stopped by the reload above.
           if require('pkm.mode').is_active() then
