@@ -775,6 +775,39 @@ function M.count_many(names)
   return counts
 end
 
+--- Return the set of note paths matched by *any* of the named views.
+--- The membership path, and the counterpart of `count_many`: a caller asking
+--- "is this note covered by some view?" needs neither the array nor its order,
+--- so V views cost one `index.get_all()` plus V filter passes, and no path
+--- array, no basename key and no sort are built to be thrown away.
+--- Keys are `utils.normalize`d — compare with a normalized path.
+--- Unknown or invalid views notify and contribute nothing, exactly as
+--- `match_all(name)` does.
+---@param names string[]
+---@return table<string, true>  Set of normalized absolute paths
+function M.match_set(names)
+  if #names == 0 then return {} end
+
+  local filter  = require('pkm.filter')
+  local entries = require('pkm.index').get_all()
+  local set     = {}
+
+  for _, name in ipairs(names) do
+    local tree, err = get_tree(name)
+    if tree then
+      for _, entry in ipairs(entries) do
+        if filter.eval(tree, entry) then
+          set[utils.normalize(entry.path)] = true
+        end
+      end
+    else
+      vim.notify(err, vim.log.levels.ERROR)
+    end
+  end
+
+  return set
+end
+
 --- Return the currently active view name for context-aware features.
 --- Prefers the sidebar's open detail view; falls back to the last activated view.
 ---@return string|nil

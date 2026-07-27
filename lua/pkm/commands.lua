@@ -307,13 +307,11 @@ function M.register()
     local views = require('pkm.views')
     local utils = require('pkm.utils')
 
-    -- Build a set of paths that appear in at least one defined view.
-    local viewed = {}
-    for _, vname in ipairs(views.list()) do
-      for _, path in ipairs(views.match_all(vname)) do
-        viewed[utils.normalize(path)] = true
-      end
-    end
+    -- The set of paths that appear in at least one defined view. match_set
+    -- reads the index once for the whole batch; the match_all loop this
+    -- replaces read it once per view and sorted each result by basename, an
+    -- order a membership test cannot use.
+    local viewed = views.match_set(views.list())
 
     -- An orphan has no tags, no citations, and belongs to no view.
     local orphan_paths = {}

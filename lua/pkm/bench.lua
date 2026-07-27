@@ -156,6 +156,26 @@ function M.gen_notes(n, dest)
 end
 
 -- =============================================================================
+-- SECTION: Bench directory
+-- =============================================================================
+
+--- Resolve the directory a benchmark writes its synthetic corpus into.
+--- A caller may hand in a Unix-style path on Windows ('/tmp/pkm_bench'), and
+--- `utils.join` appends with the *native* separator — so without normalising
+--- once, here, every path derived from it mixes the two. The filesystem
+--- tolerates that (`mkdir` and `glob` both accept mixed separators), which is
+--- why the malformed paths only ever surfaced in the printed report, and why
+--- this is verified on the string rather than on the files it creates: the
+--- files come out right either way.
+--- `vim.fn.tempname()` is already native, so the fallback passes through.
+---@param supplied string|nil  Caller-supplied directory, if any
+---@param suffix   string      Suffix for the generated temp directory
+---@return string  Absolute path in this platform's own separator
+function M._resolve_bench_dir(supplied, suffix)
+  return utils.normalize(supplied or (vim.fn.tempname() .. suffix))
+end
+
+-- =============================================================================
 -- SECTION: Cleanup
 -- =============================================================================
 
@@ -346,9 +366,7 @@ function M.run_suite(bench_dir, opts)
   local keep     = opts.keep     or false
   local extended = opts.extended or false
 
-  if not bench_dir then
-    bench_dir = vim.fn.tempname() .. '_pkmbench'
-  end
+  bench_dir = M._resolve_bench_dir(bench_dir, '_pkmbench')
 
   local tiers = { 100, 1000, 10000 }
   if extended then tiers[#tiers + 1] = 100000 end
@@ -430,8 +448,7 @@ function M.views_suite(opts)
   opts       = opts or {}
   local keep       = opts.keep       or false
   local note_count = opts.note_count or 10000
-  local bench_dir  = opts.bench_dir
-    or (vim.fn.tempname() .. '_pkmbench_views')
+  local bench_dir  = M._resolve_bench_dir(opts.bench_dir, '_pkmbench_views')
 
   local filter = require('pkm.filter')
 
@@ -586,7 +603,7 @@ local function views_open_synthetic(opts)
   local note_count = type(opts.synthetic) == 'number' and opts.synthetic or 2000
   local view_count = opts.view_count or 20
   local keep       = opts.keep or false
-  local bench_dir  = opts.bench_dir or (vim.fn.tempname() .. '_pkmbench_open')
+  local bench_dir  = M._resolve_bench_dir(opts.bench_dir, '_pkmbench_open')
 
   local filter    = require('pkm.filter')
   local notes_dir = utils.join(bench_dir, 'notes')
@@ -805,7 +822,7 @@ function M.index_profile(opts)
 
   local dirs, bench_dir
   if opts.synthetic then
-    bench_dir = opts.bench_dir or (vim.fn.tempname() .. '_pkmbench_index')
+    bench_dir = M._resolve_bench_dir(opts.bench_dir, '_pkmbench_index')
     local notes_dir = utils.join(bench_dir, 'notes')
     vim.notify(string.format(
       'PKMBench index: generating %d synthetic notes…', opts.synthetic),

@@ -24,44 +24,43 @@
     starting with `ex:` is not a modeline, which is why a first reproduction
     attempt wrongly suggested the defect was already gone.
 
+-   **Two assertions that outlived what they described** (v1.10.1 Ph2). Test
+    drift, not code defects, and the whole suite is green again for the first
+    time since v1.5.4. `test_phase1_old.lua` asserted that an unknown field
+    prefix is rejected; since v1.5.4 it is not a field at all but the value of
+    an `any:` predicate, without which `http://x` and `TODO:` are unsearchable.
+    The assertion now states that, and checks the *value* too — a parser that
+    dropped the `body:` part would also report `field == 'any'`, and would be
+    wrong. `test_v160_p3.lua` demanded `Views` and `browse all` on one header
+    line; the panel never rendered them together — the header names the panel
+    and points at `?`, and the hint lives in the `?` overlay. The check now
+    presses `?` and reads the overlay, which is the only route to the hint.
+
+-   **`:PKMOrphans` no longer rebuilds and sorts what it only counts as a set**
+    (v1.10.1 Ph3). It called `views.match_all` once per view, so it read the
+    index V times and paid V basename sorts — an ordering it then discarded,
+    since all it does with the result is test membership. New
+    `views.match_set(names)`: the batch, unordered counterpart of `count_many`
+    — one `index.get_all()`, V filter passes, a set of normalized paths, with
+    the same notify-and-contribute-nothing behaviour on an unknown view.
+
+-   **`bench.lua` resolves its bench directory in one separator** (v1.10.1
+    Ph3). A caller-supplied Unix-style dir on Windows (`/tmp/pkm_bench`) was
+    joined with the *native* separator, so every derived path mixed the two.
+    New `bench._resolve_bench_dir(supplied, suffix)`, called by all four entry
+    points. Worth recording how this was verified: the files always came out
+    right, because `mkdir` and `glob` both accept mixed separators — so a test
+    that created files and found them would have passed with the bug still in
+    place. The check is on the resolved string.
+
 *The sections below are living project state, not release notes: they are
 carried forward from version to version and consulted before any fix.*
 
 ### Known Bugs (queued)
 
--   `test/test_phase1_old.lua` — the "parse rejects unknown field" assertion
-    fails. Test drift, not a code defect: the legacy suite predates the filter
-    DSL change that turned an unknown field prefix into an `any:` substring
-    match (`filter.lua:252` documents the current behaviour, and
-    `test_filter.lua` asserts it across 135 cases). `filter.lua` has not
-    changed since v1.5.4. Either update the legacy assertion or retire the file
-    in favour of `test_filter.lua`.
-
--   `bench.lua`: `utils.join` uses `\` separator on Windows/WSL, producing
-     malformed paths when `bench_dir` is a Unix-style path (e.g.
-     `/tmp/pkm_bench`). Files are still created correctly because
-     `vim.fn.mkdir`/`glob` tolerate mixed separators on WSL. Fix: accept
-     `bench_dir` as-is and join subdirs with the correct separator for the path
-     type, or document that `bench_dir` must use the native separator.
-
--   `:PKMOrphans` is O(V × N) at call time (calls `views.match_all()` once per
-     defined view to build the viewed-path set). Unlike the overview screens
-     fixed in v1.6.1 Ph3, it needs the *paths*, not the counts, so `count_many`
-     does not apply — but it also does not need them **sorted**, and it pays one
-     `index.get_all()` plus one sort per view. A `match_all` variant that skips
-     the sort (or an `each_match(name, fn)` iterator) would remove both; it was
-     left out of Ph3 to keep that phase to a single file. Measured cost at 2000
-     notes × 50 views: ~121 ms for the whole loop. At current real corpus scale
-     (hundreds of notes, tens of views) it stays imperceptible.
-
--   `test/test_v160_p3.lua` — the "header mentions the C-f-to-browse hint"
-    assertion fails. Test drift, not a code defect: the check (line 77) requires
-    a single header line containing both `Views` and `browse all`, but the views
-    panel renders the `<C-f>  browse all notes` hint on its own line, separate
-    from the title. The hint is present and functional (`views.lua` ~L913).
-    Fix: relax the test to check the hint line independently of the title.
-    (Pre-existing; confirmed present on `be0ccd8` before the v1.6.x helper
-    dedup, so unrelated to it.)
+*(Empty — the four entries that stood here were closed in v1.10.1: the `ex:`
+modeline in Ph1, the two test drifts in Ph2, and `:PKMOrphans` plus the
+`bench.lua` separator in Ph3.)*
 
 ### Known limitations
 
