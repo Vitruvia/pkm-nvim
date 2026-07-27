@@ -792,16 +792,28 @@ function M.register()
     end
   end
 
-  --- Folder names that :PKMVaultAdopt can take: everything under Unregistered/.
+  --- Folder names :PKMVaultAdopt can take: everything under Unregistered/, and
+  --- every folder beside the vaults that no vault claims.
+  ---
+  --- The second half is how a vault that predates the registry gets into it —
+  --- the first `:PKMVaultAdopt "01 - Vitruvia"` on a Note-Vault that has no
+  --- vaults.json yet. Offering only Unregistered/ left that path working but
+  --- invisible, which for a first use is the same as missing.
   local function adoptable()
     local vault = require('pkm.vault')
-    local dir   = vault.unregistered_dir()
-    if not dir then return {} end
+    local roots = { vault.unregistered_dir(), vault.vaults_root() }
 
-    local out = {}
-    for _, path in ipairs(vim.fn.glob(dir .. '/*', false, true)) do
-      if vim.fn.isdirectory(path) == 1 then
-        out[#out + 1] = vim.fn.fnamemodify(path, ':t')
+    local out, seen = {}, {}
+    for _, dir in ipairs(roots) do
+      for _, path in ipairs(vim.fn.glob(dir .. '/*', false, true)) do
+        local leaf = vim.fn.fnamemodify(path, ':t')
+        if vim.fn.isdirectory(path) == 1
+        and leaf ~= 'Unregistered'
+        and not seen[leaf]
+        and vault.of(path) == nil then
+          seen[leaf]  = true
+          out[#out + 1] = leaf
+        end
       end
     end
     return out

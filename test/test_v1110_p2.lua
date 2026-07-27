@@ -211,6 +211,19 @@ check("adopt imposed no skeleton the folder did not have",
   not isdir(nvroot .. '/03 - Antiga/' .. folders.journal))
 check("and kept the one it did", isdir(nvroot .. '/03 - Antiga/' .. folders.consolidated))
 
+-- A folder beside the vaults that no vault claims is adopted where it stands.
+-- This is how a Note-Vault that predates the registry acquires one: the vaults
+-- are already in their folders and must not move to be registered.
+vim.fn.mkdir(nvroot .. '/05 - Preexistente/' .. folders.consolidated, 'p')
+local ok_pre, err_pre, entry_pre = vault.adopt('05 - Preexistente')
+check("a folder beside the vaults is adopted in place", ok_pre, err_pre)
+check("keeping the number and name it already had",
+  entry_pre and entry_pre.number == 5 and entry_pre.name == 'Preexistente',
+  vim.inspect(entry_pre))
+check("it did not move to get registered", isdir(nvroot .. '/05 - Preexistente'))
+check("and Unregistered/ was never involved",
+  not isdir(nvroot .. '/Unregistered/05 - Preexistente'))
+
 print("  (expected refusals follow)")
 check("adopting a folder that is not there is refused", vault.adopt('Ghost') == false)
 vim.fn.mkdir(nvroot .. '/Unregistered/Casa', 'p')
