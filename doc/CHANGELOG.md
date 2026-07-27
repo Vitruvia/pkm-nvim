@@ -60,12 +60,13 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
-## [1.11.0] - 27/7/2026 — code complete on `dev`, **not tagged**
+## [1.11.0] - 27/7/2026
 
-*Awaiting the smoke route in
-`00 - NotesTeste/03-Consolidated/0270_note_smoke-v1110-os-vaults-sao-enumerados.md`,
-whose three Telescope screens the headless suite structurally cannot see. The
-tag is cut after it passes, not before.*
+*Smoke route passed in full
+(`00 - NotesTeste/03-Consolidated/0270_note_smoke-v1110-os-vaults-sao-enumerados.md`),
+including the three Telescope screens the headless suite structurally cannot
+see. Two defects were found and fixed during it, both recorded below: the
+trailing separator, and the first run complaining about a path nobody chose.*
 
 *The active vault stopped being a path written into `init.lua`. A registry
 beside the vaults maps a number to a name, the folder is derived from the pair,

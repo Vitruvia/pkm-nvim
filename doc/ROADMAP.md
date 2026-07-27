@@ -194,15 +194,15 @@ v1.10.0 MINOR  Header navigation  ✅ released 26/7/2026, tagged
         gap Neovim's native ]] / [[ actually leaves — plus the commands,
         the count, and the level argument.
 
-v1.11.0 MINOR  The vaults are enumerated, not hardcoded  ⏳ code complete on
-        `dev`, awaiting its smoke route (note 0270 in the test vault); tag
-        after it passes. Three phases: the registry `vaults.json` and vault
-        identity by path; the lifecycle (:PKMVaultNew / Rename / Renumber /
-        Unregister / Adopt); and choosing (`vault = "<name>"`, $PKM_VAULT,
-        :PKMVault with its three guards). Detail in doc/CHANGELOG.md.
+v1.11.0 MINOR  The vaults are enumerated, not hardcoded  ✅ released 27/7/2026,
+        tagged. Three phases: the registry `vaults.json` and vault identity by
+        path; the lifecycle (:PKMVaultNew / Rename / Renumber / Unregister /
+        Adopt); and choosing (registry default, `vault = "<name>"`, $PKM_VAULT,
+        :PKMVault with its three guards). Nothing outside the registry names a
+        vault. Detail in doc/CHANGELOG.md.
 
-(next)  v1.12.0 — typed forms for every state-writing operation. Was v1.11.0;
-        renumbered when the vaults took a version of their own.
+(next)  v1.11.1 — the indicator, finished: the vault visible in the buffer
+        panel and in the statusline. Then v1.12.0, typed forms.
 ```
 
 **v1.12.0 (MINOR) — every state write has a typed form.** The interactive and
