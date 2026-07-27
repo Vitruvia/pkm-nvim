@@ -29,6 +29,13 @@ local defaults = {
   -- working exactly as it always has.
   vaults_path = nil,
 
+  -- Active vault, by name, resolved through the registry into root_path at
+  -- startup. Overridden for one session by $PKM_VAULT, which is how the normal
+  -- configuration can be pointed at the test vault without being edited.
+  -- Setting this instead of root_path is what stops the active vault being a
+  -- hardcoded path that every rename has to chase.
+  vault = nil,
+
   folders = {
     consolidated = "03-Consolidated",
     journal      = "02-Journal",
@@ -214,8 +221,11 @@ function M.resolve(user_config)
     cfg.vaults_path = utils.normalize(vim.fn.expand(cfg.vaults_path))
   end
 
-  -- Validation
-  if vim.fn.isdirectory(cfg.root_path) == 0 then
+  -- Validation. Silent when a vault was named: root_path is then a placeholder
+  -- about to be replaced by the registry, and complaining about a path nobody
+  -- chose would bury the message that matters — which pkm.vault emits if the
+  -- named vault turns out not to be registered.
+  if vim.fn.isdirectory(cfg.root_path) == 0 and not cfg.vault and not vim.env.PKM_VAULT then
     vim.notify("PKM Critical: Root path does not exist: " .. cfg.root_path, vim.log.levels.ERROR)
   end
 

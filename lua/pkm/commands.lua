@@ -807,6 +807,46 @@ function M.register()
     return out
   end
 
+  vim.api.nvim_create_user_command('PKMVault', function(opts)
+    local vault = require('pkm.vault')
+
+    local function switch(name)
+      local ok, err, entry = vault.select(name)
+      if ok then
+        vim.notify('[pkm] active vault: ' .. vault.folder_of(entry), vim.log.levels.INFO)
+      else
+        vim.notify('[pkm] ' .. (err or 'the vault was not changed'), vim.log.levels.ERROR)
+      end
+    end
+
+    local name = vim.trim(opts.args)
+    if name ~= '' then
+      switch(name)
+      return
+    end
+
+    local entries = vault.list()
+    if #entries == 0 then
+      vim.notify('[pkm] no vaults are registered — :PKMVaultNew makes one', vim.log.levels.INFO)
+      return
+    end
+
+    -- Listing and switching are one panel, and the panel answers "which one am
+    -- I in?" before it asks "which one do you want?".
+    local active = vault.active()
+    require('pkm.picker').choose(entries, {
+      title   = 'Vault · ' .. (vault.indicator() ~= '' and vault.indicator() or 'unregistered root'),
+      display = function(row)
+        local here = active and active.number == row.number and active.name == row.name
+        return (here and '● ' or '  ') .. vault.folder_of(row)
+      end,
+    }, function(row) switch(row.name) end)
+  end, {
+    nargs    = '?',
+    complete = function() return vault_names() end,
+    desc     = 'Switch the active vault (no argument lists them, marking the active one)',
+  })
+
   vim.api.nvim_create_user_command('PKMVaultNew', function(opts)
     local vault = require('pkm.vault')
     local name  = vim.trim(opts.args)

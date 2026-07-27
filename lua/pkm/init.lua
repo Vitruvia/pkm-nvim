@@ -41,6 +41,13 @@ local _saved_since_open = {}
 function M.setup(user_config)
   M.config = require('pkm.config').resolve(user_config)
 
+  -- A vault named in the config (or in $PKM_VAULT) resolves through the
+  -- registry into root_path here, before any module is handed that table.
+  -- Nothing derived exists yet — no index, no view caches, no open notes — so
+  -- this needs none of the invalidation :PKMVault does at runtime. Running it
+  -- after the module setups is what would need it.
+  require('pkm.vault').apply_startup_selection()
+
   -- Initialize Modules
   require('pkm.timestamp').setup(M.config)
   require('pkm.yaml').setup(M.config)

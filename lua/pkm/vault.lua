@@ -55,6 +55,12 @@
 --   renumber(name, n)      → keeps the name, moves the folder
 --   unregister(name)       → moves the folder to Unregistered/, deletes nothing
 --   adopt(folder, opts?)   → the way back; takes the contents as they stand
+--
+-- Selection:
+--   indicator()               → string  "01 Vitruvia", or "" — never nil
+--   select(name, opts?)       → switch the active vault, invalidating what the
+--                               old root produced; refuses on unsaved work
+--   apply_startup_selection() → resolve config.vault / $PKM_VAULT into the root
 -- =============================================================================
 
 local M = {}
@@ -1011,6 +1017,145 @@ function M.adopt(folder, opts)
   end
 
   return true, nil, entry
+end
+
+-- =============================================================================
+-- SECTION: Choosing the active vault
+-- =============================================================================
+--
+-- After a switch the two vaults look identical on screen, and every destructive
+-- command acts on "the vault". No amount of code fixes that; only saying which
+-- one does. So the indicator is published on every path through this section,
+-- including the ones that fail.
+
+--- The active vault as a label — `"01 Vitruvia"`, or an empty string when no
+--- registered vault holds the root. Never nil, so a statusline can concatenate
+--- it without a guard.
+---@return string
+function M.indicator()
+  local entry = M.active()
+  if not entry then return '' end
+  return string.format('%02d %s', entry.number, entry.name)
+end
+
+--- Publish the active vault where a statusline and the panels can read it.
+local function publish()
+  vim.g.pkm_vault = M.indicator()
+end
+
+--- Point the plugin at another vault.
+---
+--- Three things have to happen, and the order is what makes it safe.
+---
+--- First, refuse while the vault being left holds unsaved work. After the
+--- switch that buffer is outside the root: `in_root` answers false, so saving
+--- it stops stamping its timestamp, stops syncing citations and stops touching
+--- the index. It still looks like a note and has quietly stopped being treated
+--- as one.
+---
+--- Then move the root, in place — the eight modules that keep config hold this
+--- same table.
+---
+--- Then discard everything derived from the old root. This is the step that
+--- corrupts if it is skipped: `views.json` lives *inside* the root, so a stale
+--- sidecar evaluates one vault's saved views against another's notes, and a
+--- stale index lists notes that are not there.
+---@param name string
+---@param opts table|nil { force? = boolean — switch despite unsaved buffers }
+---@return boolean ok
+---@return string|nil err
+---@return table|nil entry
+function M.select(name, opts)
+  opts = opts or {}
+
+  local entry = M.get(name)
+  if not entry then
+    publish()
+    return false, string.format('no vault is named %q', name)
+  end
+
+  local path = M.path_of(entry)
+  if vim.fn.isdirectory(path) == 0 then
+    publish()
+    return false, string.format('%s is registered but its folder is not there',
+      M.folder_of(entry))
+  end
+
+  local cfg = get_config()
+  if comparable(slashed(cfg.root_path or '')) == comparable(slashed(path)) then
+    publish()
+    return true, nil, entry
+  end
+
+  if not opts.force then
+    local dirty = {}
+    for _, b in ipairs(buffers_under(cfg.root_path or '')) do
+      if vim.bo[b].modified then
+        dirty[#dirty + 1] = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(b), ':t')
+      end
+    end
+    if #dirty > 0 then
+      publish()
+      return false, string.format(
+        'unsaved changes in %s — after the switch those buffers sit outside the root, '
+        .. 'where saving no longer updates the timestamp, the citations or the index',
+        table.concat(dirty, ', '))
+    end
+  end
+
+  cfg.root_path = utils.normalize(path)
+
+  -- Everything the old root produced, dropped together.
+  pcall(function() require('pkm.views').invalidate() end)
+  pcall(function()
+    local index = require('pkm.index')
+    if index.is_built() then index.rebuild() end
+  end)
+  pcall(function() require('pkm.views').refresh_sidebar_if_open() end)
+
+  publish()
+  return true, nil, entry
+end
+
+--- Resolve a vault chosen by name into the active root, once, at startup.
+---
+--- `$PKM_VAULT` outranks `config.vault`: pointing the real configuration at the
+--- test vault for a single session, without editing init.lua, is the reason the
+--- startup form exists at all.
+---
+--- Nothing derived exists yet when this runs — no index, no view caches, no
+--- open notes — which is why it needs none of the invalidation `select()` does.
+--- That is also why it must run before the modules are handed the config.
+---@return boolean applied
+function M.apply_startup_selection()
+  local cfg  = get_config()
+  local name = vim.env.PKM_VAULT
+  if name == nil or name == '' then name = cfg.vault end
+
+  if type(name) ~= 'string' or name == '' then
+    publish()
+    return false
+  end
+
+  local entry = M.get(name)
+  if not entry then
+    utils.notify(string.format('no vault named %q is registered — staying on %s',
+      name, tostring(cfg.root_path)), vim.log.levels.ERROR)
+    publish()
+    return false
+  end
+
+  local path = M.path_of(entry)
+  if vim.fn.isdirectory(path) == 0 then
+    utils.notify(string.format('%s is registered but its folder is not there — staying on %s',
+      M.folder_of(entry), tostring(cfg.root_path)), vim.log.levels.ERROR)
+    publish()
+    return false
+  end
+
+  cfg.root_path = utils.normalize(path)
+  publish()
+  return true
 end
 
 return M

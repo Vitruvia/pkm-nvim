@@ -198,6 +198,15 @@ local function invalidate()
   _tree_cache    = {}
 end
 
+--- Drop both caches from outside the module.
+---
+--- For switching vaults: `views.json` lives *inside* the root, so a cache held
+--- across a switch evaluates one vault's saved views against another vault's
+--- notes — the views resolve, name real files, and belong to neither.
+function M.invalidate()
+  invalidate()
+end
+
 --- Return the parent view name for a subproject, or nil for root views.
 ---@param name string
 ---@return string|nil
@@ -2528,8 +2537,14 @@ end
 ---@return string[], table  lines, view_lines (1-based line number → view name)
 local function sidebar_build_overview()
   local tree       = build_tree_entries()
+
+  -- The vault goes in the title because after a switch the two are identical
+  -- on screen, and this panel is where the destructive commands are reached
+  -- from. An unregistered root says nothing rather than guessing a name.
+  local vault_label = require('pkm.vault').indicator()
+
   local lines = {
-    '  PKM Views',
+    vault_label ~= '' and ('  PKM Views · ' .. vault_label) or '  PKM Views',
     '  ' .. string.rep('─', 38),
     ''
   }
