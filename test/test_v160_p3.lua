@@ -72,13 +72,41 @@ do
   local buf = vim.api.nvim_win_get_buf(win)
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
+  -- The header names the panel and points at '?' — it does not carry the
+  -- keymap hints themselves. This assertion used to demand 'Views' and
+  -- 'browse all' on one line, which the panel never rendered together; it
+  -- passed only while the two lived in the same string. The browse hint is
+  -- discovered through '?', so it is checked below, where it actually is.
   local header_ok, found_view = false, false
   for _, line in ipairs(lines) do
-    if line:find('Views', 1, true) and line:find('browse all', 1, true) then header_ok = true end
+    if line:find('Views', 1, true) and line:find('? help', 1, true) then header_ok = true end
     if line:find('__test_v160_p3_view', 1, true) then found_view = true end
   end
-  check("header mentions the C-f-to-browse hint", header_ok)
+  check("header names the panel and advertises '? help'", header_ok,
+    lines[1] and ('first line: ' .. lines[1]) or 'no lines')
   check("scratch view appears in the panel", found_view)
+
+  -- '?' is the only route to the keymap list, so the <C-f>-to-browse hint is
+  -- only discoverable if the overlay carries it. 'normal' without the bang:
+  -- the bang skips mappings, and the mapping is the thing under test.
+  vim.api.nvim_set_current_win(win)
+  vim.cmd('normal ?')
+  local help_win, help_has_browse = nil, false
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if w ~= win and vim.api.nvim_win_get_config(w).relative ~= '' then
+      help_win = w
+      for _, l in ipairs(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)) do
+        if l:find('<C-f>', 1, true) and l:find('browse all notes', 1, true) then
+          help_has_browse = true
+        end
+      end
+    end
+  end
+  check("'?' opens the keymap help overlay", help_win ~= nil)
+  check("and the overlay carries the <C-f>-to-browse hint", help_has_browse)
+  if help_win and vim.api.nvim_win_is_valid(help_win) then
+    vim.api.nvim_win_close(help_win, true)
+  end
 
   local keymap_lhs, keymap_lower = {}, {}
   for _, km in ipairs(vim.api.nvim_buf_get_keymap(buf, 'n')) do

@@ -1,12 +1,16 @@
 -- =============================================================================
--- test/test_phase1.lua — Phase 1 test suite
+-- test/test_phase1_old.lua — Phase 1 test suite
 -- =============================================================================
 -- Tests filter.lua, index.lua, and export.lua integration.
--- Run with: :luafile P:/Active/pkm-nvim/test/test_phase1.lua
 --
--- Requirements:
---   - PKM must be set up and running (require('pkm').setup() called)
---   - At least one note must exist in the PKM root
+-- Run from repo root:
+--   nvim --headless -u test/min_init.lua -c "luafile test/test_phase1_old.lua" -c "qa!"
+--
+-- The filter section here predates test_filter.lua, which covers the same
+-- parser in 140 checks; what this file still earns its place with is the
+-- integration between filter, index, export and views. Those sections need
+-- notes in the root and announce themselves as skipped when there are none,
+-- which is the normal outcome under min_init's disposable temp root.
 --
 -- This script is read-only: it never creates, modifies, or deletes any note.
 -- =============================================================================
@@ -88,9 +92,16 @@ ok("parse text field", t ~= nil and t.field == 'text', err)
 t, err = filter.parse('')
 ok("parse rejects empty string", t == nil and err ~= nil)
 
--- Error: unknown field
+-- Unknown field: NOT an error since v1.5.4 — an unrecognised prefix is not a
+-- field at all, so the whole token becomes the value of an `any:` predicate.
+-- (Rejecting it would make `http://x` or `TODO:` unsearchable.) Asserting the
+-- value too, not just the field: a parser that dropped the `body:` part would
+-- also report field == 'any', and would be wrong.
 t, err = filter.parse('body:something')
-ok("parse rejects unknown field", t == nil and err ~= nil)
+ok("unknown field parses as an any: predicate",
+  t ~= nil and err == nil and t.type == 'PRED' and t.field == 'any', err)
+ok("unknown field keeps the whole token as the value",
+  t ~= nil and t.value == 'body:something', t and t.value)
 
 -- Error: dangling AND
 t, err = filter.parse('tag:rpg AND')
