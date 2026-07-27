@@ -46,6 +46,16 @@ check("modelines are enabled in this session at all",
 check("and they fire on a file outside the PKM root",
   vim.bo.shiftwidth == 9, tostring(vim.bo.shiftwidth))
 
+-- The value alone is a weak witness, and the v1.10.1 smoke pass proved it:
+-- markdown's own ftplugin also writes 'shiftwidth', so a value that is *not* 9
+-- cannot tell "the modeline never fired" from "it fired and something wrote
+-- afterwards". `:verbose` names the source, which is the thing being claimed.
+local function sw_source()
+  return (vim.fn.execute('verbose set shiftwidth?'):match('Last set from ([^\n]*)') or '')
+end
+check("and the source Vim reports for it is the modeline",
+  sw_source():find('modeline', 1, true) ~= nil, sw_source())
+
 vim.cmd('bwipeout!')
 
 -- =============================================================================
@@ -79,6 +89,8 @@ local ok_open = pcall(vim.cmd, 'edit ' .. vim.fn.fnameescape(applied))
 check("opening a note does not error", ok_open, "pcall failed")
 check("and the note's text was not applied as configuration",
   vim.bo.shiftwidth ~= 9, 'shiftwidth=' .. tostring(vim.bo.shiftwidth))
+check("and Vim does not name a modeline as the source",
+  sw_source():find('modeline', 1, true) == nil, sw_source())
 
 -- The reported case: an unknown option name, which is what raised E518.
 local broken = make_note('0002_note_modeline_error.md', 'um exemplo ex: Será')

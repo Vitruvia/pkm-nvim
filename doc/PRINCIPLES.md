@@ -195,6 +195,18 @@ past a test written to catch it.
     smoke note found what the test suite did not, because a route only completes
     when every step lands where it claims — there is no line to compare, so
     there is nothing to get wrong in the comparison.
+-   **When something else writes the same state, assert the source, not the
+    value.** The v1.10.1 control claimed a modeline had fired by reading
+    `shiftwidth`, but markdown's own ftplugin writes `shiftwidth` too — so the
+    expected value could arrive from the wrong author, and the unexpected one
+    could mean either "it never fired" or "it fired and was overwritten".
+    `:verbose set` names who set it, which is what the check was actually
+    claiming. The smoke pass caught this, not the suite: the author ran the
+    control in a session with an ftplugin the headless run did not have.
+-   **A probe must not answer itself.** `vim.fn.execute('messages')` includes
+    the script's own `print` output, so searching it for `E518` after printing
+    a label containing `E518` matches the label — every later check then reads
+    `true` for free. Search for the error's *text*, or capture before printing.
 
 ### The smoke note — the checklist is the terrain
 
