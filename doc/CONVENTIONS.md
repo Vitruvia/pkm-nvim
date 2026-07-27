@@ -39,6 +39,22 @@ PKM-internal references; the citation engine depends on this exact pattern.
 Nested: `[CF/88 [bib-003]]` — links a short external reference to its PKM
 bibliography entry.
 
+`[Vault::note{xxx}]` — a reference to a note in **another vault**. Example:
+`[Vitruvia::note{0042}]`. Vaults do not share an index, tags, views or a
+citation graph, so this deliberately does not resolve: no frontmatter is
+written on either side and `goto_citation` will not follow it. It is a pointer
+for a human (or an assistant) to act on, not a link.
+
+The braces are what make that guarantee structural rather than a promise. The
+citation engine scans for `[%a][%w_%-]*%[[%w%-_]+%]` — a word followed by a
+**square** bracket — so `note{0042}` cannot match it under any surrounding
+text, whereas `[Vitruvia::note[0042]]` *would*: the scanner finds the inner
+`note[0042]` regardless of the wrapper, and if the current vault happens to
+hold its own note 0042 the reference silently becomes a real citation to the
+wrong note. The outer `[ ]` is the same in-text wrapper every citation uses;
+only the inner brackets change, and they change to say "this one does not
+resolve".
+
 ---
 
 ## Header and Body Organization
