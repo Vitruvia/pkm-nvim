@@ -24,9 +24,14 @@ local defaults = {
 
   -- Directory the vaults sit in as siblings, holding `vaults.json` — the
   -- registry that maps a number and a name to each vault folder (pkm.vault).
-  -- Optional: left unset it is taken to be root_path's parent, which is the
-  -- shape the vaults have on disk. A root with no registry beside it keeps
-  -- working exactly as it always has.
+  --
+  -- This is the only absolute path the configuration needs, and it names the
+  -- *container*, never a vault: renaming, renumbering, unregistering and
+  -- adopting all leave it untouched. Set this and `vault` and no vault root is
+  -- written down anywhere.
+  --
+  -- It is never guessed from root_path. Unset simply means no registry, and
+  -- a plain root_path keeps working exactly as it always has.
   vaults_path = nil,
 
   -- Active vault, by name, resolved through the registry into root_path at

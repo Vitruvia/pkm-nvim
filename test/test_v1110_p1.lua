@@ -49,7 +49,7 @@ for _, d in ipairs({ alpha .. '/03-Consolidated', beta .. '/03-Consolidated',
   vim.fn.mkdir(d, 'p')
 end
 
-pkm.setup({ root_path = alpha })
+pkm.setup({ root_path = alpha, vaults_path = nvroot })
 
 local registry = nvroot .. '/vaults.json'
 
@@ -58,7 +58,7 @@ print("== the registry is optional ==")
 -- Everything below runs before vaults.json exists. This is the state of all 29
 -- other test files and of min_init: a root_path and nothing else. If any of it
 -- errors or answers something other than "nothing", the phase broke them.
-check("vaults_root is derived from the root's parent",
+check("vaults_root is what vaults_path says, and nothing else",
   same(vault.vaults_root(), nvroot), vault.vaults_root())
 check("registry_path names vaults.json beside the vaults",
   same(vault.registry_path(), registry), vault.registry_path())
@@ -202,13 +202,13 @@ local after = vault.list()
 check("a hand edit is picked up without an explicit invalidate", #after == 2, '#=' .. #after)
 check("and the new vault resolves", (vault.by_number(7) or {}).name == 'GammaWrittenByHand')
 
-print("\n== vaults_path names the directory outright ==")
+print("\n== vaults_path is independent of the root ==")
 
--- A root that is nobody's sibling, pointed at the registry explicitly. This is
--- the shape the startup selection in Ph3 needs: the registry is reachable
--- without the root having to sit next to it.
+-- A root that is nobody's sibling. The registry is reachable anyway, which is
+-- what the startup selection needs: `vault = "<name>"` has to resolve before
+-- any root is known, so the registry can never be found *through* the root.
 pkm.setup({ root_path = outside, vaults_path = nvroot })
-check("the configured directory wins over the derivation",
+check("the configured directory is used whatever the root is",
   same(vault.vaults_root(), nvroot), vault.vaults_root())
 check("the registry is still found", #vault.list() == 2, '#=' .. #vault.list())
 check("but the root is in no vault, and active() says so", vault.active() == nil)
@@ -221,11 +221,24 @@ local bare = vim.fn.tempname() .. '/Solo'
 vim.fn.mkdir(bare .. '/03-Consolidated', 'p')
 pkm.setup({ root_path = bare })
 
-check("vaults_root still answers something",     vault.vaults_root() ~= nil)
+-- A root on its own designates NOTHING. This is the property the derivation
+-- broke: with it, `root_path = "P:/Notes"` quietly nominated `P:/` as the place
+-- to list vault folders from and to write the registry into.
+check("vaults_root is nil, not a guess",         vault.vaults_root() == nil, vault.vaults_root())
+check("and so is registry_path",                 vault.registry_path() == nil)
 check("list() is empty",                         #vault.list() == 0, #vault.list())
 check("of() answers nil for a note in the root", vault.of(bare .. '/03-Consolidated/x.md') == nil)
 check("active() answers nil",                    vault.active() == nil)
 check("history() is empty",                      #vault.history() == 0)
+
+-- And nothing can be written into a place nobody named.
+local ok_nowhere, err_nowhere = vault.save({ version = 1, history = {},
+  vaults = { { number = 0, name = 'Solo' } } })
+check("save() refuses when no vaults directory is known", ok_nowhere == false)
+check("and says which key is missing",
+  (err_nowhere or ''):find('vaults_path', 1, true) ~= nil, err_nowhere)
+check("create() refuses for the same reason",
+  vault.create('Qualquer', { git = false }) == false)
 
 local index = require('pkm.index')
 index.rebuild()

@@ -38,7 +38,7 @@ local nvroot = base .. '/Note-Vault'
 local home   = nvroot .. '/00 - Home'          -- the active vault throughout
 vim.fn.mkdir(home .. '/03-Consolidated', 'p')
 
-pkm.setup({ root_path = home })
+pkm.setup({ root_path = home, vaults_path = nvroot })
 
 -- Home is registered by hand, so the registry starts in a known state.
 vault.save({ version = 1, history = {}, vaults = { { number = 0, name = 'Home' } } })

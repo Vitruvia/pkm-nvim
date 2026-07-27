@@ -61,7 +61,7 @@ local a_note = make_note(a_path, '9701_note_soh_no_alpha.md', 'alphatag')
 local b_note = make_note(b_path, '9801_note_soh_no_beta.md',  'betatag')
 
 -- Register both, starting on Alpha.
-pkm.setup({ root_path = a_path })
+pkm.setup({ root_path = a_path, vaults_path = nvroot })
 vault.save({ version = 1, history = {}, vaults = {
   { number = 0, name = 'Alpha' }, { number = 1, name = 'Beta' } } })
 
@@ -90,14 +90,14 @@ check("$PKM_VAULT outranks config.vault", (vault.active() or {}).name == 'Alpha'
 vim.env.PKM_VAULT = nil
 
 print("  (the error below is expected — an unregistered name being refused)")
-pkm.setup({ root_path = a_path, vault = 'Gamma' })
+pkm.setup({ root_path = a_path, vaults_path = nvroot, vault = 'Gamma' })
 check("an unknown vault name leaves the root where it was",
   (pkm.config.root_path:gsub('\\', '/')) == (utils.normalize(a_path):gsub('\\', '/')),
   pkm.config.root_path)
 
 print("\n== guard 1: what the old root produced is discarded ==")
 
-pkm.setup({ root_path = a_path })
+pkm.setup({ root_path = a_path, vaults_path = nvroot })
 
 -- A view that exists only in Alpha, because views.json lives inside Alpha.
 check("a view saves into Alpha", views.save('__so_alpha', 'tag:alphatag'))

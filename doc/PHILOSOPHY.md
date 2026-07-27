@@ -35,9 +35,31 @@ knowledge graph, and projects are lenses onto it, not partitions of it. The
 flat global namespace and the project-view system are direct architectural
 consequences of this principle.
 
-**Corollary:** Task tracking, kanban-style workflows, and physical project
-isolation (multi-wiki) are out of scope. Views are the correct answer to
-project organisation.
+**Corollary:** Task tracking, kanban-style workflows, and the physical
+separation of *projects* are out of scope. Views are the correct answer to
+project organisation, and no feature may quietly make folders the answer
+instead.
+
+**On vaults.** A vault is a separate namespace — its own numbering, its own
+citation graph, its own views — and vaults never communicate. This does not
+weaken the paragraph above: *within* a vault the namespace is still flat and
+global, and a project is still a view and never a folder. What a vault
+separates is never a project. There are four reasons for one to exist:
+
+1.  **The owner's own knowledge.** The default, and ordinarily the only vault
+    anyone needs.
+2.  **Testing.** A disposable vault, so experiments never run against the
+    knowledge base.
+3.  **Collaboration with LLMs**, and the exploration of what that collaboration
+    can be. Giving an assistant a vault of its own turns "be careful where you
+    write" from a norm into a structural fact.
+4.  **Genuine isolation**, in the rare case where a user wants part of their
+    knowledge kept apart. An edge case, and treated as one.
+
+Splitting a project across vaults is a misuse of the feature, not a use of it.
+Nothing here admits multi-user editing, task administration, or documents with
+complex design — those remain out of scope for the reasons given in §1 and
+above.
 
 ---
 

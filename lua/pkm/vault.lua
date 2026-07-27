@@ -101,25 +101,23 @@ end
 
 --- The directory the vaults sit in as siblings, and where `vaults.json` lives.
 ---
---- `config.vaults_path` names it outright. Absent that it is the root's parent,
---- which is the shape the vaults actually have on disk — a root of
---- `Note-Vault/00 - NotesTeste` puts the registry at `Note-Vault/vaults.json`
---- with nothing configured. The derivation is deliberately *not* done in
---- `pkm.config`: for a root that is nobody's sibling (`~/Notes`) the answer
---- would be `~`, and storing that in the config would state as fact something
---- that is only a guess. Here it is a guess that resolves to a file which does
---- not exist, and an absent registry is a supported state.
+--- `config.vaults_path` names it, and nothing else does. It is the single
+--- absolute path in the configuration, and it names the *container* rather than
+--- any vault: renaming, renumbering, unregistering and adopting all leave it
+--- untouched, which is the point — no vault root is ever written down.
+---
+--- It is deliberately **not** derived from `root_path`'s parent. That was the
+--- first shape and it was wrong: a root pointing anywhere at all — a stale one,
+--- a temporary one, a plain `~/Notes` — silently designates its parent as the
+--- place this module lists folders from and writes the registry into. A path
+--- the user chose for one purpose must not become a write location for another.
+--- Unset means no registry, which is a supported state, not a fallback.
 ---@return string|nil
 function M.vaults_root()
   local cfg = get_config()
 
-  if type(cfg.vaults_path) == 'string' and cfg.vaults_path ~= '' then
-    return utils.normalize(vim.fn.expand(cfg.vaults_path))
-  end
-
-  local root = cfg.root_path
-  if type(root) ~= 'string' or root == '' then return nil end
-  return utils.normalize(vim.fn.fnamemodify(root, ':h'))
+  if type(cfg.vaults_path) ~= 'string' or cfg.vaults_path == '' then return nil end
+  return utils.normalize(vim.fn.expand(cfg.vaults_path))
 end
 
 --- The registry file itself.
@@ -1137,10 +1135,29 @@ function M.apply_startup_selection()
     return false
   end
 
+  if not M.vaults_root() then
+    utils.notify(string.format(
+      'vault = %q needs vaults_path, the directory the vaults sit in — without it '
+      .. 'there is no registry to resolve the name against', name), vim.log.levels.ERROR)
+    publish()
+    return false
+  end
+
   local entry = M.get(name)
   if not entry then
-    utils.notify(string.format('no vault named %q is registered — staying on %s',
-      name, tostring(cfg.root_path)), vim.log.levels.ERROR)
+    -- The first run of all: the folders exist, the registry does not yet.
+    -- Saying so beats reporting a missing vault the user can see on disk.
+    local hint = ''
+    for _, path in ipairs(vim.fn.glob(M.vaults_root() .. '/*', false, true)) do
+      local leaf = vim.fn.fnamemodify(path, ':t')
+      local _, folder_name = M.parse_folder(leaf)
+      if vim.fn.isdirectory(path) == 1 and folder_name
+      and folder_name:lower() == name:lower() then
+        hint = string.format(' — the folder is there; :PKMVaultAdopt "%s" registers it', leaf)
+      end
+    end
+    utils.notify(string.format('no vault named %q is registered%s', name, hint),
+      vim.log.levels.ERROR)
     publish()
     return false
   end

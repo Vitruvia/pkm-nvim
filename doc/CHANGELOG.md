@@ -92,9 +92,9 @@ constant. Three phases: the registry and identity, the lifecycle, and choosing.*
     `Note-Vault/` is not a git repository (each vault is), so `vaults.json` is
     the one piece of state nothing can rebuild: written to a temp file and
     renamed over the original, keeping the copy it replaced as `.bak`, and
-    validated before any of it reaches disk. New config key `vaults_path`;
-    **`root_path` alone keeps working exactly as before**, which the other 29
-    test files and `min_init` all depend on.
+    validated before any of it reaches disk. New config key `vaults_path`, the
+    directory the vaults sit in; **`root_path` alone keeps working exactly as
+    before**, which the other 29 test files and `min_init` all depend on.
 
 -   **The vault lifecycle, five commands** (v1.11.0 Ph2). `:PKMVaultNew`
     (folder, skeleton named from `config.folders`, `views.json`, `.gitignore`,
@@ -145,13 +145,28 @@ constant. Three phases: the registry and identity, the lifecycle, and choosing.*
     consulted to resolve a name — not being a namespace is what stops it
     colliding with one.
 
--   **This is multi-wiki, and `doc/PHILOSOPHY.md` §2 says multi-wiki is out of
-    scope.** The substance of the principle is intact — *within* a vault,
-    projects are still views and never folders — but the wording is now
-    literally false, and the vaults exist for reasons that are not project
-    organisation (a disposable test vault; a vault of Claude's own, which turns
-    "be careful where you write" from a norm into a structural fact). Flagged
-    for the author; PHILOSOPHY is not amended without them.
+-   **`doc/PHILOSOPHY.md` §2 was amended, by the author's decision.** It read
+    that "physical project isolation (multi-wiki)" was out of scope, which the
+    vaults made literally false while leaving the substance intact. It now says
+    what it always meant — that *projects* are never separated physically, and
+    that within a vault a project is still a view and never a folder — and names
+    the four reasons a vault exists: the owner's own knowledge, testing,
+    collaboration with LLMs, and genuine isolation as an edge case. Splitting a
+    project across vaults is a misuse of the feature.
+
+-   **No path to any vault is written in the configuration.** `vaults_path`
+    names the *container* — the directory the vaults are siblings in — and
+    `vault` names one by name. Renaming, renumbering, unregistering and adopting
+    all leave `vaults_path` untouched, so nothing a vault command does can
+    invalidate the configuration.
+
+    `vaults_root()` was briefly derived from `root_path`'s parent when
+    `vaults_path` was unset. That was wrong and was removed before the version
+    shipped: a root pointing anywhere at all — a stale one, a temporary one, a
+    plain `~/Notes` — would silently designate its parent as the directory this
+    module lists vault folders from and writes the registry into. A path chosen
+    for one purpose must not become a write location for another. Unset now
+    means no registry, which is a supported state and not a fallback.
 
 ### Fixed
 
