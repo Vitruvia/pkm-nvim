@@ -34,11 +34,14 @@ local defaults = {
   -- a plain root_path keeps working exactly as it always has.
   vaults_path = nil,
 
-  -- Active vault, by name, resolved through the registry into root_path at
-  -- startup. Overridden for one session by $PKM_VAULT, which is how the normal
-  -- configuration can be pointed at the test vault without being edited.
-  -- Setting this instead of root_path is what stops the active vault being a
-  -- hardcoded path that every rename has to chase.
+  -- Active vault, by name. **Optional, and normally left unset**: the registry
+  -- carries its own default, which is the only reference that survives a
+  -- rename — the registry performs renames and can correct itself, while a
+  -- name written here cannot, because a rename never reads this file. Set it
+  -- only to override the default on one machine or one profile.
+  --
+  -- Resolution order, most specific first: $PKM_VAULT, then this, then the
+  -- registry's default.
   vault = nil,
 
   folders = {

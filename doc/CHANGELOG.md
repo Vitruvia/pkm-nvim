@@ -154,11 +154,34 @@ constant. Three phases: the registry and identity, the lifecycle, and choosing.*
     collaboration with LLMs, and genuine isolation as an edge case. Splitting a
     project across vaults is a misuse of the feature.
 
--   **No path to any vault is written in the configuration.** `vaults_path`
-    names the *container* — the directory the vaults are siblings in — and
-    `vault` names one by name. Renaming, renumbering, unregistering and adopting
-    all leave `vaults_path` untouched, so nothing a vault command does can
-    invalidate the configuration.
+-   **Nothing outside the registry names a vault.** `vaults_path` names the
+    *container* — the directory the vaults are siblings in — and that is the
+    entire configuration. Which vault opens is `"default"` in `vaults.json`,
+    set with `:PKMVault!`.
+
+    It lives there rather than in `init.lua` for a reason that only the registry
+    can satisfy: **the registry is what performs a rename, so it is the only
+    place that can keep a reference true across one.** A name written in the
+    user's config cannot be corrected by a rename, because a rename never reads
+    the user's config. Stored by *number* so a rename does not touch it at all,
+    and rewritten by `renumber()` in the same write that moves the folder;
+    `unregister()` clears it rather than passing it to a neighbour, because
+    which vault becomes the default is the user's to say. `create()` and
+    `adopt()` set it when there is none, so the first vault registered is the
+    one that opens.
+
+    `vault = "<name>"` survives as an optional per-machine override, and
+    `$PKM_VAULT` as a per-session one — most specific first. Renaming,
+    renumbering, unregistering and adopting all leave `vaults_path` untouched,
+    so nothing a vault command does can invalidate the configuration.
+
+-   **A trailing separator on `vaults_path` or `root_path` is stripped.**
+    `"P:/Note-Vault/"` is the natural way to write a directory and made every
+    path built from it `dir//child`. Nothing errored — the OS opens such a path
+    — but `of()` compared one separator against two, the prefix missed, and the
+    vault silently stopped being recognised: no indicator, no active vault, and
+    `:PKMVault` unable to say where you were. The worst shape a defect can take,
+    since every individual operation appears to work.
 
     `vaults_root()` was briefly derived from `root_path`'s parent when
     `vaults_path` was unset. That was wrong and was removed before the version

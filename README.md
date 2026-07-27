@@ -144,7 +144,7 @@ active vault is a *name* rather than a path: see **Configuration** below.
 
 | Command | Description |
 |---|---|
-| `:PKMVault [name]` | Switch the active vault (no argument lists them, marking the active one) |
+| `:PKMVault[!] [name]` | Switch the active vault (no argument lists them; `!` also makes it the default) |
 | `:PKMVaultNew[!] <name>` | Create a vault: folder, skeleton and registry entry (`!` for no git repository) |
 | `:PKMVaultRename <from> <to>` | Rename a vault, keeping its number |
 | `:PKMVaultRenumber <name> <n>` | Renumber a vault, keeping its name |
@@ -162,16 +162,21 @@ require('pkm').setup({
   -- One of two shapes. Either name the folder directly:
   root_path = vim.fn.expand('~/Notes'),
 
-  -- or, with more than one vault, name the directory they sit in and pick one
-  -- by name. Nothing then records a path to any vault, so renaming or
-  -- renumbering one never edits this file:
+  -- or, with more than one vault, name only the directory they sit in:
   --
   --   vaults_path = vim.fn.expand('~/Note-Vault'),   -- holds vaults.json
-  --   vault       = 'Personal',                      -- resolved through it
   --
-  -- $PKM_VAULT overrides `vault` for one session. On the very first run the
-  -- registry does not exist yet: `:PKMVaultAdopt` registers the folders that
-  -- are already there, without moving them.
+  -- That is the whole configuration. Which vault opens is the registry's own
+  -- default, set with `:PKMVault! <name>` — it lives there rather than here
+  -- because the registry is what performs a rename and can correct itself,
+  -- while a name written in this file cannot: a rename never reads it.
+  --
+  -- Two optional overrides, most specific first: $PKM_VAULT for one session,
+  -- and `vault = 'Personal'` for one machine or profile.
+  --
+  -- On the very first run the registry does not exist yet: `:PKMVaultAdopt`
+  -- registers the folders that are already there, without moving them, and the
+  -- first one registered becomes the default.
 
   folders = {
     scratchpad   = '01-Scratchpad',

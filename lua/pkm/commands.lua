@@ -822,13 +822,25 @@ function M.register()
   vim.api.nvim_create_user_command('PKMVault', function(opts)
     local vault = require('pkm.vault')
 
+    -- `!` also makes it the vault that opens next time. A bang rather than a
+    -- command of its own: "go there, and stay there" is one decision, taken
+    -- where the switch is already being made, and the registry is where the
+    -- answer has to live — a name in init.lua cannot survive a rename, because
+    -- a rename never reads init.lua.
     local function switch(name)
       local ok, err, entry = vault.select(name)
-      if ok then
-        vim.notify('[pkm] active vault: ' .. vault.folder_of(entry), vim.log.levels.INFO)
-      else
+      if not ok then
         vim.notify('[pkm] ' .. (err or 'the vault was not changed'), vim.log.levels.ERROR)
+        return
       end
+
+      local msg = 'active vault: ' .. vault.folder_of(entry)
+      if opts.bang then
+        local ok_def, err_def = vault.set_default(entry.name)
+        msg = ok_def and (msg .. ' — and it is now the default')
+                      or (msg .. ' — but the default was not saved: ' .. tostring(err_def))
+      end
+      vim.notify('[pkm] ' .. msg, vim.log.levels.INFO)
     end
 
     local name = vim.trim(opts.args)
@@ -845,18 +857,23 @@ function M.register()
 
     -- Listing and switching are one panel, and the panel answers "which one am
     -- I in?" before it asks "which one do you want?".
-    local active = vault.active()
+    local active  = vault.active()
+    local default = vault.default()
     require('pkm.picker').choose(entries, {
       title   = 'Vault · ' .. (vault.indicator() ~= '' and vault.indicator() or 'unregistered root'),
       display = function(row)
-        local here = active and active.number == row.number and active.name == row.name
-        return (here and '● ' or '  ') .. vault.folder_of(row)
+        local here = active  and active.number  == row.number
+        local dflt = default and default.number == row.number
+        -- ● where you are, ★ what opens next time; they are different questions
+        -- and a list that answered only the first would invite the wrong one.
+        return (here and '●' or ' ') .. (dflt and '★' or ' ') .. ' ' .. vault.folder_of(row)
       end,
     }, function(row) switch(row.name) end)
   end, {
     nargs    = '?',
+    bang     = true,
     complete = function() return vault_names() end,
-    desc     = 'Switch the active vault (no argument lists them, marking the active one)',
+    desc     = 'Switch the active vault (no argument lists them; ! also makes it the default)',
   })
 
   vim.api.nvim_create_user_command('PKMVaultNew', function(opts)

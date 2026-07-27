@@ -57,10 +57,14 @@
 --   adopt(folder, opts?)   → the way back; takes the contents as they stand
 --
 -- Selection:
+--   default()                 → entry|nil  the vault that opens by default,
+--                               stored in the registry by number so a rename
+--                               cannot invalidate it and a renumber rewrites it
+--   set_default(name)         → boolean, err?
 --   indicator()               → string  "01 Vitruvia", or "" — never nil
 --   select(name, opts?)       → switch the active vault, invalidating what the
 --                               old root produced; refuses on unsaved work
---   apply_startup_selection() → resolve config.vault / $PKM_VAULT into the root
+--   apply_startup_selection() → $PKM_VAULT, else config.vault, else default()
 -- =============================================================================
 
 local M = {}
@@ -268,6 +272,17 @@ function M.validate(data)
     by_name[key] = v.number
   end
 
+  -- The default is stored as a **number**, not a name, and the registry is what
+  -- keeps it true: rename leaves a number alone, and renumber rewrites it in
+  -- the same write that moves the folder. A name here would be a second place
+  -- holding a name, and renaming would have to chase it.
+  if data.default ~= nil then
+    if not by_number[data.default] then
+      return false, string.format('the default names vault %s, which is not registered',
+        tostring(data.default))
+    end
+  end
+
   return true
 end
 
@@ -368,6 +383,21 @@ function M.by_number(n)
   return nil
 end
 
+--- The vault to open when nothing says otherwise.
+---
+--- It lives in the registry rather than in the user's config, and that is the
+--- whole point: the registry is what performs a rename, so it is the only place
+--- that can keep a reference true across one. A name written in `init.lua`
+--- cannot be corrected by a rename, because a rename never reads `init.lua`.
+--- Stored as a number for the same reason — rename does not touch it, and
+--- renumber rewrites it in the same write that moves the folder.
+---@return table|nil entry
+function M.default()
+  local n = load().default
+  if type(n) ~= 'number' then return nil end
+  return M.by_number(n)
+end
+
 --- The rename/renumber record. **Never consulted to resolve a name** — a name
 --- means whatever it means today, and only today. This exists so a later
 --- `:PKMCheck` can say "that reference names a vault renamed on such a date"
@@ -457,6 +487,10 @@ end
 ---@return string[]
 local function encode_registry(data)
   local lines = { '{', '  "version": ' .. vim.json.encode(data.version or 1) .. ',' }
+
+  if data.default ~= nil then
+    lines[#lines + 1] = '  "default": ' .. vim.json.encode(data.default) .. ','
+  end
 
   local vaults = {}
   for _, v in ipairs(data.vaults or {}) do vaults[#vaults + 1] = v end
@@ -721,6 +755,10 @@ local function apply_move(entry, target, event, fields)
       v.number, v.name = target.number, target.name
     end
   end
+  -- The default follows the vault it points at. This is the write that makes
+  -- storing it here worth anything: the rename fixes its own reference, which
+  -- is precisely what a name in the user's config could never do.
+  if data.default == entry.number then data.default = target.number end
   push_history(data, event, fields)
 
   local saved, serr = M.save(data)
@@ -831,6 +869,9 @@ function M.create(name, opts)
 
   local data = registry_copy()
   data.vaults[#data.vaults + 1] = entry
+  -- The first vault to exist is the one to open, until someone says otherwise.
+  -- It makes the very first run work with nothing configured but vaults_path.
+  if data.default == nil then data.default = number end
   push_history(data, 'new', { number = number, name = name })
 
   local saved, serr = M.save(data)
@@ -945,6 +986,10 @@ function M.unregister(name)
     end
   end
   data.vaults = kept
+  -- A default pointing at a vault that is no longer registered would fail
+  -- validation on the very next write. Cleared, not carried to a neighbour:
+  -- which vault becomes the default is the user's to say.
+  if data.default == entry.number then data.default = nil end
   push_history(data, 'unregister', { number = entry.number, name = entry.name })
 
   local saved, serr = M.save(data)
@@ -1017,6 +1062,7 @@ function M.adopt(folder, opts)
 
   local data = registry_copy()
   data.vaults[#data.vaults + 1] = entry
+  if data.default == nil then data.default = number end
   push_history(data, 'adopt', { number = number, name = name, from = folder })
 
   local saved, serr = M.save(data)
@@ -1126,6 +1172,25 @@ function M.select(name, opts)
   return true, nil, entry
 end
 
+--- Make a vault the one that opens when nothing says otherwise.
+---
+--- Recorded by number, in the registry, so a later rename cannot invalidate it
+--- and a later renumber rewrites it.
+---@param name string
+---@return boolean ok
+---@return string|nil err
+function M.set_default(name)
+  local entry = M.get(name)
+  if not entry then return false, string.format('no vault is named %q', name) end
+
+  local data = registry_copy()
+  if data.default == entry.number then return true end
+
+  data.default = entry.number
+  push_history(data, 'default', { number = entry.number, name = entry.name })
+  return M.save(data)
+end
+
 --- Resolve a vault chosen by name into the active root, once, at startup.
 ---
 --- `$PKM_VAULT` outranks `config.vault`: pointing the real configuration at the
@@ -1137,13 +1202,28 @@ end
 --- That is also why it must run before the modules are handed the config.
 ---@return boolean applied
 function M.apply_startup_selection()
-  local cfg  = get_config()
+  local cfg = get_config()
+
+  -- Most specific wins: a variable set for this session, then a name written
+  -- in the config, then the registry's own default. The last one is the
+  -- ordinary case and the only one that survives a rename, because it is the
+  -- registry — the thing that performs renames — holding the reference.
   local name = vim.env.PKM_VAULT
   if name == nil or name == '' then name = cfg.vault end
 
   if type(name) ~= 'string' or name == '' then
-    publish()
-    return false
+    -- No registry means no default, and a plain root_path is a supported
+    -- configuration — so this is silence, not an error.
+    if not M.vaults_root() then
+      publish()
+      return false
+    end
+    local fallback = M.default()
+    if not fallback then
+      publish()
+      return false
+    end
+    name = fallback.name
   end
 
   if not M.vaults_root() then

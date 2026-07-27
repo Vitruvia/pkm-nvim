@@ -95,6 +95,48 @@ check("an unknown vault name leaves the root where it was",
   (pkm.config.root_path:gsub('\\', '/')) == (utils.normalize(a_path):gsub('\\', '/')),
   pkm.config.root_path)
 
+print("\n== the default lives in the registry, so a rename cannot break it ==")
+
+-- The point of storing it there rather than in the user's config: the registry
+-- is what performs a rename, so it is the only place that can correct itself.
+pkm.setup({ vaults_path = nvroot })
+check("a fresh registry written by hand has no default", vault.default() == nil)
+
+check("set_default names one", vault.set_default('Alpha'))
+check("and default() answers it", (vault.default() or {}).name == 'Alpha')
+
+pkm.setup({ vaults_path = nvroot })
+check("with no vault = and no $PKM_VAULT, the default is what opens",
+  (vault.active() or {}).name == 'Alpha', pkm.config.root_path)
+
+-- Rename: the default is stored by number, so it is not even touched.
+check("renaming the default vault succeeds", vault.rename('Alpha', 'Alfa'))
+check("the default followed the rename", (vault.default() or {}).name == 'Alfa',
+  vim.inspect(vault.default()))
+pkm.setup({ vaults_path = nvroot })
+check("and it still opens on startup", (vault.active() or {}).name == 'Alfa')
+
+-- Renumber: the number *is* the reference, so this is the case that needs the
+-- registry to rewrite it in the same write that moves the folder.
+check("renumbering the default vault succeeds", vault.renumber('Alfa', 5))
+check("the default was rewritten to the new number", (vault.default() or {}).number == 5,
+  vim.inspect(vault.default()))
+pkm.setup({ vaults_path = nvroot })
+check("and it still opens on startup", (vault.active() or {}).name == 'Alfa')
+
+check("an explicit vault = still outranks the default", (function()
+  pkm.setup({ vaults_path = nvroot, vault = 'Beta' })
+  return (vault.active() or {}).name == 'Beta'
+end)())
+vim.env.PKM_VAULT = 'Alfa'
+pkm.setup({ vaults_path = nvroot, vault = 'Beta' })
+check("and $PKM_VAULT outranks both", (vault.active() or {}).name == 'Alfa')
+vim.env.PKM_VAULT = nil
+
+-- Put the fixture back the way the rest of the file expects it.
+check("restore the name",   vault.rename('Alfa', 'Alpha'))
+check("restore the number", vault.renumber('Alpha', 0))
+
 print("\n== guard 1: what the old root produced is discarded ==")
 
 pkm.setup({ root_path = a_path, vaults_path = nvroot })
