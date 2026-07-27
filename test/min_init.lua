@@ -41,9 +41,12 @@
 --
 -- Usage examples (from repo root):
 --   nvim --headless -u test/min_init.lua -c "luafile test/test_v160_p1.lua" -c "qa!"
---   nvim -u test/min_init.lua -- --root=/mnt/p/Notes
---   nvim -u test/min_init.lua -- --root=/mnt/p/Notes --with-telescope
---   nvim -u test/min_init.lua -- --root=P:/NotesCopia --with-telescope --leader=comma
+--   nvim -u test/min_init.lua -- "--root=P:/Note-Vault/00 - NotesTeste"
+--   nvim -u test/min_init.lua -- "--root=P:/Note-Vault/00 - NotesTeste" --with-telescope
+--   nvim -u test/min_init.lua -- "--root=/mnt/p/Note-Vault/00 - NotesTeste" --leader=comma
+--
+-- Quote the whole flag, as above: vault paths contain spaces, and argv would
+-- otherwise arrive as three arguments with the flag holding only `P:/Note-Vault/00`.
 --
 -- Extending: add new flags by reading FLAGS['your-flag-name'] wherever
 -- needed below (or in a new SECTION). parse_flags() itself needs no

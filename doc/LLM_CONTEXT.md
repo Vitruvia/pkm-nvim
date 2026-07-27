@@ -202,7 +202,8 @@ different vault — which is how a restore from `NotesTeste` came to target
 | Editor | Neovim 0.11.3 |
 | Plugin manager | Lazy.nvim |
 | Plugin path | `P:/Active/pkm-nvim/` (Windows) · `/mnt/p/Active/pkm-nvim/` (WSL) |
-| Notes path | `P:/Notes` (Windows) · `/mnt/p/Notes` (WSL) |
+| Vaults | `P:/Note-Vault/` — `01 - Vitruvia` (primary, never touched in development) · `00 - NotesTeste` (test vault; smoke notes and every experiment go here) |
+| Vault paths contain spaces | `P:/Note-Vault/00 - NotesTeste`. Quote the whole flag in a shell: `-- "--root=P:/Note-Vault/00 - NotesTeste"`, or argv splits it. Verified unaffected: `vim.fn.glob`, `vim.fn.expand`, libuv scandir, and every `find(root, 1, true)` — the plugin's root comparisons all pass the plain flag |
 | Config path | `~/AppData/Local/nvim/` (Windows) · `~/.config/nvim/` (WSL) |
 | Git | Google Drive sync — object-DB rewrites forbidden (see Non-Negotiable Rules + Git Conventions) |
 

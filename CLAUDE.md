@@ -50,9 +50,14 @@ conflict, say so explicitly rather than silently choosing one.
 - Reference materials (read-only): `/mnt/p/Recursos/<subpasta>` /
   `P:\Recursos\<subpasta>` — e.g. *Programming in Lua, 4th ed.* Consult for
   language semantics; the Lua 5.4 manual remains the higher authority.
-- The notes vault `P:\Notes` and the "Agregador de Questões" project belong to
-  **other** workflows. Never read, write, or reason about them while developing
-  this plugin.
+- Vaults live under `P:\Note-Vault\` (moved there 27/7/2026; `P:\Notes` and
+  `P:\NotesTeste` no longer exist). `01 - Vitruvia` is the **primary vault** and,
+  like the "Agregador de Questões" project, belongs to **another** workflow:
+  never read, write, or reason about it while developing this plugin — the
+  rename changed its address, not its status. `00 - NotesTeste` is the test
+  vault; smoke notes and every experiment go there.
+- **Vault paths contain spaces.** In a shell, quote the whole flag —
+  `-- "--root=P:/Note-Vault/00 - NotesTeste"` — or argv splits it into three.
 
 ---
 

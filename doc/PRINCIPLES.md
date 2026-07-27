@@ -212,7 +212,8 @@ past a test written to catch it.
 
 A phase that needs specific material to be smoke-tested (headers at several
 levels, nested lists, a citation graph) gets that material **written for it in
-advance**, as a note in the test vault `P:\NotesTeste` — never in `P:\Notes`.
+advance**, as a note in the test vault `P:\Note-Vault\00 - NotesTeste` — never
+in the primary vault, `P:\Note-Vault\01 - Vitruvia`.
 Without it the author either hunts for a note that happens to have the right
 shape or drafts one by hand before being able to test at all.
 
