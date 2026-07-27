@@ -135,11 +135,43 @@ Views are named filter expressions stored in `views.json` at your notes root. Th
 | `:PKMEmptyTrash` | Permanently delete all trashed notes |
 | `:PKMStats` | Show note statistics |
 
+### Vaults
+
+A vault is a folder with its own numbering, citation graph and views; vaults
+never communicate. Most people need exactly one and can ignore this section —
+`root_path` on its own behaves as it always has. The registry exists so the
+active vault is a *name* rather than a path: see **Configuration** below.
+
+| Command | Description |
+|---|---|
+| `:PKMVault [name]` | Switch the active vault (no argument lists them, marking the active one) |
+| `:PKMVaultNew[!] <name>` | Create a vault: folder, skeleton and registry entry (`!` for no git repository) |
+| `:PKMVaultRename <from> <to>` | Rename a vault, keeping its number |
+| `:PKMVaultRenumber <name> <n>` | Renumber a vault, keeping its name |
+| `:PKMVaultUnregister [name]` | Move a vault out of the registry into `Unregistered/` (always confirms) |
+| `:PKMVaultAdopt [folder]` | Register a folder as a vault, contents untouched |
+
+Renaming and renumbering move the folder and touch no note. Unregistering moves
+the folder intact — **no command here deletes a note**; `:PKMVaultAdopt` is the
+way back. Both refuse while a buffer under the vault has unsaved changes.
+
 ## Configuration
 
 ~~~lua
 require('pkm').setup({
-  root_path = vim.fn.expand('~/Notes'),  -- required
+  -- One of two shapes. Either name the folder directly:
+  root_path = vim.fn.expand('~/Notes'),
+
+  -- or, with more than one vault, name the directory they sit in and pick one
+  -- by name. Nothing then records a path to any vault, so renaming or
+  -- renumbering one never edits this file:
+  --
+  --   vaults_path = vim.fn.expand('~/Note-Vault'),   -- holds vaults.json
+  --   vault       = 'Personal',                      -- resolved through it
+  --
+  -- $PKM_VAULT overrides `vault` for one session. On the very first run the
+  -- registry does not exist yet: `:PKMVaultAdopt` registers the folders that
+  -- are already there, without moving them.
 
   folders = {
     scratchpad   = '01-Scratchpad',
