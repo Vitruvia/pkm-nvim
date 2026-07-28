@@ -210,37 +210,62 @@ v1.11.1 PATCH  The indicator, finished  ✅ the vault in the buffer panel (V01
 
 **The order from here, and why it is this order.**
 
-1.  **v1.12.0 — typed forms.** Everything that writes state gets a form that
-    takes arguments instead of prompting. This is the last version that *adds*
-    commands in bulk, which is why it precedes the clearup.
-2.  **Features from Near/Distant goals that create commands** — `next_header`
+1.  **v1.12.0 — typed forms**, opening with the shared argument parser.
+    Everything that writes state gets a form that takes arguments instead of
+    prompting. This is the last version that *adds* commands in bulk, which is
+    why it precedes the clearup.
+2.  **Evaluations.** As soon as v1.12.0 closes: drive the vault with Claude on
+    real tasks, **without** a skill, recording where it goes wrong. Early and
+    deliberately before the clearup, knowing the surface still moves — what
+    expires is a command's *name*; what does not is the finding about what is
+    missing and what confuses, and that is what should decide the clearup.
+    Evaluation before documentation is the recommended practice, and it
+    produces no file that ages.
+3.  **Features from Near/Distant goals that create commands** — `next_header`
     global, list-component navigation, the index panel, syntax and commands
     outside PKM, structure-aware autowrap. Each is born with both forms.
-3.  **Merge, then split.** Pulled forward the moment a real `Unregistered/`
+4.  **Merge, then split.** Pulled forward the moment a real `Unregistered/`
     folder needs them; otherwise they wait here, because they are the only
     vault operations that renumber notes.
-4.  **Command clearup.** Only once nothing new is arriving, so the conversion
+5.  **Command clearup.** Only once nothing new is arriving, so the conversion
     happens once. Two versions: introduce contexts with aliases, then delete
     the aliases — the `:PKM<TAB>` list only shrinks at the second one.
-5.  **`pkm.api`, `doc/AGENT_PROTOCOL.md`, the skill.** Last, so the text
-    describes a surface that has stopped moving. Evaluations run *before* the
-    documentation, as soon as v1.12.0 closes.
+6.  **`pkm.api`, `doc/AGENT_PROTOCOL.md`, the skill.** Last, so the text
+    describes a surface that has stopped moving.
 
 **v1.12.0 (MINOR) — every state write has a typed form.** The interactive and
 the programmatic form are the *same command* (Design Question 4.d): no argument
 gives the friendly path, an argument makes it deterministic and script-callable.
-Ph1 note lifecycle (`:PKMNewNote … title=`, `:PKMSetTitle`, `:PKMRenameNote` —
-today all three only prompt). Ph2 citations both ways: `cite` / `uncite`, the
-second of which does not exist. Ph3 tags and views acting on a *named* note —
-`:PKMAddTag`/`:PKMRemoveTag` are buffer-only by design — plus
-`:PKMView add|remove <view> [note]`. Ph4 authorship, `NNNN_<tipo>_ByClaude_<slug>.md`
-(the existing `^(%d+)_([a-z]+)_(.+)$` parser already tolerates the extra
-segment); with `LLM-Claude` the prefix stops being the only defence, since
-Claude's default root becomes its own and writing elsewhere is an explicit act.
-Ph5 `:PKMCheck` (new `lua/pkm/check.lua`, pure, no UI) — frontmatter validity,
-`cites`/`cited_by` symmetry, citations pointing at notes that exist, numbering
-collisions, plus two the vaults add: a `[Nome::note{...}]` naming a vault that
-does not exist, and notes stranded in `Unregistered/`.
+
+**Ph1 — `lua/pkm/args.lua`, the shared argument parser.** Pulled forward from
+the command clearup, where it was listed as a prerequisite. This version is
+where most argument parsing gets written, and writing it six times to unify it
+later is guaranteed rework. It is not a new parser: it generalises **two that
+already exist and are proven** — `views.parse_command_args` and
+`tags.parse_command_args`. The first already resolves the ambiguity the clearup
+will face: position 1 is a verb only when it matches a declared one, otherwise
+it is the default verb's argument (`:PKMView add leituras` vs
+`:PKMView leituras`). Input: the command `opts`. Output:
+`{ verb, positional, named, bang }`, with `named` from `key=value`, and
+completion driven by the same table that declares the verbs. **Both call sites
+migrate in this phase** — migrating is what proves the module generalises them
+rather than becoming a third dialect, and it is also the regression to watch,
+since several suite files exercise `:PKMView` and the tag commands.
+
+Ph2 note lifecycle (`:PKMNewNote … title=`, `:PKMSetTitle`, `:PKMRenameNote` —
+the last two take no argument at all today). Ph3 citations both ways: `cite` /
+`uncite`, the second of which does not exist. Ph4 tags and views acting on a
+*named* note — `:PKMAddTag`/`:PKMRemoveTag` stay buffer-only by design, so the
+typed form is a new path that writes — plus `:PKMView add|remove <view> [note]`,
+the current-note form having shipped in v1.9.0. Ph5 authorship,
+`NNNN_<tipo>_ByClaude_<slug>.md` (the existing `^(%d+)_([a-z]+)_(.+)$` parser
+already tolerates the extra segment); with `LLM-Claude` the prefix stops being
+the only defence, since Claude's default root becomes its own and writing
+elsewhere is an explicit act. Ph6 `:PKMCheck` (new `lua/pkm/check.lua`, pure, no
+UI) — frontmatter validity, `cites`/`cited_by` symmetry, citations pointing at
+notes that exist, numbering collisions, plus two the vaults add: a
+`[Nome::note{...}]` naming a vault that does not exist, and notes stranded in
+`Unregistered/`.
 
 ---
 
@@ -344,13 +369,16 @@ names, documented as shortcuts rather than as deprecated aliases. A pure
 taxonomy is more elegant and worse to use, and the daily path is not where the
 discovery problem lives.
 
-**One prerequisite, and it is a phase of its own.** Today each command parses
-its own `opts.fargs`. Eleven contexts each growing a private parser would move
-the inconsistency rather than remove it. The version opens with a shared
-argument module — one place that turns `fargs` into
+**Its one prerequisite now lands earlier.** Eleven contexts each growing a
+private parser would move the inconsistency rather than remove it, so the
+clearup needs a shared argument module — one place that turns `fargs` into
 `{ verb, positional, named, bang }`, produces consistent errors, and drives the
 completion from the *same* table that declares the verbs, so a verb cannot exist
-without completing and cannot complete without existing.
+without completing and cannot complete without existing. That module is
+**v1.12.0 Ph1**, not a phase here: v1.12.0 is where most argument parsing gets
+written, and writing it six times to unify it afterwards is guaranteed rework.
+By the time the clearup starts, the parser is proven on `views`, `tags` and
+every typed form, and the clearup is mostly renaming.
 
 **Ambiguity, and its fix.** `:PKMVault Vitruvia` must keep switching. So
 position 1 is read as a verb only when it matches a declared one, and otherwise
