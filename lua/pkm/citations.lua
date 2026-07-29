@@ -16,6 +16,9 @@
 --   get_citable_items_for_picker()   → item[] formatted list for pickers
 --   get_citable_items_list           → alias for get_citable_items_for_picker
 --   complete_insertion(selected)     → insert citation at cursor, trigger sync
+--   resolve_citable(ref)             → (item, err) from a path, id or token
+--   cite(source_path, target_ref)    → add a citation, both sides of the graph
+--   uncite(source_path, target_ref)  → remove it, both sides of the graph
 --   update_references(target_file?)  → sync cites/cited_by for one file
 --   goto_citation()                  → jump to note under cursor
 --   update_references_on_rename(old, new, title?) → propagate rename/deletion across wiki
@@ -668,6 +671,156 @@ function M.update_references(target_file)
       end
     end
   end
+end
+
+-- =============================================================================
+-- SECTION: Citation by reference (the typed form)
+-- =============================================================================
+--
+-- The body text is the source of truth: `update_references` rebuilds `cites`
+-- from the tokens it finds in the body, and would drop any `cites` entry with no
+-- token behind it. So `cite` adds a token and `uncite` removes one, and both
+-- then run `update_references`, which is the single engine that keeps `cites`
+-- here and `cited_by` on the target in step. Nothing here manages the graph by
+-- hand; that is exactly the mistake the engine exists to prevent.
+
+--- The inner citation token for a resolved item, e.g. "note[0042]".
+---@param item table  A get_citable_items_for_picker() entry
+---@return string
+local function token_of(item)
+  return string.format('%s[%s]', item.type, item.short_id)
+end
+
+local function samepath(a, b)
+  return (a:gsub('\\', '/')):lower() == (b:gsub('\\', '/')):lower()
+end
+
+--- Resolve a reference to a citable note.
+--- Accepts, in this order: an absolute path, an identifier ("note-0042"), or a
+--- raw token ("note[0042]"). A short number alone is refused as ambiguous — it
+--- could be a note or a bib — because a wrong guess cites the wrong note.
+---@param ref string
+---@return table|nil item
+---@return string|nil err
+function M.resolve_citable(ref)
+  if type(ref) ~= 'string' or ref == '' then return nil, 'no target given' end
+
+  local items = M.get_citable_items_for_picker()
+  local as_path = vim.fn.fnamemodify(ref, ':p')
+  local t, s = M.parse_citation(ref)
+
+  for _, it in ipairs(items) do
+    if it.identifier == ref then return it end
+    if t and s and it.type == t and it.short_id == s then return it end
+    if samepath(it.path, as_path) then return it end
+  end
+  return nil, string.format("no note matches '%s'", ref)
+end
+
+--- The source note as lines, refusing to work behind an unsaved buffer.
+--- Persisting a note with edits the user has not seen would be a surprise from
+--- a citation command, so — like a vault switch — it stops and says so.
+---@param source_path string
+---@return string[]|nil lines
+---@return string|nil err
+local function source_lines(source_path)
+  if vim.fn.filereadable(source_path) == 0 then
+    return nil, 'source note not found: ' .. source_path
+  end
+  local bufnr = require('pkm.bufsync').buffer_for(source_path)
+  if bufnr and vim.bo[bufnr].modified then
+    return nil, 'the note has unsaved changes — save it first'
+  end
+  return vim.fn.readfile(source_path)
+end
+
+--- Add a citation from `source_path` to the note named by `target_ref`.
+--- The token is appended on its own line at the end of the body, and
+--- `update_references` then records it in `cites` here and `cited_by` there.
+--- Idempotent: a note already citing the target is left as it is.
+---@param source_path string
+---@param target_ref string
+---@return boolean ok
+---@return string|nil err
+function M.cite(source_path, target_ref)
+  source_path = vim.fn.fnamemodify(source_path, ':p')
+
+  local target, terr = M.resolve_citable(target_ref)
+  if not target then return false, terr end
+  if samepath(target.path, source_path) then
+    return false, 'a note cannot cite itself'
+  end
+
+  local lines, lerr = source_lines(source_path)
+  if not lines then return false, lerr end
+
+  local fm, content_start = yaml.parse_frontmatter(lines)
+  if not fm then return false, 'source note has no frontmatter' end
+
+  local token = token_of(target)
+  for i = content_start, #lines do
+    if lines[i]:find(token, 1, true) then
+      return true   -- already cited; the desired state already holds
+    end
+  end
+
+  lines[#lines + 1] = string.format('[%s]', token)   -- [note[0042]]
+  vim.fn.writefile(lines, source_path)
+
+  M.update_references(source_path)
+  require('pkm.bufsync').reload({ source_path })
+  return true
+end
+
+--- Remove every citation from `source_path` to the note named by `target_ref`.
+--- Tokens are stripped from the body (a line that held only the citation is
+--- dropped; an inline one leaves its prose behind), and `update_references`
+--- then clears the entry from `cites` here and `cited_by` there.
+---@param source_path string
+---@param target_ref string
+---@return boolean ok
+---@return integer removed  How many tokens were taken out
+---@return string|nil err
+function M.uncite(source_path, target_ref)
+  source_path = vim.fn.fnamemodify(source_path, ':p')
+
+  local target, terr = M.resolve_citable(target_ref)
+  if not target then return false, 0, terr end
+
+  local lines, lerr = source_lines(source_path)
+  if not lines then return false, 0, lerr end
+
+  local fm, content_start = yaml.parse_frontmatter(lines)
+  if not fm then return false, 0, 'source note has no frontmatter' end
+
+  local token   = token_of(target)          -- note[0042]
+  local wrapped = '[' .. token .. ']'        -- [note[0042]]
+  local removed = 0
+
+  local kept = {}
+  for i = 1, #lines do
+    local line = lines[i]
+    if i >= content_start and line:find(token, 1, true) then
+      local before = line
+      line = line:gsub(vim.pesc(wrapped), '')
+      line = line:gsub(vim.pesc(token), '')
+      removed = removed + (select(2, before:gsub(vim.pesc(token), '')))
+      if line:match('^%s*$') and not before:match('^%s*$') then
+        -- The line existed only to hold the citation: drop it entirely.
+        line = nil
+      end
+    end
+    if line ~= nil then kept[#kept + 1] = line end
+  end
+
+  if removed == 0 then
+    return true, 0   -- nothing cited this target; nothing to do
+  end
+
+  vim.fn.writefile(kept, source_path)
+  M.update_references(source_path)
+  require('pkm.bufsync').reload({ source_path })
+  return true, removed
 end
 
 -- =============================================================================
