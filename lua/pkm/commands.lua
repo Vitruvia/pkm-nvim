@@ -118,17 +118,19 @@ function M.register()
       end
     end
 
-    require('pkm.notes').create_new_note(note_type, { where = where, title = p.named.title })
+    require('pkm.notes').create_new_note(note_type, {
+      where = where, title = p.named.title, by = p.named.by,
+    })
   end, {
     nargs    = '*',
     complete = function(lead)
       local out = {}
-      for _, tok in ipairs({ 'note', 'agg', 'bib', 'left', 'right', 'title=' }) do
+      for _, tok in ipairs({ 'note', 'agg', 'bib', 'left', 'right', 'title=', 'by=' }) do
         if tok:find(lead:lower(), 1, true) == 1 then out[#out + 1] = tok end
       end
       return out
     end,
-    desc = 'Create a note; optional type, placement (left/right/N) and title=<text>',
+    desc = 'Create a note; optional type, placement, title=<text> and by=<agent>',
   })
 
   -- :PKMNewRelative — new note seeded with the current note's tags, so it lands

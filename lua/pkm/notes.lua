@@ -161,6 +161,8 @@ end
 ---                       open it in — see `utils.focus_editing_win`
 ---                       { title = string } supplied title; when present, the
 ---                       title prompt is skipped (`:PKMNewNote … title=`)
+---                       { by = string } agent author; marks the note
+---                       NNNN_type_By<Author>_slug and records the author
 ---@return string|nil filepath Absolute path of created note, or nil on cancel
 function M.create_new_note(note_type, opts)
   opts = opts or {}
@@ -218,9 +220,21 @@ function M.create_new_note(note_type, opts)
   
   -- Generate filename (the rest of the function is the same)
   local note_number = get_next_note_number()
-  local safe_title = sanitize_title(title)
+  local safe_title  = sanitize_title(title)
+
+  -- Agent authorship, marked in the name itself: a note written by an agent
+  -- becomes NNNN_type_By<Author>_slug. The marker travels with the file — it
+  -- survives a copy, a move between vaults, and a manual rename that keeps the
+  -- prefix — which is why the deletion guard reads it from the name rather than
+  -- from frontmatter that a careless edit could drop.
+  local author_marker
+  if type(opts.by) == 'string' and opts.by ~= '' then
+    author_marker = 'By' .. opts.by:sub(1, 1):upper() .. opts.by:sub(2)
+    safe_title    = author_marker .. '_' .. safe_title
+  end
+
   local filename = string.format("%04d_%s_%s.md", note_number, note_type, safe_title)
-  
+
   local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
   utils.ensure_dir(consolidated_path)
   
@@ -237,6 +251,11 @@ function M.create_new_note(note_type, opts)
   local frontmatter_data = {
     title = title ~= "" and title or "Unnamed Note",
   }
+  -- An agent-authored note records the agent as its author, so who wrote it is
+  -- legible in the note as well as in its name.
+  if opts.by and opts.by ~= '' then
+    frontmatter_data.author = opts.by:sub(1, 1):upper() .. opts.by:sub(2)
+  end
 
   -- Seeded tags (relative note). Normalised through pkm.tags so the new note
   -- carries exactly what a tag written by :PKMAddTag would look like, with no
@@ -280,6 +299,56 @@ function M.create_new_note(note_type, opts)
   
   vim.notify("Created: " .. filename, vim.log.levels.INFO)
   return filepath
+end
+
+-- =============================================================================
+-- SECTION: Agent authorship
+-- =============================================================================
+--
+-- An agent writing in the vault marks its notes in their names —
+-- NNNN_type_By<Author>_slug — and may delete only notes that carry such a mark.
+-- The prefix is the last line of defence, not the first: once LLM-Claude exists,
+-- the agent's own vault is where it writes by default and writing in another is
+-- an explicit act (pkm.vault). The prefix still matters for exactly that case —
+-- an agent acting inside a human's vault must not remove what a human wrote.
+
+--- The agent that authored a note, read from its filename, or nil for a note no
+--- agent marked. Read from the name, not frontmatter, because the name survives
+--- copying and moving between vaults where a frontmatter field could be lost.
+---@param path string
+---@return string|nil author
+function M.agent_authored(path)
+  local stem      = vim.fn.fnamemodify(path, ':t:r')
+  local name_part = stem:match('^%d+_%a+_(.+)$')
+  if not name_part then return nil end
+  return name_part:match('^By(%u%a*)_')
+end
+
+--- Delete a note **on an agent's behalf**, refusing any note no agent authored.
+--- This is the deletion path the agent protocol calls; the human path
+--- (`delete_note_safely`) is unguarded and interactive. The note is trashed,
+--- never hard-deleted, so an over-eager agent is always recoverable.
+---@param path string  Absolute note path
+---@return boolean ok
+---@return string|nil author_or_err  the author on success, the reason on refusal
+function M.agent_delete(path)
+  path = vim.fn.fnamemodify(path, ':p')
+  if vim.fn.filereadable(path) == 0 then
+    return false, 'note not found: ' .. path
+  end
+
+  local author = M.agent_authored(path)
+  if not author then
+    return false, 'refusing to delete a note no agent authored — '
+      .. 'it has no By<agent> marker, so a human wrote it'
+  end
+
+  if not require('pkm.trash').trash_note(path) then
+    return false, 'could not move the note to trash'
+  end
+  require('pkm.index').invalidate(path)
+  pcall(function() require('pkm.views').refresh_sidebar_if_open() end)
+  return true, author
 end
 
 --- Create a note that inherits the current note's tags.
