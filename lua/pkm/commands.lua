@@ -587,6 +587,39 @@ function M.register()
     -- remains is read exactly as before.
     local p        = require('pkm.args').parse(opts, { named = true })
     local note_ref = p.named.note
+
+    -- `rename` is handled here rather than in parse_command_args, because both
+    -- names can contain spaces: the old name is resolved as the longest known
+    -- view among the words after `rename`, and the rest is the new name.
+    if (p.positional[1] or ''):lower() == 'rename' then
+      local rest = {}
+      for i = 2, #p.positional do rest[#rest + 1] = p.positional[i] end
+      local known = {}
+      for _, v in ipairs(views.list()) do known[v] = true end
+
+      local old, split
+      for len = #rest, 1, -1 do
+        local cand = table.concat(vim.list_slice(rest, 1, len), ' ')
+        if known[cand] then old, split = cand, len break end
+      end
+      if not old then
+        vim.notify('[pkm] usage: :PKMView rename <existing view> <new name>', vim.log.levels.WARN)
+        return
+      end
+      local new = table.concat(vim.list_slice(rest, split + 1, #rest), ' ')
+      if new == '' then
+        vim.notify('[pkm] a new name is required', vim.log.levels.WARN)
+        return
+      end
+      local ok, rerr = views.rename(old, new)
+      if ok then
+        vim.notify(string.format("[pkm] view renamed: '%s' → '%s'", old, new), vim.log.levels.INFO)
+      else
+        vim.notify('[pkm] ' .. (rerr or 'not renamed'), vim.log.levels.ERROR)
+      end
+      return
+    end
+
     local mode, name, err = views.parse_command_args(p.positional, views.list())
 
     if err then
@@ -640,11 +673,11 @@ function M.register()
       or line:match('^%s*PKMView%s+[Rr][Ee][Mm][Oo][Vv][Ee]%s') then
         return views.list()
       end
-      local out = { 'add', 'remove' }
+      local out = { 'add', 'remove', 'rename' }
       vim.list_extend(out, views.list())
       return out
     end,
-    desc     = 'Open a view, or add/remove the current note (:PKMView add <name>)',
+    desc     = 'Open a view, add/remove a note, or rename (:PKMView rename <old> <new>)',
   })
 
   vim.api.nvim_create_user_command('PKMViews', function()

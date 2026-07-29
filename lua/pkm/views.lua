@@ -2353,43 +2353,36 @@ end
 --- old name. Config-only views (not present in views.json) cannot be renamed
 --- this way; the user receives an explanatory message.
 ---@param old_name string
-local function rename_view_prompt(old_name)
+--- Rename a view, moving its sidecar entry and reparenting its children.
+--- The core both the prompt and `:PKMView rename <old> <new>` call, so the two
+--- forms cannot drift. A view defined in the Neovim config is refused (it must
+--- be edited there); a config subproject still pointing at the old name is
+--- warned about but never blocks, because the sidecar rename already succeeded.
+--- Renaming to the same name is a successful no-op.
+---@param old_name string
+---@param new_name string
+---@return boolean ok
+---@return string|nil err
+function M.rename(old_name, new_name)
   local data = load_sidecar()
   if not data[old_name] then
     if (get_config().projects or {})[old_name] then
-      vim.notify(
-        string.format(
-          "[pkm] '%s' is defined in your Neovim config — edit it there to rename",
-          old_name),
-        vim.log.levels.WARN)
-    else
-      vim.notify(string.format("[pkm] '%s' is not in views.json", old_name),
-        vim.log.levels.WARN)
+      return false, string.format(
+        "'%s' is defined in your Neovim config — edit it there to rename", old_name)
     end
-    return
+    return false, string.format("'%s' is not in views.json", old_name)
   end
 
-  vim.fn.inputsave()
-  local new_name = vim.fn.input('Rename view to: ', old_name)
-  vim.fn.inputrestore()
-
-  if not new_name or new_name:match('^%s*$') then
-    vim.notify('[pkm] rename cancelled', vim.log.levels.INFO)
-    return
+  if type(new_name) ~= 'string' or new_name:match('^%s*$') then
+    return false, 'a new name is required'
   end
   new_name = new_name:match('^%s*(.-)%s*$')
 
-  if new_name == old_name then
-    vim.notify('[pkm] name unchanged', vim.log.levels.INFO)
-    return
-  end
+  if new_name == old_name then return true end   -- nothing to do
 
   -- Block if new_name already exists in the merged set (config OR sidecar).
   if get_projects()[new_name] then
-    vim.notify(
-      string.format("[pkm] a view named '%s' already exists", new_name),
-      vim.log.levels.ERROR)
-    return
+    return false, string.format("a view named '%s' already exists", new_name)
   end
 
   -- Move the sidecar entry and propagate to child subprojects.
@@ -2401,34 +2394,50 @@ local function rename_view_prompt(old_name)
     end
   end
 
-  if save_sidecar(data) then
-    -- Keep session state consistent.
-    if _last_view == old_name then _last_view = new_name end
-    local ct = get_tab()
-    if ct.name == old_name then ct.name = new_name end
-    vim.notify(
-      string.format("[pkm] view renamed: '%s' → '%s'", old_name, new_name),
-      vim.log.levels.INFO)
-
-    -- config.lua subprojects cannot be safely rewritten by the plugin;
-    -- warn (never block — the sidecar rename above already succeeded).
-    local stale = {}
-    for k, v in pairs(get_config().projects or {}) do
-      if type(v) == 'table' and v.parent == old_name then
-        stale[#stale + 1] = k
-      end
-    end
-    if #stale > 0 then
-      table.sort(stale)
-      vim.notify(
-        string.format(
-          "[pkm] config.lua subproject(s) still reference the old name '%s': %s — update their 'parent' field by hand",
-          old_name, table.concat(stale, ', ')),
-        vim.log.levels.WARN)
-    end
-
-    M.refresh_sidebar_if_open()
+  if not save_sidecar(data) then
+    return false, 'could not write views.json'
   end
+
+  -- Keep session state consistent.
+  if _last_view == old_name then _last_view = new_name end
+  local ct = get_tab()
+  if ct.name == old_name then ct.name = new_name end
+
+  -- config.lua subprojects cannot be safely rewritten by the plugin; warn
+  -- (never block — the sidecar rename above already succeeded).
+  local stale = {}
+  for k, v in pairs(get_config().projects or {}) do
+    if type(v) == 'table' and v.parent == old_name then stale[#stale + 1] = k end
+  end
+  if #stale > 0 then
+    table.sort(stale)
+    vim.notify(string.format(
+      "[pkm] config.lua subproject(s) still reference the old name '%s': %s — "
+      .. "update their 'parent' field by hand", old_name, table.concat(stale, ', ')),
+      vim.log.levels.WARN)
+  end
+
+  M.refresh_sidebar_if_open()
+  return true
+end
+
+local function rename_view_prompt(old_name)
+  vim.fn.inputsave()
+  local new_name = vim.fn.input('Rename view to: ', old_name)
+  vim.fn.inputrestore()
+
+  if not new_name or new_name:match('^%s*$') then
+    vim.notify('[pkm] rename cancelled', vim.log.levels.INFO)
+    return
+  end
+
+  local ok, err = M.rename(old_name, new_name)
+  if not ok then
+    vim.notify('[pkm] ' .. err, vim.log.levels.WARN)
+    return
+  end
+  vim.notify(string.format("[pkm] view renamed: '%s' → '%s'",
+    old_name, new_name:match('^%s*(.-)%s*$')), vim.log.levels.INFO)
 end
 
 --- Prompt for a new parent and reparent a subproject view.
