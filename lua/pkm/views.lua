@@ -664,28 +664,32 @@ end
 ---@return string|nil   name  The view named, when one was
 ---@return string|nil   err   Set when the arguments cannot be read
 function M.parse_command_args(fargs, names)
-  fargs = fargs or {}
-  if #fargs == 0 then return 'open', nil, nil end
-
-  local joined = table.concat(fargs, ' ')
-
   local known = {}
   for _, name in ipairs(names or {}) do known[name] = true end
-  if known[joined] then return 'open', joined, nil end
 
-  local verb = fargs[1]:lower()
-  if verb == 'add' or verb == 'remove' then
-    local rest = table.concat(vim.list_slice(fargs, 2, #fargs), ' ')
-    if rest == '' then return verb, nil, nil end
-    if not known[rest] then
-      return verb, rest, string.format("no view named '%s'", rest)
-    end
-    return verb, rest, nil
+  -- The structure comes from pkm.args; the escape is what makes a view named
+  -- after a verb still open — the whole argument naming an existing view means
+  -- open it, and only then is `add`/`remove` read as a verb.
+  local p = require('pkm.args').parse({ fargs = fargs }, {
+    verbs   = { 'add', 'remove' },
+    default = 'open',
+    escape  = function(joined) return known[joined] == true end,
+  })
+
+  local name = table.concat(p.positional, ' ')
+  if name == '' then name = nil end
+
+  if p.verb == 'open' then
+    return 'open', name, nil
   end
 
-  -- Not a verb and not a known view: still an open, so the failure is reported
-  -- by the one place that knows how to report it.
-  return 'open', joined, nil
+  -- add / remove: a name is required, and it must be one that exists — a verb
+  -- naming nothing is an error, not a guess.
+  if not name then return p.verb, nil, nil end
+  if not known[name] then
+    return p.verb, name, string.format("no view named '%s'", name)
+  end
+  return p.verb, name, nil
 end
 
 --- The parsed filter of a view, with its parent chain already composed.

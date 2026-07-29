@@ -601,9 +601,6 @@ end
 ---@return string|nil header  Wording for the confirmation, alongside ops
 ---@return string|nil err     Message when the arguments do not make sense
 function M.parse_command_args(fargs)
-  fargs = fargs or {}
-  if #fargs == 0 then return 'browse' end
-
   --- A quoted argument reaches us with its quotes; a tag never wants them.
   ---@param arg string|nil
   ---@return string|nil
@@ -612,20 +609,30 @@ function M.parse_command_args(fargs)
     return M.normalize((arg:gsub('^(["\'])(.*)%1$', '%2')))
   end
 
-  local mode = fargs[1]:lower()
+  -- The verb dispatch comes from pkm.args. `browse` is the default, and — unlike
+  -- views — a first word that is not a declared verb is a mistake here, not the
+  -- name of anything, so `is_verb` is what turns it into an error.
+  local p = require('pkm.args').parse({ fargs = fargs }, {
+    verbs   = { 'browse', 'add', 'remove', 'rename' },
+    default = 'browse',
+  })
+
+  if not p.is_verb and #p.positional > 0 then
+    return nil, nil, nil, "unknown mode '" .. p.positional[1] .. "'"
+  end
+
+  local mode, pos = p.verb, p.positional
 
   if mode == 'browse' then
-    if #fargs > 1 then return nil, nil, nil, 'browse takes no further argument' end
+    if #pos > 0 then return nil, nil, nil, 'browse takes no further argument' end
     return 'browse'
   end
 
   if mode == 'add' or mode == 'remove' then
-    if #fargs > 2 then
-      return nil, nil, nil, mode .. ' takes at most one tag'
-    end
-    if #fargs == 1 then return mode end
+    if #pos > 1 then return nil, nil, nil, mode .. ' takes at most one tag' end
+    if #pos == 0 then return mode end
 
-    local tag = unquote(fargs[2])
+    local tag = unquote(pos[1])
     if not tag then return nil, nil, nil, 'empty tag' end
 
     if mode == 'add' then
@@ -635,11 +642,11 @@ function M.parse_command_args(fargs)
   end
 
   if mode == 'rename' then
-    if #fargs ~= 3 then
+    if #pos ~= 2 then
       return nil, nil, nil, 'rename needs both the old and the new tag'
     end
 
-    local from, to = unquote(fargs[2]), unquote(fargs[3])
+    local from, to = unquote(pos[1]), unquote(pos[2])
     if not from or not to then return nil, nil, nil, 'empty tag' end
     if from == to then return nil, nil, nil, 'same tag — nothing to do' end
 
@@ -648,7 +655,7 @@ function M.parse_command_args(fargs)
       string.format("Rename '%s' to '%s'", from, to)
   end
 
-  return nil, nil, nil, "unknown mode '" .. fargs[1] .. "'"
+  return nil, nil, nil, "unknown mode"
 end
 
 --- Pick a tag and browse the notes carrying it.
