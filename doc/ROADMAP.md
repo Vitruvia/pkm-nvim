@@ -205,7 +205,14 @@ v1.11.1 PATCH  The indicator, finished  ✅ the vault in the buffer panel (V01
         per row, the active one in the header) and pkm.vault.statusline(),
         which also calls out a buffer belonging to another vault.
 
-(next)  v1.12.0 — typed forms for every state-writing operation.
+v1.12.0 MINOR  Typed forms for every state-writing operation  ⏳ code complete on
+        `dev`, awaiting its smoke route (note 0271) and the evaluations; tag
+        after. Six phases: the shared arg parser (args.lua), note lifecycle,
+        cite/uncite, tags/views on a named note, agent authorship + deletion
+        guard, and :PKMCheck. Detail in doc/CHANGELOG.md.
+
+(next)  Evaluations — drive the vault with Claude on real tasks, no skill,
+        recording where it goes wrong. Then the command clearup.
 ```
 
 **The order from here, and why it is this order.**

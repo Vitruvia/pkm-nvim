@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.11.1** (released, tagged) · v1.11.0 carried the vaults
+## Current version: **v1.11.1** (released, tagged) · **v1.12.0** code complete on `dev`, untagged
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
@@ -27,7 +27,13 @@ Full module-by-module detail (role, key functions, invariants) is owned by
 quick orientation. Module list: `init, config, utils, commands, keymaps, yaml,
 timestamp, citations, notes, journal, ui, telescope, templates, export, filter,
 index, views, panel, mode, syntax, trash, markdown, bench, tags, picker, actions,
-rename, bufsync, vault`.
+rename, bufsync, vault, args, check`.
+
+`args` (v1.12.0) is the one reading of a command's arguments —
+`:PKM<Context>[!] <verb> [positional] [key=value]` → `{verb, positional, named,
+bang, is_verb}`; `views` and `tags` parse through it, and every typed form uses
+it. `check` (v1.12.0) is the read-only `:PKMCheck` audit: pure, returns findings,
+built to never report a false positive.
 
 `tags`, `picker`, `actions`, `rename` and `bufsync` are the bulk-operation stack
 (v1.8.0): `tags` and `rename` hold the rules and the writes, `picker` owns every

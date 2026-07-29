@@ -60,6 +60,72 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
+## [1.12.0] - 29/7/2026 — code complete on `dev`, **not tagged**
+
+*Awaiting the smoke route
+(`00 - NotesTeste/03-Consolidated/0271_note_smoke-v1120-formas-tipadas.md`) run
+in the real config, and the evaluations that follow. Everything is
+headless-tested; the tag is cut after the route passes.*
+
+*Every operation that writes state grew a typed form, so the interactive and the
+programmatic paths are the one command: no argument gives the friendly path,
+an argument makes it deterministic and script-callable (Design Question 4.d).
+This is the surface the agent protocol will drive, and the last version that
+adds commands in bulk before the command clearup.*
+
+### Added
+
+-   **`lua/pkm/args.lua` — one reading of a command's arguments** (Ph1). The
+    grammar `:PKM<Context>[!] <verb> [positional] [key=value]` was open-coded in
+    each command; this is the single parser. It is not new — it generalises
+    `views.parse_command_args` and `tags.parse_command_args`, both of which
+    migrated onto it, which is the proof it serves both rather than becoming a
+    third dialect. The one real difference between callers — whether a first
+    word that is not a verb is a name or a mistake — it reports as `is_verb` and
+    leaves to the caller. `complete_verbs` draws from the same table the parser
+    reads, the property the clearup will lean on.
+
+-   **The note lifecycle takes arguments** (Ph2). `:PKMNewNote note title=Foo`,
+    `:PKMSetTitle <text>` and `:PKMRenameNote <name>` do straight through what
+    they used to only prompt for. `title=` is one token (Neovim splits on
+    whitespace); a spaced title is set with `:PKMSetTitle`, which takes the whole
+    argument string. A supplied title also means "do not interact", so a bib note
+    created with `title=` no longer stops to prompt for author and source.
+
+-   **Cite and uncite by reference** (Ph3). `:PKMCite <target>` and
+    `:PKMUncite <target>`, with the picker still there when no argument is given.
+    The body text is the source of truth, so cite appends the token and uncite
+    strips it, and both run `update_references` — the single engine that keeps
+    `cites` here and `cited_by` there in step. The target resolves from a path,
+    an identifier or a token; a bare number is refused as ambiguous.
+
+-   **Tags and views on a named note** (Ph4). `:PKMAddTag <tag> note=<ref>` and
+    `:PKMRemoveTag <tag> note=<ref>` write to a named note on disk (the buffer-only
+    forms are unchanged without `note=`). `:PKMView add|remove <view> note=<ref>`
+    makes a named note a member of a view by applying its tag condition — refusing,
+    rather than guessing, when a view can be satisfied several ways.
+
+-   **Agent authorship, and a deletion guard** (Ph5). `:PKMNewNote … by=Claude`
+    marks a note `NNNN_type_By<Author>_slug` and records the author.
+    `notes.agent_delete` — the path the agent protocol will call — trashes only
+    notes carrying a `By<agent>` marker, read from the name so it survives a copy
+    or a move: an agent inside a human's vault must not delete what a human wrote.
+
+-   **`:PKMCheck` — a read-only vault audit** (Ph6). New pure module
+    `lua/pkm/check.lua`: frontmatter validity, `cites`/`cited_by` symmetry,
+    citations resolving to notes that exist, numbering collisions, cross-vault
+    references naming an unregistered (or renamed) vault, and notes stranded in
+    `Unregistered/`. Built to never cry wolf — verified by a system-produced
+    corpus reporting zero findings, and by the real test vault's 49 findings
+    being confirmed genuine (BibTeX imports and old journals that truly lack
+    frontmatter, plus real graph asymmetries).
+
+### Changed
+
+-   **`views` and `tags` parse their command arguments through `pkm.args`.**
+    Same behaviour, one parser; their public `parse_command_args` signatures and
+    every contract are unchanged, which the suite confirms.
+
 ## [1.11.1] - 27/7/2026
 
 *The v1.11.0 indicator reached the sidebar title, the vault picker and
