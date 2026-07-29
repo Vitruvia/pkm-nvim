@@ -215,28 +215,34 @@ v1.12.0 MINOR  Typed forms for every state-writing operation  ⏳ code complete 
         recording where it goes wrong. Then the command clearup.
 ```
 
-**The order from here, and why it is this order.**
+**The order from here, and why it is this order.** *Reordered 29/7/2026: the
+command clearup moves ahead of the evaluations. The author, looking at the still-
+enormous `:PKM<TAB>` list after v1.12.0, made the call, and it is the right one —
+the clearup's direction is settled, its one prerequisite (`args.lua`) is built,
+the daily pain is present, and the evaluations run **better** against the clean
+surface than against 55 names. The earlier "evaluations first" reasoning held
+when the clearup design was still open; it no longer is.*
 
-1.  **v1.12.0 — typed forms**, opening with the shared argument parser.
-    Everything that writes state gets a form that takes arguments instead of
-    prompting. This is the last version that *adds* commands in bulk, which is
-    why it precedes the clearup.
-2.  **Evaluations.** As soon as v1.12.0 closes: drive the vault with Claude on
-    real tasks, **without** a skill, recording where it goes wrong. Early and
-    deliberately before the clearup, knowing the surface still moves — what
-    expires is a command's *name*; what does not is the finding about what is
-    missing and what confuses, and that is what should decide the clearup.
-    Evaluation before documentation is the recommended practice, and it
-    produces no file that ages.
-3.  **Features from Near/Distant goals that create commands** — `next_header`
-    global, list-component navigation, the index panel, syntax and commands
-    outside PKM, structure-aware autowrap. Each is born with both forms.
-4.  **Merge, then split.** Pulled forward the moment a real `Unregistered/`
-    folder needs them; otherwise they wait here, because they are the only
-    vault operations that renumber notes.
-5.  **Command clearup.** Only once nothing new is arriving, so the conversion
-    happens once. Two versions: introduce contexts with aliases, then delete
-    the aliases — the `:PKM<TAB>` list only shrinks at the second one.
+1.  **v1.12.0 — typed forms.** ✅ done. Everything that writes state took an
+    argument form, opening with the shared parser. The last version that adds
+    commands as new top-level `PKM*` names; from here new features add *verbs to
+    contexts*.
+2.  **Command clearup — contexts and verbs.** Next. 55 names → ~11 contexts, the
+    verb carrying the action. Two versions: introduce the contexts with the old
+    names kept as aliases, then delete the aliases — the `:PKM<TAB>` list only
+    shrinks at the second, but the clean surface is usable from the first. Detail
+    below.
+3.  **Evaluations.** Drive the vault with Claude on real tasks, **without** a
+    skill, against the new context surface, recording where it goes wrong. What
+    it finds — a missing verb, a confusing one — is added to the right context,
+    not as a new top-level name. Evaluation before documentation, and it produces
+    no file that ages.
+4.  **Features from Near/Distant goals** — `next_header` global, list-component
+    navigation, the index panel, syntax and commands outside PKM, structure-aware
+    autowrap. Each is born as a verb in its context, with both forms.
+5.  **Merge, then split.** Pulled forward the moment a real `Unregistered/`
+    folder needs them; otherwise they wait here, because they are the only vault
+    operations that renumber notes.
 6.  **`pkm.api`, `doc/AGENT_PROTOCOL.md`, the skill.** Last, so the text
     describes a surface that has stopped moving.
 
@@ -319,12 +325,38 @@ carried as a flag: `:PKMNote -n`, `:PKMVault -a`. The diagnosis is right and the
 direction is right; the honest assessment below changes the notation and names
 what it costs.*
 
-**The problem is real and measurable.** 55 command names are registered today.
-`:PKM<TAB>` is not discovery at that size — it is a wall. Grouped by subject
-they are **11 contexts**: `Note` (14), `View` (8), `Vault` (6), `Cite` (7),
-`Header` (5), `Tag` (4), `Find` (3), `Panel` (3), `List` (2), `Trash` (2),
-`Export` (2). Eleven names is a surface a person can hold in their head and an
-agent can be told about in a paragraph.
+**The problem is real and measurable.** ~57 command names are registered today
+(v1.12.0 added `:PKMCite`/`:PKMUncite`). `:PKM<TAB>` is not discovery at that
+size — it is a wall. Grouped by subject they are about **11 contexts**, and the
+author's own groupings (29/7/2026) are the shape to build:
+
+-   **`PKMNote`** — the note *file*: `new`, `rename`, `delete`, `promote`,
+    `convert`, `transpose`, `changetype`, `settitle`, `import`. (New/journal/
+    scratchpad collapse into `new journal` / `new scratch`.)
+-   **`PKMTag`** — `add`, `remove`, `merge`, and `rename` (the tag-rename
+    `:PKMMergeTags` half). Tag operations are their own domain, so tagging lives
+    here, not as a `PKMNote` verb — the author weighed both and this is the call.
+-   **`PKMView`** — `open` (default), `add`, `remove`, `rename` (shipped this
+    version), `new`, `update`, `delete`, `export`, `sidebar`, `last`, `edit`.
+-   **`PKMVault`** — `switch` (default), `new`, `rename`, `renumber`,
+    `unregister`, `adopt`.
+-   **`PKMCite`** — `add` (default), `remove` (today's `uncite`), `goto`,
+    `insert` (the picker), `update`, `link`, `backlinks`.
+-   **`PKMBrowse`** — the read/find surface the author named: bare (filter DSL),
+    `recent`, `orphans`, `tags`. Views are *managed* under `PKMView` but
+    *browsed* here — browsing and CRUD are different questions.
+-   **`PKMPanel`** — the UI toggles: `sidebar` (left), `buffers` (bottom),
+    `explorer` (both), `mode`. "left sidebar" and "bottom buffer" become
+    `PKMPanel sidebar` / `PKMPanel buffers`, opened as today.
+-   **`PKMHeader`** — `append`, `next`, `prev`, `up`, `down`.
+-   **`PKMList`** — `renumber`, `convert`.
+-   **`PKMTrash`** — `restore`, `empty`.
+-   **`PKMCheck`**, **`PKMStats`** — standalone; each is one verb-less action.
+
+The exact verb sets are settled during the work; the point is the count drops
+from ~57 top-level names to ~11 a person holds in their head and an agent is told
+about in a paragraph. The view-rename argument shipped in v1.12.0 is the pattern
+in miniature — a verb added to a context, sharing the interactive core.
 
 **Verbs, not flags.** `:PKMVault adopt <folder>`, not `:PKMVault -a <folder>`.
 Four reasons, in order of weight:
