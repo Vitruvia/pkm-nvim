@@ -367,6 +367,46 @@ function M.register()
     require('pkm.citations').goto_citation()
   end, {})
 
+  -- Read-only audit of the active vault. The module finds; the command shows —
+  -- a clean vault says so and opens nothing, a vault with problems lists them in
+  -- a scratch buffer, errors first, each line a path and a one-line reason.
+  vim.api.nvim_create_user_command('PKMCheck', function()
+    local findings = require('pkm.check').run()
+    if #findings == 0 then
+      vim.notify('[pkm] check: no problems found', vim.log.levels.INFO)
+      return
+    end
+
+    local errors = 0
+    for _, f in ipairs(findings) do
+      if f.severity == 'error' then errors = errors + 1 end
+    end
+
+    local root = require('pkm').config.root_path or ''
+    local lines = {
+      string.format('PKM check — %d finding%s (%d error%s)',
+        #findings, #findings == 1 and '' or 's', errors, errors == 1 and '' or 's'),
+      string.rep('─', 60),
+    }
+    for _, f in ipairs(findings) do
+      local where = f.path and f.path:gsub(vim.pesc(root .. '/'), ''):gsub(vim.pesc(root), '') or ''
+      lines[#lines + 1] = string.format('%-7s %s', f.severity:upper(), f.message)
+      if where ~= '' then lines[#lines + 1] = '        ' .. where end
+    end
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modifiable = false
+    vim.bo[buf].bufhidden  = 'wipe'
+    vim.bo[buf].filetype   = 'pkm-check'
+    require('pkm.utils').focus_editing_win()
+    vim.api.nvim_set_current_buf(buf)
+
+    vim.notify(string.format('[pkm] check: %d finding%s (%d error%s)',
+      #findings, #findings == 1 and '' or 's', errors, errors == 1 and '' or 's'),
+      errors > 0 and vim.log.levels.WARN or vim.log.levels.INFO)
+  end, { desc = 'Audit the vault: frontmatter, the citation graph, numbering, vault references' })
+
   -- The current note is the source; the argument names the target. With no
   -- argument, :PKMCite falls back to the interactive picker (the same one
   -- :PKMInsertCitation opens), keeping the two forms one command. The target
