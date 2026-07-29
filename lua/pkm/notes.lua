@@ -102,11 +102,17 @@ end
 -- SECTION: Frontmatter editing (buffer-only)
 -- =============================================================================
 
---- Prompt for a new title and write it to the current buffer's frontmatter.
+--- Set the current buffer's frontmatter title.
 --- Buffer-only — no disk write. BufWritePre/BufWritePost handle persistence.
 --- Must NOT call index.invalidate: no disk write occurred; the index re-reads
 --- correctly when the user saves.
-function M.set_title()
+---
+--- Interactive and programmatic are the one command: with `new_title` given
+--- (`:PKMSetTitle My Note`) it writes it straight; without one it prompts,
+--- seeded with the current title. `new_title` is taken as-is, so a script can
+--- set any string, including an empty one.
+---@param new_title string|nil  When nil, prompt; otherwise use verbatim
+function M.set_title(new_title)
   local filepath  = vim.fn.expand('%:p')
   local norm_path = filepath:gsub('\\', '/')
   local norm_root = config.root_path:gsub('\\', '/')
@@ -123,11 +129,13 @@ function M.set_title()
     return
   end
 
-  local current = type(fm.title) == 'string' and fm.title or ''
-  vim.fn.inputsave()
-  local new_title = vim.fn.input('Title: ', current)
-  vim.fn.inputrestore()
-  if new_title == nil then return end   -- Esc / cancelled
+  if new_title == nil then
+    local current = type(fm.title) == 'string' and fm.title or ''
+    vim.fn.inputsave()
+    new_title = vim.fn.input('Title: ', current)
+    vim.fn.inputrestore()
+    if new_title == nil then return end   -- Esc / cancelled
+  end
 
   fm.title = new_title
   yaml_m.save_frontmatter(fm, content_start)   -- Case A: buffer-only, no disk write
@@ -151,6 +159,8 @@ end
 ---                       tags; used by create_relative_note()
 ---                       { where = nil|'left'|'right'|integer } which window to
 ---                       open it in — see `utils.focus_editing_win`
+---                       { title = string } supplied title; when present, the
+---                       title prompt is skipped (`:PKMNewNote … title=`)
 ---@return string|nil filepath Absolute path of created note, or nil on cancel
 function M.create_new_note(note_type, opts)
   opts = opts or {}
@@ -189,16 +199,21 @@ function M.create_new_note(note_type, opts)
     return nil
   end
   
-  -- Get note title
-  vim.fn.inputsave()
-  -- SIMPLIFIED: Always allow unnamed notes
-  local title = vim.fn.input("Note title (leave empty for unnamed): ")
-  vim.fn.inputrestore()
-  
-  -- If user cancels with <Esc>, title will be nil
+  -- Get note title. A title supplied by the caller (`title=` on the command)
+  -- skips the prompt entirely, so `:PKMNewNote note title=Foo` creates without
+  -- interaction; an explicit empty title is still "supplied" and means unnamed.
+  local title = opts.title
   if title == nil then
-    vim.notify("Note creation cancelled", vim.log.levels.INFO)
-    return nil
+    vim.fn.inputsave()
+    -- SIMPLIFIED: Always allow unnamed notes
+    title = vim.fn.input("Note title (leave empty for unnamed): ")
+    vim.fn.inputrestore()
+
+    -- If user cancels with <Esc>, title will be nil
+    if title == nil then
+      vim.notify("Note creation cancelled", vim.log.levels.INFO)
+      return nil
+    end
   end
   
   -- Generate filename (the rest of the function is the same)
@@ -231,14 +246,18 @@ function M.create_new_note(note_type, opts)
     if #seeded > 0 then frontmatter_data.tags = seeded end
   end
 
-  if note_type == "bib" then
+  -- A bib note's author and source are prompted only on the interactive path.
+  -- A title supplied by the caller means "do not interact", so the programmatic
+  -- form stays promptless throughout; those fields are then left for frontmatter
+  -- editing. (Their own named arguments are a later phase's addition.)
+  if note_type == "bib" and opts.title == nil then
     vim.fn.inputsave()
     local author = vim.fn.input("Author: ")
     vim.fn.inputrestore()
     if author ~= "" then
       frontmatter_data.source_author = author
     end
-    
+
     vim.fn.inputsave()
     local source_type = vim.fn.input("Source type [book]: ", "book")
     vim.fn.inputrestore()
@@ -946,13 +965,20 @@ function M.rename_file(path, new_stem)
   return true, new_path
 end
 
---- Prompt for a new name and rename the current PKM note file.
+--- Rename the current PKM note file.
 --- For consolidated notes: preserves number and type prefix, renames the title part.
 --- For journal/scratchpad: allows renaming the full stem.
 --- Does not modify the title frontmatter field.
 --- Propagates the rename through citations via update_references_on_rename.
+---
+--- Interactive and programmatic are the one command. With `new_name` given
+--- (`:PKMRenameNote nome novo`) it renames straight; without one it prompts,
+--- seeded with the current name. In both cases `new_name` is the *human* name —
+--- the number and type prefix of a consolidated note are kept for you — and it
+--- is sanitised the same way the prompt's input is.
+---@param new_name string|nil  When nil, prompt; otherwise the new name part
 ---@return nil
-function M.rename_note()
+function M.rename_note(new_name)
   local filepath = vim.fn.expand('%:p')
   local old_stem = vim.fn.fnamemodify(filepath, ':t:r')
 
@@ -976,16 +1002,22 @@ function M.rename_note()
       vim.notify('[pkm] unrecognized consolidated note filename', vim.log.levels.WARN)
       return
     end
-    vim.fn.inputsave()
-    local input = vim.fn.input('Rename note: ', (name_part:gsub('_', ' ')))
-    vim.fn.inputrestore()
+    local input = new_name
+    if input == nil then
+      vim.fn.inputsave()
+      input = vim.fn.input('Rename note: ', (name_part:gsub('_', ' ')))
+      vim.fn.inputrestore()
+    end
     if not input or input == '' then return end
     local safe_name = sanitize_title(input)
     new_stem = string.format('%04d_%s_%s', tonumber(number), note_type, safe_name)
   else
-    vim.fn.inputsave()
-    local input = vim.fn.input('Rename to (stem, no extension): ', old_stem)
-    vim.fn.inputrestore()
+    local input = new_name
+    if input == nil then
+      vim.fn.inputsave()
+      input = vim.fn.input('Rename to (stem, no extension): ', old_stem)
+      vim.fn.inputrestore()
+    end
     if not input or input:match('^%s*$') then return end
     new_stem = sanitize_title(input)
   end

@@ -94,9 +94,15 @@ function M.register()
   -- rather than a second command. Both are optional and order-free: the type
   -- comes from a closed set and the placement is a side or a window number, so
   -- neither can be mistaken for the other.
+  -- `title=` is the one named value: a title that comes with it skips the
+  -- prompt, so `:PKMNewNote note title=Foo` creates without interaction. It is a
+  -- single token, because Neovim splits arguments on whitespace before the
+  -- callback sees them; a spaced title is set afterwards with :PKMSetTitle, or
+  -- through the prompt.
   vim.api.nvim_create_user_command('PKMNewNote', function(opts)
+    local p = require('pkm.args').parse(opts, { named = true })
     local note_type, where
-    for _, arg in ipairs(opts.fargs) do
+    for _, arg in ipairs(p.positional) do
       local low = arg:lower()
       if low == 'note' or low == 'agg' or low == 'bib' then
         note_type = low
@@ -106,23 +112,23 @@ function M.register()
         where = tonumber(low)
       else
         vim.notify(string.format("[pkm] don't know what '%s' means here — "
-          .. 'expected a type (note/agg/bib) or a place (left/right/<number>)',
-          arg), vim.log.levels.ERROR)
+          .. 'expected a type (note/agg/bib), a place (left/right/<number>) '
+          .. 'or title=<text>', arg), vim.log.levels.ERROR)
         return
       end
     end
 
-    require('pkm.notes').create_new_note(note_type, { where = where })
+    require('pkm.notes').create_new_note(note_type, { where = where, title = p.named.title })
   end, {
     nargs    = '*',
     complete = function(lead)
       local out = {}
-      for _, tok in ipairs({ 'note', 'agg', 'bib', 'left', 'right' }) do
+      for _, tok in ipairs({ 'note', 'agg', 'bib', 'left', 'right', 'title=' }) do
         if tok:find(lead:lower(), 1, true) == 1 then out[#out + 1] = tok end
       end
       return out
     end,
-    desc = 'Create a note; optional type and placement (left/right/window number)',
+    desc = 'Create a note; optional type, placement (left/right/N) and title=<text>',
   })
 
   -- :PKMNewRelative — new note seeded with the current note's tags, so it lands
@@ -157,9 +163,15 @@ function M.register()
     require('pkm.notes').import_note()
   end, { desc = 'Import current file into PKM system' })
 
-  vim.api.nvim_create_user_command('PKMRenameNote', function()
-    require('pkm.notes').rename_note()
-  end, { desc = 'Rename current consolidated note file' })
+  -- The whole argument string is the new name, so a spaced name needs no
+  -- quoting; with no argument it prompts. The number and type prefix of a
+  -- consolidated note are kept either way.
+  vim.api.nvim_create_user_command('PKMRenameNote', function(opts)
+    require('pkm.notes').rename_note(opts.args ~= '' and opts.args or nil)
+  end, {
+    nargs = '*',
+    desc  = 'Rename the current note (argument = new name; prompts if none)',
+  })
 
   -- ---------------------------------------------------------------------------
   -- Note conversion and promotion
@@ -360,9 +372,14 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- Frontmatter editing (buffer-only; no disk write; no index.invalidate)
   -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMSetTitle', function()
-    require('pkm.notes').set_title()
-  end, { desc = 'Set title frontmatter field in current buffer (no disk write)' })
+  -- The whole argument string is the title, so a spaced title needs no quoting;
+  -- with no argument it prompts, seeded with the current title.
+  vim.api.nvim_create_user_command('PKMSetTitle', function(opts)
+    require('pkm.notes').set_title(opts.args ~= '' and opts.args or nil)
+  end, {
+    nargs = '*',
+    desc  = 'Set the title frontmatter field (argument = title; prompts if none; no disk write)',
+  })
 
   vim.api.nvim_create_user_command('PKMAddTag', function(opts)
     if opts.args ~= '' then
