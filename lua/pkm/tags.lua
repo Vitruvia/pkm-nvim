@@ -421,6 +421,31 @@ function M.apply(paths, ops)
   return applied, errors
 end
 
+--- Apply a tag operation to one *named* note and keep an open buffer in step.
+--- The typed counterpart to the buffer-only :PKMAddTag/:PKMRemoveTag: it writes
+--- to disk, so — like a citation or a vault switch — it refuses to run behind an
+--- unsaved buffer rather than persist edits the user has not seen, then reloads
+--- the buffer so what it wrote is what is shown.
+---@param path string  Absolute note path
+---@param ops  table   { add?, remove?, rename? } — see M.plan
+---@return boolean ok
+---@return string|nil err
+function M.write_note_tags(path, ops)
+  if type(path) ~= 'string' or vim.fn.filereadable(path) == 0 then
+    return false, 'note not found: ' .. tostring(path)
+  end
+
+  local bufsync = require('pkm.bufsync')
+  local bufnr   = bufsync.buffer_for(path)
+  if bufnr and vim.bo[bufnr].modified then
+    return false, 'the note has unsaved changes — save it first'
+  end
+
+  M.apply({ path }, ops)
+  bufsync.reload({ path })
+  return true
+end
+
 -- =============================================================================
 -- SECTION: Interactive flow
 -- =============================================================================

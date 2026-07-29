@@ -702,6 +702,49 @@ function M.get_tree(name)
   return get_tree(name)
 end
 
+--- Add or remove a *named* note's membership in a view, without a prompt.
+---
+--- A view is a filter over tags, so membership is having the tags it filters on;
+--- this resolves the view's tag condition and applies it. The interactive
+--- counterpart (`tags.view_flow`) shows a menu when a view can be satisfied more
+--- than one way — an OR of tags — because which tag to add is a judgement about
+--- meaning. The programmatic form cannot guess, so it refuses that case and
+--- points at the interactive one, rather than pick a tag the caller did not
+--- choose. This is the typed sibling of `:PKMView add <view>` on the current note.
+---@param path string       Absolute note path
+---@param view_name string
+---@param kind string       'add' | 'remove'
+---@return boolean ok
+---@return string|nil err
+function M.set_membership(path, view_name, kind)
+  local tree, terr = get_tree(view_name)
+  if not tree then return false, terr or ("no view named '" .. view_name .. "'") end
+
+  -- Removal is satisfying the negation: the same question, mirrored.
+  local target = (kind == 'add') and tree or { type = 'NOT', args = { tree } }
+  local alts   = require('pkm.filter').tag_sets(target)
+
+  local usable = {}
+  for _, alt in ipairs(alts) do
+    if #alt.blockers == 0 and (#alt.add > 0 or #alt.remove > 0) then
+      usable[#usable + 1] = alt
+    end
+  end
+
+  if #usable == 0 then
+    return false, string.format(
+      "'%s' has no tag condition to change with tags alone", view_name)
+  end
+  if #usable > 1 then
+    return false, string.format(
+      "'%s' can be satisfied several ways — choose interactively with :PKMView %s %s",
+      view_name, kind, view_name)
+  end
+
+  local alt = usable[1]
+  return require('pkm.tags').write_note_tags(path, { add = alt.add, remove = alt.remove })
+end
+
 --- Return all note paths matching the named view's filter expression.
 --- Returns an empty array and notifies on error.
 ---@param name string

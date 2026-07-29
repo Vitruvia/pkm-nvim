@@ -461,21 +461,54 @@ function M.register()
     desc  = 'Set the title frontmatter field (argument = title; prompts if none; no disk write)',
   })
 
-  vim.api.nvim_create_user_command('PKMAddTag', function(opts)
-    if opts.args ~= '' then
-      require('pkm.citations').add_tag(opts.args)
-    else
-      require('pkm.ui').open_tag_panel('add')
-    end
-  end, { nargs = '?', desc = 'Append a tag via the tag panel, or directly if an argument is given (no disk write)' })
+  -- Buffer-only by default (no disk write), exactly as before. With note=<ref>
+  -- it instead writes the tag to that named note on disk — the typed form the
+  -- agent path needs, since an agent tags notes it is not "in". The tag itself
+  -- is the positional words, so a spaced tag needs no quoting.
+  local function tag_command(kind)
+    return function(opts)
+      local p   = require('pkm.args').parse(opts, { named = true })
+      local tag = table.concat(p.positional, ' ')
 
-  vim.api.nvim_create_user_command('PKMRemoveTag', function(opts)
-    if opts.args ~= '' then
-      require('pkm.citations').remove_tag(opts.args)
-    else
-      require('pkm.ui').open_tag_panel('remove')
+      if p.named.note then
+        if tag == '' then
+          vim.notify('[pkm] a tag is required with note=', vim.log.levels.WARN)
+          return
+        end
+        local item, rerr = require('pkm.citations').resolve_citable(p.named.note)
+        if not item then
+          vim.notify('[pkm] ' .. (rerr or 'note not found'), vim.log.levels.ERROR)
+          return
+        end
+        local ops = (kind == 'add') and { add = { tag } } or { remove = { tag } }
+        local ok, werr = require('pkm.tags').write_note_tags(item.path, ops)
+        if ok then
+          vim.notify(string.format("[pkm] %s '%s' on %s",
+            kind == 'add' and 'added' or 'removed', tag, p.named.note), vim.log.levels.INFO)
+        else
+          vim.notify('[pkm] ' .. (werr or 'not written'), vim.log.levels.ERROR)
+        end
+        return
+      end
+
+      -- No note=: the buffer-only path, unchanged.
+      if tag ~= '' then
+        require('pkm.citations')[kind == 'add' and 'add_tag' or 'remove_tag'](tag)
+      else
+        require('pkm.ui').open_tag_panel(kind)
+      end
     end
-  end, { nargs = '?', desc = 'Remove a tag via the tag panel, or directly if an argument is given (no disk write)' })
+  end
+
+  vim.api.nvim_create_user_command('PKMAddTag', tag_command('add'), {
+    nargs = '*',
+    desc  = 'Append a tag (panel, or directly; note=<ref> writes to a named note)',
+  })
+
+  vim.api.nvim_create_user_command('PKMRemoveTag', tag_command('remove'), {
+    nargs = '*',
+    desc  = 'Remove a tag (panel, or directly; note=<ref> writes to a named note)',
+  })
 
   -- ---------------------------------------------------------------------------
   -- Navigation and linking
@@ -507,7 +540,12 @@ function M.register()
   -- still means "open", so nothing that worked before reads differently now.
   vim.api.nvim_create_user_command('PKMView', function(opts)
     local views = require('pkm.views')
-    local mode, name, err = views.parse_command_args(opts.fargs, views.list())
+
+    -- note=<ref> is pulled out first, so it never lands in the view name; what
+    -- remains is read exactly as before.
+    local p        = require('pkm.args').parse(opts, { named = true })
+    local note_ref = p.named.note
+    local mode, name, err = views.parse_command_args(p.positional, views.list())
 
     if err then
       vim.notify('[pkm] ' .. err, vim.log.levels.ERROR)
@@ -520,7 +558,27 @@ function M.register()
       return
     end
 
-    -- The note under the cursor is the whole selection here.
+    -- A named note (note=<ref>): the deterministic, promptless path. It applies
+    -- the view's tag condition when there is one unambiguous way, and refuses
+    -- when the view can be satisfied several ways — that choice is the
+    -- interactive form's to make.
+    if note_ref then
+      local item, rerr = require('pkm.citations').resolve_citable(note_ref)
+      if not item then
+        vim.notify('[pkm] ' .. (rerr or 'note not found'), vim.log.levels.ERROR)
+        return
+      end
+      local ok, serr = views.set_membership(item.path, name, mode)
+      if ok then
+        vim.notify(string.format("[pkm] %s %s '%s'",
+          note_ref, mode == 'add' and 'added to' or 'removed from', name), vim.log.levels.INFO)
+      else
+        vim.notify('[pkm] ' .. (serr or 'not changed'), vim.log.levels.ERROR)
+      end
+      return
+    end
+
+    -- No note=: the note under the cursor is the whole selection, interactively.
     local filepath = vim.fn.expand('%:p')
     local root     = require('pkm').config.root_path or ''
     local in_root  = filepath ~= '' and root ~= ''
