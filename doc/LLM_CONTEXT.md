@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.13.0** (released, tagged) · **v1.14.0** code complete on `dev`, untagged
+## Current version: **v1.14.0** (released, tagged)
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.

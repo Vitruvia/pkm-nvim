@@ -217,8 +217,8 @@ v1.13.0 MINOR  Command clearup, part 1 — contexts + aliases  ✅ released and
         58 old names kept as working aliases. The :PKM<TAB> list does not shrink
         yet. Detail in doc/CHANGELOG.md.
 
-v1.14.0 MINOR  Command clearup, part 2 — delete the aliases  ⏳ code complete on
-        `dev`, awaiting its smoke route (note 0275); tag after. 46 aliases
+v1.14.0 MINOR  Command clearup, part 2 — delete the aliases  ✅ released and
+        tagged; smoke route (note 0275) passed in the real config. 46 aliases
         removed; :PKM<TAB> lists 15 commands. :PKMTags repurposed as the
         vault-wide bulk tag command; :PKMVault verbs reserved as names. Detail
         in doc/CHANGELOG.md.

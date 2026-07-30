@@ -70,15 +70,16 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
-## [1.14.0] - 30/7/2026 — code complete on `dev`, **not tagged**
+## [1.14.0] - 30/7/2026
 
 *The command clearup, part 2: delete the aliases. `:PKM<TAB>` now lists **15**
 commands — eleven verb-contexts (`:PKMNote`, `:PKMTag`, `:PKMCite`, `:PKMView`,
 `:PKMVault`, `:PKMBrowse`, `:PKMPanel`, `:PKMHeader`, `:PKMList`, `:PKMTrash`,
 `:PKMExport`) and four standalone (`:PKMCheck`, `:PKMStats`, `:PKMToggleAutoSync`,
-`:PKMTags`) — instead of 64. Awaiting the smoke route
-(`00 - NotesTeste/03-Consolidated/0275_note_smoke-v1140-o-corte-dos-aliases.md`)
-run in the real config; the tag is cut after it passes.*
+`:PKMTags`) — instead of 64. Smoke route passed in the real config
+(`00 - NotesTeste/03-Consolidated/0275_note_smoke-v1140-o-corte-dos-aliases.md`):
+the shrunk `:PKM<TAB>`, the removed names erroring (E492), the `:PKMTag`/`:PKMTags`
+split, keymaps on the verb forms, and the reserved-verb refusal.*
 
 ### Removed
 
