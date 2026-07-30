@@ -3,7 +3,7 @@
 -- =============================================================================
 -- Dependencies : pkm.index (lazy), pkm.citations (lazy), pkm.utils
 -- Consumed by  : pkm.init (delete_note_safely),
---                pkm.commands (:PKMRestoreNote, :PKMEmptyTrash)
+--                pkm.commands (:PKMTrash restore, :PKMTrash empty)
 --                pkm.notes (get_next_note_number — reads manifest for numbering)
 --
 -- Notes moved to trash are stored in {root}/.pkm-trash/ and recorded in
@@ -479,7 +479,7 @@ local _restore_panel = panel.create({
     return lines, map
   end,
   -- Deliberately no delete key of any kind — emptying stays exclusive to
-  -- :PKMEmptyTrash's typed "yes"/"no" confirmation. Do not add one here.
+  -- :PKMTrash empty's typed "yes"/"no" confirmation. Do not add one here.
   keymaps = {
     ['<CR>'] = function(state, helpers)
       local entry = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
@@ -504,7 +504,7 @@ local _restore_panel = panel.create({
 })
 
 --- Open the trash browse/search/restore panel. No-op with a notification
---- if trash is currently empty (matches the pre-panel :PKMRestoreNote
+--- if trash is currently empty (matches the pre-panel :PKMTrash restore
 --- behaviour — avoids opening a panel with nothing to show).
 ---@return nil
 function M.open_restore_panel()

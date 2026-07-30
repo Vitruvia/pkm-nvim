@@ -177,14 +177,14 @@ local defaults = {
     view_buffers = "<leader>vb",
     toggle_file_explorer = false,   -- superseded by view_sidebar + T (filename/title toggle)
     focus_sidebar = "<leader>s",   -- jump focus directly to sidebar window
-    -- PKMMode
-    toggle_mode   = false,   -- :PKMMode toggle
+    -- PKM mode
+    toggle_mode   = false,   -- :PKMPanel mode toggle
     -- Search and browsing
     browse          = "<leader>nf",
     browse_tags     = "<leader>nt",
     -- Markdown editing
     ---- Headers ----
-    next_header        = "<leader>Mh",   -- :PKMHeaderAppend (writes; not a motion)
+    next_header        = "<leader>Mh",   -- :PKMHeader append (writes; not a motion)
     header_level_up    = "<leader>M^",
     header_level_down  = "<leader>M_",
     -- Header navigation: buffer-local on markdown, normal and visual mode,
@@ -196,11 +196,11 @@ local defaults = {
     header_prev_same   = "[h",   -- previous header of the current header's level
     -- Any-level jumps, left unbound: this is ]] / [[ . Assign only if you want
     -- what those lack — a count, Visual mode, a jumplist entry, and working
-    -- without the tree-sitter markdown parser (:PKMHeaderNext has all of it).
+    -- without the tree-sitter markdown parser (:PKMHeader next has all of it).
     header_next        = false,
     header_prev        = false,
     renumber_list      = "<leader>Mr",
-    convert_list = false,   -- :PKMConvertList (range or paragraph at cursor)
+    convert_list = false,   -- :PKMList convert (range or paragraph at cursor)
   },
 }
 

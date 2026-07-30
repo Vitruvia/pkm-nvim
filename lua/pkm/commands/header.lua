@@ -4,16 +4,15 @@
 -- Dependencies : pkm.args, pkm.markdown (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- Header operations reached two ways. `:PKMHeader <verb>` is the context form
--- the command clearup introduces — append, next, prev, levelup, leveldown. The
--- original names (`:PKMHeaderAppend`, `:PKMHeaderNext`, …) stay as aliases and
--- drive the same cores.
+-- Header operations. `:PKMHeader <verb>` — append, next, prev, levelup,
+-- leveldown.
 --
--- One thing does not fold cleanly: `:PKMHeaderNext`/`Prev` take a Vim count
--- (`:3PKMHeaderNext`), while the level-shifts take a range — a single command
--- cannot carry both. So the context form reads the motion count as an argument
--- (`:PKMHeader next 3`, `:PKMHeader next h2`) and keeps `range` for the shifts;
--- the `:count` prefix stays on the `:PKMHeaderNext`/`Prev` aliases.
+-- The motions and the level-shifts want different command attributes — a count
+-- for next/prev, a range for the shifts, which one command cannot both carry.
+-- So `:PKMHeader` keeps `range` for the shifts and reads the motion count as an
+-- argument (`:PKMHeader next 3`, `:PKMHeader next h2`); the count-prefix
+-- ergonomic lives on the header-motion keymaps (which call goto_heading with
+-- v:count1 directly).
 --
 -- Public API:
 --   register() → register this context's :PKM* commands

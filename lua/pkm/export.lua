@@ -589,7 +589,7 @@ end
 
 --- Export a pre-computed path list, skipping the filter form.
 --- Opens the results picker directly, then prompts for destination.
---- Used by :PKMExportView and context-aware export from the sidebar.
+--- Used by :PKMView export and context-aware export from the sidebar.
 ---@param label string   Display label shown in the picker title
 ---@param paths string[] Pre-computed path list
 function M.export_direct(label, paths)

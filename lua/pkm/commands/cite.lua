@@ -5,12 +5,9 @@
 --                pkm.ui, pkm.telescope (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- The citation graph from the editor's side, reached two ways. `:PKMCite <verb>`
--- is the context form the command clearup introduces — add, remove, goto,
--- insert, update, link, follow, backlinks — with `add` the default verb, so a
--- bare `:PKMCite` still opens the picker and `:PKMCite <target>` still cites.
--- The original names (`:PKMUncite`, `:PKMGotoCitation`, `:PKMLinkNote`, …) stay
--- as aliases and drive the same cores.
+-- The citation graph from the editor's side. `:PKMCite <verb>` — add, remove,
+-- goto, insert, update, link, follow, backlinks — with `add` the default verb,
+-- so a bare `:PKMCite` opens the picker and `:PKMCite <target>` cites.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands
@@ -58,7 +55,7 @@ local function act_cite(target)
 end
 
 --- Remove a citation from the current note; with no target, choose from what it
---- cites. Shared by `:PKMUncite` and `:PKMCite remove`.
+--- cites. The core behind `:PKMCite remove`.
 ---@param target string|nil
 local function act_uncite(target)
   local source = current_note()

@@ -5,11 +5,9 @@
 --                pkm.utils, pkm.commands.shared (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- The whole view surface reached two ways. `:PKMView <verb>` is the context
--- form: a bare view name opens it (the default), and the verbs are add, remove,
--- rename, new, update, edit, delete, last, export, sidebar, list. The original
--- names (`:PKMViews`, `:PKMViewNew`, `:PKMViewUpdate`, …) stay as aliases and
--- drive the same cores. Membership (add/remove) still goes through
+-- The whole view surface. `:PKMView <verb>`: a bare view name opens it (the
+-- default), and the verbs are add, remove, rename, new, update, edit, delete,
+-- last, export, sidebar, list. Membership (add/remove) still goes through
 -- views.parse_command_args, so a view named like a verb still opens.
 --
 -- Public API:

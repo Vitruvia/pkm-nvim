@@ -395,7 +395,7 @@ end
 
 --- Delete or trash the current note.
 --- With trash.enabled = true (default): moves to .pkm-trash/ and preserves
---- backlinks; use :PKMRestoreNote to undo or :PKMEmptyTrash to permanently
+--- backlinks; use :PKMTrash restore to undo or :PKMTrash empty to permanently
 --- delete. With trash.enabled = false: permanent delete (strips backlinks).
 function M.delete_note_safely()
   local filepath = vim.fn.expand('%:p')
@@ -411,7 +411,7 @@ function M.delete_note_safely()
   local trash_enabled = M.config.trash and M.config.trash.enabled
   local filename      = vim.fn.fnamemodify(filepath, ':t')
   local action_note   = trash_enabled
-    and '(moves to trash · :PKMRestoreNote to undo)'
+    and '(moves to trash · :PKMTrash restore to undo)'
     or  '(permanent · cannot be undone)'
 
   vim.fn.inputsave()
@@ -436,7 +436,7 @@ function M.delete_note_safely()
       require('pkm.index').invalidate(filepath)
       require('pkm.views').refresh_sidebar_if_open()
       vim.notify(
-        string.format("'%s' moved to trash. Use :PKMRestoreNote to undo.", filename),
+        string.format("'%s' moved to trash. Use :PKMTrash restore to undo.", filename),
         vim.log.levels.INFO)
     else
       vim.notify('Failed to move note to trash.', vim.log.levels.ERROR)

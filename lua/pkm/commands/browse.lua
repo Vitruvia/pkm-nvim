@@ -5,14 +5,12 @@
 --                pkm.tags, pkm.utils, pkm.commands.shared (lazy)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- Opening notes, reached two ways. `:PKMBrowse <verb>` is the context form the
--- command clearup introduces — a bare filter expression (the default), plus
--- `recent`, `orphans`, and `tags` (browse by tag). The original names
--- (`:PKMBrowseRecent`, `:PKMOrphans`) stay as aliases and drive the same cores.
--- Each falls back from Telescope to the built-in ui when Telescope is absent.
+-- Opening notes. `:PKMBrowse <verb>` — a bare filter expression (the default),
+-- plus `recent`, `orphans`, and `tags` (browse by tag). Each falls back from
+-- Telescope to the built-in ui when Telescope is absent.
 --
--- `tags` is the browse half of `:PKMTags`; the batch half stays on `:PKMTags`
--- (kept as an alias) until the alias-deletion version homes it on `:PKMTag`.
+-- `tags` is the browse-by-tag path; the vault-wide bulk tag operations live on
+-- `:PKMTags`, and the per-note ones on `:PKMTag`.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands

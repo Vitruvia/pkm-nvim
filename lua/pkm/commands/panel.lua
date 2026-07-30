@@ -4,12 +4,9 @@
 -- Dependencies : pkm.args, pkm.ui, pkm.views, pkm.mode (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- The panels and mode toggles, reached two ways. `:PKMPanel <verb>` is the
--- context form the command clearup introduces — `explorer` (the default:
--- sidebar + buffer panel as a unit), `buffers`, `sidebar`, `mode`. The original
--- names (`:PKMBuffers`, `:PKMExplorer`, `:PKMMode`) stay as aliases and drive
--- the same cores. `sidebar` opens the view sidebar, whose own alias
--- (`:PKMViewSidebar`) lives with the view surface.
+-- The panels and mode toggles. `:PKMPanel <verb>` — `explorer` (the default:
+-- sidebar + buffer panel as a unit), `buffers`, `sidebar`, `mode`. `sidebar`
+-- opens the view sidebar (also reachable as `:PKMView sidebar`).
 --
 -- Public API:
 --   register() → register this context's :PKM* commands

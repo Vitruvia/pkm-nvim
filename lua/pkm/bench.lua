@@ -47,7 +47,7 @@
 --   baseline()                     → timed raw scan on real corpus (read-only)
 --   run_suite(bench_dir?, opts?)   → four-phase suite; cleans up afterward
 --   views_suite(opts?)             → view × note scaling bench (overview scenario)
---   views_open(opts?)              → :PKMViews open-path bench on the live
+--   views_open(opts?)              → :PKMView list open-path bench on the live
 --                                    corpus and views (read-only), or on a
 --                                    synthetic corpus with opts.synthetic
 -- =============================================================================
@@ -428,7 +428,7 @@ end
 --- views.json, or the live index.
 ---
 --- This is the required measurement gate before introducing any caching of
---- match_all results in sidebar_build_overview or :PKMOrphans. Both call
+--- match_all results in sidebar_build_overview or :PKMBrowse orphans. Both call
 --- match_all once per defined view (O(V × N) at query time); caching is
 --- only justified if this suite shows meaningful latency at realistic V.
 ---
@@ -436,7 +436,7 @@ end
 ---   single  : one filter evaluated against all N notes
 ---             (sidebar detail-mode cost: one match_all call per open)
 ---   overview: V filters evaluated against all N notes, counting only
----             (sidebar_build_overview + :PKMOrphans: one match_all per view)
+---             (sidebar_build_overview + :PKMBrowse orphans: one match_all per view)
 ---
 --- Options (opts table):
 ---   note_count (integer) synthetic notes to generate; default 10000
@@ -517,7 +517,7 @@ function M.views_suite(opts)
     end)
 
     -- Overview: V filters over all entries, counting only.
-    -- Mirrors sidebar_build_overview() and :PKMOrphans (both O(V × N)).
+    -- Mirrors sidebar_build_overview() and :PKMBrowse orphans (both O(V × N)).
     local ms_overview = M.time(function()
       for _, tree in ipairs(trees) do
         local c = 0
@@ -676,7 +676,7 @@ local function views_open_synthetic(opts)
   end
 end
 
---- Measure the `:PKMViews` / sidebar-overview open path against the corpus and
+--- Measure the `:PKMView list` / sidebar-overview open path against the corpus and
 --- the view definitions this session is configured with. Read-only: it calls
 --- the live index and live views but never writes a file or changes any state.
 ---

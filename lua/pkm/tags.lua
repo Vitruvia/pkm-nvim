@@ -33,7 +33,7 @@
 --   1. rename first, then remove, then add.
 --   2. Comparison is case-insensitive, but a surviving tag keeps the exact form
 --      it had in the file. Only tags this operation introduces (added or
---      renamed) are stored normalised, matching what :PKMAddTag writes. This
+--      renamed) are stored normalised, matching what :PKMTag add writes. This
 --      is why a batch never rewrites a note merely to change "Beta" to "beta".
 --   3. No duplicates ever: renaming onto an existing tag merges into it, and
 --      adding a tag already present is a no-op.
@@ -422,7 +422,7 @@ function M.apply(paths, ops)
 end
 
 --- Apply a tag operation to one *named* note and keep an open buffer in step.
---- The typed counterpart to the buffer-only :PKMAddTag/:PKMRemoveTag: it writes
+--- The typed counterpart to the buffer-only :PKMTag add/remove: it writes
 --- to disk, so — like a citation or a vault switch — it refuses to run behind an
 --- unsaved buffer rather than persist edits the user has not seen, then reloads
 --- the buffer so what it wrote is what is shown.
@@ -588,7 +588,7 @@ local function ask_tags(kind, paths, on_ops)
     end
 
     -- Destination: every tag but the source. Choosing one that exists merges
-    -- into it — the same operation :PKMMergeTags performs, reached from here.
+    -- into it — the same operation :PKMTag merge performs, reached from here.
     local targets = {}
     for _, row in ipairs(M.suggest_tags(paths)) do
       if row.tag ~= from then targets[#targets + 1] = row end

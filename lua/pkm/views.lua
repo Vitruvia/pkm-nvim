@@ -2,8 +2,7 @@
 -- pkm.views — Named project views over the note index
 -- =============================================================================
 -- Dependencies : pkm.filter, pkm.index (lazy), pkm.utils
--- Consumed by  : pkm.commands (:PKMView, :PKMViews, :PKMViewNew,
---                :PKMViewEdit, :PKMViewDelete)
+-- Consumed by  : pkm.commands (:PKMView and its verbs),
 --                pkm.init (setup, delete_note_safely)
 --
 -- A view is a named filter expression. Views are stored in views.json at the
@@ -966,7 +965,7 @@ end
 ---
 --- Deletes without asking: **the caller owns the confirmation**, and every
 --- caller must have one (`doc/PRINCIPLES.md` § every removal confirms). Both
---- current callers do — the deletion panel and `:PKMViewDelete <name>` — and a
+--- current callers do — the deletion panel and `:PKMView delete <name>` — and a
 --- new one that does not is a bug, not a shortcut.
 ---@param name string
 ---@return boolean success
@@ -1541,7 +1540,7 @@ local function pick_view()
   local names = M.list()
   if #names == 0 then
     vim.notify(
-      'PKMView: no views defined. Use :PKMViewNew to create one.',
+      'PKMView: no views defined. Use :PKMView new to create one.',
       vim.log.levels.WARN)
     return
   end
@@ -2229,7 +2228,7 @@ local _delete_panel = panel.create({
 --- Open the view-deletion panel: browse → select → confirm before delete
 --- (vim.fn.confirm, single keypress — matches the existing convention used
 --- by the buffer panel's own "close with unsaved changes" prompt, not a
---- typed "yes"/"no" like :PKMEmptyTrash's heavier confirmation, since
+--- typed "yes"/"no" like :PKMTrash empty's heavier confirmation, since
 --- deleting a view only removes a saved filter, never any note content).
 ---@return nil
 function M.open_view_deletion_panel()
@@ -2569,7 +2568,7 @@ function M.edit_view(name)
 
   vim.ui.select(options, {
     prompt      = string.format(
-      "PKMViewUpdate — '%s'  (%s):",
+      "PKMView update — '%s'  (%s):",
       name,
       is_sub and 'subproject' or 'simple view'),
     format_item = function(o) return o end,
@@ -2616,7 +2615,7 @@ local function sidebar_build_overview()
   end
 
   if #tree == 0 then
-    lines[#lines + 1] = '  (no views defined — use :PKMViewNew)'
+    lines[#lines + 1] = '  (no views defined — use :PKMView new)'
   end
 
   return lines, view_lines

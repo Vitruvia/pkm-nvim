@@ -218,7 +218,7 @@ function M.validate_name(name)
   end
 
   -- The derivation has to round-trip: whatever `folder_of` writes, the folder
-  -- scan in `:PKMVaultAdopt` has to read back as the same vault. This fires the
+  -- scan in `:PKMVault adopt` has to read back as the same vault. This fires the
   -- moment someone changes the format string to something `parse_folder` no
   -- longer inverts, which is the failure that would otherwise surface as a
   -- vault quietly renaming itself.
@@ -812,7 +812,7 @@ function M.scaffold(path)
   local ignore = utils.join(path, '.gitignore')
   if vim.fn.filereadable(ignore) == 0 then
     pcall(vim.fn.writefile, {
-      '# Soft-deleted notes, recoverable with :PKMRestoreNote.',
+      '# Soft-deleted notes, recoverable with :PKMTrash restore.',
       '# Transient state, not history — the notes themselves are versioned.',
       '.pkm-trash/',
     }, ignore)
@@ -869,7 +869,7 @@ function M.create(name, opts)
   local uv    = vim.uv or vim.loop
 
   if uv.fs_stat(path) then
-    return false, string.format('%s already exists — :PKMVaultAdopt takes a folder as it stands',
+    return false, string.format('%s already exists — :PKMVault adopt takes a folder as it stands',
       path)
   end
   if not utils.ensure_dir(path) then return false, 'cannot create ' .. path end
@@ -1266,11 +1266,11 @@ function M.report_no_default()
 
   if #found > 0 then
     utils.notify(string.format(
-      'no vault is registered yet — :PKMVaultAdopt registers what is already in %s (%s)',
+      'no vault is registered yet — :PKMVault adopt registers what is already in %s (%s)',
       dir, table.concat(found, ', ')), vim.log.levels.WARN)
   else
     utils.notify(string.format(
-      'no vault is registered, and %s holds no folder to adopt — :PKMVaultNew <name> makes one',
+      'no vault is registered, and %s holds no folder to adopt — :PKMVault new <name> makes one',
       dir), vim.log.levels.WARN)
   end
 end
@@ -1330,7 +1330,7 @@ function M.apply_startup_selection()
       local _, folder_name = M.parse_folder(leaf)
       if vim.fn.isdirectory(path) == 1 and folder_name
       and folder_name:lower() == name:lower() then
-        hint = string.format(' — the folder is there; :PKMVaultAdopt "%s" registers it', leaf)
+        hint = string.format(' — the folder is there; :PKMVault adopt "%s" registers it', leaf)
       end
     end
     utils.notify(string.format('no vault named %q is registered%s', name, hint),

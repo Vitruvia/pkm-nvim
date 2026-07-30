@@ -87,7 +87,7 @@ vim.fn.mkdir(nvroot .. '/02 - Squatter', 'p')
 local ok_sq, err_sq = vault.create('Squatter', { git = false, number = 2 })
 check("an existing folder is refused, not overwritten", ok_sq == false)
 check("and the message points at adopt",
-  (err_sq or ''):find('Adopt', 1, true) ~= nil, err_sq)
+  (err_sq or ''):find('adopt', 1, true) ~= nil, err_sq)
 
 print("\n== notes ride along, and unsaved work blocks the move ==")
 

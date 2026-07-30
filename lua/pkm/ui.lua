@@ -16,7 +16,7 @@
 --   browse_recent(n?)          → n most-recently-modified notes via vim.ui.select
 --   insert_citation_ui()       → Context-aware citation picker fallback (no Telescope);
 --                                 sorted by view membership and shared tags
---   merge_tags_ui()            → Interactive tag merge (fallback for PKMMergeTags)
+--   merge_tags_ui()            → Interactive tag merge (fallback for :PKMTag merge)
 --   show_stats()               → Show note counts via vim.notify
 --   get_display_mode()         → 'filename' | 'title'
 --   toggle_display_mode()      → toggle and return new mode
@@ -727,7 +727,7 @@ end
 --- Interactive tag merge UI. Prompts for a target tag via vim.ui.select,
 --- then accepts comma-separated source tags via input. Validates, confirms,
 --- then delegates to citations.merge_tags(). Used as fallback when Telescope
---- is unavailable for PKMMergeTags.
+--- is unavailable for :PKMTag merge.
 function M.merge_tags_ui()
   local citations_mod = require('pkm.citations')
   local all_tags = citations_mod.get_all_tags()

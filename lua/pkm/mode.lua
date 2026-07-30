@@ -1,9 +1,9 @@
 -- =============================================================================
--- pkm.mode — PKMMode session context manager
+-- pkm.mode — PKM mode session context manager
 -- =============================================================================
 -- Dependencies : pkm.views (lazy), pkm.ui (lazy), pkm.index (lazy),
 --                pkm.syntax (lazy)
--- Consumed by  : pkm.init (setup), pkm.commands (:PKMMode, :PKMExplorer)
+-- Consumed by  : pkm.init (setup), pkm.commands (:PKMPanel mode, :PKMPanel explorer)
 --
 -- Manages the PKM editing context: explorer UI (sidebar + bufpanel), eager
 -- index pre-build, and syntax activation. Mode state is session-scoped and

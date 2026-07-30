@@ -108,7 +108,7 @@ end
 --- correctly when the user saves.
 ---
 --- Interactive and programmatic are the one command: with `new_title` given
---- (`:PKMSetTitle My Note`) it writes it straight; without one it prompts,
+--- (`:PKMNote settitle My Note`) it writes it straight; without one it prompts,
 --- seeded with the current title. `new_title` is taken as-is, so a script can
 --- set any string, including an empty one.
 ---@param new_title string|nil  When nil, prompt; otherwise use verbatim
@@ -160,7 +160,7 @@ end
 ---                       { where = nil|'left'|'right'|integer } which window to
 ---                       open it in — see `utils.focus_editing_win`
 ---                       { title = string } supplied title; when present, the
----                       title prompt is skipped (`:PKMNewNote … title=`)
+---                       title prompt is skipped (`:PKMNote new … title=`)
 ---                       { by = string } agent author; marks the note
 ---                       NNNN_type_By<Author>_slug and records the author
 ---@return string|nil filepath Absolute path of created note, or nil on cancel
@@ -202,7 +202,7 @@ function M.create_new_note(note_type, opts)
   end
   
   -- Get note title. A title supplied by the caller (`title=` on the command)
-  -- skips the prompt entirely, so `:PKMNewNote note title=Foo` creates without
+  -- skips the prompt entirely, so `:PKMNote new note title=Foo` creates without
   -- interaction; an explicit empty title is still "supplied" and means unnamed.
   local title = opts.title
   if title == nil then
@@ -258,7 +258,7 @@ function M.create_new_note(note_type, opts)
   end
 
   -- Seeded tags (relative note). Normalised through pkm.tags so the new note
-  -- carries exactly what a tag written by :PKMAddTag would look like, with no
+  -- carries exactly what a tag written by :PKMTag add would look like, with no
   -- duplicates.
   if type(opts.tags) == "table" and #opts.tags > 0 then
     local seeded = require('pkm.tags').plan({}, { add = opts.tags })
@@ -433,7 +433,7 @@ function M.promote_note()
   end
 
   if not current_path:find(config.folders.scratchpad, 1, true) then
-    vim.notify("PKMPromote: only works on scratchpad notes. Use :PKMConvertNote for other types.", vim.log.levels.WARN)
+    vim.notify("PKMNote promote: only works on scratchpad notes. Use :PKMNote convert for other types.", vim.log.levels.WARN)
     return
   end
 
@@ -508,7 +508,7 @@ function M.transpose_note()
   elseif current_path:find(config.folders.consolidated, 1, true) then
     current_folder = "consolidated"
   else
-    vim.notify("PKMTranspose: file is not inside a PKM folder", vim.log.levels.ERROR)
+    vim.notify("PKMNote transpose: file is not inside a PKM folder", vim.log.levels.ERROR)
     return
   end
 
@@ -710,7 +710,7 @@ function M.convert_note()
   elseif current_path:find(config.folders.consolidated, 1, true) then
     folder_type = "consolidated"
   else
-    vim.notify("PKMConvertNote: file is not inside a PKM folder", vim.log.levels.ERROR)
+    vim.notify("PKMNote convert: file is not inside a PKM folder", vim.log.levels.ERROR)
     return
   end
 
@@ -837,7 +837,7 @@ function M.change_note_type()
   end
 
   if not current_path:find(config.folders.consolidated, 1, true) then
-    vim.notify("PKMChangeType: only works on consolidated notes.", vim.log.levels.ERROR)
+    vim.notify("PKMNote changetype: only works on consolidated notes.", vim.log.levels.ERROR)
     return
   end
 
@@ -845,7 +845,7 @@ function M.change_note_type()
   local number, current_type = basename:match("^(%d+)_([a-z]+)_")
 
   if not number or not current_type then
-    vim.notify("PKMChangeType: file does not have a valid PKM filename. Use :PKMConvertNote first.", vim.log.levels.WARN)
+    vim.notify("PKMNote changetype: file does not have a valid PKM filename. Use :PKMNote convert first.", vim.log.levels.WARN)
     return
   end
 
@@ -902,7 +902,7 @@ function M.change_note_type()
     -- content is being fully replaced anyway, so a separate rename step
     -- before the write is redundant.
     if vim.fn.writefile(new_content, new_path) ~= 0 then
-      vim.notify("PKMChangeType: failed to write new file.", vim.log.levels.ERROR)
+      vim.notify("PKMNote changetype: failed to write new file.", vim.log.levels.ERROR)
       return
     end
     if utils.normalize(current_path) ~= utils.normalize(new_path) then
@@ -1041,7 +1041,7 @@ end
 --- Propagates the rename through citations via update_references_on_rename.
 ---
 --- Interactive and programmatic are the one command. With `new_name` given
---- (`:PKMRenameNote nome novo`) it renames straight; without one it prompts,
+--- (`:PKMNote rename nome novo`) it renames straight; without one it prompts,
 --- seeded with the current name. In both cases `new_name` is the *human* name —
 --- the number and type prefix of a consolidated note are kept for you — and it
 --- is sanitised the same way the prompt's input is.

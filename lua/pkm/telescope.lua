@@ -63,7 +63,7 @@ end
 --- `<Tab>` marks notes and `<C-a>` runs a bulk action over them (or over
 --- everything the prompt leaves listed, when nothing is marked). Since this one
 --- picker backs browse, browse_recent and browse_paths, that covers
---- :PKMBrowse, :PKMBrowseRecent, the sidebar's '/' and the views tree's <C-f>.
+--- :PKMBrowse, :PKMBrowse recent, the sidebar's '/' and the views tree's <C-f>.
 ---@param title   string    Picker prompt title
 ---@param entries table[]   Index entry array; each entry has path, filename, title, tags, body, note_type
 ---@param seed    string|nil  Optional expression to pre-populate the prompt

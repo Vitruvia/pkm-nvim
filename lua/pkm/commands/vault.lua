@@ -9,12 +9,10 @@
 -- So renaming and renumbering *are* moves, and neither touches a note — which
 -- is why none of these commands has anything to say about note contents.
 --
--- Reached two ways. `:PKMVault <verb>` is the context form: a bare name (or no
--- argument) switches or lists, and the verbs are new, rename, renumber,
--- unregister, adopt. The original names (`:PKMVaultNew`, `:PKMVaultRename`, …)
--- stay as aliases and drive the same cores. `!` means "make it the default" on a
--- switch and "no git repository" on new. Only unregistering confirms — it is
--- the one operation that moves a whole vault out of the set.
+-- `:PKMVault <verb>`: a bare name (or no argument) switches or lists, and the
+-- verbs are new, rename, renumber, unregister, adopt. `!` means "make it the
+-- default" on a switch and "no git repository" on new. Only unregistering
+-- confirms — it is the one operation that moves a whole vault out of the set.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands

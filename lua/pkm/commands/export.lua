@@ -7,7 +7,7 @@
 -- `:PKMExport <verb>` — bare opens the mode menu (simple or deep), and the
 -- verbs `simple` / `deep` skip straight to one. :PKMExport is the context
 -- itself, as it already was the export command, so no new top-level name.
--- Exporting a named view lives with the view surface (:PKMExportView).
+-- Exporting a named view lives with the view surface (:PKMView export).
 --
 -- Public API:
 --   register() → register this context's :PKM* commands

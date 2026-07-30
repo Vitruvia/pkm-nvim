@@ -117,7 +117,7 @@ check("instead it says no vault is registered",
 check("and names the folder sitting there, ready to adopt",
   all:find('01 - Vitruvia', 1, true) ~= nil, all)
 check("and names the command that does it",
-  all:find('PKMVaultAdopt', 1, true) ~= nil, all)
+  all:find('PKMVault adopt', 1, true) ~= nil, all)
 
 -- Registered, but nobody said which one opens: a different question, and it
 -- gets a different answer.

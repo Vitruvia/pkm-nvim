@@ -4,10 +4,8 @@
 -- Dependencies : pkm.args, pkm.trash (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- Trash operations reached two ways. `:PKMTrash <verb>` is the context form the
--- command clearup introduces — restore (the default: open the restore panel),
--- empty. The original names (`:PKMRestoreNote`, `:PKMEmptyTrash`) stay as
--- aliases and drive the same cores. Emptying always confirms.
+-- Trash operations. `:PKMTrash <verb>` — restore (the default: open the restore
+-- panel), empty. Emptying always confirms.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands

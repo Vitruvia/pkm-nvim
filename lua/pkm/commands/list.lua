@@ -4,10 +4,7 @@
 -- Dependencies : pkm.args, pkm.markdown (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- List operations reached two ways. `:PKMList <verb>` is the context form the
--- command clearup introduces — convert, renumber — both range-aware. The
--- original names (`:PKMConvertList`, `:PKMRenumberList`) stay as aliases and
--- drive the same cores.
+-- List operations. `:PKMList <verb>` — convert, renumber — both range-aware.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands
