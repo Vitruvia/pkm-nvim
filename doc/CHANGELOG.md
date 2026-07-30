@@ -60,12 +60,12 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
-## [1.12.0] - 29/7/2026 — code complete on `dev`, **not tagged**
+## [1.12.0] - 29/7/2026
 
-*Awaiting the smoke route
-(`00 - NotesTeste/03-Consolidated/0271_note_smoke-v1120-formas-tipadas.md`) run
-in the real config, and the evaluations that follow. Everything is
-headless-tested; the tag is cut after the route passes.*
+*Smoke route passed in full
+(`00 - NotesTeste/03-Consolidated/0271_note_smoke-v1120-formas-tipadas.md`),
+including the prompt and Telescope steps the headless suite structurally cannot
+see. The evaluations follow next, then the command clearup.*
 
 *Every operation that writes state grew a typed form, so the interactive and the
 programmatic paths are the one command: no argument gives the friendly path,
