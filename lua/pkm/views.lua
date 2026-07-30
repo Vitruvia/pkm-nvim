@@ -1791,7 +1791,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
       end
       local function do_new()
         actions.close(prompt_bufnr)
-        vim.schedule(function() vim.cmd('PKMViewNew') end)
+        vim.schedule(function() vim.cmd('PKMView new') end)
       end
       local function do_update()
         local sel = action_state.get_selected_entry()
@@ -2043,7 +2043,7 @@ local _views_panel = panel.create({
     ['n'] = function(state, helpers)
       if state.mode == 'browse' then return end
       helpers.close()
-      vim.schedule(function() vim.cmd('PKMViewNew') end)
+      vim.schedule(function() vim.cmd('PKMView new') end)
     end,
     -- `n` is a new *view*, so a new *note* — one that starts out matching the
     -- view under the cursor — is `N`. Only in the views mode: browse mode has

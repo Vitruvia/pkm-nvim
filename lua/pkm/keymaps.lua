@@ -34,34 +34,34 @@ function M.register(config)
       { noremap = true, silent = true, desc = "PKM: Promote note" })
   end
 
-  map(k.new_note, "<cmd>PKMNewNote<cr>", "New Note")
-  map(k.new_relative, "<cmd>PKMNewRelative<cr>", "New Relative Note")
-  map(k.new_journal, "<cmd>PKMNewJournal<cr>", "New Journal")
-  map(k.new_scratchpad, "<cmd>PKMNewScratchpad<cr>", "New Scratchpad")
-  map(k.delete_note, "<cmd>PKMDeleteNote<cr>", "Delete Note")
+  map(k.new_note, "<cmd>PKMNote new<cr>", "New Note")
+  map(k.new_relative, "<cmd>PKMNote relative<cr>", "New Relative Note")
+  map(k.new_journal, "<cmd>PKMNote journal<cr>", "New Journal")
+  map(k.new_scratchpad, "<cmd>PKMNote scratch<cr>", "New Scratchpad")
+  map(k.delete_note, "<cmd>PKMNote delete<cr>", "Delete Note")
   map(k.browse, "<cmd>PKMBrowse<cr>", "Browse Notes")
-  map(k.browse_tags, "<cmd>PKMTags<cr>", "Browse Tags") 
-  map(k.insert_citation, "<cmd>PKMInsertCitation<cr>", "Insert Citation")
-  map(k.goto_citation, "<cmd>PKMGotoCitation<cr>", "Goto Citation")
-  map(k.link_note, "<cmd>PKMLinkNote<cr>", "Link Note")
-  map(k.follow_link, "<cmd>PKMFollowLink<cr>", "Follow Link")
-  map(k.backlinks, "<cmd>PKMBacklinks<cr>", "Backlinks")
-  map(k.import_note, "<cmd>PKMImport<cr>", "Import Note")
-  map(k.convert_note, "<cmd>PKMConvertNote<cr>", "Convert Note")
-  map(k.transpose_note, "<cmd>PKMTranspose<cr>", "Transpose Note")
-  map(k.change_note_type, "<cmd>PKMChangeType<cr>", "Change Note Type")
-  map(k.rename_note, "<cmd>PKMRenameNote<cr>", "Rename Note")
-  map(k.set_title,  "<cmd>PKMSetTitle<cr>",  "Set Title")
-  map(k.add_tag,    "<cmd>PKMAddTag<cr>",    "Add Tag")
-  map(k.remove_tag, "<cmd>PKMRemoveTag<cr>", "Remove Tag")
+  map(k.browse_tags, "<cmd>PKMBrowse tags<cr>", "Browse Tags")
+  map(k.insert_citation, "<cmd>PKMCite insert<cr>", "Insert Citation")
+  map(k.goto_citation, "<cmd>PKMCite goto<cr>", "Goto Citation")
+  map(k.link_note, "<cmd>PKMCite link<cr>", "Link Note")
+  map(k.follow_link, "<cmd>PKMCite follow<cr>", "Follow Link")
+  map(k.backlinks, "<cmd>PKMCite backlinks<cr>", "Backlinks")
+  map(k.import_note, "<cmd>PKMNote import<cr>", "Import Note")
+  map(k.convert_note, "<cmd>PKMNote convert<cr>", "Convert Note")
+  map(k.transpose_note, "<cmd>PKMNote transpose<cr>", "Transpose Note")
+  map(k.change_note_type, "<cmd>PKMNote changetype<cr>", "Change Note Type")
+  map(k.rename_note, "<cmd>PKMNote rename<cr>", "Rename Note")
+  map(k.set_title,  "<cmd>PKMNote settitle<cr>",  "Set Title")
+  map(k.add_tag,    "<cmd>PKMTag add<cr>",    "Add Tag")
+  map(k.remove_tag, "<cmd>PKMTag remove<cr>", "Remove Tag")
 
   -- --------------------------------------------------------------------------
   -- KEYMAPS: views
-  -- -------------------------------------------------------------------------- 
-  map(k.view_last,    "<cmd>PKMViewLast<cr>",    "Last View")
-  map(k.view_sidebar, "<cmd>PKMViewSidebar<cr>", "View Sidebar")
-  map(k.view_list, "<cmd>PKMViews<cr>", "List Views")
-  map(k.view_buffers, "<cmd>PKMBuffers<cr>", "Buffer Panel")
+  -- --------------------------------------------------------------------------
+  map(k.view_last,    "<cmd>PKMView last<cr>",    "Last View")
+  map(k.view_sidebar, "<cmd>PKMView sidebar<cr>", "View Sidebar")
+  map(k.view_list, "<cmd>PKMView list<cr>", "List Views")
+  map(k.view_buffers, "<cmd>PKMPanel buffers<cr>", "Buffer Panel")
 
   if k.view_panel then
     require('pkm.views').set_panel_keymap(k.view_panel)
@@ -80,7 +80,7 @@ function M.register(config)
   end
 
   if k.toggle_mode then
-    vim.keymap.set('n', k.toggle_mode, '<cmd>PKMMode<cr>',
+    vim.keymap.set('n', k.toggle_mode, '<cmd>PKMPanel mode<cr>',
       { desc = 'PKM: toggle PKM mode', silent = true })
   end
 
@@ -219,10 +219,10 @@ function M.register(config)
 
   -- --------------------------------------------------------------------------
   -- KEYMAPS: markdown editing
-  -- -------------------------------------------------------------------------- 
-  
+  -- --------------------------------------------------------------------------
+
   -- Header Editing
-  map(k.next_header, "<cmd>PKMHeaderAppend<cr>", "Append Header (increment counter)")
+  map(k.next_header, "<cmd>PKMHeader append<cr>", "Append Header (increment counter)")
 
   -- Header navigation. Only the same-level pair is bound by default: `]]` and
   -- `[[` already jump header to header, so a key for that would spend a
@@ -269,30 +269,30 @@ function M.register(config)
   end
 
   if k.header_level_up then
-    vim.keymap.set('n', k.header_level_up, '<cmd>PKMHeaderLevelUp<cr>',
+    vim.keymap.set('n', k.header_level_up, '<cmd>PKMHeader levelup<cr>',
       { desc = "PKM: Header Level Up (buffer)", silent = true })
-    vim.keymap.set('v', k.header_level_up, ':PKMHeaderLevelUp<cr>',
+    vim.keymap.set('v', k.header_level_up, ':PKMHeader levelup<cr>',
       { desc = "PKM: Header Level Up (selection)", silent = true })
   end
 
   if k.header_level_down then
-    vim.keymap.set('n', k.header_level_down, '<cmd>PKMHeaderLevelDown<cr>',
+    vim.keymap.set('n', k.header_level_down, '<cmd>PKMHeader leveldown<cr>',
       { desc = "PKM: Header Level Down (buffer)", silent = true })
-    vim.keymap.set('v', k.header_level_down, ':PKMHeaderLevelDown<cr>',
+    vim.keymap.set('v', k.header_level_down, ':PKMHeader leveldown<cr>',
       { desc = "PKM: Header Level Down (selection)", silent = true })
   end
 
   if k.renumber_list then
-    vim.keymap.set('n', k.renumber_list, '<cmd>PKMRenumberList<cr>',
+    vim.keymap.set('n', k.renumber_list, '<cmd>PKMList renumber<cr>',
       { desc = 'PKM: Renumber sequence (paragraph)', silent = true })
-    vim.keymap.set('v', k.renumber_list, ':PKMRenumberList<cr>',
+    vim.keymap.set('v', k.renumber_list, ':PKMList renumber<cr>',
       { desc = 'PKM: Renumber sequence (selection)', silent = true })
   end
 
   if k.convert_list then
-    vim.keymap.set('n', k.convert_list, '<cmd>PKMConvertList<cr>',
+    vim.keymap.set('n', k.convert_list, '<cmd>PKMList convert<cr>',
       { desc = 'PKM: Convert list ordered/unordered (paragraph)', silent = true })
-    vim.keymap.set('v', k.convert_list, ':PKMConvertList<cr>',
+    vim.keymap.set('v', k.convert_list, ':PKMList convert<cr>',
       { desc = 'PKM: Convert list ordered/unordered (selection)', silent = true })
   end
 end
