@@ -275,54 +275,6 @@ function M.register()
     desc     = 'Vaults: :PKMVault [<name>] | new|rename|renumber|unregister|adopt (! = default/no-git)',
   })
 
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMVaultNew', function(opts)
-    act_vault_new(opts.args, opts.bang)
-  end, {
-    nargs = '?',
-    bang  = true,
-    desc  = 'Create a vault: folder, skeleton and registry entry (! for no git repository)',
-  })
-
-  vim.api.nvim_create_user_command('PKMVaultRename', function(opts)
-    act_vault_rename(opts.fargs[1], opts.fargs[2])
-  end, {
-    nargs    = '+',
-    complete = function(_, line)
-      -- Only the first argument is a vault: the second is the new name.
-      return #vim.split(vim.trim(line), '%s+') > 2 and {} or vault_names()
-    end,
-    desc = 'Rename a vault, keeping its number (the folder moves; no note changes)',
-  })
-
-  vim.api.nvim_create_user_command('PKMVaultRenumber', function(opts)
-    act_vault_renumber(opts.fargs[1], tonumber(opts.fargs[2]))
-  end, {
-    nargs    = '+',
-    complete = function(_, line)
-      return #vim.split(vim.trim(line), '%s+') > 2 and {} or vault_names()
-    end,
-    desc = 'Renumber a vault, keeping its name (the folder moves; no note changes)',
-  })
-
-  vim.api.nvim_create_user_command('PKMVaultUnregister', function(opts)
-    act_vault_unregister(opts.args)
-  end, {
-    nargs    = '?',
-    complete = function() return vault_names() end,
-    desc     = 'Move a vault out of the registry into Unregistered/ (always confirms)',
-  })
-
-  vim.api.nvim_create_user_command('PKMVaultAdopt', function(opts)
-    act_vault_adopt(opts.args)
-  end, {
-    nargs    = '?',
-    complete = adoptable,
-    desc     = 'Register a folder from Unregistered/ as a vault, contents untouched',
-  })
-
 end
 
 return M

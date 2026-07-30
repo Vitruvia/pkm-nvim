@@ -209,6 +209,13 @@ function M.validate_name(name)
   if name == 'Unregistered' then
     return false, '"Unregistered" is where unregistered vaults are kept'
   end
+  -- The :PKMVault verbs are reserved: a vault named like a verb would be
+  -- shadowed by it — `:PKMVault new` could never switch to a vault named "new",
+  -- it would try to create one. (Same reasoning as "Unregistered" above.)
+  if ({ new = true, rename = true, renumber = true,
+        unregister = true, adopt = true })[name:lower()] then
+    return false, string.format('%q is a :PKMVault verb, so it cannot be a vault name', name)
+  end
 
   -- The derivation has to round-trip: whatever `folder_of` writes, the folder
   -- scan in `:PKMVaultAdopt` has to read back as the same vault. This fires the

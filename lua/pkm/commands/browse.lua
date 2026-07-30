@@ -171,20 +171,6 @@ function M.register()
     desc = 'Browse notes: :PKMBrowse [<filter>] | recent [n] | orphans | tags',
   })
 
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMBrowseRecent', function(opts)
-    act_recent(tonumber(opts.args))
-  end, {
-    nargs = '?',
-    desc  = 'Show the n most recently modified notes (default 20)',
-  })
-
-  vim.api.nvim_create_user_command('PKMOrphans', function()
-    act_orphans()
-  end, { desc = 'Show notes with no tags, no citations, and no matching view' })
-
 end
 
 return M

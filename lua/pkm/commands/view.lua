@@ -283,57 +283,6 @@ function M.register()
     desc     = 'Views: :PKMView [<name>] | add|remove|new|update|edit|delete|last|export|sidebar|list|rename',
   })
 
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMViews', function()
-    act_views_panel()
-  end, { desc = 'Browse all defined views (panel; <Tab> to browse all notes)' })
-
-  vim.api.nvim_create_user_command('PKMViewNew', function()
-    act_view_new()
-  end, { desc = 'Create a new view; prompts to edit if the name already exists' })
-
-  vim.api.nvim_create_user_command('PKMViewUpdate', function(opts)
-    act_view_update(opts.args ~= '' and opts.args or nil)
-  end, {
-    nargs    = '?',
-    complete = function() return require('pkm.views').list() end,
-    desc     = 'Edit an existing view (expression pre-filled; <C-r> to reset)',
-  })
-
-  vim.api.nvim_create_user_command('PKMViewEdit', function()
-    act_view_edit()
-  end, { desc = 'Open views.json for direct editing' })
-
-  vim.api.nvim_create_user_command('PKMViewDelete', function(opts)
-    act_view_delete(opts.args ~= '' and opts.args or nil)
-  end, {
-    nargs    = '?',
-    complete = function() return require('pkm.views').list() end,
-    desc     = 'Delete a named project view (panel if no argument; confirms either way)',
-  })
-
-  vim.api.nvim_create_user_command('PKMViewLast', function()
-    act_view_last()
-  end, { desc = 'Reopen the last activated view (session-scoped)' })
-
-  vim.api.nvim_create_user_command('PKMExportView', function(opts)
-    act_view_export(opts.args ~= '' and opts.args or nil)
-  end, {
-    nargs    = '?',
-    complete = function() return require('pkm.views').list() end,
-    desc     = 'Export all notes in a named view',
-  })
-
-  vim.api.nvim_create_user_command('PKMViewSidebar', function(opts)
-    act_view_sidebar(opts.args ~= '' and opts.args or nil)
-  end, {
-    nargs    = '?',
-    complete = function() return require('pkm.views').list() end,
-    desc     = 'Open or toggle the persistent view sidebar',
-  })
-
 end
 
 return M

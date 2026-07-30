@@ -52,27 +52,6 @@ local function do_shift(dir, opts)
   require('pkm.markdown').shift_header_level(dir, l1, l2)
 end
 
---- The Vim-count motion handler for the :PKMHeaderNext/Prev aliases, where the
---- count comes as `:3PKMHeaderNext` and the level as the sole argument.
-local function alias_motion(dir)
-  return function(opts)
-    local level = nil
-    if opts.args ~= '' then
-      level = (opts.args == 'same') and 'same' or tonumber(opts.args:match('^[hH]([1-6])$'))
-      if level == nil then
-        vim.notify('[pkm] use same or h1-h6 for the level; a bare number is the count',
-          vim.log.levels.WARN)
-        return
-      end
-    end
-    require('pkm.markdown').goto_heading({
-      dir   = dir,
-      count = opts.count > 0 and opts.count or 1,
-      level = level,
-    })
-  end
-end
-
 local M = {}
 
 function M.register()
@@ -114,39 +93,6 @@ function M.register()
     end,
     desc = 'Headers: :PKMHeader append | next|prev [same|h1-h6] [count] | levelup|leveldown',
   })
-
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  -- Renamed from :PKMNextHeader in v1.10.0. It edits the buffer, while
-  -- :PKMHeaderNext only moves the cursor; under the old pair of names the
-  -- wrong one was a completion away, and the wrong one writes. The keymap
-  -- config key stays `next_header` so existing setups keep working.
-  vim.api.nvim_create_user_command('PKMHeaderAppend', function()
-    require('pkm.markdown').append_next_header()
-  end, { desc = 'Duplicate current header with counter incremented, append at EOF' })
-
-  vim.api.nvim_create_user_command('PKMHeaderNext', alias_motion('next'), {
-    count    = true,
-    nargs    = '?',
-    complete = function() return HEADER_LEVELS end,
-    desc     = 'Jump to the next header (any level; arg restricts it)',
-  })
-
-  vim.api.nvim_create_user_command('PKMHeaderPrev', alias_motion('prev'), {
-    count    = true,
-    nargs    = '?',
-    complete = function() return HEADER_LEVELS end,
-    desc     = 'Jump to the previous header (any level; arg restricts it)',
-  })
-
-  vim.api.nvim_create_user_command('PKMHeaderLevelUp', function(opts)
-    require('pkm.markdown').shift_header_level('up', opts.line1, opts.line2)
-  end, { range = '%', desc = 'Increase header level in range (default: whole buffer)' })
-
-  vim.api.nvim_create_user_command('PKMHeaderLevelDown', function(opts)
-    require('pkm.markdown').shift_header_level('down', opts.line1, opts.line2)
-  end, { range = '%', desc = 'Decrease header level in range (default: whole buffer)' })
 
 end
 

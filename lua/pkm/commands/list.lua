@@ -76,22 +76,6 @@ function M.register()
     desc = 'Lists: :PKMList convert [to_ordered|to_unordered] | renumber',
   })
 
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMConvertList', function(opts)
-    do_convert(opts.args ~= '' and opts.args or nil, opts)
-  end, {
-    range    = true,
-    nargs    = '?',
-    complete = function() return { 'to_ordered', 'to_unordered' } end,
-    desc     = 'Convert list between ordered/unordered; optional direction arg',
-  })
-
-  vim.api.nvim_create_user_command('PKMRenumberList', function(opts)
-    do_renumber(opts)
-  end, { range = true, desc = 'Renumber ordered sequence in range or current paragraph' })
-
 end
 
 return M

@@ -65,17 +65,6 @@ function M.register()
     desc = 'Trash: :PKMTrash [restore] | empty',
   })
 
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMRestoreNote', function()
-    act_restore()
-  end, { desc = 'Browse and restore notes from the PKM trash' })
-
-  vim.api.nvim_create_user_command('PKMEmptyTrash', function()
-    act_empty()
-  end, { desc = 'Permanently delete all PKM trash and strip backlinks' })
-
 end
 
 return M

@@ -1,20 +1,15 @@
 -- =============================================================================
--- pkm.commands.tag — tag browsing and tag writes
+-- pkm.commands.tag — per-note tag CRUD, and the vault-wide bulk operations
 -- =============================================================================
 -- Dependencies : pkm.args, pkm.tags, pkm.citations, pkm.ui, pkm.telescope,
 --                pkm.commands.shared (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- Tag CRUD reached two ways. `:PKMTag <verb>` is the context form the command
--- clearup introduces — `add`, `remove`, `merge` — acting on the current note
--- (buffer-only) or, with `note=<ref>`, on a named note on disk. The original
--- names (`:PKMAddTag`, `:PKMRemoveTag`, `:PKMMergeTags`) stay as aliases and
--- drive the same cores.
---
--- Two tag things live *elsewhere* and are deferred to the browse phase, so they
--- are not verbs here yet: browsing notes by tag (heading to `:PKMBrowse tags`)
--- and the vault-wide batch operations and tag-rename (`:PKMTags` with
--- arguments). `:PKMTags` is untouched by this phase.
+-- Two commands, singular and plural, split by scope:
+--   :PKMTag  add|remove <tag> [note=<ref>] | merge   — one note (buffer or note=)
+--   :PKMTags add|remove|rename <tag>                 — across ALL notes (bulk),
+--                                                       with the change-list confirm
+-- Browsing notes by tag is a third thing and lives on `:PKMBrowse tags`.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands
@@ -22,10 +17,9 @@
 
 local focus_main_win = require('pkm.commands.shared').focus_main_win
 
---- Add or remove one tag. With `note_ref` it writes to that named note on disk
---- (the typed form the agent path needs, since an agent tags notes it is not
---- "in"); without it, the buffer-only path, unchanged. Shared by the aliases
---- and by `:PKMTag add|remove`, which is what keeps the two forms one behaviour.
+--- Add or remove one tag on a single note. With `note_ref` it writes to that
+--- named note on disk (the typed form the agent path needs, since an agent tags
+--- notes it is not "in"); without it, the buffer-only path.
 ---@param kind 'add'|'remove'
 ---@param tag string            the tag (possibly empty → open the panel)
 ---@param note_ref string|nil   note= reference, or nil for the current buffer
@@ -51,7 +45,9 @@ local function apply_tag(kind, tag, note_ref)
     return
   end
 
-  -- No note=: the buffer-only path, unchanged.
+  -- No note=: the buffer-only path.
+  -- (The empty-tag panel is still the built-in list, not a Telescope picker —
+  -- see doc/CHANGELOG.md Known limitations.)
   if tag ~= '' then
     require('pkm.citations')[kind == 'add' and 'add_tag' or 'remove_tag'](tag)
   else
@@ -73,7 +69,7 @@ local M = {}
 function M.register()
 
   -- ---------------------------------------------------------------------------
-  -- :PKMTag — the context form: add / remove / merge
+  -- :PKMTag — one note: add / remove / merge
   -- ---------------------------------------------------------------------------
   local TAG_VERBS = { 'add', 'remove', 'merge' }
 
@@ -105,20 +101,16 @@ function M.register()
       local lead = (arg_lead or ''):lower()
       return vim.tbl_filter(function(t) return t:lower():find(lead, 1, true) == 1 end, out)
     end,
-    desc = 'Tag CRUD: :PKMTag add|remove <tag> [note=<ref>] | merge',
+    desc = 'Tag one note: :PKMTag add|remove <tag> [note=<ref>] | merge',
   })
 
   -- ---------------------------------------------------------------------------
-  -- :PKMTags — the tag browser, or one batch operation stated in arguments.
+  -- :PKMTags — vault-wide bulk operations (add/remove/rename across ALL notes)
   -- ---------------------------------------------------------------------------
-  -- Bare, it goes straight to the browser: the mode menu was a screen that
-  -- decided nothing for the common case. Batch operations belong to the
-  -- navigation panels, where the notes are chosen (<C-a>); the argument form is
-  -- the deterministic path for scripts and advanced users, and always ends at
-  -- the change list. Without Telescope the old mode menu is the fallback.
-  --
-  -- Left whole for now: the browse half heads to :PKMBrowse and the batch half
-  -- to :PKMTag in the browse phase, which is where the split can be tested.
+  -- The plural is the whole-vault scope: the change list is always shown, and
+  -- nothing is written until it is confirmed. The per-note forms live on the
+  -- singular :PKMTag; browsing notes by tag moved to :PKMBrowse tags. Bare, it
+  -- offers the three bulk operations.
   vim.api.nvim_create_user_command('PKMTags', function(opts)
     focus_main_win()
     local tags = require('pkm.tags')
@@ -130,10 +122,9 @@ function M.register()
         return
       end
       if mode == 'browse' then
-        tags.browse_by_tag()
+        -- Browsing moved to :PKMBrowse tags; send it there.
+        vim.cmd('PKMBrowse tags')
       elseif ops then
-        -- Stated in full, so the scope is the whole vault; the change list is
-        -- still shown, and nothing is written until it is confirmed.
         tags.batch_on(tags.all_note_paths(), mode, ops, header)
       else
         tags.batch_flow(mode)
@@ -141,21 +132,14 @@ function M.register()
       return
     end
 
-    if pcall(require, 'telescope') then
-      tags.browse_by_tag()
-      return
-    end
-
     vim.ui.select({
-      'Browse by tag',
-      'Add a tag to notes…',
-      'Remove a tag from notes…',
-      'Rename a tag on notes…',
-    }, { prompt = 'Tags:' }, function(_, idx)
-      if idx == 1 then tags.browse_by_tag()
-      elseif idx == 2 then tags.batch_flow('add')
-      elseif idx == 3 then tags.batch_flow('remove')
-      elseif idx == 4 then tags.batch_flow('rename')
+      'Add a tag to all notes…',
+      'Remove a tag from all notes…',
+      'Rename a tag across all notes…',
+    }, { prompt = 'Bulk tags (whole vault):' }, function(_, idx)
+      if idx == 1 then tags.batch_flow('add')
+      elseif idx == 2 then tags.batch_flow('remove')
+      elseif idx == 3 then tags.batch_flow('rename')
       end
     end)
   end, {
@@ -167,7 +151,7 @@ function M.register()
 
       local candidates = {}
       if typing_mode then
-        candidates = { 'browse', 'add', 'remove', 'rename' }
+        candidates = { 'add', 'remove', 'rename' }
       elseif words[2] == 'remove' or words[2] == 'rename' then
         for _, row in ipairs(require('pkm.tags').tag_counts()) do
           candidates[#candidates + 1] = row.tag
@@ -178,34 +162,7 @@ function M.register()
         return c:find(arg_lead, 1, true) == 1
       end, candidates)
     end,
-    desc = 'Browse notes by tag; with arguments, run one batch tag operation',
-  })
-
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMMergeTags', function()
-    act_merge()
-  end, { desc = 'Merge tags across all notes' })
-
-  -- Buffer-only by default (no disk write), exactly as before. With note=<ref>
-  -- it instead writes the tag to that named note on disk. The tag itself is the
-  -- positional words, so a spaced tag needs no quoting.
-  local function tag_command(kind)
-    return function(opts)
-      local p = require('pkm.args').parse(opts, { named = true })
-      apply_tag(kind, table.concat(p.positional, ' '), p.named.note)
-    end
-  end
-
-  vim.api.nvim_create_user_command('PKMAddTag', tag_command('add'), {
-    nargs = '*',
-    desc  = 'Append a tag (panel, or directly; note=<ref> writes to a named note)',
-  })
-
-  vim.api.nvim_create_user_command('PKMRemoveTag', tag_command('remove'), {
-    nargs = '*',
-    desc  = 'Remove a tag (panel, or directly; note=<ref> writes to a named note)',
+    desc = 'Bulk tag ops across ALL notes: :PKMTags add|remove|rename <tag> (change-list confirm)',
   })
 
 end

@@ -83,25 +83,6 @@ function M.register()
     desc = 'Panels: :PKMPanel [explorer] | buffers | sidebar [view] | mode [on|off]',
   })
 
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMBuffers', function()
-    act_buffers()
-  end, { desc = 'Toggle the persistent bottom buffer-list panel' })
-
-  vim.api.nvim_create_user_command('PKMMode', function(opts)
-    act_mode(opts.args)
-  end, {
-    nargs = '?',
-    complete = function() return { 'on', 'off' } end,
-    desc = 'Toggle PKM mode (explorer + index + syntax)',
-  })
-
-  vim.api.nvim_create_user_command('PKMExplorer', function()
-    act_explorer()
-  end, { desc = 'Toggle PKM explorer (sidebar + buffer panel)' })
-
 end
 
 return M

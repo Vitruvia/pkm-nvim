@@ -25,37 +25,16 @@ local root = vim.fn.tempname() .. '/Note-Vault/00 - Test'
 vim.fn.mkdir(root .. '/03-Consolidated', 'p')
 pkm.setup({ root_path = root })
 
--- The whole expected roster: eleven contexts, three standalone commands, and
--- the fifty aliases the clearup keeps until the alias-deletion version.
+-- The whole expected roster after the alias deletion: eleven verb-contexts and
+-- four standalone commands — the three loners, plus :PKMTags, the vault-wide
+-- bulk tag command kept when its per-note siblings became :PKMTag verbs. No
+-- aliases remain.
 local CONTEXTS = {
   'PKMNote', 'PKMTag', 'PKMCite', 'PKMView', 'PKMVault', 'PKMBrowse',
   'PKMPanel', 'PKMHeader', 'PKMList', 'PKMTrash', 'PKMExport',
 }
-local STANDALONE = { 'PKMCheck', 'PKMStats', 'PKMToggleAutoSync' }
-local ALIASES = {
-  -- tag
-  'PKMTags', 'PKMMergeTags', 'PKMAddTag', 'PKMRemoveTag',
-  -- cite
-  'PKMInsertCitation', 'PKMGotoCitation', 'PKMUncite', 'PKMUpdateReferences',
-  'PKMLinkNote', 'PKMFollowLink', 'PKMBacklinks',
-  -- browse
-  'PKMBrowseRecent', 'PKMOrphans',
-  -- panel
-  'PKMBuffers', 'PKMExplorer', 'PKMMode',
-  -- header
-  'PKMHeaderAppend', 'PKMHeaderNext', 'PKMHeaderPrev', 'PKMHeaderLevelUp',
-  'PKMHeaderLevelDown',
-  -- list
-  'PKMConvertList', 'PKMRenumberList',
-  -- trash
-  'PKMRestoreNote', 'PKMEmptyTrash',
-  -- view
-  'PKMViews', 'PKMViewNew', 'PKMViewUpdate', 'PKMViewEdit', 'PKMViewDelete',
-  'PKMViewLast', 'PKMExportView', 'PKMViewSidebar',
-  -- vault
-  'PKMVaultNew', 'PKMVaultRename', 'PKMVaultRenumber', 'PKMVaultUnregister',
-  'PKMVaultAdopt',
-}
+local STANDALONE = { 'PKMCheck', 'PKMStats', 'PKMToggleAutoSync', 'PKMTags' }
+local ALIASES = {}
 
 print("== the whole roster is registered ==")
 

@@ -140,40 +140,6 @@ function M.register()
     desc = 'Citations: :PKMCite [add] <target> | remove | goto | insert | update | link | follow | backlinks',
   })
 
-  -- ---------------------------------------------------------------------------
-  -- Aliases
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMInsertCitation', function()
-    act_insert()
-  end, { desc = 'Insert a citation at cursor (Telescope picker or ui fallback)' })
-
-  vim.api.nvim_create_user_command('PKMGotoCitation', function()
-    require('pkm.citations').goto_citation()
-  end, {})
-
-  vim.api.nvim_create_user_command('PKMUncite', function(opts)
-    act_uncite(opts.args ~= '' and opts.args or nil)
-  end, {
-    nargs = '?',
-    desc  = 'Remove a citation from the current note (picker if no argument)',
-  })
-
-  vim.api.nvim_create_user_command('PKMUpdateReferences', function()
-    require('pkm.citations').update_references()
-  end, {})
-
-  vim.api.nvim_create_user_command('PKMLinkNote', function()
-    require('pkm.notes').link_to_note()
-  end, {})
-
-  vim.api.nvim_create_user_command('PKMFollowLink', function()
-    require('pkm.notes').follow_link()
-  end, {})
-
-  vim.api.nvim_create_user_command('PKMBacklinks', function()
-    require('pkm.notes').show_backlinks()
-  end, {})
-
 end
 
 return M
