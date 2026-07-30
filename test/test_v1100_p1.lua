@@ -242,52 +242,50 @@ check("a count reaches the second one of that level",
 -- Commands
 -- =============================================================================
 
-check("PKMHeaderNext is registered", vim.fn.exists(':PKMHeaderNext') == 2)
-check("PKMHeaderPrev is registered", vim.fn.exists(':PKMHeaderPrev') == 2)
-check("the writing command is now PKMHeaderAppend",
-  vim.fn.exists(':PKMHeaderAppend') == 2)
+check(":PKMHeader is registered", vim.fn.exists(':PKMHeader') == 2)
 check("the ambiguous PKMNextHeader is gone",
   vim.fn.exists(':PKMNextHeader') == 0, tostring(vim.fn.exists(':PKMNextHeader')))
 
 vim.api.nvim_win_set_cursor(0, { 1, 0 })
-vim.cmd('PKMHeaderNext')
-check(":PKMHeaderNext jumps", vim.api.nvim_win_get_cursor(0)[1] == 7,
+vim.cmd('PKMHeader next')
+check(":PKMHeader next jumps", vim.api.nvim_win_get_cursor(0)[1] == 7,
   tostring(vim.api.nvim_win_get_cursor(0)[1]))
 
+-- The context form takes the count as an argument, not a Vim prefix (:PKMHeader
+-- carries a range for its level-shifts, which a count prefix would collide with;
+-- the prefix ergonomic lives on the header-motion keymaps instead).
 vim.api.nvim_win_set_cursor(0, { 1, 0 })
-vim.cmd('3PKMHeaderNext')
-check("a count prefix is honoured", vim.api.nvim_win_get_cursor(0)[1] == 18,
+vim.cmd('PKMHeader next 3')
+check("a count argument is honoured", vim.api.nvim_win_get_cursor(0)[1] == 18,
   tostring(vim.api.nvim_win_get_cursor(0)[1]))
 
 -- From line 7 the two readings of "2" diverge: the second header ahead is 18,
--- the first level-2 header ahead is 12. The old assertion started at line 1,
--- where both give the same answer, so it could not tell them apart — and the
--- command was in fact reading the level as a count.
+-- the first level-2 header ahead is 12.
 vim.api.nvim_win_set_cursor(0, { 7, 0 })
-vim.cmd('PKMHeaderNext h2')
+vim.cmd('PKMHeader next h2')
 check("a level argument is honoured", vim.api.nvim_win_get_cursor(0)[1] == 12,
   tostring(vim.api.nvim_win_get_cursor(0)[1]))
 
 vim.api.nvim_win_set_cursor(0, { 7, 0 })
-vim.cmd('PKMHeaderNext 2')
-check("a bare number is the count, as Vim reads it",
+vim.cmd('PKMHeader next 2')
+check("a bare number argument is the count",
   vim.api.nvim_win_get_cursor(0)[1] == 18,
   tostring(vim.api.nvim_win_get_cursor(0)[1]))
 
 vim.api.nvim_win_set_cursor(0, { 7, 0 })
-vim.cmd('2PKMHeaderNext h2')
+vim.cmd('PKMHeader next h2 2')
 check("count and level compose",
   vim.api.nvim_win_get_cursor(0)[1] == 20,
   tostring(vim.api.nvim_win_get_cursor(0)[1]))
 
 vim.api.nvim_win_set_cursor(0, { 27, 0 })
-vim.cmd('PKMHeaderPrev same')
+vim.cmd('PKMHeader prev same')
 check("'same' as an argument is honoured",
   vim.api.nvim_win_get_cursor(0)[1] == 22,
   tostring(vim.api.nvim_win_get_cursor(0)[1]))
 
 vim.api.nvim_win_set_cursor(0, { 1, 0 })
-local ok_bad = pcall(vim.cmd, 'PKMHeaderNext nonsense')
+local ok_bad = pcall(vim.cmd, 'PKMHeader next nonsense')
 check("a bad level argument warns instead of moving",
   ok_bad and vim.api.nvim_win_get_cursor(0)[1] == 1,
   string.format('%s,%d', tostring(ok_bad), vim.api.nvim_win_get_cursor(0)[1]))

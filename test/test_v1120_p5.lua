@@ -27,9 +27,9 @@ local root = vim.fn.tempname() .. '/Note-Vault/00 - Test'
 vim.fn.mkdir(root .. '/03-Consolidated', 'p')
 pkm.setup({ root_path = root })
 
-print("== :PKMNewNote by=Claude marks authorship in the name ==")
+print("== :PKMNote new by=Claude marks authorship in the name ==")
 
-vim.cmd('PKMNewNote note title=Idea by=Claude')
+vim.cmd('PKMNote new note title=Idea by=Claude')
 local agent_note = vim.fn.expand('%:p')
 check("the filename carries the ByClaude marker",
   agent_note:gsub('\\', '/'):find('/0001_note_ByClaude_Idea%.md$') ~= nil,
@@ -43,14 +43,14 @@ check("and the author is recorded in the frontmatter too", fm.author == 'Claude'
 
 print("== a note lowercased in the argument is still capitalised in the mark ==")
 
-vim.cmd('PKMNewNote note title=Two by=claude')
+vim.cmd('PKMNote new note title=Two by=claude')
 local agent2 = vim.fn.expand('%:p')
 check("by=claude → ByClaude", notes.agent_authored(agent2) == 'Claude',
   vim.fn.fnamemodify(agent2, ':t'))
 
 print("\n== an ordinary note carries no marker ==")
 
-vim.cmd('PKMNewNote note title=Human')
+vim.cmd('PKMNote new note title=Human')
 local human_note = vim.fn.expand('%:p')
 check("a note with no by= is not agent-authored",
   notes.agent_authored(human_note) == nil, tostring(notes.agent_authored(human_note)))

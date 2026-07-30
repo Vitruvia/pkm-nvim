@@ -174,7 +174,7 @@ check("and it is the untagged, uncited, unviewed note",
 -- hangs a headless run. What the command adds over the loop above is the
 -- picker, and a picker is what the smoke note is for.
 check("the command is registered",
-  vim.fn.exists(':PKMOrphans') == 2, tostring(vim.fn.exists(':PKMOrphans')))
+  vim.fn.exists(':PKMBrowse') == 2, tostring(vim.fn.exists(':PKMBrowse')))
 
 -- =============================================================================
 -- bench: the resolved directory is in one separator

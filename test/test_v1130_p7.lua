@@ -37,14 +37,10 @@ local function has_view(name)
   return false
 end
 
-print("== the vault context and its aliases are registered ==")
+print("== the vault context is registered ==")
 
 local cmds = vim.api.nvim_get_commands({})
 check("the :PKMVault context exists", cmds.PKMVault ~= nil)
-for _, name in ipairs({ 'PKMVaultNew', 'PKMVaultRename', 'PKMVaultRenumber',
-                        'PKMVaultUnregister', 'PKMVaultAdopt' }) do
-  check(name .. ' alias still exists', cmds[name] ~= nil)
-end
 
 print("\n== :PKMVault new / rename / renumber drive the registry ==")
 
@@ -59,18 +55,9 @@ check("`:PKMVault renumber` changed the number",
   vault.get('Delta') and vault.get('Delta').number == 7,
   vault.get('Delta') and vault.get('Delta').number)
 
-print("\n== the vault alias drives the same core ==")
+print("\n== the view context is registered ==")
 
-vim.cmd('PKMVaultNew! Zeta')
-check("`:PKMVaultNew!` registered a vault just as the verb does", has_vault('Zeta'))
-
-print("\n== the view context and its aliases are registered ==")
-
-for _, name in ipairs({ 'PKMView', 'PKMViews', 'PKMViewNew', 'PKMViewUpdate',
-                        'PKMViewEdit', 'PKMViewDelete', 'PKMViewLast',
-                        'PKMExportView', 'PKMViewSidebar' }) do
-  check(name .. ' is registered', cmds[name] ~= nil)
-end
+check("the :PKMView context exists", cmds.PKMView ~= nil)
 
 print("\n== :PKMView rename still works (regression) ==")
 

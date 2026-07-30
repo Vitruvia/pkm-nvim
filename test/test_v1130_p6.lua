@@ -41,13 +41,10 @@ local function same(a, b)
   return true
 end
 
-print("== the context commands and their aliases are registered ==")
+print("== the context commands are registered ==")
 
 local cmds = vim.api.nvim_get_commands({})
-for _, name in ipairs({ 'PKMHeader', 'PKMList', 'PKMTrash', 'PKMExport',
-                        'PKMHeaderAppend', 'PKMHeaderNext', 'PKMHeaderLevelUp',
-                        'PKMConvertList', 'PKMRenumberList',
-                        'PKMRestoreNote', 'PKMEmptyTrash' }) do
+for _, name in ipairs({ 'PKMHeader', 'PKMList', 'PKMTrash', 'PKMExport' }) do
   check(name .. ' is registered', cmds[name] ~= nil)
 end
 
@@ -110,8 +107,6 @@ end
 
 check("`:PKMTrash empty` on an empty trash says so",
   (notify_of('PKMTrash empty') or ''):find('already empty', 1, true) ~= nil)
-check("the :PKMEmptyTrash alias reports the same",
-  (notify_of('PKMEmptyTrash') or ''):find('already empty', 1, true) ~= nil)
 
 print("")
 if failures == 0 then

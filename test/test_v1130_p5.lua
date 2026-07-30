@@ -28,14 +28,11 @@ local root = vim.fn.tempname() .. '/Note-Vault/00 - Test'
 vim.fn.mkdir(root .. '/03-Consolidated', 'p')
 pkm.setup({ root_path = root })
 
-print("== the context commands and their aliases are registered ==")
+print("== the context commands are registered ==")
 
 local cmds = vim.api.nvim_get_commands({})
 check("the :PKMBrowse context exists", cmds.PKMBrowse ~= nil)
 check("the :PKMPanel context exists", cmds.PKMPanel ~= nil)
-for _, name in ipairs({ 'PKMBrowseRecent', 'PKMOrphans', 'PKMBuffers', 'PKMExplorer', 'PKMMode' }) do
-  check(name .. ' alias still exists', cmds[name] ~= nil)
-end
 
 print("\n== :PKMBrowse orphans reports an empty result, no picker ==")
 
@@ -50,16 +47,14 @@ end
 
 check("`:PKMBrowse orphans` on an empty vault says so",
   (notify_of('PKMBrowse orphans') or ''):find('no orphaned notes', 1, true) ~= nil)
-check("the :PKMOrphans alias reports the same",
-  (notify_of('PKMOrphans') or ''):find('no orphaned notes', 1, true) ~= nil)
 
 print("\n== :PKMPanel buffers toggles the buffer panel ==")
 
 check("the buffer panel starts closed", ui.is_bufpanel_open() == false)
 vim.cmd('PKMPanel buffers')
 check("`:PKMPanel buffers` opens it", ui.is_bufpanel_open() == true)
-vim.cmd('PKMBuffers')
-check("the :PKMBuffers alias toggles it back", ui.is_bufpanel_open() == false)
+vim.cmd('PKMPanel buffers')
+check("`:PKMPanel buffers` again toggles it back", ui.is_bufpanel_open() == false)
 
 print("\n== :PKMPanel sidebar opens the view sidebar ==")
 

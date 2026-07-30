@@ -42,9 +42,9 @@ local function buffer_title()
   return fm and fm.title
 end
 
-print("== :PKMNewNote note title=... creates without a prompt ==")
+print("== :PKMNote new note title=... creates without a prompt ==")
 
-vim.cmd('PKMNewNote note title=SmokeIdea')
+vim.cmd('PKMNote new note title=SmokeIdea')
 local created = vim.fn.expand('%:p')
 check("a note was created and opened",
   created ~= '' and vim.fn.filereadable(created) == 1, created)
@@ -54,9 +54,9 @@ check("its number, type and title are in the filename",
 check("and the frontmatter carries the title", disk_title(created) == 'SmokeIdea',
   tostring(disk_title(created)))
 
-print("\n== :PKMSetTitle writes the buffer's title, still no prompt ==")
+print("\n== :PKMNote settitle writes the buffer's title, still no prompt ==")
 
-vim.cmd('PKMSetTitle Retitled Idea')
+vim.cmd('PKMNote settitle Retitled Idea')
 check("a spaced title needs no quoting, and reaches the buffer",
   buffer_title() == 'Retitled Idea', tostring(buffer_title()))
 check("but not the disk yet — set_title is buffer-only",
@@ -67,9 +67,9 @@ vim.cmd('silent write')
 check("after a save the title is on disk", disk_title(created) == 'Retitled Idea',
   tostring(disk_title(created)))
 
-print("\n== :PKMRenameNote renames the file, keeping number and type ==")
+print("\n== :PKMNote rename renames the file, keeping number and type ==")
 
-vim.cmd('PKMRenameNote a whole new name')
+vim.cmd('PKMNote rename a whole new name')
 local renamed = vim.fn.expand('%:p')
 check("the file moved to the new name",
   renamed:gsub('\\', '/'):find('/0001_note_a_whole_new_name%.md$') ~= nil,
@@ -83,7 +83,7 @@ check("the rename left the frontmatter title untouched",
 
 print("\n== an explicit empty title is 'supplied', so it is unnamed, not prompted ==")
 
-vim.cmd('PKMNewNote note title=')
+vim.cmd('PKMNote new note title=')
 local unnamed = vim.fn.expand('%:p')
 check("a second note took the next number, no prompt",
   unnamed:gsub('\\', '/'):find('/0002_note_unnamed%.md$') ~= nil,
@@ -93,7 +93,7 @@ check("and its title is the unnamed placeholder",
 
 print("\n== the type is still honoured, and placement still parses ==")
 
-vim.cmd('PKMNewNote bib title=Fonte')
+vim.cmd('PKMNote new bib title=Fonte')
 local bib = vim.fn.expand('%:p')
 check("a bib note carries its type in the filename",
   bib:gsub('\\', '/'):find('/0003_bib_Fonte%.md$') ~= nil,
@@ -104,7 +104,7 @@ print("\n== an unrecognised positional is reported, not guessed ==")
 local msg
 local orig = vim.notify
 vim.notify = function(m) msg = m end
-vim.cmd('PKMNewNote sideways title=X')
+vim.cmd('PKMNote new sideways title=X')
 vim.notify = orig
 check("a word that is neither type, place nor title= is refused",
   type(msg) == 'string' and msg:find('sideways', 1, true) ~= nil, tostring(msg))

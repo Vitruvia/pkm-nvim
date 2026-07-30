@@ -43,12 +43,10 @@ local function buffer_title()
   return fm and fm.title
 end
 
-print("== both the context command and its aliases are registered ==")
+print("== the context command is registered ==")
 
 local cmds = vim.api.nvim_get_commands({})
 check("the :PKMNote context exists", cmds.PKMNote ~= nil)
-check("the :PKMNewNote alias still exists", cmds.PKMNewNote ~= nil)
-check("the :PKMRenameNote alias still exists", cmds.PKMRenameNote ~= nil)
 
 print("\n== :PKMNote new creates without a prompt ==")
 
@@ -117,14 +115,6 @@ check("a word that is neither type, place nor title= is refused",
   type(msg) == 'string' and msg:find('sideways', 1, true) ~= nil, tostring(msg))
 check("and no stray note was created",
   vim.fn.filereadable(utils.join(consolidated, '0004_note_X.md')) == 0)
-
-print("\n== the alias still drives the same core, unchanged ==")
-
-vim.cmd('PKMNewNote note title=ViaAlias')
-local via_alias = vim.fn.expand('%:p')
-check("`:PKMNewNote` creates just as `:PKMNote new` does",
-  via_alias:gsub('\\', '/'):find('/0004_note_ViaAlias%.md$') ~= nil,
-  vim.fn.fnamemodify(via_alias, ':t'))
 
 print("")
 if failures == 0 then

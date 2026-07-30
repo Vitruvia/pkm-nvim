@@ -45,9 +45,9 @@ end
 
 print("== two notes, created by command ==")
 
-vim.cmd('PKMNewNote note title=Target')
+vim.cmd('PKMNote new note title=Target')
 local target = vim.fn.expand('%:p')
-vim.cmd('PKMNewNote note title=Source')
+vim.cmd('PKMNote new note title=Source')
 local source = vim.fn.expand('%:p')
 
 check("target is note 0001", target:gsub('\\', '/'):find('/0001_note_Target%.md$') ~= nil, target)
@@ -82,9 +82,9 @@ local ok_self, err_self = citations.cite(source, 'note-0002')
 check("self-citation is refused", ok_self == false)
 check("and named as such", (err_self or ''):find('itself', 1, true) ~= nil, err_self)
 
-print("\n== :PKMUncite clears both sides ==")
+print("\n== :PKMCite remove clears both sides ==")
 
-vim.cmd('PKMUncite note-0001')
+vim.cmd('PKMCite remove note-0001')
 
 check("source cites nothing now", next(ids(source, 'cites')) == nil,
   vim.inspect(ids(source, 'cites')))

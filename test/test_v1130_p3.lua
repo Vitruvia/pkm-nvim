@@ -37,8 +37,6 @@ print("== both the context command and its aliases are registered ==")
 
 local cmds = vim.api.nvim_get_commands({})
 check("the :PKMTag context exists", cmds.PKMTag ~= nil)
-check("the :PKMAddTag alias still exists", cmds.PKMAddTag ~= nil)
-check("the :PKMMergeTags alias still exists", cmds.PKMMergeTags ~= nil)
 
 vim.cmd('PKMNote new note title=Subject')
 local note = vim.fn.expand('%:p')
@@ -65,12 +63,6 @@ print("\n== only the first token is a verb: a tag may be named like one ==")
 vim.cmd('PKMTag add merge note=note-0001')
 check("`:PKMTag add merge` adds the tag 'merge', it does not run the merge verb",
   disk_tags(note)['merge'] == true, vim.inspect(disk_tags(note)))
-
-print("\n== the alias drives the same core, unchanged ==")
-
-vim.cmd('PKMAddTag aliaswrite note=note-0001')
-check("`:PKMAddTag note=` still writes to disk", disk_tags(note)['aliaswrite'] == true,
-  vim.inspect(disk_tags(note)))
 
 print("\n== a bad note reference is refused ==")
 

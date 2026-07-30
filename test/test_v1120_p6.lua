@@ -41,12 +41,12 @@ end
 print("== a corpus the system produced is clean ==")
 
 -- Five notes, two symmetric citation pairs, all created and linked by command.
-vim.cmd('PKMNewNote note title=Alpha')   -- 0001
-vim.cmd('PKMNewNote note title=Bravo')   -- 0002
-vim.cmd('PKMNewNote note title=Charlie') -- 0003
-vim.cmd('PKMNewNote note title=Delta')   -- 0004
+vim.cmd('PKMNote new note title=Alpha')   -- 0001
+vim.cmd('PKMNote new note title=Bravo')   -- 0002
+vim.cmd('PKMNote new note title=Charlie') -- 0003
+vim.cmd('PKMNote new note title=Delta')   -- 0004
 local echo = vim.fn.expand('%:p')
-vim.cmd('PKMNewNote note title=Echo')    -- 0005
+vim.cmd('PKMNote new note title=Echo')    -- 0005
 local alpha = consolidated .. '/0001_note_Alpha.md'
 
 -- Alpha cites Bravo; Delta cites Echo. Both through the engine, so both sides

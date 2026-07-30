@@ -37,14 +37,10 @@ local function ids(path, field)
   return out
 end
 
-print("== the context command and its aliases are registered ==")
+print("== the context command is registered ==")
 
 local cmds = vim.api.nvim_get_commands({})
 check("the :PKMCite context exists", cmds.PKMCite ~= nil)
-for _, name in ipairs({ 'PKMUncite', 'PKMInsertCitation', 'PKMGotoCitation',
-                        'PKMUpdateReferences', 'PKMLinkNote', 'PKMFollowLink', 'PKMBacklinks' }) do
-  check(name .. ' alias still exists', cmds[name] ~= nil)
-end
 
 print("\n== two notes, created by command ==")
 
@@ -84,14 +80,6 @@ vim.cmd('PKMCite update')
 vim.cmd('silent write')   -- update_references stamps the buffer; persist it
 check("the citation survives an update", ids(source, 'cites')['note-0001'] == true,
   vim.inspect(ids(source, 'cites')))
-
-print("\n== the alias drives the same core, unchanged ==")
-
-vim.cmd('PKMUncite note-0001')
-check("`:PKMUncite <target>` still clears the citation", next(ids(source, 'cites')) == nil,
-  vim.inspect(ids(source, 'cites')))
-check("and the other side too", next(ids(target, 'cited_by')) == nil,
-  vim.inspect(ids(target, 'cited_by')))
 
 print("")
 if failures == 0 then

@@ -1,7 +1,7 @@
 -- test/test_v1120_p4.lua
 -- v1.12.0 Ph4 — tags and views acting on a *named* note, on disk.
 --
--- :PKMAddTag/:PKMRemoveTag stay buffer-only by default; with note=<ref> they
+-- :PKMTag add/:PKMTag remove stay buffer-only by default; with note=<ref> they
 -- write to the named note. :PKMView add|remove <view> note=<ref> makes that note
 -- a member of the view by applying its tag condition — refusing, rather than
 -- guessing, when the view can be satisfied several ways. All headless, by
@@ -37,23 +37,23 @@ local function disk_tags(path)
   return set
 end
 
-vim.cmd('PKMNewNote note title=Subject')
+vim.cmd('PKMNote new note title=Subject')
 local note = vim.fn.expand('%:p')
 check("a note exists to act on", vim.fn.filereadable(note) == 1)
 
-print("== :PKMAddTag note= writes the tag to disk ==")
+print("== :PKMTag add note= writes the tag to disk ==")
 
-vim.cmd('PKMAddTag draft note=note-0001')
+vim.cmd('PKMTag add draft note=note-0001')
 check("the tag reached the note on disk", disk_tags(note)['draft'] == true,
   vim.inspect(disk_tags(note)))
 
-vim.cmd('PKMAddTag ring forge note=note-0001')
+vim.cmd('PKMTag add ring forge note=note-0001')
 check("a spaced tag needs no quoting", disk_tags(note)['ring forge'] == true,
   vim.inspect(disk_tags(note)))
 
-print("\n== :PKMRemoveTag note= removes it ==")
+print("\n== :PKMTag remove note= removes it ==")
 
-vim.cmd('PKMRemoveTag draft note=note-0001')
+vim.cmd('PKMTag remove draft note=note-0001')
 check("the tag is gone from disk", disk_tags(note)['draft'] == nil, vim.inspect(disk_tags(note)))
 check("but the other tag stayed", disk_tags(note)['ring forge'] == true)
 
@@ -61,7 +61,7 @@ print("\n== the buffer-only path is unchanged (no note=) ==")
 
 -- The note is open in a buffer. Tag it without note=: buffer only, no disk.
 vim.cmd('edit ' .. vim.fn.fnameescape(note))
-vim.cmd('PKMAddTag bufonly')
+vim.cmd('PKMTag add bufonly')
 local buf_fm = yaml.parse_frontmatter(vim.api.nvim_buf_get_lines(0, 0, -1, false))
 local in_buf = false
 for _, t in ipairs((buf_fm and buf_fm.tags) or {}) do if t == 'bufonly' then in_buf = true end end
@@ -109,7 +109,7 @@ print("\n== a bad note reference is refused ==")
 local msg
 local orig = vim.notify
 vim.notify = function(m) msg = m end
-vim.cmd('PKMAddTag draft note=note-9999')
+vim.cmd('PKMTag add draft note=note-9999')
 vim.notify = orig
 check("note=<nonexistent> is reported", type(msg) == 'string' and msg:find('9999', 1, true))
 
