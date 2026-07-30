@@ -4,8 +4,9 @@
 -- Dependencies : pkm.args, pkm.markdown (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- Header operations. `:PKMHeader <verb>` — append, next, prev, levelup,
--- leveldown.
+-- Header operations. `:PKMHeader <verb>` — append, sibling, next, prev,
+-- levelup, leveldown. `append` duplicates the current header +1 at EOF;
+-- `sibling` adds the next same-level header at the end of the current section.
 --
 -- The motions and the level-shifts want different command attributes — a count
 -- for next/prev, a range for the shifts, which one command cannot both carry.
@@ -58,12 +59,14 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- :PKMHeader — the context form
   -- ---------------------------------------------------------------------------
-  local HEADER_VERBS = { 'append', 'next', 'prev', 'levelup', 'leveldown' }
+  local HEADER_VERBS = { 'append', 'sibling', 'next', 'prev', 'levelup', 'leveldown' }
 
   vim.api.nvim_create_user_command('PKMHeader', function(opts)
     local p = require('pkm.args').parse(opts, { verbs = HEADER_VERBS })
     if p.verb == 'append' then
       require('pkm.markdown').append_next_header()
+    elseif p.verb == 'sibling' then
+      require('pkm.markdown').append_global_header()
     elseif p.verb == 'next' then
       do_motion('next', p.positional)
     elseif p.verb == 'prev' then
@@ -90,7 +93,7 @@ function M.register()
       local lead = (arg_lead or ''):lower()
       return vim.tbl_filter(function(t) return t:lower():find(lead, 1, true) == 1 end, out)
     end,
-    desc = 'Headers: :PKMHeader append | next|prev [same|h1-h6] [count] | levelup|leveldown',
+    desc = 'Headers: :PKMHeader append|sibling | next|prev [same|h1-h6] [count] | levelup|leveldown',
   })
 
 end

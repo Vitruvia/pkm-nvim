@@ -10,6 +10,7 @@
 --
 -- Public API:
 --   append_next_header()                       → Duplicate current header with counter +1, append at EOF
+--   append_global_header()                     → Next sibling header (max counter +1) at the section's end
 --   shift_header_level(direction, start, end)  → Shift header '#'-level up or down in line range
 --   find_heading_target(lines, cursor, opts)   → Line of the next/previous ATX heading, or nil (pure)
 --   goto_heading(opts)                         → Move the cursor there; true when it moved
@@ -141,6 +142,74 @@ local function scan_headings(lines)
   end
 
   return out
+end
+
+--- Create the next sibling header at the end of the current section.
+---
+--- Where `append_next_header` takes the current line's counter +1 and appends it
+--- at end-of-buffer, this reads the whole section: it finds the header the cursor
+--- sits in, takes the highest `-N` counter among the same-level, same-prefix
+--- headers within the enclosing block (bounded by any shallower header), and
+--- inserts `<prefix>-<max+1><suffix>` at the *end of that block* — after every
+--- sibling and its sub-content, before the next higher-level header (or at EOF).
+--- The cursor moves to the new header. So from any `## foo-m` it makes `## foo-(n+1)`.
+---@return nil
+function M.append_global_header()
+  local lines  = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local cursor = vim.api.nvim_win_get_cursor(0)[1]
+  local heads  = scan_headings(lines)
+
+  -- The header the cursor sits in: the last heading at or before the cursor.
+  local cur_idx
+  for i, h in ipairs(heads) do
+    if h.lnum <= cursor then cur_idx = i else break end
+  end
+  if not cur_idx then
+    vim.notify('[pkm] put the cursor in a header section first', vim.log.levels.WARN)
+    return
+  end
+
+  local level = heads[cur_idx].level
+  local prefix, num_str, suffix = lines[heads[cur_idx].lnum]:match('^(.*)%-(%d+)(%D*)$')
+  if not prefix then
+    vim.notify('[pkm] the current header has no -N counter to continue', vim.log.levels.WARN)
+    return
+  end
+
+  -- Block bounds: from just after the nearest shallower header before the cursor
+  -- to the nearest shallower header after it (or EOF). Siblings live in between.
+  local block_end = #lines + 1
+  for i = cur_idx + 1, #heads do
+    if heads[i].level < level then block_end = heads[i].lnum; break end
+  end
+  local block_start = 1
+  for i = cur_idx - 1, 1, -1 do
+    if heads[i].level < level then block_start = heads[i].lnum + 1; break end
+  end
+
+  -- Highest counter among the same-level, same-prefix siblings in the block.
+  local pat  = '^' .. vim.pesc(prefix) .. '%-(%d+)%D*$'
+  local maxn = tonumber(num_str)
+  for _, h in ipairs(heads) do
+    if h.level == level and h.lnum >= block_start and h.lnum < block_end then
+      local n = tonumber(lines[h.lnum]:match(pat))
+      if n and n > maxn then maxn = n end
+    end
+  end
+
+  local new_header = prefix .. '-' .. tostring(maxn + 1) .. suffix
+
+  -- Insert just before the block's end (or at EOF); blank separators that do
+  -- not double up on an already-blank line.
+  local ins0   = block_end - 1
+  local before = (block_end - 1 >= 1) and lines[block_end - 1] or ''
+  local chunk  = {}
+  if before ~= '' then chunk[#chunk + 1] = '' end
+  chunk[#chunk + 1] = new_header
+  if block_end <= #lines then chunk[#chunk + 1] = '' end
+
+  vim.api.nvim_buf_set_lines(0, ins0, ins0, false, chunk)
+  vim.api.nvim_win_set_cursor(0, { ins0 + ((before ~= '') and 2 or 1), 0 })
 end
 
 --- Line number of the heading `count` jumps away from `cursor`, or nil.

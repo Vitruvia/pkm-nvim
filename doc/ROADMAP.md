@@ -638,17 +638,14 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
 
 ### Near goals (short-term to mid-term)
 1.  **Markdown improvements (near):**
-    1.  the next_header command currently only works when the cursor is above a
-       header. If used this way, it will create a header numbered as the
-       current + 1. Create a new "global' next_header command which creates a
-       new header based on the last header number (highest numbered /
-       last-in-order) of the same level. It creates this header after every
-       other header of that same level and below (including plain text), but
-       before any header of a higher level (if none exist, then this will be the
-       last line in the file), then moves the cursor to the newly
-       created header (that is, it will create `## header-(n+1)` whenever the
-       cursor is at `## header-m`, for any `m <= n`. *(Lives in `markdown.lua`;
-       could be bundled with the v1.7.0 header-navigation pass if promoted.)*;
+    1.  ✅ **done (v1.15.0, `:PKMHeader sibling`).** The `append` verb still does
+       current+1 at EOF; the new `sibling` verb takes the highest same-level,
+       same-prefix `-N` counter within the enclosing block and inserts
+       `<prefix>-<max+1>` at the end of that block — after every sibling and its
+       sub-content, before the next shallower header (or at EOF) — then moves the
+       cursor there. `markdown.append_global_header`; test_v1150_p1.
+       *(Original spec: a global next_header that creates `## header-(n+1)`
+       whenever the cursor is at `## header-m`, for any `m <= n`.)*
     2.  Conventions (near): establish our own conventions for markdown, in
         order to provide a guideline for consistent and high-quality
         note-taking, reviewing, and editing, as well as LLM/AI collaboration.
