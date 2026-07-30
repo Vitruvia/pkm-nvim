@@ -211,16 +211,17 @@ v1.12.0 MINOR  Typed forms for every state-writing operation  ✅ released and
         tags/views on a named note, agent authorship + deletion guard, and
         :PKMCheck. Detail in doc/CHANGELOG.md.
 
-v1.13.0 MINOR  Command clearup, part 1 — contexts + aliases  ⏳ code complete on
-        `dev`, awaiting its smoke route (note 0274); tag after. commands.lua
+v1.13.0 MINOR  Command clearup, part 1 — contexts + aliases  ✅ released and
+        tagged; smoke route (note 0274) passed in the real config. commands.lua
         split into a commands/ directory; eleven verb-contexts introduced, the
         58 old names kept as working aliases. The :PKM<TAB> list does not shrink
         yet. Detail in doc/CHANGELOG.md.
 
 (next)  Command clearup, part 2 (v1.14.0) — delete the aliases (where :PKM<TAB>
         finally shrinks), after homing :PKMTags' batch/rename half on :PKMTag
-        and reserving the verbs as names. Then the evaluations against the
-        clean surface.
+        and reserving the verbs as names. Candidate to fold in: give the
+        add/remove tag panel a Telescope picker (see Known limitations). Then
+        the evaluations against the clean surface.
 ```
 
 **The order from here, and why it is this order.** *Reordered 29/7/2026: the

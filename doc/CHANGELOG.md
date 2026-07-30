@@ -28,6 +28,16 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ### Known limitations
 
+- **The add/remove tag panel is always the built-in list, never a Telescope
+  picker.** `:PKMTag add`/`remove` (and the `:PKMAddTag`/`:PKMRemoveTag`
+  aliases) with no tag call `ui.open_tag_panel(mode)` directly, which has no
+  Telescope variant — unlike browse, citations and tag-merge, which pick
+  Telescope when it is present. Fine at ≤5 tags on a note; degrades past ~10,
+  where a fuzzy picker would matter. Pre-existing (v1.13.0 preserved it
+  verbatim); noticed during the v1.13.0 smoke. Fix is a `telescope`-branch in
+  the tag handler mirroring the other panels' fallback pattern — a candidate to
+  fold into v1.14.0.
+
 - `notes.is_same_file()`'s case-fold fallback is gated on
   `utils.is_windows`/`utils.is_wsl` (session-level) rather than a per-path
   filesystem case-sensitivity check, which `pkm.utils` doesn't currently
@@ -60,14 +70,15 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
-## [1.13.0] - 30/7/2026 — code complete on `dev`, **not tagged**
+## [1.13.0] - 30/7/2026
 
 *The command clearup, part 1: introduce the verb-contexts, keep every old name
-as an alias. Awaiting the smoke route
-(`00 - NotesTeste/03-Consolidated/0274_note_smoke-v1130-a-limpeza-de-comandos.md`)
-run in the real config; everything is headless-tested, and the tag is cut after
-the route passes. Part 2 (v1.14.0) deletes the aliases, which is where the
-`:PKM<TAB>` list finally shrinks.*
+as an alias. Smoke route passed in the real config
+(`00 - NotesTeste/03-Consolidated/0274_note_smoke-v1130-a-limpeza-de-comandos.md`),
+including the `:PKM<TAB>` tree, the prompt/picker/panel forms reached through
+verbs, and alias parity — the parts the headless suite structurally cannot see.
+Part 2 (v1.14.0) deletes the aliases, which is where the `:PKM<TAB>` list finally
+shrinks.*
 
 *The first agent evaluation drove this: given a real task, Claude used zero PKM
 commands and hand-rolled notes on the filesystem. A tidier surface does not fix
