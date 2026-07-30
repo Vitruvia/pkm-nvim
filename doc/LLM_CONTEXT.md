@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.12.0** (released, tagged)
+## Current version: **v1.12.0** (released, tagged) · **v1.13.0** code complete on `dev`, untagged
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
@@ -28,6 +28,13 @@ quick orientation. Module list: `init, config, utils, commands, keymaps, yaml,
 timestamp, citations, notes, journal, ui, telescope, templates, export, filter,
 index, views, panel, mode, syntax, trash, markdown, bench, tags, picker, actions,
 rename, bufsync, vault, args, check`.
+
+`commands` (v1.13.0) is a **directory**, not a file: one module per verb-context
+(`note, tag, cite, browse, view, vault, trash, list, header, panel, export,
+misc`), wired by `commands/init.lua`, which exposes the single `register()`
+`pkm.init` calls — so `require('pkm.commands')` is unchanged. Each context is
+`:PKM<Context> <verb>` dispatched through `args`; every old name is kept as an
+alias (deleted in v1.14.0). `commands/shared.lua` holds cross-context helpers.
 
 `args` (v1.12.0) is the one reading of a command's arguments —
 `:PKM<Context>[!] <verb> [positional] [key=value]` → `{verb, positional, named,

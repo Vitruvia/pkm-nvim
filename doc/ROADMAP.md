@@ -211,8 +211,16 @@ v1.12.0 MINOR  Typed forms for every state-writing operation  ✅ released and
         tags/views on a named note, agent authorship + deletion guard, and
         :PKMCheck. Detail in doc/CHANGELOG.md.
 
-(next)  Command clearup — collapse the 55 PKM* names into ~11 contexts with the
-        verb carrying the action. Then the evaluations against that surface.
+v1.13.0 MINOR  Command clearup, part 1 — contexts + aliases  ⏳ code complete on
+        `dev`, awaiting its smoke route (note 0274); tag after. commands.lua
+        split into a commands/ directory; eleven verb-contexts introduced, the
+        58 old names kept as working aliases. The :PKM<TAB> list does not shrink
+        yet. Detail in doc/CHANGELOG.md.
+
+(next)  Command clearup, part 2 (v1.14.0) — delete the aliases (where :PKM<TAB>
+        finally shrinks), after homing :PKMTags' batch/rename half on :PKMTag
+        and reserving the verbs as names. Then the evaluations against the
+        clean surface.
 ```
 
 **The order from here, and why it is this order.** *Reordered 29/7/2026: the
@@ -227,11 +235,11 @@ when the clearup design was still open; it no longer is.*
     argument form, opening with the shared parser. The last version that adds
     commands as new top-level `PKM*` names; from here new features add *verbs to
     contexts*.
-2.  **Command clearup — contexts and verbs.** Next. 55 names → ~11 contexts, the
-    verb carrying the action. Two versions: introduce the contexts with the old
-    names kept as aliases, then delete the aliases — the `:PKM<TAB>` list only
-    shrinks at the second, but the clean surface is usable from the first. Detail
-    below.
+2.  **Command clearup — contexts and verbs.** In progress. 58 names → 11
+    contexts, the verb carrying the action. Two versions: **v1.13.0** (done on
+    `dev`) introduced the contexts with the old names kept as aliases; **v1.14.0**
+    deletes the aliases — the `:PKM<TAB>` list only shrinks at the second, but the
+    clean surface is usable from the first. Detail below.
 3.  **Evaluations.** Drive the vault with Claude on real tasks, **without** a
     skill, against the new context surface, recording where it goes wrong. What
     it finds — a missing verb, a confusing one — is added to the right context,

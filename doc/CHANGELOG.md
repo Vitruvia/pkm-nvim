@@ -60,6 +60,65 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
+## [1.13.0] - 30/7/2026 — code complete on `dev`, **not tagged**
+
+*The command clearup, part 1: introduce the verb-contexts, keep every old name
+as an alias. Awaiting the smoke route
+(`00 - NotesTeste/03-Consolidated/0274_note_smoke-v1130-a-limpeza-de-comandos.md`)
+run in the real config; everything is headless-tested, and the tag is cut after
+the route passes. Part 2 (v1.14.0) deletes the aliases, which is where the
+`:PKM<TAB>` list finally shrinks.*
+
+*The first agent evaluation drove this: given a real task, Claude used zero PKM
+commands and hand-rolled notes on the filesystem. A tidier surface does not fix
+that by itself, but the clearup builds the one surface a human and an agent both
+reach for, with note-creation safe by default — the surface the agent protocol
+will later point at.*
+
+### Added
+
+-   **`lua/pkm/commands/` — one file per command context** (Ph1). The 58 `:PKM*`
+    registrations moved out of the single `commands.lua` into a directory
+    (`note`, `tag`, `cite`, `browse`, `view`, `vault`, `trash`, `list`, `header`,
+    `panel`, `export`, `misc`), wired by `init.lua`, which still exposes the one
+    `register()` that `pkm.init` calls — so `require('pkm.commands')` is
+    unchanged. Behaviour-identical; the enabling refactor that lets each context
+    be its own phase.
+
+-   **Eleven verb-contexts**, each `:PKM<Context> <verb>`, dispatched through
+    `pkm.args` with completion drawn from the same verb table:
+    `:PKMNote` (new/relative/journal/scratch/rename/delete/import/convert/promote/
+    transpose/changetype/settitle), `:PKMTag` (add/remove/merge),
+    `:PKMCite` (add/remove/goto/insert/update/link/follow/backlinks),
+    `:PKMBrowse` ([filter]/recent/orphans/tags), `:PKMPanel` (explorer/buffers/
+    sidebar/mode), `:PKMHeader` (append/next/prev/levelup/leveldown),
+    `:PKMList` (convert/renumber), `:PKMTrash` (restore/empty),
+    `:PKMExport` (simple/deep), and the already-dispatching `:PKMView` and
+    `:PKMVault`, which absorbed their sibling commands as verbs.
+
+-   **The safety slice** (Ph2). `:PKMNote new … by=<agent>` is the one safe
+    creation path — it allocates the next number, writes schema-correct
+    frontmatter, keeps the citation graph in step, and stamps the `By<Author>`
+    authorship marker — while no argument stays the friendly prompt, so human
+    use is untouched. Each context's verb and its alias share one core, so the
+    two forms cannot drift.
+
+### Changed
+
+-   **Every old command name is kept as a working alias** (`:PKMNewNote`,
+    `:PKMRenameNote`, `:PKMAddTag`, `:PKMViewNew`, `:PKMVaultNew`, …), driving
+    the same cores as the new verbs. Nothing a user or script types today
+    breaks; the `:PKM<TAB>` list does not shrink until part 2 removes them.
+
+### Deferred to v1.14.0 (alias deletion)
+
+-   `:PKMTags`' **batch and tag-rename** half must be homed on `:PKMTag`
+    (`:PKMBrowse tags` already covers its browse half) before `:PKMTags` is
+    removed; and `validate_name` must reserve the verbs as names, since a view
+    or vault named exactly like a verb is shadowed by it.
+
+---
+
 ## [1.12.0] - 29/7/2026
 
 *Smoke route passed in full
