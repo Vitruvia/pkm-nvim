@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.13.0** (released, tagged)
+## Current version: **v1.13.0** (released, tagged) · **v1.14.0** code complete on `dev`, untagged
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
@@ -33,8 +33,10 @@ rename, bufsync, vault, args, check`.
 (`note, tag, cite, browse, view, vault, trash, list, header, panel, export,
 misc`), wired by `commands/init.lua`, which exposes the single `register()`
 `pkm.init` calls — so `require('pkm.commands')` is unchanged. Each context is
-`:PKM<Context> <verb>` dispatched through `args`; every old name is kept as an
-alias (deleted in v1.14.0). `commands/shared.lua` holds cross-context helpers.
+`:PKM<Context> <verb>` dispatched through `args`. **v1.14.0 deleted the aliases**:
+the surface is 15 commands (11 contexts + `:PKMCheck`/`:PKMStats`/
+`:PKMToggleAutoSync` + `:PKMTags`, the vault-wide bulk tag command).
+`commands/shared.lua` holds cross-context helpers.
 
 `args` (v1.12.0) is the one reading of a command's arguments —
 `:PKM<Context>[!] <verb> [positional] [key=value]` → `{verb, positional, named,
@@ -79,7 +81,7 @@ nil vault, which is the state every test file and `min_init` runs in.
 | Never touch a file twice within one phase | Each phase edits every file it touches in a single pass; see `doc/PRINCIPLES.md` § Execution for how to split work that doesn't fit one pass |
 | Never call `vim.fn.confirm` / `input` right after closing a picker without `inputsave()` | They read the typeahead: the `<CR>` that closed the picker answers the dialog before it is drawn, and it vanishes unseen (v1.8.0 Ph7) |
 | Never scan the vault per note in a batch | `citations.propagate_title` / `update_references_on_rename` glob and read three folders *per call*; use the batched form or it is quadratic |
-| Never give a command both a count and a numeric argument | Vim reads a leading number in the arguments **as** the count: `:PKMHeaderNext 6` is six headers ahead, never level six. Spell such arguments non-numerically (`h6`) |
+| Never give a `-count` command a numeric argument | Vim reads a leading number **as** the count: the old `:PKMHeaderNext 6` meant six headers ahead, never level six — which is why the header context spells the level `h6`, takes a `range` not a count, and reads its motion count as an explicit argument (`:PKMHeader next 3`) |
 | Never verify a keymap with `normal!` | The bang skips mappings, so the check exercises the built-in keys and reports the feature broken (or working) for the wrong reason; use `normal` |
 | Never write an assertion where the wrong behaviour gives the same answer | Name the reading it must exclude, then pick an input where the two diverge — see `doc/PRINCIPLES.md` § What a check has to prove |
 | Never store an absolute path in vault state | The vault gets copied, moved and (soon) switched. `.pkm-trash/manifest.json` records `original_path` relative to the root; read it with `trash.resolve_original`. An absolute path in vault state is a pointer at whichever vault happened to be open when it was written |
@@ -210,7 +212,7 @@ different vault — which is how a restore from `NotesTeste` came to target
 :lua print(vim.inspect(require('pkm.trash').list()))
 :messages
 :PKMStats
-:PKMMode on
+:PKMPanel mode on
 :lua require('pkm.yaml').validate_frontmatter()
 :lua require('pkm.bench').baseline()
 ```

@@ -33,7 +33,7 @@ double form. If ambiguity is unavoidable, add a short author tag:
 or identifier. Examples: `[CF/88]`, `[Stein-2003]`.
 
 `[note[xxx]]`, `[bib[xxx]]` — PKM structured citations. These are the
-canonical form produced by `:PKMInsertCitation`. Do not use other forms for
+canonical form produced by `:PKMCite insert`. Do not use other forms for
 PKM-internal references; the citation engine depends on this exact pattern.
 
 Nested: `[CF/88 [bib-003]]` — links a short external reference to its PKM

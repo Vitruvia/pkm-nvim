@@ -100,7 +100,7 @@ shrink as work completes, and these do not.
   they want" is an argument about the first, never about the second.
 
   Two things are *not* exempted by being fast paths: a command called with
-  explicit arguments (`:PKMViewDelete <name>` confirms exactly as its panel
+  explicit arguments (`:PKMView delete <name>` confirms exactly as its panel
   does) and a "force" variant of an existing key. A force key may skip the
   question when nothing is at stake — closing a saved buffer costs nothing —
   but never when it is the difference between the key and its gentler sibling.
@@ -108,7 +108,7 @@ shrink as work completes, and these do not.
   unsaved edits gone without a word.
 
   Genuinely exempt, and only these: changes confined to a buffer that `u`
-  reverses (`:PKMRemoveTag` writes nothing to disk), and automatic maintenance
+  reverses (`:PKMTag remove` writes nothing to disk), and automatic maintenance
   the user configured in advance (`trash.max_age_days` purging on startup),
   which reports rather than asks. A flow whose confirmation *is* its panel — a
   preview list plus `<CR>`, as every `tags` batch has — already satisfies this;
@@ -116,7 +116,7 @@ shrink as work completes, and these do not.
 - **`winfixbuf` safety net.** Every PKM panel window (sidebar, buffer panel, and
   every panel built on `panel.lua`) sets `winfixbuf = true` immediately after
   its buffer is assigned. This converts the whole class of "a file opened inside
-  the panel" bugs (`:Ex`, `:edit`, `:PKMViewEdit` invoked while a panel holds
+  the panel" bugs (`:Ex`, `:edit`, `:PKMView edit` invoked while a panel holds
   focus) from a silent hijack that destroys the panel into a loud, harmless
   error. PKM's own open/create commands additionally redirect through
   `focus_main_win()` for smooth UX; `winfixbuf` catches everything not explicitly
@@ -180,7 +180,7 @@ Learned building the first smoke route, at the cost of a defect that shipped
 past a test written to catch it.
 
 -   **A check must start where the candidate readings diverge.** The assertion
-    for `:PKMHeaderNext`'s level argument started at a line where "the second
+    for the header motion's level argument started at a line where "the second
     header ahead" and "the first level-2 header ahead" were the same line. It
     passed for months of nothing while the command read the level as a count.
     Before writing an assertion, name the wrong behaviour it is meant to exclude

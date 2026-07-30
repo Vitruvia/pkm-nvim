@@ -36,55 +36,60 @@ Consolidated subtypes: `note`, `bib` (bibliography), `agg` (aggregate/collection
 
 ## Commands
 
-The most-used commands are grouped below. See `:help pkm-commands` for the
-complete reference.
+Every command is a **verb-context**: `:PKM<Context> <verb> [args]`. Type
+`:PKM<Tab>` for the ~15 contexts, and `:PKMNote <Tab>` (etc.) for a context's
+verbs. A context with a friendly default does the common thing bare — `:PKMNote`
+creates, `:PKMCite <target>` cites, `:PKMBrowse <expr>` browses.
 
-### Notes
-
-| Command | Description |
-|---|---|
-| `:PKMNewNote` | Create a consolidated note |
-| `:PKMNewJournal` | Create a journal entry |
-| `:PKMNewScratchpad` | Create a scratchpad note |
-| `:PKMRenameNote` | Rename current consolidated note (citations propagate) |
-| `:PKMDeleteNote` | Delete current note (moves to trash) |
-| `:PKMPromote` | Promote scratchpad to consolidated note or journal |
-| `:PKMConvertNote` | Convert current note to a different type |
-| `:PKMChangeType` | Change a consolidated note's type (`note`/`agg`/`bib`) |
-| `:PKMTranspose` | Move note to a different PKM folder and convert it |
-| `:PKMImport` | Import the current file into the PKM system |
-| `:PKMSetTitle` | Set the title frontmatter field (buffer only) |
-
-### Tags and Metadata
+### Notes — `:PKMNote <verb>`
 
 | Command | Description |
 |---|---|
-| `:PKMAddTag [tag]` | Append a tag (tag panel, or directly with an argument) |
-| `:PKMRemoveTag [tag]` | Remove a tag (tag panel, or directly with an argument) |
-| `:PKMMergeTags` | Merge one or more tags into a target tag |
-| `:PKMUpdateReferences` | Rebuild citation frontmatter for the current buffer |
-| `:PKMToggleAutoSync` | Toggle automatic reference synchronization |
+| `:PKMNote [new] [note\|agg\|bib]` | Create a note (bare prompts; `title=` and `by=<agent>` optional) |
+| `:PKMNote journal` | Create a journal entry |
+| `:PKMNote scratch` | Create a scratchpad note |
+| `:PKMNote relative [type]` | Create a note inheriting the current note's tags |
+| `:PKMNote rename [name]` | Rename current note (citations propagate) |
+| `:PKMNote delete` | Delete current note (moves to trash) |
+| `:PKMNote promote` | Promote scratchpad to consolidated note or journal |
+| `:PKMNote convert` | Convert current note to a different type |
+| `:PKMNote changetype` | Change a consolidated note's type (`note`/`agg`/`bib`) |
+| `:PKMNote transpose` | Move note to a different PKM folder and convert it |
+| `:PKMNote import` | Import the current file into the PKM system |
+| `:PKMNote settitle [text]` | Set the title frontmatter field (buffer only) |
 
-### Citations and Links
+### Tags — `:PKMTag` (one note) · `:PKMTags` (all notes)
 
 | Command | Description |
 |---|---|
-| `:PKMInsertCitation` | Insert a citation at the cursor |
-| `:PKMGotoCitation` | Jump to the note under the cursor |
-| `:PKMLinkNote` | Insert a link to another note |
-| `:PKMFollowLink` | Follow the link/citation under the cursor |
-| `:PKMBacklinks` | Show notes that cite the current one |
+| `:PKMTag add <tag> [note=<ref>]` | Add a tag to the current note (or to `note=<ref>` on disk) |
+| `:PKMTag remove <tag> [note=<ref>]` | Remove a tag |
+| `:PKMTag merge` | Merge one or more tags into a target tag |
+| `:PKMTags add\|remove\|rename <tag>` | The same across **all** notes, with a change-list confirm |
+
+### Citations and Links — `:PKMCite <verb>`
+
+| Command | Description |
+|---|---|
+| `:PKMCite [add] <target>` | Cite a note from the current one (bare = picker) |
+| `:PKMCite remove [target]` | Remove a citation (bare = picker over what this note cites) |
+| `:PKMCite insert` | Insert a citation at the cursor |
+| `:PKMCite goto` | Jump to the note under the cursor |
+| `:PKMCite update` | Rebuild citation frontmatter for the current buffer |
+| `:PKMCite link` | Insert a link to another note |
+| `:PKMCite follow` | Follow the link/citation under the cursor |
+| `:PKMCite backlinks` | Show notes that cite the current one |
 
 Inserting a citation automatically updates `cites` in the current note and `cited_by` in the cited note. The picker scores notes by active view and shared tags, prefixing contextually relevant results with `~`. In Telescope, `<C-v>` toggles a view-only mode.
 
-### Browse and Search
+### Browse and Search — `:PKMBrowse <verb>`
 
 | Command | Description |
 |---|---|
 | `:PKMBrowse [expr]` | Browse notes with an optional filter expression |
-| `:PKMTags` | Browse notes by tag |
-| `:PKMBrowseRecent` | Browse recently modified notes |
-| `:PKMOrphans` | Show notes with no tags, no citations, and no matching view |
+| `:PKMBrowse tags` | Browse notes by tag |
+| `:PKMBrowse recent [n]` | Browse recently modified notes |
+| `:PKMBrowse orphans` | Show notes with no tags, no citations, and no matching view |
 
 Filter examples: `tag:math AND title:fourier`, `tag:physics OR tag:math`, `filename:0042`, `NOT tag:draft`.
 
@@ -94,46 +99,53 @@ Views are named filter expressions stored in `views.json` at your notes root. Th
 
 | Command | Description |
 |---|---|
-| `:PKMViews` | Browse all views in a tree picker |
 | `:PKMView [name]` | Open a named view |
-| `:PKMViewNew` | Create a view — prompts for a simple view or a subproject |
-| `:PKMViewUpdate [name]` | Edit, rename, or reparent a view |
-| `:PKMViewLast` | Reopen the last activated view |
-| `:PKMViewSidebar [name]` | Toggle the persistent sidebar |
-| `:PKMViewEdit` | Open `views.json` directly |
-| `:PKMViewDelete [name]` | Remove a view |
-| `:PKMExportView [name]` | Export a named view's notes to a folder |
+| `:PKMView list` | Browse all views in a tree picker |
+| `:PKMView add\|remove <view> [note=<ref>]` | Add/remove a note to/from a view |
+| `:PKMView new` | Create a view — prompts for a simple view or a subproject |
+| `:PKMView update [name]` | Edit or reparent a view |
+| `:PKMView rename <old> <new>` | Rename a view |
+| `:PKMView last` | Reopen the last activated view |
+| `:PKMView sidebar [name]` | Toggle the persistent sidebar |
+| `:PKMView edit` | Open `views.json` directly |
+| `:PKMView delete [name]` | Remove a view |
+| `:PKMView export [name]` | Export a named view's notes to a folder |
 
 **Sidebar keymaps:** `<CR>` enter view or open note · `b` / `<C-b>` back to views overview · `/` scoped search within current view · `r` refresh · `q` close.
 
-### Export
+### Export — `:PKMExport`
 
 | Command | Description |
 |---|---|
-| `:PKMExport` | Interactive: filter form → picker → destination |
-| `:PKMExportView [name]` | Export a named view directly (no filter form) |
+| `:PKMExport [simple\|deep]` | Interactive export (bare opens the mode menu) |
+| `:PKMView export [name]` | Export a named view directly (no filter form) |
 
-### Markdown Editing
-
-| Command | Description |
-|---|---|
-| `:PKMHeaderAppend` | Duplicate current header with its counter incremented, append at EOF |
-| `:[count]PKMHeaderNext [same\|h1-h6]` | Jump to the next header — any level, or the level given (a bare number is the count) |
-| `:[count]PKMHeaderPrev [same\|h1-h6]` | Same, backwards |
-| `:PKMHeaderLevelUp` / `:PKMHeaderLevelDown` | Shift header level in range (default: whole buffer) |
-| `:PKMRenumberList` | Renumber an ordered sequence in range or current paragraph |
-| `:PKMConvertList` | Convert list style in range or current paragraph |
-
-### Explorer, Trash and Utilities
+### Markdown Editing — `:PKMHeader` · `:PKMList`
 
 | Command | Description |
 |---|---|
-| `:PKMExplorer` | Toggle the explorer (sidebar + buffer panel) |
-| `:PKMMode` | Toggle PKM mode (explorer + index + syntax) |
-| `:PKMBuffers` | Toggle a persistent bottom panel listing open buffers |
-| `:PKMRestoreNote` | Browse and restore notes from the trash |
-| `:PKMEmptyTrash` | Permanently delete all trashed notes |
+| `:PKMHeader append` | Duplicate current header with its counter incremented, append at EOF |
+| `:PKMHeader next\|prev [same\|h1-h6] [count]` | Jump to next/prev header — any level, or the level given; a bare number is the count |
+| `:PKMHeader levelup` / `:PKMHeader leveldown` | Shift header level in range (default: whole buffer) |
+| `:PKMList renumber` | Renumber an ordered sequence in range or current paragraph |
+| `:PKMList convert [to_ordered\|to_unordered]` | Convert list style in range or current paragraph |
+
+The header-motion **keymaps** (`]h` / `[h` by default) still take a Vim count
+(`3]h`); on the command, the count is an argument (`:PKMHeader next 3`).
+
+### Panels, Trash and Utilities — `:PKMPanel` · `:PKMTrash`
+
+| Command | Description |
+|---|---|
+| `:PKMPanel [explorer]` | Toggle the explorer (sidebar + buffer panel) |
+| `:PKMPanel buffers` | Toggle a persistent bottom panel listing open buffers |
+| `:PKMPanel sidebar [name]` | Toggle the view sidebar |
+| `:PKMPanel mode [on\|off]` | Toggle PKM mode (explorer + index + syntax) |
+| `:PKMTrash restore` | Browse and restore notes from the trash |
+| `:PKMTrash empty` | Permanently delete all trashed notes |
+| `:PKMCheck` | Audit the vault (frontmatter, citation graph, numbering, vault refs) |
 | `:PKMStats` | Show note statistics |
+| `:PKMToggleAutoSync` | Toggle automatic reference synchronization |
 
 ### Vaults
 
@@ -145,14 +157,14 @@ active vault is a *name* rather than a path: see **Configuration** below.
 | Command | Description |
 |---|---|
 | `:PKMVault[!] [name]` | Switch the active vault (no argument lists them; `!` also makes it the default) |
-| `:PKMVaultNew[!] <name>` | Create a vault: folder, skeleton and registry entry (`!` for no git repository) |
-| `:PKMVaultRename <from> <to>` | Rename a vault, keeping its number |
-| `:PKMVaultRenumber <name> <n>` | Renumber a vault, keeping its name |
-| `:PKMVaultUnregister [name]` | Move a vault out of the registry into `Unregistered/` (always confirms) |
-| `:PKMVaultAdopt [folder]` | Register a folder as a vault, contents untouched |
+| `:PKMVault[!] new <name>` | Create a vault: folder, skeleton and registry entry (`!` for no git repository) |
+| `:PKMVault rename <from> <to>` | Rename a vault, keeping its number |
+| `:PKMVault renumber <name> <n>` | Renumber a vault, keeping its name |
+| `:PKMVault unregister [name]` | Move a vault out of the registry into `Unregistered/` (always confirms) |
+| `:PKMVault adopt [folder]` | Register a folder as a vault, contents untouched |
 
 Renaming and renumbering move the folder and touch no note. Unregistering moves
-the folder intact — **no command here deletes a note**; `:PKMVaultAdopt` is the
+the folder intact — **no command here deletes a note**; `:PKMVault adopt` is the
 way back. Both refuse while a buffer under the vault has unsaved changes.
 
 With more than one vault registered, the buffer panel prefixes each note with
@@ -188,7 +200,7 @@ require('pkm').setup({
   -- Two optional overrides, most specific first: $PKM_VAULT for one session,
   -- and `vault = 'Personal'` for one machine or profile.
   --
-  -- On the very first run the registry does not exist yet: `:PKMVaultAdopt`
+  -- On the very first run the registry does not exist yet: `:PKMVault adopt`
   -- registers the folders that are already there, without moving them, and the
   -- first one registered becomes the default.
 
@@ -235,20 +247,20 @@ require('pkm').setup({
 ## Views Quick Start
 
 ~~~
-:PKMViewNew
+:PKMView new
 " View type: Simple view
 " Name: physics
 " Filter: tag:physics AND NOT tag:draft
 
 :PKMView physics
 
-:PKMViewNew
+:PKMView new
 " View type: Subproject
 " Name: physics-problems
 " Parent: physics
 " Filter: tag:problem
 
-:PKMViewSidebar physics
+:PKMView sidebar physics
 ~~~
 
 Views are stored in `views.json` alongside your notes and can be version-controlled with them.

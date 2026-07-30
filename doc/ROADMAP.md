@@ -217,11 +217,16 @@ v1.13.0 MINOR  Command clearup, part 1 — contexts + aliases  ✅ released and
         58 old names kept as working aliases. The :PKM<TAB> list does not shrink
         yet. Detail in doc/CHANGELOG.md.
 
-(next)  Command clearup, part 2 (v1.14.0) — delete the aliases (where :PKM<TAB>
-        finally shrinks), after homing :PKMTags' batch/rename half on :PKMTag
-        and reserving the verbs as names. Candidate to fold in: give the
-        add/remove tag panel a Telescope picker (see Known limitations). Then
-        the evaluations against the clean surface.
+v1.14.0 MINOR  Command clearup, part 2 — delete the aliases  ⏳ code complete on
+        `dev`, awaiting its smoke route (note 0275); tag after. 46 aliases
+        removed; :PKM<TAB> lists 15 commands. :PKMTags repurposed as the
+        vault-wide bulk tag command; :PKMVault verbs reserved as names. Detail
+        in doc/CHANGELOG.md.
+
+(next)  Evaluations — drive the vault with Claude on real tasks against the
+        clean ~15-command surface, no skill, recording where it goes wrong; the
+        findings decide what verbs the contexts still need. (The first, informal
+        run is the baseline — see [[pkm-eval-first-run]].)
 ```
 
 **The order from here, and why it is this order.** *Reordered 29/7/2026: the
@@ -236,11 +241,10 @@ when the clearup design was still open; it no longer is.*
     argument form, opening with the shared parser. The last version that adds
     commands as new top-level `PKM*` names; from here new features add *verbs to
     contexts*.
-2.  **Command clearup — contexts and verbs.** In progress. 58 names → 11
-    contexts, the verb carrying the action. Two versions: **v1.13.0** (done on
-    `dev`) introduced the contexts with the old names kept as aliases; **v1.14.0**
-    deletes the aliases — the `:PKM<TAB>` list only shrinks at the second, but the
-    clean surface is usable from the first. Detail below.
+2.  **Command clearup — contexts and verbs.** ✅ done on `dev`. 64 names → 15,
+    the verb carrying the action. **v1.13.0** introduced the contexts with the
+    old names kept as aliases; **v1.14.0** deleted the aliases — the `:PKM<TAB>`
+    list shrank at the second. Detail below.
 3.  **Evaluations.** Drive the vault with Claude on real tasks, **without** a
     skill, against the new context surface, recording where it goes wrong. What
     it finds — a missing verb, a confusing one — is added to the right context,

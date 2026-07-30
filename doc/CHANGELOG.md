@@ -70,6 +70,45 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
+## [1.14.0] - 30/7/2026 — code complete on `dev`, **not tagged**
+
+*The command clearup, part 2: delete the aliases. `:PKM<TAB>` now lists **15**
+commands — eleven verb-contexts (`:PKMNote`, `:PKMTag`, `:PKMCite`, `:PKMView`,
+`:PKMVault`, `:PKMBrowse`, `:PKMPanel`, `:PKMHeader`, `:PKMList`, `:PKMTrash`,
+`:PKMExport`) and four standalone (`:PKMCheck`, `:PKMStats`, `:PKMToggleAutoSync`,
+`:PKMTags`) — instead of 64. Awaiting the smoke route
+(`00 - NotesTeste/03-Consolidated/0275_note_smoke-v1140-o-corte-dos-aliases.md`)
+run in the real config; the tag is cut after it passes.*
+
+### Removed
+
+-   **The 46 alias commands** the previous version kept (`:PKMNewNote`,
+    `:PKMRenameNote`, `:PKMAddTag`, `:PKMUncite`, `:PKMViewNew`, `:PKMVaultNew`,
+    …). Every operation is now `:PKM<Context> <verb>`. Callers were migrated to
+    the verb forms first — keymaps, the two internal `vim.cmd('PKMViewNew')`
+    calls, the whole test suite, and every user-facing message — so the surface
+    shrank without a functional gap.
+
+### Changed
+
+-   **`:PKMTags` is now the vault-wide bulk tag command**, no longer an alias:
+    singular `:PKMTag` acts on one note (current buffer, or `note=<ref>` on
+    disk); plural `:PKMTags add|remove|rename <tag>` acts across **all** notes
+    with the change-list confirm. Its browse half is `:PKMBrowse tags`.
+-   **`vault.validate_name` reserves the `:PKMVault` verbs** (new/rename/renumber/
+    unregister/adopt) as names, the way it already reserves `Unregistered`, so a
+    vault can't be shadowed by a verb.
+-   **README, and the source/messages throughout, point at the verb forms.** The
+    command reference is rewritten context by context.
+
+### Known limitations
+
+-   The add/remove tag panel is still the built-in list, not a Telescope picker
+    (carried from v1.13.0). And the stale `PKMViewNewSub` references in
+    `views.lua` name a command that never existed — a separate cleanup.
+
+---
+
 ## [1.13.0] - 30/7/2026
 
 *The command clearup, part 1: introduce the verb-contexts, keep every old name
