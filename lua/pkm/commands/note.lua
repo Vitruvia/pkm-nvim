@@ -5,18 +5,13 @@
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
 -- Creation, file operations, conversion/promotion, and the title field:
--- everything that makes, names or reshapes a single note.
---
--- The whole lifecycle is reached two ways. `:PKMNote <verb>` is the context
--- form the command clearup introduces — `new`, `rename`, `delete`, `convert`,
--- `promote`, `transpose`, `changetype`, `settitle`, `import`, plus `relative`,
--- `journal`, `scratch`. The original per-operation names (`:PKMNewNote`,
--- `:PKMRenameNote`, …) stay as aliases; they will be removed once the context
--- form has shipped. Both drive the same cores, so neither can drift from the
--- other. `:PKMNote new` is the one safe creation path: `pkm.notes.create_new_note`
--- allocates the next number, writes schema-correct frontmatter, keeps the graph
--- in step and — with `by=<agent>` — stamps the authorship marker. No argument
--- is the friendly prompt, exactly as before, so human use is untouched.
+-- everything that makes, names or reshapes a single note, under one command.
+-- `:PKMNote <verb>` — new, relative, journal, scratch, rename, delete, import,
+-- convert, promote, transpose, changetype, settitle. No argument to `new` is
+-- the friendly prompt; `:PKMNote new … by=<agent>` is the one safe creation
+-- path — `pkm.notes.create_new_note` allocates the next number, writes
+-- schema-correct frontmatter, keeps the graph in step, and stamps the
+-- authorship marker.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands
@@ -24,12 +19,10 @@
 
 local focus_main_win = require('pkm.commands.shared').focus_main_win
 
---- Create a note from a command's parsed arguments. Shared by `:PKMNewNote` and
---- `:PKMNote new`, which is what keeps the two forms one behaviour.
---- The type comes from a closed set and the placement is a side or a window
---- number, so neither can be mistaken for the other; both are optional and
---- order-free. `title=` and `by=` are named values already split out by the
---- parser.
+--- Create a note from `:PKMNote new`'s parsed arguments. The type comes from a
+--- closed set and the placement is a side or a window number, so neither can be
+--- mistaken for the other; both are optional and order-free. `title=` and `by=`
+--- are named values already split out by the parser.
 ---@param positional string[]  the words after the verb (types, placements)
 ---@param named table          { title?, by? }
 local function act_new(positional, named)
@@ -59,9 +52,6 @@ local M = {}
 
 function M.register()
 
-  -- ---------------------------------------------------------------------------
-  -- :PKMNote — the context form: one verb per lifecycle operation
-  -- ---------------------------------------------------------------------------
   local NOTE_VERBS = {
     'new', 'relative', 'journal', 'scratch', 'rename', 'delete',
     'import', 'convert', 'promote', 'transpose', 'changetype', 'settitle',
@@ -122,106 +112,6 @@ function M.register()
       return vim.tbl_filter(function(t) return t:lower():find(lead, 1, true) == 1 end, out)
     end,
     desc = 'The note lifecycle: :PKMNote <verb> (new/rename/delete/convert/promote/…); bare = new',
-  })
-
-  -- ---------------------------------------------------------------------------
-  -- Note creation (aliases)
-  -- ---------------------------------------------------------------------------
-  -- :PKMNewNote [note|agg|bib] [left|right|N] — the placement is an argument
-  -- rather than a second command. Both are optional and order-free: the type
-  -- comes from a closed set and the placement is a side or a window number, so
-  -- neither can be mistaken for the other.
-  -- `title=` is the one named value: a title that comes with it skips the
-  -- prompt, so `:PKMNewNote note title=Foo` creates without interaction. It is a
-  -- single token, because Neovim splits arguments on whitespace before the
-  -- callback sees them; a spaced title is set afterwards with :PKMSetTitle, or
-  -- through the prompt.
-  vim.api.nvim_create_user_command('PKMNewNote', function(opts)
-    local p = require('pkm.args').parse(opts, { named = true })
-    act_new(p.positional, p.named)
-  end, {
-    nargs    = '*',
-    complete = function(lead)
-      local out = {}
-      for _, tok in ipairs({ 'note', 'agg', 'bib', 'left', 'right', 'title=', 'by=' }) do
-        if tok:find(lead:lower(), 1, true) == 1 then out[#out + 1] = tok end
-      end
-      return out
-    end,
-    desc = 'Create a note; optional type, placement, title=<text> and by=<agent>',
-  })
-
-  -- :PKMNewRelative — new note seeded with the current note's tags, so it lands
-  -- in the same views without retyping its classification.
-  vim.api.nvim_create_user_command('PKMNewRelative', function(opts)
-    require('pkm.notes').create_relative_note(opts.args ~= '' and opts.args or nil)
-  end, {
-    nargs    = '?',
-    complete = function() return { 'note', 'agg', 'bib' } end,
-    desc     = "Create a note inheriting the current note's tags",
-  })
-
-  vim.api.nvim_create_user_command('PKMNewJournal', function()
-    focus_main_win()
-    require('pkm.journal').create_entry(true)
-  end, {})
-
-  vim.api.nvim_create_user_command('PKMNewScratchpad', function()
-    focus_main_win()
-    require('pkm.notes').create_scratchpad()
-  end, {})
-
-  -- ---------------------------------------------------------------------------
-  -- Note file operations (aliases)
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMDeleteNote', function()
-    require('pkm').delete_note_safely()
-  end, {})
-
-  vim.api.nvim_create_user_command('PKMImport', function()
-    focus_main_win()
-    require('pkm.notes').import_note()
-  end, { desc = 'Import current file into PKM system' })
-
-  -- The whole argument string is the new name, so a spaced name needs no
-  -- quoting; with no argument it prompts. The number and type prefix of a
-  -- consolidated note are kept either way.
-  vim.api.nvim_create_user_command('PKMRenameNote', function(opts)
-    require('pkm.notes').rename_note(opts.args ~= '' and opts.args or nil)
-  end, {
-    nargs = '*',
-    desc  = 'Rename the current note (argument = new name; prompts if none)',
-  })
-
-  -- ---------------------------------------------------------------------------
-  -- Note conversion and promotion (aliases)
-  -- ---------------------------------------------------------------------------
-  vim.api.nvim_create_user_command('PKMConvertNote', function()
-    require('pkm.notes').convert_note()
-  end, { desc = 'Convert current note to a different type' })
-
-  vim.api.nvim_create_user_command('PKMPromote', function()
-    require('pkm.notes').promote_note()
-  end, { desc = 'Promote scratchpad to consolidated note or journal' })
-
-  vim.api.nvim_create_user_command('PKMTranspose', function()
-    require('pkm.notes').transpose_note()
-  end, { desc = 'Move note to a different PKM folder and convert it' })
-
-  vim.api.nvim_create_user_command('PKMChangeType', function()
-    require('pkm.notes').change_note_type()
-  end, { desc = 'Change the type of a consolidated note (note/agg/bib)' })
-
-  -- ---------------------------------------------------------------------------
-  -- Frontmatter: the title field (buffer-only; no disk write) (alias)
-  -- ---------------------------------------------------------------------------
-  -- The whole argument string is the title, so a spaced title needs no quoting;
-  -- with no argument it prompts, seeded with the current title.
-  vim.api.nvim_create_user_command('PKMSetTitle', function(opts)
-    require('pkm.notes').set_title(opts.args ~= '' and opts.args or nil)
-  end, {
-    nargs = '*',
-    desc  = 'Set the title frontmatter field (argument = title; prompts if none; no disk write)',
   })
 
 end

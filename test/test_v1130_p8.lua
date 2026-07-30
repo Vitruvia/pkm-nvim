@@ -33,10 +33,6 @@ local CONTEXTS = {
 }
 local STANDALONE = { 'PKMCheck', 'PKMStats', 'PKMToggleAutoSync' }
 local ALIASES = {
-  -- note
-  'PKMNewNote', 'PKMNewRelative', 'PKMNewJournal', 'PKMNewScratchpad',
-  'PKMDeleteNote', 'PKMImport', 'PKMRenameNote', 'PKMConvertNote', 'PKMPromote',
-  'PKMTranspose', 'PKMChangeType', 'PKMSetTitle',
   -- tag
   'PKMTags', 'PKMMergeTags', 'PKMAddTag', 'PKMRemoveTag',
   -- cite
