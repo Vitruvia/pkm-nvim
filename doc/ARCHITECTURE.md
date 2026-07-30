@@ -19,7 +19,10 @@ pkm.nvim/
 │   ├── init.lua        # Orchestration: setup, delete_note_safely, sync autocmds
 │   ├── config.lua      # Default config table and resolution logic (pure data)
 │   ├── utils.lua       # Shared cross-platform utilities: path join, OS flags, notify
-│   ├── commands.lua    # All :PKM* command registration (handlers lazy-require)
+│   ├── commands/       # :PKM* registration, one file per context (handlers lazy-require)
+│   │   ├── init.lua     #   wires every context; `register()` is the single entry point
+│   │   ├── shared.lua   #   helpers used by more than one context (focus_main_win)
+│   │   └── …            #   note, tag, cite, browse, view, vault, trash, list, header, panel, export, misc
 │   ├── keymaps.lua     # All keymap wiring (receives resolved config)
 │   ├── yaml.lua        # YAML frontmatter parsing and generation — handle carefully
 │   ├── timestamp.lua   # Timestamp creation, parsing, formatting
@@ -83,8 +86,14 @@ used by the index build, where the VimL round trip per file was measurable),
 (shared display helpers used by `ui.lua` and `views.lua`), `utils.is_windows`,
 `utils.is_wsl`. No `pkm.*` dependencies — safe to require from anywhere.
 
-**commands.lua** — registers all `:PKM*` commands. Handlers use lazy `require`.
-Contains `browse_complete` (filter DSL autocomplete for `:PKMBrowse`).
+**commands/** — registers all `:PKM*` commands, split one file per context
+(`note`, `tag`, `cite`, `browse`, `view`, `vault`, `trash`, `list`, `header`,
+`panel`, `export`, `misc`). `init.lua` requires each and exposes the single
+`register()` that `pkm.init` calls, so `require('pkm.commands')` is unchanged.
+`shared.lua` holds the cross-context helpers (`focus_main_win`); each context
+keeps its own (e.g. `browse.lua` holds `browse_complete`, the `:PKMBrowse`
+filter-DSL autocomplete). Handlers use lazy `require`. This is the surface the
+command clearup turns into verb-contexts, one file at a time.
 
 **keymaps.lua** — `register(config)`. Receives resolved config; keymap strings
 needed at registration time. Registers both normal and visual mode bindings for
