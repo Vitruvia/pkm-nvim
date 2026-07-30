@@ -790,10 +790,19 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
     -   **No new typed commands.** The API is reached from Lua; at most one
         dispatcher would ever be added, and only if a real need appears.
 
-    Sequencing: it comes after the bulk-operation phases it would expose (v1.8.0
-    Ph5–Ph6), and it carries the still-open half of *Command clearup* (Design
-    Question 4) — deciding which of the 47 registrations survive as typed
-    commands once a programmatic path exists.
+    Sequencing and status (updated 30/7/2026): the *Command clearup* is done
+    (v1.13.0–v1.14.0), so the typed surface it would sit beside is settled — 15
+    commands, one verb-context each. **`pkm.api` is registered as a plan but
+    deliberately not started**: the author is still writing up, in scratch notes,
+    the expectations for *how* an assistant should operate against the vault, and
+    the API's shape (which operations, what a write reports, how an agent
+    discovers what it may do) follows those expectations. It is the base layer of
+    the agent-protocol stack ([[pkm-agent-protocol-direction]]); the first,
+    informal evaluation ([[pkm-eval-first-run]]) is its motivating finding — given
+    a real task and no protocol, the assistant used **zero** PKM commands and
+    hand-rolled notes on the filesystem. Until the expectations land, work
+    proceeds on the command-creating features below, which the API will later
+    wrap.
 
 5.  **Misc** (currently set to be done in the active development's Phase X,
     meaning the LLM assistant should decide when it is best to implement them):
