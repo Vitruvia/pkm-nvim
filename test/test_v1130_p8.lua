@@ -25,13 +25,14 @@ local root = vim.fn.tempname() .. '/Note-Vault/00 - Test'
 vim.fn.mkdir(root .. '/03-Consolidated', 'p')
 pkm.setup({ root_path = root })
 
--- The whole expected roster after the alias deletion: eleven verb-contexts and
+-- The whole expected roster after the alias deletion: twelve verb-contexts and
 -- four standalone commands — the three loners, plus :PKMTags, the vault-wide
 -- bulk tag command kept when its per-note siblings became :PKMTag verbs. No
--- aliases remain.
+-- aliases remain. (:PKMAgentProtocol joined the contexts with the pkm.api work —
+-- it installs the pkm-notes agent skill.)
 local CONTEXTS = {
   'PKMNote', 'PKMTag', 'PKMCite', 'PKMView', 'PKMVault', 'PKMBrowse',
-  'PKMPanel', 'PKMHeader', 'PKMList', 'PKMTrash', 'PKMExport',
+  'PKMPanel', 'PKMHeader', 'PKMList', 'PKMTrash', 'PKMExport', 'PKMAgentProtocol',
 }
 local STANDALONE = { 'PKMCheck', 'PKMStats', 'PKMToggleAutoSync', 'PKMTags' }
 local ALIASES = {}
@@ -87,6 +88,7 @@ local VERB_AUDIT = {
   { 'PKMList ',   { 'convert', 'renumber' } },
   { 'PKMTrash ',  { 'restore', 'empty' } },
   { 'PKMExport ', { 'simple', 'deep' } },
+  { 'PKMAgentProtocol ', { 'install', 'update', 'path' } },
 }
 
 for _, row in ipairs(VERB_AUDIT) do

@@ -6,7 +6,7 @@
 --
 -- The :PKM* surface used to live in one file; it is now split into one module
 -- per command context (note, tag, cite, browse, view, vault, trash, list,
--- header, panel, export, misc), each exposing its own `register()`. This file
+-- header, panel, export, agent, misc), each exposing its own `register()`. This file
 -- wires them together and preserves the single entry point `register()` that
 -- pkm.init calls, so `require('pkm.commands')` behaves exactly as before.
 --
@@ -25,7 +25,7 @@ local M = {}
 -- of adding or moving a context small and readable.
 local CONTEXTS = {
   'note', 'tag', 'cite', 'browse', 'view', 'vault',
-  'trash', 'list', 'header', 'panel', 'export', 'misc',
+  'trash', 'list', 'header', 'panel', 'export', 'agent', 'misc',
 }
 
 --- Register all :PKM* user commands. Called once by init.lua during setup.
