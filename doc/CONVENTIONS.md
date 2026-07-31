@@ -78,6 +78,40 @@ resolve".
 
 ---
 
+## Assistant-Authored Notes
+
+Notes an LLM assistant creates or edits follow extra conventions, so authorship
+and history stay legible to both the human and future assistants. The *when* and
+*why* live in `doc/AGENT_PROTOCOL.md`; the *formats* are here.
+
+**Authorship markers** (full rules in `AGENT_PROTOCOL.md` § 7):
+-   Filename marker `NNNN_<type>_By<Author>_<slug>.md` — for an assistant-created
+    note in a vault **other than** the assistant's own. It is `By<Author>`, no
+    hyphen (e.g. `0007_note_ByClaude_afo-audit.md`).
+-   Tag `by-claude` — on every assistant-*created* note, in any vault including
+    its own.
+-   Comment prefix `By Claude: ` — on every comment the assistant adds to a note
+    it did not author.
+
+**Changelog block.** Every note in the assistant's own vault ends with a short
+changelog the assistant maintains. Each entry names what was added, removed, or
+changed, and why. When it grows long, older entries may be summarised further,
+keeping the most relevant passages verbatim.
+
+**Version/model metadata.** Each such note carries, above the body and outside the
+frontmatter, its version and the model responsible (e.g. `Claude Opus 4.8`). When
+several models edited different passages, name the predominant one followed by
+"and others" and mark each passage's model as a metadata line or comment where it
+fits best; the changelog records the model per edit. Long histories may summarise
+the oldest models (e.g. `Claude Opus < 4.0 and Claude Sonnet < 3`).
+
+**Comment placement.** Prefer the top or bottom of a section over inline. Where a
+comment must sit near specific content, place it at the start or end of the
+paragraph or block, not mid-sentence, so user notes stay uncluttered. (The
+`((...))` meta-comment form is defined above.)
+
+---
+
 ## Rationale
 
 These conventions are intentionally minimal. Their purpose is to reduce the

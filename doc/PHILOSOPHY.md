@@ -99,7 +99,9 @@ mechanical work.
 
 **Corollary:** Auto-summarization, automated note generation, and features that
 replace rather than support the user's thinking are out of scope, or must be
-explicitly opt-in with the user fully aware of the trade-off.
+explicitly opt-in with the user fully aware of the trade-off. This restriction
+governs the user's own knowledge base; an assistant maintaining its own vault as
+memory is addressed in Principle 5.
 
 ---
 
@@ -120,6 +122,16 @@ without replacing cognitive work: surfacing related notes, suggesting
 citations, or checking link integrity are examples consistent with this
 principle, as are AI and automation that reduces work-load in "mindless" tasks.
 Automatic summarization or automatic note generation are not.
+
+**Whose knowledge base.** The line these corollaries draw is *whose* knowledge is
+being built, not who is typing. Automatic summarization and automatic note
+generation are out of scope **in the user's knowledge vault**, where they would
+replace the user's own cognitive work (Principle 4). They are **in scope in an
+assistant's own vault** — the LLM-collaboration vault named in §2 — because that
+vault is the assistant's *memory*, not the user's knowledge base, and building it
+does not do the user's thinking for them. An assistant note that draws on the
+user's private material (journal entries, personal logs) still requires the
+user's explicit, informed authorisation before it is written.
 
 **Corollary:** No feature may introduce a hard dependency on an AI service. AI
 features must be optional enhancements, never required for core functionality.
