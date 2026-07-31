@@ -14,19 +14,8 @@ drifts in Ph2, `:PKMOrphans` and the `bench.lua` separator in Ph3, the absolute
 `original_path` in Ph4 and the `E484` on emptying the trash in Ph5 — the last
 two found while evaluating multi-vault support, along with the one below.)*
 
--   **`PKMCitation` highlighting never matches anything.** The `matchadd`
-    pattern in `syntax.lua` is
-    `\v<(note|bib|journal|scratch)\[[\w\-_]+\>`, and it fails twice over: in a
-    Vim collection `\w` is not a character class (`[\w]` does not match a
-    digit), and under `\v` the `>` is *already* the word boundary, so `\>` is a
-    literal `>`. Verified: the pattern returns no match for `note[0042]`,
-    `note[abc]` or `note[0042]>`, while
-    `\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]` matches `note[0042]` and
-    correctly rejects `nota[0042]`. It fails silently because `matchadd`
-    accepts the regex — it simply never fires. Found 27/7/2026; **fixed on `dev`**
-    (v1.17.0-bound): that corrected pattern is now in `syntax.lua`, exposed as
-    `syntax.citation_pattern` and asserted in `test_v1170_p1.lua`. Moves to the
-    v1.17.0 release entry at close.
+*No open bugs. (The `PKMCitation` highlight bug found 27/7/2026 — the `matchadd`
+regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ### Known limitations
 
@@ -69,6 +58,37 @@ two found while evaluating multi-vault support, along with the one below.)*
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
     ~200+ views.
+
+---
+
+## [1.17.0] - 31/7/2026
+
+*Placement-aware writing and a standing highlight-bug fix, on top of the v1.16.0
+pkm.api stack.*
+
+### Added
+
+-   **`pkm.api.insert_section(path, heading, content, {mode})`** — placement-aware
+    body writing: locate a section by its heading and `append` at its end
+    (default) or `replace` its body, keeping the heading. The section stops at the
+    next same-or-shallower heading, and headings inside code fences do not count
+    (reuses the now-exported `markdown.scan_headings`). Backed by
+    `notes.write_section`; frontmatter preserved, citation graph reconciled,
+    unsaved-buffer guard. In `doc/PKM_API.md` and the skill.
+
+### Fixed
+
+-   **`PKMCitation` highlighting never fired** (standing bug, found 27/7/2026).
+    The `matchadd` regex `\v<…\[[\w\-_]+\>` was doubly wrong — `\w` excludes
+    digits in a Vim collection (dropping ids like `0042`) and `\>` under `\v` is a
+    literal `>`. Now `\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]`, extracted
+    to `syntax.citation_pattern` and asserted in `test_v1170_p1.lua`.
+
+### Changed
+
+-   **`doc/AGENT_PROTOCOL.md` § 5.1** — intra-vault citation guidance: the
+    assistant should build its own vault as a graph (cite between its own notes);
+    only cross-vault links are forbidden.
 
 ---
 

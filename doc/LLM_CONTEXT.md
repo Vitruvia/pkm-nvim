@@ -7,9 +7,12 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.16.0** (released, tagged) — the pkm.api + agent-protocol stack
+## Current version: **v1.17.0** (released, tagged) — placement-aware writing + the citation-highlight fix
 
-*v1.16.0 shipped `require('pkm.api')` (a data-only, headless surface over the
+*v1.17.0 added `api.insert_section` (placement-aware body writing — append/replace
+a named section, reusing the exported `markdown.scan_headings`) and fixed the
+standing `PKMCitation` highlight bug (the `matchadd` regex never fired). It sits
+on v1.16.0, which shipped `require('pkm.api')` (a data-only, headless surface over the
 cores: create/body/cite/tag/find/query/audit/export/…), `doc/AGENT_PROTOCOL.md` +
 `doc/PKM_API.md`, the `pkm-notes` skill and `:PKMAgentProtocol` installer, the
 `/pkm-learning` learning modes, and the `:PKMHeader sibling` next-header (planned

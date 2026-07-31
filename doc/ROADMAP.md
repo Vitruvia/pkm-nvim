@@ -232,6 +232,11 @@ v1.16.0 MINOR  pkm.api + the agent-protocol stack  ✅ released and tagged.
         find → read → write a bodied, authored note — with no raw-file edits, the
         first-run failure reversed. Detail in doc/CHANGELOG.md.
 
+v1.17.0 MINOR  Placement-aware writing + the citation-highlight fix  ✅ released
+        and tagged. api.insert_section (append/replace a named section, reusing
+        the exported markdown.scan_headings); the standing PKMCitation highlight
+        bug fixed (the matchadd regex never fired). Detail in doc/CHANGELOG.md.
+
 The evaluation is now the loop that drives refinement: each run against the real
 vault reports friction (a missing op, a discovery gap), which becomes the next
 increment. Baseline: [[pkm-eval-first-run]].
