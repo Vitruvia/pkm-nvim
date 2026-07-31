@@ -138,6 +138,11 @@ for vault notes proceeds regardless.
 
 - **The body is yours to write; the frontmatter and citations are not.** Add prose
   with `create(body=…)`, `set_body`, `append_body`; add citations with `cite`.
+- **Build your vault as a graph, not a pile.** When your own notes relate, link
+  them with `cite` *within your vault* — that interconnection is what makes the
+  vault more than flat memory and what lets structured retrieval (RAG/OKF) work.
+  (Only *cross-vault* links are forbidden; linking your own notes to each other is
+  encouraged.)
 - **Place content where it belongs** — the right section or a note-end block, not
   scattered inline. To place precisely, read the note and rewrite the body with
   your addition in position via `set_body`.

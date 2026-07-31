@@ -223,10 +223,18 @@ v1.14.0 MINOR  Command clearup, part 2 — delete the aliases  ✅ released and
         vault-wide bulk tag command; :PKMVault verbs reserved as names. Detail
         in doc/CHANGELOG.md.
 
-(next)  Evaluations — drive the vault with Claude on real tasks against the
-        clean ~15-command surface, no skill, recording where it goes wrong; the
-        findings decide what verbs the contexts still need. (The first, informal
-        run is the baseline — see [[pkm-eval-first-run]].)
+v1.16.0 MINOR  pkm.api + the agent-protocol stack  ✅ released and tagged.
+        require('pkm.api') (a data-only, headless surface over the cores),
+        doc/AGENT_PROTOCOL.md + doc/PKM_API.md, the pkm-notes skill +
+        :PKMAgentProtocol installer, the /pkm-learning modes, and :PKMHeader
+        sibling (planned v1.15.0, shipped here). Validated by a real evaluation:
+        with the skill installed the assistant drove the vault through pkm.api —
+        find → read → write a bodied, authored note — with no raw-file edits, the
+        first-run failure reversed. Detail in doc/CHANGELOG.md.
+
+The evaluation is now the loop that drives refinement: each run against the real
+vault reports friction (a missing op, a discovery gap), which becomes the next
+increment. Baseline: [[pkm-eval-first-run]].
 ```
 
 **The order from here, and why it is this order.** *Reordered 29/7/2026: the
@@ -801,19 +809,15 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
     -   **No new typed commands.** The API is reached from Lua; at most one
         dispatcher would ever be added, and only if a real need appears.
 
-    Sequencing and status (updated 30/7/2026): the *Command clearup* is done
-    (v1.13.0–v1.14.0), so the typed surface it would sit beside is settled — 15
-    commands, one verb-context each. **`pkm.api` is registered as a plan but
-    deliberately not started**: the author is still writing up, in scratch notes,
-    the expectations for *how* an assistant should operate against the vault, and
-    the API's shape (which operations, what a write reports, how an agent
-    discovers what it may do) follows those expectations. It is the base layer of
-    the agent-protocol stack ([[pkm-agent-protocol-direction]]); the first,
-    informal evaluation ([[pkm-eval-first-run]]) is its motivating finding — given
-    a real task and no protocol, the assistant used **zero** PKM commands and
-    hand-rolled notes on the filesystem. Until the expectations land, work
-    proceeds on the command-creating features below, which the API will later
-    wrap.
+    Status: ✅ **shipped in v1.16.0** (`lua/pkm/api.lua`). The three-layer stack
+    is built and validated — `require('pkm.api')` (data-only, headless), the
+    policy in `doc/AGENT_PROTOCOL.md` + reference in `doc/PKM_API.md`, and the
+    `pkm-notes` skill installed by `:PKMAgentProtocol`. The motivating finding
+    ([[pkm-eval-first-run]] — a protocol-less assistant used **zero** PKM commands
+    and hand-rolled notes) is reversed: a real eval had the assistant drive the
+    vault through the API end to end. Refinement now runs off the evaluation loop
+    (next: section-targeted insertion; richer intra-vault graphs). Detail in
+    doc/CHANGELOG.md.
 
 5.  **Misc** (currently set to be done in the active development's Phase X,
     meaning the LLM assistant should decide when it is best to implement them):

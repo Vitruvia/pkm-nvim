@@ -141,7 +141,11 @@ suppress it. What the vault adds is *extent and structure*: knowledge kept acros
 many disciplines and topics, organised so it can be retrieved by method (RAG,
 OKF, and similar) rather than recalled ad hoc. A quick, local fact belongs in the
 ordinary memory; a body of structured, growing, cross-referenced knowledge
-belongs in the vault. The two are complements, not alternatives.
+belongs in the vault. The two are complements, not alternatives. And the vault
+should be *interconnected*: when the assistant's own notes relate, it cites
+between them (`cite`, within the vault), building a graph rather than a pile of
+isolated notes — that structure is what makes retrieval by method possible. (Only
+*cross-vault* links are forbidden; linking one's own notes is encouraged.)
 
 This is the one place automated note-generation is in scope. It is the
 assistant's *own* knowledge base, not the user's, and `doc/PHILOSOPHY.md` draws

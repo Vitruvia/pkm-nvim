@@ -70,6 +70,60 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 ---
 
+## [1.16.0] - 31/7/2026
+
+*The `pkm.api` layer and the agent-protocol stack — the programmatic surface an
+LLM assistant drives the vault through, and the policy and skill that point it
+there. Validated by a real evaluation: with the skill installed, Claude read the
+vault, discovered a subject that is a **view** (via `find`), wrote a
+schema-correct, authored note **with a body** into its own vault, and never
+grepped a raw file or touched user content — the exact failure of the first,
+protocol-less run (`[[pkm-eval-first-run]]`) reversed. This release also carries
+the global next-header (`:PKMHeader sibling`) planned as v1.15.0, which shipped
+here rather than under its own tag.*
+
+### Added
+
+-   **`lua/pkm/api.lua` — `require('pkm.api')`**, the programmatic surface:
+    returns data, never opens UI, headless-safe, wrapping the existing cores. It
+    covers `create` (with `by=` authorship and a `body`), `set_body`/`append_body`,
+    `delete` (guarded — trashes only agent-authored notes), `cite`/`uncite`/
+    `resolve`, `tag`/`tag_preview`/`tag_note`, `find` (subject search across
+    views + tags + titles, accent-folded), `query`/`get`/`notes`, `views`/
+    `view_members`, `audit`, `collect`/`export`, the vault reads, and the
+    enumerable `actions()`. Every write reports what it changed and keeps the index
+    in step; body writes reconcile the citation graph. Backed by
+    `notes.write_new_note`/`write_body`, the headless write seams.
+-   **`doc/AGENT_PROTOCOL.md`** — the policy: the two-mode model (User / Manager),
+    "always through `pkm.api`", authorship demarcation, the hard no-cross-vault
+    rule, long-term learning modes, and writing-into-notes governance.
+-   **`doc/PKM_API.md`** — the API reference and the headless JSON invocation
+    contract.
+-   **The `pkm-notes` skill** (`skills/pkm-notes/`) and **`:PKMAgentProtocol
+    install|update|path`** (`lua/pkm/skill.lua`, `commands/agent.lua`), which
+    deploys the skill to `~/.claude/skills` and the **`/pkm-learning`** command to
+    `~/.claude/commands`. The twelfth verb-context.
+-   **`:PKMHeader sibling`** — the global next-header: from any sibling it inserts
+    `<prefix>-<max+1>` at the end of the enclosing block (`markdown.append_global_header`).
+
+### Changed
+
+-   **`doc/PHILOSOPHY.md`** — §4/§5 amended: automated note-generation is in scope
+    in the *assistant's own* vault (its memory), out of scope in the user's
+    knowledge base. **`doc/CONVENTIONS.md`** — assistant-authored-note formats.
+-   **Authorship** now stamps three ways on an agent-created note: the
+    `By<Author>` filename marker (other vaults), the `author` frontmatter, and the
+    queryable `by-claude` tag — on both the API and the `:PKMNote new by=` paths.
+
+### Notes
+
+-   Installing the skill is the user's act (`:PKMAgentProtocol install`); the
+    plugin ships the skill and installer, not the deployment.
+-   Cross-vault citations are inert by design and are **not** an operation to
+    consider — the evaluation confirmed the agent respects this.
+
+---
+
 ## [1.14.0] - 30/7/2026
 
 *The command clearup, part 2: delete the aliases. `:PKM<TAB>` now lists **15**

@@ -7,13 +7,18 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.14.0** (released, tagged) · **v1.15.0** in progress on `dev` (parallel features)
+## Current version: **v1.16.0** (released, tagged) — the pkm.api + agent-protocol stack
 
-*v1.13.0–v1.14.0 finished the command clearup: the surface is **15 commands**
-(11 verb-contexts + `:PKMCheck`/`:PKMStats`/`:PKMToggleAutoSync`/`:PKMTags`),
-no aliases. v1.15.0 is a parallel-feature batch (Ph1: `:PKMHeader sibling`) built
-while `pkm.api`/protocol wait on the author's expectations — see `doc/ROADMAP.md`
-Release Plan item 4 (feature queue) and Near goals #4 (pkm.api).*
+*v1.16.0 shipped `require('pkm.api')` (a data-only, headless surface over the
+cores: create/body/cite/tag/find/query/audit/export/…), `doc/AGENT_PROTOCOL.md` +
+`doc/PKM_API.md`, the `pkm-notes` skill and `:PKMAgentProtocol` installer, the
+`/pkm-learning` learning modes, and the `:PKMHeader sibling` next-header (planned
+as v1.15.0, shipped here). Validated by a real evaluation — with the skill
+installed the assistant drove the vault through pkm.api, discovered a subject that
+is a view via `find`, and wrote an authored, bodied note, with no raw-file edits.
+v1.13.0–v1.14.0 had finished the command clearup; the surface is now **16
+commands** (12 verb-contexts + `:PKMCheck`/`:PKMStats`/`:PKMToggleAutoSync`/
+`:PKMTags`), no aliases.*
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
@@ -33,16 +38,24 @@ Full module-by-module detail (role, key functions, invariants) is owned by
 quick orientation. Module list: `init, config, utils, commands, keymaps, yaml,
 timestamp, citations, notes, journal, ui, telescope, templates, export, filter,
 index, views, panel, mode, syntax, trash, markdown, bench, tags, picker, actions,
-rename, bufsync, vault, args, check`.
+rename, bufsync, vault, args, check, api, skill`.
+
+`api` (v1.16.0) is `require('pkm.api')`, the data-only, headless, no-UI surface an
+LLM assistant drives the vault through — it wraps the cores (never reimplements),
+reports what each write changed, and keeps the index/graph in step. `skill`
+(v1.16.0) installs the `pkm-notes` skill and the `/pkm-learning` command into the
+user's Claude Code dirs. The policy is `doc/AGENT_PROTOCOL.md`; the reference and
+headless JSON contract are `doc/PKM_API.md`.
 
 `commands` (v1.13.0) is a **directory**, not a file: one module per verb-context
-(`note, tag, cite, browse, view, vault, trash, list, header, panel, export,
+(`note, tag, cite, browse, view, vault, trash, list, header, panel, export, agent,
 misc`), wired by `commands/init.lua`, which exposes the single `register()`
 `pkm.init` calls — so `require('pkm.commands')` is unchanged. Each context is
-`:PKM<Context> <verb>` dispatched through `args`. **v1.14.0 deleted the aliases**:
-the surface is 15 commands (11 contexts + `:PKMCheck`/`:PKMStats`/
-`:PKMToggleAutoSync` + `:PKMTags`, the vault-wide bulk tag command).
-`commands/shared.lua` holds cross-context helpers.
+`:PKM<Context> <verb>` dispatched through `args`. **v1.14.0 deleted the aliases**;
+**v1.16.0 added `:PKMAgentProtocol`** (the skill installer): the surface is 16
+commands (12 contexts + `:PKMCheck`/`:PKMStats`/`:PKMToggleAutoSync` + `:PKMTags`,
+the vault-wide bulk tag command). `commands/shared.lua` holds cross-context
+helpers.
 
 `args` (v1.12.0) is the one reading of a command's arguments —
 `:PKM<Context>[!] <verb> [positional] [key=value]` → `{verb, positional, named,
