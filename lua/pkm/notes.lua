@@ -257,11 +257,18 @@ function M.create_new_note(note_type, opts)
     frontmatter_data.author = opts.by:sub(1, 1):upper() .. opts.by:sub(2)
   end
 
-  -- Seeded tags (relative note). Normalised through pkm.tags so the new note
-  -- carries exactly what a tag written by :PKMTag add would look like, with no
-  -- duplicates.
-  if type(opts.tags) == "table" and #opts.tags > 0 then
-    local seeded = require('pkm.tags').plan({}, { add = opts.tags })
+  -- Seeded tags (relative note), plus the by-claude authorship tag on an
+  -- agent-created note, so authorship is queryable vault-wide
+  -- (AGENT_PROTOCOL.md § 7) — matching the headless write_new_note, so the
+  -- interactive and programmatic create paths cannot drift. Both go through
+  -- pkm.tags.plan, so the result is normalised and de-duplicated.
+  local seed_tags = {}
+  if type(opts.tags) == "table" then vim.list_extend(seed_tags, opts.tags) end
+  if type(opts.by) == "string" and opts.by ~= '' then
+    seed_tags[#seed_tags + 1] = 'by-claude'
+  end
+  if #seed_tags > 0 then
+    local seeded = require('pkm.tags').plan({}, { add = seed_tags })
     if #seeded > 0 then frontmatter_data.tags = seeded end
   end
 
