@@ -7,12 +7,19 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.17.0** (released, tagged) — placement-aware writing + the citation-highlight fix
+## Current version: **v1.18.0** (released, tagged) — note-lifecycle writes through pkm.api
 
-*v1.17.0 added `api.insert_section` (placement-aware body writing — append/replace
-a named section, reusing the exported `markdown.scan_headings`) and fixed the
-standing `PKMCitation` highlight bug (the `matchadd` regex never fired). It sits
-on v1.16.0, which shipped `require('pkm.api')` (a data-only, headless surface over the
+*v1.18.0 added the note-lifecycle **writes** to `pkm.api`: `api.rename`,
+`api.changetype`, and `api.transpose` (covering promote + transpose), backed by
+three pure headless seams in `notes.lua` (`convert_file`, `changetype_file`,
+`rename_note_at`) — the twins of the interactive commands, which are left
+untouched. Plus the gestor wraps `api.set_membership` / `save_subproject` and the
+vault-wide `api.rename_tag` (subsuming `tags.merge`). A gestor-mode agent can now
+restructure a vault through the surface. It sits on v1.17.0, which added
+`api.insert_section` (placement-aware body writing — append/replace a named
+section, reusing the exported `markdown.scan_headings`) and fixed the standing
+`PKMCitation` highlight bug (the `matchadd` regex never fired), on top of
+v1.16.0, which shipped `require('pkm.api')` (a data-only, headless surface over the
 cores: create/body/cite/tag/find/query/audit/export/…), `doc/AGENT_PROTOCOL.md` +
 `doc/PKM_API.md`, the `pkm-notes` skill and `:PKMAgentProtocol` installer, the
 `/pkm-learning` learning modes, and the `:PKMHeader sibling` next-header (planned

@@ -1350,6 +1350,241 @@ function M.rename_note(new_name)
 end
 
 -- =============================================================================
+-- SECTION: Headless lifecycle seams (agent / pkm.api)
+-- =============================================================================
+-- The pure cores behind promote/transpose, changetype, and rename. Each takes
+-- an explicit path (never the current buffer), reads content from a buffer
+-- holding the file when one exists — so unsaved edits survive — and from disk
+-- otherwise, prompts for nothing, opens no buffer, and returns
+-- `new_path, err, meta`. They are the headless twins of the interactive
+-- functions above, in the mould of write_new_note ↔ create_new_note; the
+-- interactive paths keep their pickers and prompts, these keep the write logic
+-- callable from `nvim --headless` and from pkm.api.
+
+--- Move a note to another PKM type, writing a new file in the target folder,
+--- propagating citations, and (only when asked) deleting the original. The pure
+--- core behind :PKMNote promote and :PKMNote transpose.
+---@param path   string  Absolute path of the source note
+---@param target string  'note' | 'journal' | 'scratchpad'
+---@param opts   table|nil  { subtype?='note'|'agg'|'bib', title?=string, delete_original?=boolean }
+---@return string|nil new_path
+---@return string|nil err
+---@return table|nil  meta  { filename, type, title, original_deleted }
+function M.convert_file(path, target, opts)
+  opts = opts or {}
+  if vim.fn.filereadable(path) ~= 1 then
+    return nil, 'no such file: ' .. path
+  end
+
+  local bufnr = require('pkm.bufsync').buffer_for(path)
+  local lines = bufnr and vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+              or vim.fn.readfile(path)
+  local existing_fm, content_start = yaml.parse_frontmatter(lines)
+  local content = {}
+  for i = content_start, #lines do content[#content + 1] = lines[i] end
+
+  local new_path, new_frontmatter, title
+
+  if target == 'journal' then
+    local ts = timestamp.now()
+    local journal_path = utils.join(config.root_path, config.folders.journal)
+    utils.ensure_dir(journal_path)
+    new_path = utils.join(journal_path, timestamp.create_filename('journal', ts, '.md'))
+    local fm_data = {}
+    if existing_fm and existing_fm.tags then fm_data.tags = existing_fm.tags end
+    new_frontmatter = yaml.create_frontmatter('journal', fm_data)
+
+  elseif target == 'scratchpad' then
+    local ts = timestamp.now()
+    local scratch_path = utils.join(config.root_path, config.folders.scratchpad)
+    utils.ensure_dir(scratch_path)
+    new_path = utils.join(scratch_path, timestamp.create_filename('scratch', ts, '.md'))
+    local fm_data = {}
+    if existing_fm and existing_fm.tags then fm_data.tags = existing_fm.tags end
+    new_frontmatter = yaml.create_frontmatter('scratchpad', fm_data)
+
+  elseif target == 'note' then
+    local subtype = opts.subtype or 'note'
+    if subtype ~= 'note' and subtype ~= 'agg' and subtype ~= 'bib' then
+      return nil, "invalid subtype '" .. tostring(subtype) .. "' (note|agg|bib)"
+    end
+    title = opts.title
+    if not title or title == '' then
+      title = (existing_fm and type(existing_fm.title) == 'string' and existing_fm.title ~= '')
+              and existing_fm.title or 'Unnamed Note'
+    end
+    local note_number = get_next_note_number()
+    local safe_title  = sanitize_title(title)
+    local note_filename = string.format('%04d_%s_%s.md',
+      note_number, subtype, safe_title ~= '' and safe_title or 'unnamed')
+    local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
+    utils.ensure_dir(consolidated_path)
+    new_path = utils.join(consolidated_path, note_filename)
+    local fm_data = { title = title }
+    if existing_fm then
+      if existing_fm.tags   then fm_data.tags   = existing_fm.tags   end
+      if existing_fm.author then fm_data.author = existing_fm.author end
+    end
+    local fm_key = (subtype == 'bib') and 'bibliography'
+               or (subtype == 'agg') and 'agg'
+               or 'note'
+    new_frontmatter = yaml.create_frontmatter(fm_key, fm_data)
+
+  else
+    return nil, "unknown target type '" .. tostring(target) .. "' (note|journal|scratchpad)"
+  end
+
+  local new_content = vim.list_extend(new_frontmatter, content)
+  if vim.fn.writefile(new_content, new_path) ~= 0 then
+    return nil, 'could not write ' .. vim.fn.fnamemodify(new_path, ':t')
+  end
+
+  local old_basename = vim.fn.fnamemodify(path, ':t:r')
+  local new_basename = vim.fn.fnamemodify(new_path, ':t:r')
+  require('pkm.citations').update_references_on_rename(old_basename, new_basename, title)
+
+  local index = require('pkm.index')
+  index.invalidate(new_path)
+
+  local original_deleted = false
+  if opts.delete_original and utils.normalize(path) ~= utils.normalize(new_path) then
+    vim.fn.delete(path)
+    index.invalidate(path)
+    original_deleted = true
+  end
+
+  return new_path, nil, {
+    filename = new_basename .. '.md',
+    type = target,
+    title = title,
+    original_deleted = original_deleted,
+  }
+end
+
+--- Change the type of an already-named consolidated note (note/agg/bib),
+--- renaming the file and propagating the change through every citation. The
+--- pure core behind :PKMNote changetype.
+---@param path     string  Absolute path of the consolidated note
+---@param new_type string  'note' | 'agg' | 'bib'
+---@return string|nil new_path
+---@return string|nil err
+---@return table|nil  meta  { filename, type, title }
+function M.changetype_file(path, new_type)
+  if new_type ~= 'note' and new_type ~= 'agg' and new_type ~= 'bib' then
+    return nil, "invalid type '" .. tostring(new_type) .. "' (note|agg|bib)"
+  end
+  if vim.fn.filereadable(path) ~= 1 then
+    return nil, 'no such file: ' .. path
+  end
+
+  local basename = vim.fn.fnamemodify(path, ':t:r')
+  local number, current_type, name_part = basename:match('^(%d+)_([a-z]+)_(.+)$')
+  if not number then
+    return nil, 'not a valid consolidated filename: ' .. basename
+  end
+  if current_type == new_type then
+    return path, nil, { filename = basename .. '.md', type = new_type }
+  end
+
+  local dir          = vim.fn.fnamemodify(path, ':h')
+  local new_filename = string.format('%04d_%s_%s.md', tonumber(number), new_type, name_part)
+  local new_path     = utils.join(dir, new_filename)
+  if vim.fn.filereadable(new_path) == 1 then
+    return nil, 'target already exists: ' .. new_filename
+  end
+
+  local bufnr = require('pkm.bufsync').buffer_for(path)
+  local lines = bufnr and vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+              or vim.fn.readfile(path)
+  local existing_fm, content_start = yaml.parse_frontmatter(lines)
+  existing_fm = existing_fm or {}
+  local content = {}
+  for i = content_start, #lines do content[#content + 1] = lines[i] end
+
+  local fm_key = (new_type == 'bib') and 'bibliography'
+             or (new_type == 'agg') and 'agg'
+             or 'note'
+  local new_content = vim.list_extend(yaml.create_frontmatter(fm_key, existing_fm), content)
+  if vim.fn.writefile(new_content, new_path) ~= 0 then
+    return nil, 'could not write ' .. new_filename
+  end
+  if utils.normalize(path) ~= utils.normalize(new_path) then
+    vim.fn.delete(path)
+  end
+
+  local new_basename = vim.fn.fnamemodify(new_path, ':t:r')
+  require('pkm.citations').update_references_on_rename(basename, new_basename, existing_fm.title)
+
+  local index = require('pkm.index')
+  index.invalidate(path)
+  index.invalidate(new_path)
+
+  if bufnr then
+    vim.api.nvim_buf_set_name(bufnr, new_path)
+    vim.bo[bufnr].modified = false
+  end
+
+  return new_path, nil, {
+    filename = new_basename .. '.md',
+    type = new_type,
+    title = existing_fm.title,
+  }
+end
+
+--- Rename a note file at an explicit path — keeping a consolidated note's number
+--- and type prefix, sanitising the human name the same way the prompt does — and
+--- propagate the rename through every citation. The pure core behind
+--- :PKMNote rename. Reuses rename_file for the on-disk half.
+---@param path     string  Absolute path of the note
+---@param new_name string  New human name (prefix kept for consolidated notes)
+---@return string|nil new_path
+---@return string|nil err
+---@return table|nil  meta  { filename, title }
+function M.rename_note_at(path, new_name)
+  if vim.fn.filereadable(path) ~= 1 then
+    return nil, 'no such file: ' .. path
+  end
+  local old_stem = vim.fn.fnamemodify(path, ':t:r')
+
+  local folder_type
+  if path:find(config.folders.consolidated, 1, true) then
+    folder_type = 'consolidated'
+  elseif path:find(config.folders.journal, 1, true) then
+    folder_type = 'journal'
+  elseif path:find(config.folders.scratchpad, 1, true) then
+    folder_type = 'scratchpad'
+  else
+    return nil, 'file is not inside a PKM folder'
+  end
+
+  local new_stem
+  if folder_type == 'consolidated' then
+    local number, note_type = old_stem:match('^(%d+)_([a-z]+)_(.+)$')
+    if not number then
+      return nil, 'unrecognized consolidated note filename: ' .. old_stem
+    end
+    if not new_name or new_name == '' then return nil, 'new name is empty' end
+    new_stem = string.format('%04d_%s_%s', tonumber(number), note_type, sanitize_title(new_name))
+  else
+    if not new_name or new_name:match('^%s*$') then return nil, 'new name is empty' end
+    new_stem = sanitize_title(new_name)
+  end
+
+  local ok, new_filepath, err = M.rename_file(path, new_stem)
+  if not ok then return nil, err or 'rename failed' end
+  if new_filepath == path then
+    return path, nil, { filename = old_stem .. '.md' }
+  end
+
+  local fm = yaml.parse_frontmatter(vim.fn.readfile(new_filepath))
+  local display_title = (fm and type(fm.title) == 'string' and fm.title ~= '')
+                        and fm.title or new_stem:gsub('_', ' ')
+  require('pkm.citations').update_references_on_rename(old_stem, new_stem, display_title)
+
+  return new_filepath, nil, { filename = new_stem .. '.md', title = display_title }
+end
+
+-- =============================================================================
 -- SECTION: Navigation
 -- =============================================================================
 --- Insert a [[wiki-link]] to another note at the current cursor position.

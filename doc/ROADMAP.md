@@ -237,6 +237,15 @@ v1.17.0 MINOR  Placement-aware writing + the citation-highlight fix  ✅ release
         the exported markdown.scan_headings); the standing PKMCitation highlight
         bug fixed (the matchadd regex never fired). Detail in doc/CHANGELOG.md.
 
+v1.18.0 MINOR  Note-lifecycle writes through pkm.api  ✅ released and tagged.
+        Three headless seams in notes.lua (convert_file, changetype_file,
+        rename_note_at) — the pure twins of the promote/transpose, changetype,
+        and rename commands — wrapped as api.rename / changetype / transpose,
+        plus the adjacent gestor wraps api.set_membership / save_subproject and
+        the vault-wide api.rename_tag (which subsumes tags.merge). The gestor
+        agent can now restructure a vault through the API, not just create and
+        annotate. Detail in doc/CHANGELOG.md.
+
 The evaluation is now the loop that drives refinement: each run against the real
 vault reports friction (a missing op, a discovery gap), which becomes the next
 increment. Baseline: [[pkm-eval-first-run]].
@@ -334,12 +343,14 @@ low API impact, agent side may defer with a noted caveat (but do both when it is
 easy).*
 
 **1 · pkm.api & agents — 🔺 highest priority**
-- Wrap the remaining note-lifecycle **writes** as API + verbs: `rename`,
-  `convert`, `promote`, `transpose`, `changetype`; view membership
-  (`set_membership`, `save_subproject`); `tags.merge`; the vault lifecycle.
-  (Command-creating → first.)
+- ✅ **v1.18.0** — note-lifecycle **writes** wrapped: `api.rename`, `changetype`,
+  `transpose` (covering promote + transpose); view membership
+  (`set_membership`, `save_subproject`); the vault-wide `rename_tag` (subsuming
+  `tags.merge`). Left: the in-place `convert` normaliser and the **vault
+  lifecycle** (create/merge/split — deferred until a real `Unregistered/` folder).
 - Writing into a **user's** note (permission-gated, `By Claude:`-marked) — the
   protocol is written and the mechanism exists; needs the per-task authorisation.
+  **Next up in this area.**
 - RAG/OKF navigation aids (gestor mode); richer intra-vault graphs; the
   evaluation loop as the ongoing driver.
 

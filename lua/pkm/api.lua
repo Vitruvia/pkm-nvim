@@ -142,6 +142,65 @@ function M.insert_section(path, heading, content, opts)
   return { ok = true }
 end
 
+--- Rename a note, keeping a consolidated note's number and type prefix and
+--- sanitising the human name for you, then propagate the rename through every
+--- citation. `new_name` is the *human* part only. Headless twin of :PKMNote
+--- rename.
+---@param ref string  path or citation reference
+---@param new_name string
+---@return table  { ok, path?, filename?, title?, error? }
+function M.rename(ref, new_name)
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+  local new_path, err, meta = require('pkm.notes').rename_note_at(path, new_name)
+  if not new_path then return { ok = false, error = err } end
+  return { ok = true, path = new_path, filename = meta.filename, title = meta.title }
+end
+
+--- Change a consolidated note's type (note/agg/bib): renames the file to the new
+--- type prefix and propagates through citations. Headless twin of :PKMNote
+--- changetype.
+---@param ref string  path or citation reference
+---@param new_type string  "note" | "agg" | "bib"
+---@return table  { ok, path?, filename?, type?, title?, error? }
+function M.changetype(ref, new_type)
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+  local new_path, err, meta = require('pkm.notes').changetype_file(path, new_type)
+  if not new_path then return { ok = false, error = err } end
+  return { ok = true, path = new_path, filename = meta.filename, type = meta.type, title = meta.title }
+end
+
+--- Move a note to another PKM type, writing it into the target folder and
+--- propagating citations. This is both promote (scratchpad → note/journal) and
+--- transpose (any folder → any other). The original is deleted unless
+--- `opts.keep_original` is set. For `target = 'note'`, `opts.subtype` picks
+--- note/agg/bib and `opts.title` names it. Headless twin of :PKMNote
+--- promote / transpose.
+---@param ref string  path or citation reference
+---@param target string  "note" | "journal" | "scratchpad"
+---@param opts table|nil  { subtype?, title?, keep_original? }
+---@return table  { ok, path?, filename?, type?, title?, original_deleted?, error? }
+function M.transpose(ref, target, opts)
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+  opts = opts or {}
+  local new_path, err, meta = require('pkm.notes').convert_file(path, target, {
+    subtype        = opts.subtype,
+    title          = opts.title,
+    delete_original = (opts.keep_original ~= true),
+  })
+  if not new_path then return { ok = false, error = err } end
+  return {
+    ok = true,
+    path = new_path,
+    filename = meta.filename,
+    type = meta.type,
+    title = meta.title,
+    original_deleted = meta.original_deleted,
+  }
+end
+
 -- =============================================================================
 -- SECTION: Citations
 -- =============================================================================
@@ -217,6 +276,20 @@ function M.tag_note(path, ops)
   local ok, err = require('pkm.tags').write_note_tags(vim.fn.fnamemodify(path, ':p'), ops)
   if not ok then return { ok = false, error = err } end
   return { ok = true }
+end
+
+--- Rename a tag across the whole vault — every note that carries it. Renaming
+--- onto a tag that already exists *merges* the two: notes that had either end up
+--- with the destination, deduplicated. This is the vault-wide "merge tags" op.
+--- Reports how many notes changed.
+---@param from string
+---@param to string
+---@return table  { ok, applied, errors }
+function M.rename_tag(from, to)
+  local tags     = require('pkm.tags')
+  local ops      = { rename = { { from = from, to = to } } }
+  local applied, errors = tags.apply(tags.all_note_paths(), ops)
+  return { ok = errors == 0, applied = applied, errors = errors }
 end
 
 -- =============================================================================
@@ -303,6 +376,34 @@ end
 ---@return string[]
 function M.view_members(name)
   return require('pkm.views').match_all(name)
+end
+
+--- Add or remove a note from a named view by writing the tags that define it.
+--- Only works when the view is a pure tag condition satisfiable exactly one way;
+--- returns an error (never a prompt) when the view is ambiguous or non-tag.
+---@param path string
+---@param view_name string
+---@param kind string  "add" | "remove"
+---@return table  { ok, error? }
+function M.set_membership(path, view_name, kind)
+  local ok, err = require('pkm.views').set_membership(
+    vim.fn.fnamemodify(path, ':p'), view_name, kind)
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
+--- Save a sub-view under a parent view, defined by a filter expression. Fails if
+--- the parent does not exist or the filter does not parse.
+---@param name string
+---@param parent string
+---@param filter_expr string
+---@return table  { ok, error? }
+function M.save_subproject(name, parent, filter_expr)
+  local ok = require('pkm.views').save_subproject(name, parent, filter_expr)
+  if not ok then
+    return { ok = false, error = 'could not save subproject (parent missing or filter invalid)' }
+  end
+  return { ok = true }
 end
 
 -- =============================================================================

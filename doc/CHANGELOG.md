@@ -61,6 +61,40 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.18.0] - 31/7/2026
+
+*The note-lifecycle **writes** reach `pkm.api`, so a gestor-mode agent can
+restructure a vault through the surface — not just create and annotate notes.
+Three headless seams in `notes.lua` are the pure twins of the interactive
+promote/transpose, changetype, and rename commands; the interactive paths keep
+their pickers and prompts untouched (the `write_new_note` ↔ `create_new_note`
+precedent).*
+
+### Added
+
+-   **Note-lifecycle writes in `pkm.api`:**
+    -   **`api.rename(ref, new_name)`** — rename a note, keeping a consolidated
+        note's number/type prefix (only the human name changes, sanitised for
+        you), propagating through every citation.
+    -   **`api.changetype(ref, new_type)`** — change a consolidated note's type
+        (`note`/`agg`/`bib`): renames the file to the new prefix and propagates.
+    -   **`api.transpose(ref, target, opts)`** — move a note to another PKM type
+        (`note`/`journal`/`scratchpad`). Covers **both** promote and transpose;
+        the original is deleted unless `opts.keep_original`. For `target="note"`,
+        `opts.subtype` and `opts.title` shape the consolidated result.
+-   **The pure seams they wrap** (`lua/pkm/notes.lua`): `convert_file`,
+    `changetype_file`, `rename_note_at` — each takes an explicit path, reads from
+    a buffer holding the file when one exists (unsaved edits survive) and from
+    disk otherwise, prompts for nothing, and opens no buffer.
+-   **Adjacent gestor wraps:** **`api.set_membership(path, view, kind)`** and
+    **`api.save_subproject(name, parent, filter)`** (over the already-headless
+    view cores), and **`api.rename_tag(from, to)`** — a vault-wide tag rename that
+    **merges** onto an existing destination, subsuming the roadmap's `tags.merge`.
+-   Documented in `doc/PKM_API.md` (reference tables + Coverage) and driven
+    end-to-end by `test/test_v1180_p1.lua` (34 assertions, all headless).
+
+---
+
 ## [1.17.0] - 31/7/2026
 
 *Placement-aware writing and a standing highlight-bug fix, on top of the v1.16.0

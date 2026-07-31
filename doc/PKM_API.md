@@ -92,6 +92,9 @@ path.
 | `set_body(path, content)` | `{ ok }` — replace a note's body (the prose after the frontmatter); the frontmatter is preserved and the citation graph is reconciled to the new body. Refuses behind an unsaved buffer. |
 | `append_body(path, content)` | `{ ok }` — add to a note's body, same rules. |
 | `insert_section(path, heading, content, opts)` | `{ ok }` — write into a *named section* (found by heading text); `opts.mode` is `'append'` (default) or `'replace'`. Frontmatter preserved, graph reconciled. |
+| `rename(ref, new_name)` | `{ ok, path, filename, title }` — rename a note. A consolidated note keeps its number and type prefix; `new_name` is the *human* part only, sanitised for you. Propagates through every citation. Headless twin of `:PKMNote rename`. |
+| `changetype(ref, new_type)` | `{ ok, path, filename, type, title }` — change a consolidated note's type (`"note"`/`"agg"`/`"bib"`); renames the file to the new prefix and propagates through citations. Twin of `:PKMNote changetype`. |
+| `transpose(ref, target, opts)` | `{ ok, path, filename, type, title, original_deleted }` — move a note to another PKM type (`target` = `"note"`/`"journal"`/`"scratchpad"`). This is both **promote** and **transpose**: the original is deleted unless `opts.keep_original`. For `target="note"`, `opts.subtype` picks note/agg/bib and `opts.title` names it. Twin of `:PKMNote promote`/`transpose`. |
 | `delete(path)` | `{ ok, author, trashed }` — through the guard: refuses any note with no `By<Author>` marker, and trashes rather than hard-deletes. |
 | `authored_by(path)` | the agent author read from the filename, or `nil` for a human note. |
 
@@ -110,6 +113,7 @@ path.
 | `tag(paths, ops)` | `{ ok, applied, errors }` — apply `{ add?, remove?, rename? }` across notes, writing to disk. |
 | `tag_preview(paths, ops)` | `{ path, before, after }[]` — what `tag` would change, touching nothing. |
 | `tag_note(path, ops)` | `{ ok }` — one named note; refuses to run behind an unsaved buffer. |
+| `rename_tag(from, to)` | `{ ok, applied, errors }` — rename a tag across the whole vault. Renaming onto a tag that already exists **merges** the two (deduplicated); this is the vault-wide "merge tags" operation. `applied` counts the notes changed. |
 
 ### Query (read-only)
 
@@ -120,12 +124,14 @@ path.
 | `notes()` | every index entry, as an array. |
 | `query(expr)` | `{ ok, matches }` — entries matching the filter DSL (as `:PKMBrowse`). |
 
-### Views (read)
+### Views
 
 | Function | Returns |
 |---|---|
 | `views()` | the view registry. |
 | `view_members(name)` | the note paths matching a named view's full filter chain. |
+| `set_membership(path, view_name, kind)` | `{ ok }` — add/remove a note from a view by writing the tags that define it. `kind` is `"add"`/`"remove"`. Returns an error (never a prompt) when the view is not a single-way tag condition. |
+| `save_subproject(name, parent, filter_expr)` | `{ ok }` — save a sub-view under an existing parent, defined by a filter expression. Fails if the parent is missing or the filter does not parse. |
 
 ### Audit
 
@@ -167,9 +173,11 @@ filename marker — the one signal that survives a copy or a move between vaults
 ## Coverage
 
 The surface above is the base layer; it grows as the protocol's operations are
-wrapped. Not yet exposed (use the interactive commands, or a later increment):
-the note-lifecycle *writes* (`rename`, `convert`, `promote`, `transpose`,
-`changetype`), view membership writes (`set_membership`, `save_subproject`),
-`tags.merge`, the vault lifecycle, and a safe "append a marked comment to a
+wrapped. The note-lifecycle writes (`rename`, `changetype`, `transpose` — the
+last covering both promote and transpose), the view-membership writes
+(`set_membership`, `save_subproject`), and the vault-wide `rename_tag` (which
+subsumes `tags.merge`) landed in v1.18.0. Still not exposed (use the interactive
+commands, or a later increment): the in-place `convert` normaliser, the vault
+lifecycle (create/merge/split), and a safe "append a marked comment to a
 *user's* note" operation (distinct from `set_body`, which is for your own
 notes). Track additions here as they land.

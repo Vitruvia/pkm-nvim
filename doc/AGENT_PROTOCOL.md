@@ -349,6 +349,12 @@ This document is policy; `pkm.api` is how the policy is carried out.
   acquires a prompt (confirmation lives in the interactive twin). Creation stamps
   the demarcation in §7; deletion of assistant notes routes through the guard.
   (Shape: `doc/ROADMAP.md` Near goals #4; `[[pkm-api-plan]]`.)
+- **Restructuring is on the surface too (v1.18.0).** Beyond create/body/cite/tag,
+  the API now carries the note-lifecycle *writes* a gestor uses: `rename`,
+  `changetype`, `transpose` (which covers promote and transpose), the
+  view-membership writes `set_membership` / `save_subproject`, and the vault-wide
+  `rename_tag` (which merges onto an existing tag). A gestor reorganises through
+  these, never by hand-moving files. Full table: `doc/PKM_API.md`.
 - **Invocation.** The same core is reachable two ways: from Lua inside Neovim, and
   headless — `nvim --headless -u <init> -c "lua print(vim.json.encode(
   require('pkm.api').<fn>(...)))" -c "qa!"` returning JSON. The headless boca is
