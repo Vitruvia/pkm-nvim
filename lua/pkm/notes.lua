@@ -464,6 +464,85 @@ function M.write_body(path, content, opts)
   return true
 end
 
+--- Write into a *named section* of a note — placement-aware body writing — while
+--- preserving the frontmatter and reconciling the citation graph. The section is
+--- located by its heading text (case-insensitive), and its extent runs to the
+--- next heading of the same or a shallower level (headings inside code fences do
+--- not count). `mode` is `'append'` (default — add at the end of the section) or
+--- `'replace'` (swap the section's body, keeping the heading). Refuses behind an
+--- unsaved buffer and reloads an open buffer afterwards.
+---@param path string  Absolute note path
+---@param heading string  the section's heading text, without the leading #'s
+---@param content string|string[]
+---@param opts table|nil  { mode?: 'append'|'replace' }
+---@return boolean ok
+---@return string|nil err
+function M.write_section(path, heading, content, opts)
+  opts = opts or {}
+  path = vim.fn.fnamemodify(path, ':p')
+  if vim.fn.filereadable(path) == 0 then
+    return false, 'note not found: ' .. path
+  end
+
+  local bufsync = require('pkm.bufsync')
+  local bufnr   = bufsync.buffer_for(path)
+  if bufnr and vim.bo[bufnr].modified then
+    return false, 'the note has unsaved changes — save it first'
+  end
+
+  local lines = vim.fn.readfile(path)
+  local heads = require('pkm.markdown').scan_headings(lines)
+
+  local want = vim.trim(tostring(heading)):lower()
+  local idx, head
+  for i, h in ipairs(heads) do
+    local text = lines[h.lnum]:match('^%s*#+%s*(.-)%s*$') or ''
+    if text:lower() == want then
+      idx, head = i, h
+      break
+    end
+  end
+  if not head then
+    return false, string.format("no section titled '%s'", heading)
+  end
+
+  -- The section runs to the line before the next heading at the same or a
+  -- shallower level, or to end of file.
+  local sec_end = #lines
+  for i = idx + 1, #heads do
+    if heads[i].level <= head.level then
+      sec_end = heads[i].lnum - 1
+      break
+    end
+  end
+
+  local body = to_lines(content)
+  local out  = {}
+
+  if opts.mode == 'replace' then
+    for i = 1, head.lnum do out[#out + 1] = lines[i] end   -- through the heading
+    out[#out + 1] = ''
+    for _, l in ipairs(body) do out[#out + 1] = l end
+    if sec_end < #lines then out[#out + 1] = '' end
+    for i = sec_end + 1, #lines do out[#out + 1] = lines[i] end
+  else
+    -- append after the last non-blank line of the section
+    local last = head.lnum
+    for i = head.lnum, sec_end do if lines[i]:match('%S') then last = i end end
+    for i = 1, last do out[#out + 1] = lines[i] end
+    out[#out + 1] = ''
+    for _, l in ipairs(body) do out[#out + 1] = l end
+    if lines[last + 1] and lines[last + 1]:match('%S') then out[#out + 1] = '' end
+    for i = last + 1, #lines do out[#out + 1] = lines[i] end
+  end
+
+  vim.fn.writefile(out, path)
+  pcall(function() require('pkm.citations').update_references(path) end)
+  require('pkm.index').invalidate(path)
+  bufsync.reload({ path })
+  return true
+end
+
 -- =============================================================================
 -- SECTION: Agent authorship
 -- =============================================================================

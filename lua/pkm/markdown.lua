@@ -144,6 +144,13 @@ local function scan_headings(lines)
   return out
 end
 
+--- Scan a buffer's ATX headings, skipping any inside code fences and the
+--- frontmatter. Exposed for section-aware operations (e.g.
+--- `pkm.notes.write_section`).
+---@param lines string[]
+---@return { lnum: integer, level: integer }[]
+M.scan_headings = scan_headings
+
 --- Create the next sibling header at the end of the current section.
 ---
 --- Where `append_next_header` takes the current line's counter +1 and appends it

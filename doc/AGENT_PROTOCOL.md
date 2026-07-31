@@ -308,10 +308,10 @@ What is writable, and by what right.
 - **Placement matters.** Write in the *appropriate* place, not merely at the end:
   under the right heading, as a new section, extending a list. Prefer the least
   disruptive placement that serves the need — a section or a note-end block over
-  edits scattered through the text. (Mechanism today: `append_body` to add at the
-  end, `set_body` to rewrite the prose with your addition positioned correctly;
-  section-targeted insertion is a coming refinement. Either way the frontmatter is
-  preserved and the graph reconciled.)
+  edits scattered through the text. (Mechanism: `insert_section` to write under a
+  named heading — `append` or `replace`; `append_body` to add at the end;
+  `set_body` to rewrite the whole prose. The frontmatter is preserved and the
+  graph reconciled either way.)
 - **Your own notes:** write freely.
 - **A user's note — adding content:** only with the user's permission for that
   act, always marked (`By Claude: …`), and placed at a section or note boundary

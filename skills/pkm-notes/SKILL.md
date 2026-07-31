@@ -143,9 +143,9 @@ for vault notes proceeds regardless.
   vault more than flat memory and what lets structured retrieval (RAG/OKF) work.
   (Only *cross-vault* links are forbidden; linking your own notes to each other is
   encouraged.)
-- **Place content where it belongs** — the right section or a note-end block, not
-  scattered inline. To place precisely, read the note and rewrite the body with
-  your addition in position via `set_body`.
+- **Place content where it belongs** — `insert_section(path, heading, text)` adds
+  under a named section (or `mode='replace'` to swap its body); `append_body` adds
+  at the end; `set_body` rewrites the whole prose. Not scattered inline.
 - **Your own notes:** write freely. **A user's note:** add content only with
   permission, marked `By Claude: …`, at a section boundary. **Changing what the
   user wrote** is never a default — only under an explicit task (grammar,

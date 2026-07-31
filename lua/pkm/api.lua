@@ -126,6 +126,22 @@ function M.append_body(path, content)
   return { ok = true }
 end
 
+--- Write into a *named section* of a note — placement-aware. The section is
+--- found by its heading text; `opts.mode` is `'append'` (default, add at the
+--- section's end) or `'replace'` (swap its body, keeping the heading).
+--- Frontmatter preserved, graph reconciled.
+---@param path string
+---@param heading string  the heading text, without the leading #'s
+---@param content string|string[]
+---@param opts table|nil  { mode?: 'append'|'replace' }
+---@return table  { ok, error? }
+function M.insert_section(path, heading, content, opts)
+  local ok, err = require('pkm.notes').write_section(
+    vim.fn.fnamemodify(path, ':p'), heading, content, opts or {})
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
 -- =============================================================================
 -- SECTION: Citations
 -- =============================================================================

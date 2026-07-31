@@ -91,6 +91,7 @@ path.
 | `create(note_type, opts)` | `{ ok, path, number, filename, title, tags, author }` — `note_type` is `"note"`/`"agg"`/`"bib"`; `opts = { title?, by?, tags?, body?, source_author?, source_type? }`. `body` (string or list of lines) populates the note; `by` stamps the authorship demarcation (§ 7). Headless: no prompt, no buffer opened. |
 | `set_body(path, content)` | `{ ok }` — replace a note's body (the prose after the frontmatter); the frontmatter is preserved and the citation graph is reconciled to the new body. Refuses behind an unsaved buffer. |
 | `append_body(path, content)` | `{ ok }` — add to a note's body, same rules. |
+| `insert_section(path, heading, content, opts)` | `{ ok }` — write into a *named section* (found by heading text); `opts.mode` is `'append'` (default) or `'replace'`. Frontmatter preserved, graph reconciled. |
 | `delete(path)` | `{ ok, author, trashed }` — through the guard: refuses any note with no `By<Author>` marker, and trashes rather than hard-deletes. |
 | `authored_by(path)` | the agent author read from the filename, or `nil` for a human note. |
 

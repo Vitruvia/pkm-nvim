@@ -149,6 +149,33 @@ check("Beta gained the backlink to Delta (graph reconciled from the body)", (fun
   return false
 end)(), 'expected ' .. string.format('%04d', delta.number) .. ' in Beta cited_by')
 
+print("\n== insert_section places content in the right section ==")
+local sec = api.create('note', { title = 'Sectioned', by = 'claude',
+  body = '## Alpha\naaa\n\n## Beta\nbbb' })
+check("a sectioned note was created", sec.ok, vim.inspect(sec))
+check("append into Alpha lands inside Alpha, before Beta", (function()
+  local r = api.insert_section(sec.path, 'Alpha', 'x-in-alpha', { mode = 'append' })
+  if not r.ok then return false end
+  local ls, ax, beta = vim.fn.readfile(sec.path), nil, nil
+  for i, l in ipairs(ls) do
+    if l == 'x-in-alpha' then ax = i end
+    if l == '## Beta' then beta = i end
+  end
+  return ax and beta and ax < beta
+end)(), vim.inspect(vim.fn.readfile(sec.path)))
+check("replace swaps a section's body, keeping the heading", (function()
+  local r = api.insert_section(sec.path, 'Beta', 'new-beta-body', { mode = 'replace' })
+  if not r.ok then return false end
+  local hasnew, hasold, hashdr = false, false, false
+  for _, l in ipairs(vim.fn.readfile(sec.path)) do
+    if l == 'new-beta-body' then hasnew = true end
+    if l == 'bbb' then hasold = true end
+    if l == '## Beta' then hashdr = true end
+  end
+  return hasnew and not hasold and hashdr
+end)(), vim.inspect(vim.fn.readfile(sec.path)))
+check("an unknown section is refused", not api.insert_section(sec.path, 'Nope', 'x').ok)
+
 print("\n== find locates a subject across views, tags, and titles ==")
 local eps = api.create('note', { title = 'Orcamento', by = 'claude', tags = { 'orçamentária' } })
 check("a note for the accent search was created", eps.ok, vim.inspect(eps))
