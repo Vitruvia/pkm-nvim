@@ -1,0 +1,301 @@
+-- =============================================================================
+-- pkm.api — the programmatic surface for assistants and scripts
+-- =============================================================================
+-- Dependencies : pkm.notes, pkm.citations, pkm.tags, pkm.index, pkm.filter,
+--                pkm.views, pkm.check, pkm.export, pkm.vault, pkm.actions
+-- Consumed by  : LLM assistants (via `doc/AGENT_PROTOCOL.md` + the skill), the
+--                headless invocation contract, and advanced users from Lua.
+--
+-- The stable naming over the existing cores. Three rules make it what the
+-- protocol can point an assistant at (`doc/ROADMAP.md` Near goals #4):
+--
+--   1. Returns data, never opens UI. Every function is callable from
+--      `nvim --headless -c "lua ..."` and testable without a screen. Where a
+--      core bakes in UI (create_new_note opens a buffer), this layer reaches the
+--      headless seam beneath it (notes.write_new_note) instead.
+--   2. Wraps cores, never reimplements them. The pure and read-only layers
+--      already exist; this is the boundary, not a second copy.
+--   3. Writes are auditable and promptless. A write reports what it changed and
+--      keeps the index.invalidate discipline (the cores already do); confirmation
+--      belongs to the *interactive* twin, so nothing here acquires a prompt.
+--
+-- Return convention: a write returns `{ ok = boolean, ... }` with `error` set on
+-- failure; a read returns the data directly. Everything returned is plain data
+-- (no functions), so Layer 2 can `vim.json.encode` it — which is why `actions()`
+-- strips the `run` closure from each row.
+-- =============================================================================
+
+local M = {}
+
+-- =============================================================================
+-- SECTION: Helpers
+-- =============================================================================
+
+--- Resolve a note reference to an absolute path. Accepts a filesystem path or a
+--- citation reference (`note[0042]`, an identifier, a title-less short id) and
+--- falls back to the citation resolver so the caller may pass either.
+---@param ref string
+---@return string|nil path
+local function to_path(ref)
+  if type(ref) ~= 'string' or ref == '' then return nil end
+  local p = vim.fn.fnamemodify(ref, ':p')
+  if vim.fn.filereadable(p) == 1 then return p end
+  local item = require('pkm.citations').resolve_citable(ref)
+  if item and item.path then return item.path end
+  return nil
+end
+
+-- =============================================================================
+-- SECTION: Notes
+-- =============================================================================
+
+--- Create a consolidated note, headless and schema-correct — the safe creation
+--- path an assistant must use instead of hand-writing YAML. Wraps
+--- `notes.write_new_note`; `by` stamps the authorship demarcation (§7).
+---@param note_type string  "note" | "agg" | "bib"
+---@param opts table|nil  { title?, by?, tags?, source_author?, source_type? }
+---@return table  { ok, path?, number?, filename?, title?, tags?, author?, error? }
+function M.create(note_type, opts)
+  local path, err, meta = require('pkm.notes').write_new_note(note_type, opts)
+  if not path then return { ok = false, error = err } end
+  return {
+    ok       = true,
+    path     = path,
+    number   = meta.number,
+    filename = meta.filename,
+    title    = meta.title,
+    tags     = meta.tags,
+    author   = meta.author,
+  }
+end
+
+--- Delete a note on an agent's behalf, through the guard: refuses any note that
+--- carries no `By<Author>` filename marker, and trashes rather than hard-deletes.
+---@param path string
+---@return table  { ok, author?, trashed?, error? }
+function M.delete(path)
+  local ok, res = require('pkm.notes').agent_delete(vim.fn.fnamemodify(path, ':p'))
+  if not ok then return { ok = false, error = res } end
+  return { ok = true, author = res, trashed = true }
+end
+
+--- The agent that authored a note, read from its filename, or nil for a
+--- human-authored note.
+---@param path string
+---@return string|nil author
+function M.authored_by(path)
+  return require('pkm.notes').agent_authored(vim.fn.fnamemodify(path, ':p'))
+end
+
+-- =============================================================================
+-- SECTION: Citations
+-- =============================================================================
+
+--- Add a citation from `source` (path or ref) to the note named by `target_ref`.
+--- Idempotent; keeps both sides of the graph in step (cites / cited_by).
+---@param source string
+---@param target_ref string
+---@return table  { ok, error? }
+function M.cite(source, target_ref)
+  local src = to_path(source)
+  if not src then return { ok = false, error = 'source note not found: ' .. tostring(source) } end
+  local ok, err = require('pkm.citations').cite(src, target_ref)
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
+--- Remove every citation from `source` to the note named by `target_ref`.
+---@param source string
+---@param target_ref string
+---@return table  { ok, removed?, error? }
+function M.uncite(source, target_ref)
+  local src = to_path(source)
+  if not src then return { ok = false, error = 'source note not found: ' .. tostring(source) } end
+  local ok, removed, err = require('pkm.citations').uncite(src, target_ref)
+  if not ok then return { ok = false, error = err } end
+  return { ok = true, removed = removed }
+end
+
+--- Resolve a citation reference to the note it names, as plain data.
+---@param ref string
+---@return table  { ok, identifier?, type?, short_id?, path?, title?, error? }
+function M.resolve(ref)
+  local item, err = require('pkm.citations').resolve_citable(ref)
+  if not item then return { ok = false, error = err } end
+  return {
+    ok         = true,
+    identifier = item.identifier,
+    type       = item.type,
+    short_id   = item.short_id,
+    path       = item.path,
+    title      = item.title,
+  }
+end
+
+-- =============================================================================
+-- SECTION: Tags
+-- =============================================================================
+
+--- Apply a tag operation set to a list of notes, writing to disk.
+---@param paths string[]
+---@param ops table  { add?, remove?, rename? }
+---@return table  { ok, applied, errors }
+function M.tag(paths, ops)
+  local applied, errors = require('pkm.tags').apply(paths, ops)
+  return { ok = errors == 0, applied = applied, errors = errors }
+end
+
+--- Report what `tag` would change, touching nothing.
+---@param paths string[]
+---@param ops table
+---@return { path: string, before: string[], after: string[] }[]
+function M.tag_preview(paths, ops)
+  return require('pkm.tags').preview(paths, ops)
+end
+
+--- Apply a tag operation to one named note, refusing to run behind an unsaved
+--- buffer and keeping an open buffer in step.
+---@param path string
+---@param ops table
+---@return table  { ok, error? }
+function M.tag_note(path, ops)
+  local ok, err = require('pkm.tags').write_note_tags(vim.fn.fnamemodify(path, ':p'), ops)
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
+-- =============================================================================
+-- SECTION: Query (read-only)
+-- =============================================================================
+
+--- The index entry for one note, or nil if it is not indexed.
+---@param path string
+---@return table|nil entry
+function M.get(path)
+  return require('pkm.index').get(vim.fn.fnamemodify(path, ':p'))
+end
+
+--- Every note the index knows about, as a flat array of entries.
+---@return table[]
+function M.notes()
+  return require('pkm.index').get_all()
+end
+
+--- Notes matching a filter expression (the same DSL as :PKMBrowse and views).
+---@param expr string
+---@return table  { ok, matches?, error? }
+function M.query(expr)
+  local filter    = require('pkm.filter')
+  local tree, err = filter.parse(expr)
+  if not tree then return { ok = false, error = err or 'invalid filter' } end
+  local matches = {}
+  for _, entry in ipairs(require('pkm.index').get_all()) do
+    if filter.eval(tree, entry) then matches[#matches + 1] = entry end
+  end
+  return { ok = true, matches = matches }
+end
+
+-- =============================================================================
+-- SECTION: Views (read)
+-- =============================================================================
+
+--- All views, as the view registry returns them.
+---@return table
+function M.views()
+  return require('pkm.views').list()
+end
+
+--- The note paths matching a named view (its full AND-chain of filters).
+---@param name string
+---@return string[]
+function M.view_members(name)
+  return require('pkm.views').match_all(name)
+end
+
+-- =============================================================================
+-- SECTION: Audit
+-- =============================================================================
+
+--- The vault-integrity audit: a flat list of findings, errors before warnings.
+--- Read-only; writes and opens nothing.
+---@return { kind: string, severity: string, path: string|nil, message: string }[]
+function M.audit()
+  return require('pkm.check').run()
+end
+
+-- =============================================================================
+-- SECTION: Export
+-- =============================================================================
+
+--- The transitive closure of a citation neighbourhood — seeds plus everything
+--- reached within the depth budget. Pure: returns paths, copies nothing.
+---@param seed_paths string[]
+---@param opts table|nil  { cites_depth?, cited_by_depth? }
+---@return string[] paths
+function M.collect(seed_paths, opts)
+  return require('pkm.export').collect_deep(seed_paths, opts)
+end
+
+--- Copy a set of notes into a destination directory.
+---@param paths string[]
+---@param dest string
+---@return table  { ok, copied, errors, dest }
+function M.export(paths, dest)
+  local copied, errors = require('pkm.export').copy_files(paths, dest)
+  return { ok = errors == 0, copied = copied, errors = errors, dest = dest }
+end
+
+-- =============================================================================
+-- SECTION: Vault
+-- =============================================================================
+
+--- Every registered vault.
+---@return table
+function M.vaults()
+  return require('pkm.vault').list()
+end
+
+--- The active vault.
+---@return table|nil
+function M.active_vault()
+  return require('pkm.vault').active()
+end
+
+--- The default vault from the registry.
+---@return table|nil
+function M.default_vault()
+  return require('pkm.vault').default()
+end
+
+--- The vault a path belongs to.
+---@param path string
+---@return table|nil
+function M.vault_of(path)
+  return require('pkm.vault').of(vim.fn.fnamemodify(path, ':p'))
+end
+
+-- =============================================================================
+-- SECTION: Actions (enumerable bulk operations)
+-- =============================================================================
+
+--- The bulk operations the plugin exposes, as `{ id, label }` rows — the `run`
+--- closure is stripped so the list is JSON-encodable. This is what lets an
+--- assistant discover the operations instead of hard-coding them.
+---@return { id: string, label: string }[]
+function M.actions()
+  local out = {}
+  for _, a in ipairs(require('pkm.actions').list()) do
+    out[#out + 1] = { id = a.id, label = a.label }
+  end
+  return out
+end
+
+--- Run a bulk operation by id over a list of notes, without the picker menu.
+---@param id string
+---@param paths string[]
+---@param ctx table|nil
+function M.run_action(id, paths, ctx)
+  return require('pkm.actions').run_id(id, paths, ctx)
+end
+
+return M

@@ -301,6 +301,86 @@ function M.create_new_note(note_type, opts)
   return filepath
 end
 
+--- Write a new consolidated note to disk with no UI whatsoever.
+---
+--- The headless-safe core beneath the interactive `create_new_note` and the one
+--- `pkm.api` calls: it allocates the next number, builds schema-correct
+--- frontmatter, writes the file, and invalidates the index — no prompt, no
+--- buffer opened, no notice. The type is required (there is no picker); a nil
+--- title means an unnamed note. An agent author (`by`) is stamped three ways per
+--- `doc/AGENT_PROTOCOL.md` § 7: the `By<Author>` filename marker, the `author`
+--- frontmatter field, and the queryable `by-claude` tag.
+---
+--- (Follow-up: migrate `create_new_note` to delegate its write here, so the
+--- interactive `by=` path also stamps the by-claude tag and the two paths cannot
+--- drift. Deferred only to avoid an anchor-fragile edit this pass.)
+---@param note_type string  "note" | "agg" | "bib"
+---@param opts table|nil  { title?, by?, tags?, source_author?, source_type? }
+---@return string|nil filepath  Absolute path, or nil on error
+---@return string|nil err
+---@return table|nil meta  { number, filename, title, tags, author }
+function M.write_new_note(note_type, opts)
+  opts = opts or {}
+  if not (note_type == "agg" or note_type == "note" or note_type == "bib") then
+    return nil, "invalid note type: use agg, note, or bib"
+  end
+
+  local title       = opts.title or ""
+  local note_number = get_next_note_number()
+  local safe_title  = sanitize_title(title)
+
+  local author
+  if type(opts.by) == 'string' and opts.by ~= '' then
+    author     = opts.by:sub(1, 1):upper() .. opts.by:sub(2)
+    safe_title = 'By' .. author .. '_' .. safe_title
+  end
+
+  local filename = string.format("%04d_%s_%s.md", note_number, note_type, safe_title)
+  local consolidated_path = utils.join(config.root_path, config.folders.consolidated)
+  utils.ensure_dir(consolidated_path)
+  local filepath = utils.join(consolidated_path, filename)
+  if vim.fn.filereadable(filepath) == 1 then
+    return nil, "file already exists: " .. filename
+  end
+
+  local fm_type = (note_type == "bib") and "bibliography"
+    or (note_type == "agg") and "agg"
+    or "note"
+  local frontmatter_data = { title = title ~= "" and title or "Unnamed Note" }
+  if author then frontmatter_data.author = author end
+
+  -- Seeded tags, plus the by-claude authorship tag on an agent-created note, so
+  -- authorship is queryable vault-wide, not only legible in the filename. Both
+  -- go through pkm.tags.plan, so the result is normalised and de-duplicated.
+  local seed = {}
+  if type(opts.tags) == "table" then vim.list_extend(seed, opts.tags) end
+  if author then seed[#seed + 1] = 'by-claude' end
+  if #seed > 0 then
+    local planned = require('pkm.tags').plan({}, { add = seed })
+    if #planned > 0 then frontmatter_data.tags = planned end
+  end
+
+  if type(opts.source_author) == 'string' and opts.source_author ~= '' then
+    frontmatter_data.source_author = opts.source_author
+  end
+  if type(opts.source_type) == 'string' and opts.source_type ~= '' then
+    frontmatter_data.source_type = opts.source_type
+  end
+
+  local frontmatter_lines = yaml.create_frontmatter(fm_type, frontmatter_data)
+  table.insert(frontmatter_lines, "")
+  vim.fn.writefile(frontmatter_lines, filepath)
+  require('pkm.index').invalidate(filepath)
+
+  return filepath, nil, {
+    number   = note_number,
+    filename = filename,
+    title    = frontmatter_data.title,
+    tags     = frontmatter_data.tags or {},
+    author   = author,
+  }
+end
+
 -- =============================================================================
 -- SECTION: Agent authorship
 -- =============================================================================
