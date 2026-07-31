@@ -250,9 +250,23 @@ when the clearup design was still open; it no longer is.*
     it finds — a missing verb, a confusing one — is added to the right context,
     not as a new top-level name. Evaluation before documentation, and it produces
     no file that ages.
-4.  **Features from Near/Distant goals** — `next_header` global, list-component
-    navigation, the index panel, syntax and commands outside PKM, structure-aware
-    autowrap. Each is born as a verb in its context, with both forms.
+4.  **Parallel feature queue (v1.15.0+).** Built while `pkm.api`/protocol wait on
+    the author's expectations. Each is born as a verb in its context (or a
+    self-contained fix), headless-tested. Ordered:
+    1.  ✅ **Global next-header** — `:PKMHeader sibling` (v1.15.0 Ph1). See
+        Near goals #1.1.
+    2.  **Wrapped-number highlighting fix** *(author-flagged "Fix now")* —
+        `syntax.lua` mis-highlights a `1.` that is wrapped text (e.g. a citation
+        `[note[0205] - 1. Da Prova]` that wrapped at the second `1.`) as a new
+        list item; it must tell a wrapped continuation line from a real list
+        line. See Near goals #5.
+    3.  **`doc/CONVENTIONS.md`** — the markdown/notation guidelines (spacing/
+        indentation, list prefixes incl. Brazilian legal ones, juxtaposition
+        notation). Guidance first; later drives syntax/autowrap. See Near #1.2.
+    4.  **Navigation** (active-window motions, index panel) and **structure-aware
+        autowrap** (frontmatter/code/headers/tables). Larger; Near #2, Distant #1.
+    These come before `pkm.api` because the API would wrap them; each lands as
+    the verb-context surface the API later exposes.
 5.  **Merge, then split.** Pulled forward the moment a real `Unregistered/`
     folder needs them; otherwise they wait here, because they are the only vault
     operations that renumber notes.

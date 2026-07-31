@@ -7,7 +7,13 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.14.0** (released, tagged)
+## Current version: **v1.14.0** (released, tagged) · **v1.15.0** in progress on `dev` (parallel features)
+
+*v1.13.0–v1.14.0 finished the command clearup: the surface is **15 commands**
+(11 verb-contexts + `:PKMCheck`/`:PKMStats`/`:PKMToggleAutoSync`/`:PKMTags`),
+no aliases. v1.15.0 is a parallel-feature batch (Ph1: `:PKMHeader sibling`) built
+while `pkm.api`/protocol wait on the author's expectations — see `doc/ROADMAP.md`
+Release Plan item 4 (feature queue) and Near goals #4 (pkm.api).*
 
 The canonical version is the top released entry in `doc/CHANGELOG.md`; this line
 mirrors it. Everything under `[Unreleased]` there is on `dev` and awaiting a tag.
