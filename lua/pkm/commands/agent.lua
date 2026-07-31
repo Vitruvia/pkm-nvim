@@ -32,16 +32,26 @@ function M.register()
 
     if p.verb == 'install' or p.verb == 'update' then
       local res = skill.install(dest)
-      if res.ok then
-        vim.notify(string.format('[pkm] skill %s → %s (%s)',
-          p.verb, res.dest, table.concat(res.files, ', ')), vim.log.levels.INFO)
-      else
+      if not res.ok then
         vim.notify('[pkm] skill install failed: ' .. (res.error or 'unknown error'),
           vim.log.levels.ERROR)
+        return
       end
+      local msg = string.format('[pkm] skill %s → %s (%s)',
+        p.verb, res.dest, table.concat(res.files, ', '))
+      -- On the real install (no custom destination), also place the
+      -- /pkm-learning slash command in the user's commands directory.
+      if not dest then
+        local cres = skill.install_command()
+        msg = msg .. (cres.ok and ('; command → ' .. cres.dir)
+          or ('; command FAILED: ' .. (cres.error or '?')))
+      end
+      vim.notify(msg, vim.log.levels.INFO)
     elseif p.verb == 'path' then
-      vim.notify(string.format('[pkm] skill source: %s\n         default dest: %s',
-        skill.source_dir() or '(not found on runtimepath)', skill.default_dest()),
+      vim.notify(string.format(
+        '[pkm] skill source: %s\n         skill dest:   %s\n         command dest: %s',
+        skill.source_dir() or '(not found on runtimepath)',
+        skill.default_dest(), skill.default_commands_dest()),
         vim.log.levels.INFO)
     end
   end, {

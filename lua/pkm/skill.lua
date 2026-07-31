@@ -12,9 +12,11 @@
 -- path — it discovers vaults through the registry at call time.
 --
 -- Public API:
---   source_dir()   → the installed plugin's skills/pkm-notes dir, or nil
---   default_dest() → ~/.claude/skills/pkm-notes
---   install(dest)  → copy the bundle into dest (default: default_dest())
+--   source_dir()            → the installed plugin's skills/pkm-notes dir, or nil
+--   default_dest()          → ~/.claude/skills/pkm-notes
+--   default_commands_dest() → ~/.claude/commands
+--   install(dest)           → copy the skill bundle into dest (default: above)
+--   install_command(dir)    → copy the /pkm-learning slash command into dir
 -- =============================================================================
 
 local M = {}
@@ -45,6 +47,38 @@ end
 ---@return string
 function M.default_dest()
   return utils.join(vim.fn.expand('~'), '.claude', 'skills', 'pkm-notes')
+end
+
+--- The default destination for the slash command: ~/.claude/commands.
+---@return string
+function M.default_commands_dest()
+  return utils.join(vim.fn.expand('~'), '.claude', 'commands')
+end
+
+--- Install the /pkm-learning slash command into `dir` (default: the user's
+--- Claude Code commands directory). Separate from the skill bundle because
+--- slash commands live in a different Claude Code location.
+---@param dir string|nil
+---@return table  { ok, dir, file, error? }
+function M.install_command(dir)
+  local p = plugin_paths()
+  if not p then
+    return { ok = false, error = 'could not locate the pkm-nvim skill on the runtimepath' }
+  end
+  local src = utils.join(p.skill_dir, 'commands', 'pkm-learning.md')
+  if vim.fn.filereadable(src) == 0 then
+    return { ok = false, error = 'missing command source: ' .. src }
+  end
+
+  dir = dir or M.default_commands_dest()
+  vim.fn.mkdir(dir, 'p')
+  if vim.fn.isdirectory(dir) == 0 then
+    return { ok = false, error = 'could not create destination: ' .. dir }
+  end
+  if vim.fn.writefile(vim.fn.readfile(src), utils.join(dir, 'pkm-learning.md')) ~= 0 then
+    return { ok = false, error = 'could not write pkm-learning.md' }
+  end
+  return { ok = true, dir = dir, file = 'pkm-learning.md' }
 end
 
 --- Install (or update — the two are identical) the pkm-notes skill into `dest`.

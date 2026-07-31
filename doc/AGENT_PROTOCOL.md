@@ -135,6 +135,14 @@ user's profile and preferences, on how to operate the system — reads them when
 relevant, and revises them as it learns. The goal is better personalised
 assistance and a durable memory that outlasts a single session's context.
 
+**The vault enhances the assistant's memory; it does not replace it.** The
+assistant keeps its ordinary session memory as before — the vault does not
+suppress it. What the vault adds is *extent and structure*: knowledge kept across
+many disciplines and topics, organised so it can be retrieved by method (RAG,
+OKF, and similar) rather than recalled ad hoc. A quick, local fact belongs in the
+ordinary memory; a body of structured, growing, cross-referenced knowledge
+belongs in the vault. The two are complements, not alternatives.
+
 This is the one place automated note-generation is in scope. It is the
 assistant's *own* knowledge base, not the user's, and `doc/PHILOSOPHY.md` draws
 the line by *whose* knowledge base is touched: the system may build the
@@ -186,6 +194,23 @@ General to both focuses; a project or an interactive instruction may modify them
    needs, record them in the right place and form for a Manager-mode session to
    act on later — but this is not itself an audit. Formal audits are Manager work.
 
+### 5.4 Long-term learning — a session setting
+
+*Background* learning — writing down what is worth keeping as a side effect of the
+work, not as the task itself — has three levels, which the user may switch during
+a session (a `/pkm-learning off|on|expanded` command is provided for this):
+
+- **off** — write to neither the ordinary memory nor the vault this session.
+- **on** *(default)* — write to the ordinary memory when adequate, exactly as the
+  assistant does by default. Nothing changes from normal behaviour.
+- **expanded** — write to **both** the ordinary memory and the vault when
+  pertinent, so durable, structured knowledge accrues in the vault over time.
+
+There is no "vault only" level: there is no reason to suppress the assistant's
+ordinary memory. This setting governs only *background* learning — a task whose
+*explicit* purpose is to write vault notes proceeds regardless of the level,
+because it was asked for directly.
+
 ---
 
 ## 6. Manager mode
@@ -233,7 +258,7 @@ delete.
 
 ---
 
-## 7. Authorship demarcation
+## 7. Authorship, and writing into notes
 
 Concrete, and reconciled to what the code already ships. The **filename marker is
 authoritative** for the deletion guard because it survives copy and move between
@@ -267,6 +292,32 @@ reparent — a standing bug source for a rare need. Instead: in the assistant's 
 vault no prefix is used; where an assistant view genuinely mirrors a user-vault
 view and needs disambiguation, a stable marker is applied **at creation** and not
 auto-maintained across re-leveling.
+
+### Writing into notes
+
+What is writable, and by what right.
+
+- **Free to write:** the body — prose, lists, sections, tables. Everything *except*
+  the frontmatter and the citation/backlink structure, which are the API's to
+  manage. Add citations with `cite`, never by editing frontmatter or hand-typing
+  tokens.
+- **Placement matters.** Write in the *appropriate* place, not merely at the end:
+  under the right heading, as a new section, extending a list. Prefer the least
+  disruptive placement that serves the need — a section or a note-end block over
+  edits scattered through the text. (Mechanism today: `append_body` to add at the
+  end, `set_body` to rewrite the prose with your addition positioned correctly;
+  section-targeted insertion is a coming refinement. Either way the frontmatter is
+  preserved and the graph reconciled.)
+- **Your own notes:** write freely.
+- **A user's note — adding content:** only with the user's permission for that
+  act, always marked (`By Claude: …`), and placed at a section or note boundary
+  rather than woven inline (§ 5.3).
+- **A user's note — changing what the user wrote:** *not* a default operation and
+  never assumed. Done only under an explicit task authorisation whose purpose is
+  exactly that — a grammar pass, a reformat, a restructure — and even then it
+  preserves the user's meaning, changes no more than the task requires, and stays
+  reversible (the note is versioned and trashable). When in doubt, propose and
+  show the change rather than apply it.
 
 ---
 

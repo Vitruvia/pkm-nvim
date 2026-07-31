@@ -120,6 +120,32 @@ begin it with `By Claude: `.
   capability, record it for the developer; do not edit the plugin from a vault
   session.
 
+## Memory and the vault
+
+The vault **enhances** your memory, it does not replace it. Keep using your
+ordinary memory as always; the vault adds *extent and structure* — knowledge kept
+across many disciplines, organised for method-based retrieval (RAG/OKF). Quick
+local facts → ordinary memory; a growing, cross-referenced body of knowledge →
+the vault.
+
+**Long-term learning has a session mode** (`/pkm-learning off|on|expanded`):
+`off` writes to neither; `on` (default) writes to ordinary memory as usual;
+`expanded` writes to **both** memory and the vault when pertinent. There is no
+"vault only". This governs *background* learning only — a task explicitly asking
+for vault notes proceeds regardless.
+
+## Writing into notes
+
+- **The body is yours to write; the frontmatter and citations are not.** Add prose
+  with `create(body=…)`, `set_body`, `append_body`; add citations with `cite`.
+- **Place content where it belongs** — the right section or a note-end block, not
+  scattered inline. To place precisely, read the note and rewrite the body with
+  your addition in position via `set_body`.
+- **Your own notes:** write freely. **A user's note:** add content only with
+  permission, marked `By Claude: …`, at a section boundary. **Changing what the
+  user wrote** is never a default — only under an explicit task (grammar,
+  reformat), preserving meaning, and reversible.
+
 ## When in doubt
 
 Prefer the action with the most effect and least structural impact — often a note

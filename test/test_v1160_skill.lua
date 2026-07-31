@@ -65,6 +65,16 @@ check("the command wrote SKILL.md", readable(dest2 .. '/SKILL.md'), dest2)
 check("PKMAgentProtocol install completes", vim.tbl_contains(
   vim.fn.getcompletion('PKMAgentProtocol ', 'cmdline'), 'install'))
 
+print("\n== the /pkm-learning slash command installs to its own directory ==")
+check("default_commands_dest names ~/.claude/commands",
+  skill.default_commands_dest():find('commands') ~= nil, skill.default_commands_dest())
+local cmddir = (vim.fn.tempname() .. '/cmd-dest'):gsub('\\', '/')
+local cres = skill.install_command(cmddir)
+check("install_command ok", cres.ok, vim.inspect(cres))
+check("pkm-learning.md landed", readable(cmddir .. '/pkm-learning.md'), cmddir)
+check("the command carries its argument-hint", contains(cmddir .. '/pkm-learning.md',
+  'off | on | expanded'))
+
 print("")
 if failures == 0 then
   print("ALL PASS")
