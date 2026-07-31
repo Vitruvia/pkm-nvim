@@ -118,6 +118,15 @@ end
 -- SECTION: Per-window match highlights
 -- =============================================================================
 
+--- The matchadd pattern for PKM citations — `note[0042]`, `bib[abc]`, etc.
+--- In a Vim `\v` collection `\w` does *not* include digits and `\>` is a literal
+--- `>`, so the earlier `[\w\-_]+\>` never matched a real citation (it silently
+--- accepted the regex and never fired). This matches an id of digits, letters,
+--- `_` or `-`, closed by `]`; the square bracket keeps it from matching the inert
+--- cross-vault `note{0042}` form. Exposed so a test can assert it.
+local CITATION_PATTERN = [=[\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]]=]
+M.citation_pattern = CITATION_PATTERN
+
 --- Register match-based highlights in a single window.
 --- Idempotent: returns immediately if window already has PKM matches.
 ---@param win_id integer
@@ -134,9 +143,7 @@ local function setup_win_matches(win_id)
   end
 
   -- Citations: note[id], bib[id], journal[id], scratch[id]
-  add('PKMCitation',
-    [=[\v<(note|bib|journal|scratch)\[[\w\-_]+\>]=],
-    10, { window = win_id })
+  add('PKMCitation', CITATION_PATTERN, 10, { window = win_id })
 
   -- §9 meta-comments (( )) are handled via extmarks below, not matchadd —
   -- matchadd() cannot match across line breaks, and meta-comments are

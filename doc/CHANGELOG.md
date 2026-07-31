@@ -23,8 +23,10 @@ two found while evaluating multi-vault support, along with the one below.)*
     `note[abc]` or `note[0042]>`, while
     `\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]` matches `note[0042]` and
     correctly rejects `nota[0042]`. It fails silently because `matchadd`
-    accepts the regex — it simply never fires. Found 27/7/2026; not fixed,
-    because it was not what was being worked on.
+    accepts the regex — it simply never fires. Found 27/7/2026; **fixed on `dev`**
+    (v1.17.0-bound): that corrected pattern is now in `syntax.lua`, exposed as
+    `syntax.citation_pattern` and asserted in `test_v1170_p1.lua`. Moves to the
+    v1.17.0 release entry at close.
 
 ### Known limitations
 
