@@ -111,6 +111,44 @@ end)(), vim.inspect(acts))
 print("\n== vault reads return data ==")
 check("vaults() returns a table", type(api.vaults()) == 'table')
 
+print("\n== create can populate the body, and body edits preserve frontmatter ==")
+local function body_has(path, text)
+  for _, l in ipairs(vim.fn.readfile(path)) do if l == text then return true end end
+  return false
+end
+local function fm_title(path)
+  local fm = require('pkm.yaml').parse_frontmatter(vim.fn.readfile(path))
+  return fm and fm.title
+end
+
+local gamma = api.create('note', { title = 'Gamma', by = 'claude',
+  body = 'first body line\nsecond body line' })
+check("create with a body succeeds", gamma.ok, vim.inspect(gamma))
+check("the body lines are written into the file",
+  body_has(gamma.path, 'first body line') and body_has(gamma.path, 'second body line'),
+  vim.inspect(vim.fn.readfile(gamma.path)))
+check("the frontmatter is intact", fm_title(gamma.path) == 'Gamma', tostring(fm_title(gamma.path)))
+
+check("set_body replaces the body", api.set_body(gamma.path, 'replacement body').ok)
+check("the old body is gone and the new is present",
+  body_has(gamma.path, 'replacement body') and not body_has(gamma.path, 'first body line'),
+  vim.inspect(vim.fn.readfile(gamma.path)))
+check("set_body preserved the frontmatter", fm_title(gamma.path) == 'Gamma')
+
+check("append_body adds after the body", api.append_body(gamma.path, 'appended tail').ok)
+check("append keeps the prior body and adds the new",
+  body_has(gamma.path, 'replacement body') and body_has(gamma.path, 'appended tail'))
+
+print("\n== a citation token in a created body is reconciled into the graph ==")
+local delta = api.create('note', { title = 'Delta', by = 'claude',
+  body = string.format('this cites beta [note[%04d]]', beta.number) })
+check("create Delta with a body citation succeeds", delta.ok, vim.inspect(delta))
+check("Beta gained the backlink to Delta (graph reconciled from the body)", (function()
+  local key = string.format('%04d', delta.number)
+  for _, l in ipairs(vim.fn.readfile(beta.path)) do if l:find(key, 1, true) then return true end end
+  return false
+end)(), 'expected ' .. string.format('%04d', delta.number) .. ' in Beta cited_by')
+
 print("\n== the deletion guard protects human notes and trashes agent notes ==")
 local del_human = api.delete(beta.path)
 check("deleting a human note is refused", not del_human.ok and del_human.error ~= nil,

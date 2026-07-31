@@ -51,9 +51,10 @@ end
 
 --- Create a consolidated note, headless and schema-correct — the safe creation
 --- path an assistant must use instead of hand-writing YAML. Wraps
---- `notes.write_new_note`; `by` stamps the authorship demarcation (§7).
+--- `notes.write_new_note`; `by` stamps the authorship demarcation (§7), and
+--- `body` populates the note so it is not born hollow.
 ---@param note_type string  "note" | "agg" | "bib"
----@param opts table|nil  { title?, by?, tags?, source_author?, source_type? }
+---@param opts table|nil  { title?, by?, tags?, body?, source_author?, source_type? }
 ---@return table  { ok, path?, number?, filename?, title?, tags?, author?, error? }
 function M.create(note_type, opts)
   local path, err, meta = require('pkm.notes').write_new_note(note_type, opts)
@@ -85,6 +86,28 @@ end
 ---@return string|nil author
 function M.authored_by(path)
   return require('pkm.notes').agent_authored(vim.fn.fnamemodify(path, ':p'))
+end
+
+--- Replace a note's body — the prose after the frontmatter — preserving the
+--- frontmatter and reconciling the citation graph. The prose is yours to write;
+--- citations are not raw tokens, they go through `cite`/`uncite`.
+---@param path string
+---@param content string|string[]
+---@return table  { ok, error? }
+function M.set_body(path, content)
+  local ok, err = require('pkm.notes').write_body(vim.fn.fnamemodify(path, ':p'), content, { mode = 'replace' })
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
+--- Append to a note's body, under the same rules as `set_body`.
+---@param path string
+---@param content string|string[]
+---@return table  { ok, error? }
+function M.append_body(path, content)
+  local ok, err = require('pkm.notes').write_body(vim.fn.fnamemodify(path, ':p'), content, { mode = 'append' })
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
 end
 
 -- =============================================================================

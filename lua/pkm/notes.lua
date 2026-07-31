@@ -308,6 +308,20 @@ function M.create_new_note(note_type, opts)
   return filepath
 end
 
+--- Normalise a body argument (a string, a list of lines, or nil) to a list of
+--- lines, so callers may pass either form.
+---@param content string|string[]|nil
+---@return string[]
+local function to_lines(content)
+  local out = {}
+  if type(content) == 'table' then
+    for _, l in ipairs(content) do out[#out + 1] = tostring(l) end
+  elseif type(content) == 'string' then
+    for l in (content .. '\n'):gmatch('(.-)\n') do out[#out + 1] = l end
+  end
+  return out
+end
+
 --- Write a new consolidated note to disk with no UI whatsoever.
 ---
 --- The headless-safe core beneath the interactive `create_new_note` and the one
@@ -322,7 +336,9 @@ end
 --- interactive `by=` path also stamps the by-claude tag and the two paths cannot
 --- drift. Deferred only to avoid an anchor-fragile edit this pass.)
 ---@param note_type string  "note" | "agg" | "bib"
----@param opts table|nil  { title?, by?, tags?, source_author?, source_type? }
+---@param opts table|nil  { title?, by?, tags?, body?, source_author?, source_type? }
+---                       `body` is a string or list of lines; the note is born
+---                       populated, and citation tokens in it are reconciled.
 ---@return string|nil filepath  Absolute path, or nil on error
 ---@return string|nil err
 ---@return table|nil meta  { number, filename, title, tags, author }
@@ -376,8 +392,18 @@ function M.write_new_note(note_type, opts)
 
   local frontmatter_lines = yaml.create_frontmatter(fm_type, frontmatter_data)
   table.insert(frontmatter_lines, "")
+
+  -- Optional body, so a note is born populated rather than hollow. Any citation
+  -- tokens in it are reconciled into the graph after the write, so a note
+  -- created citing others lands with cites/cited_by already correct.
+  local body_lines = to_lines(opts.body)
+  for _, l in ipairs(body_lines) do frontmatter_lines[#frontmatter_lines + 1] = l end
+
   vim.fn.writefile(frontmatter_lines, filepath)
   require('pkm.index').invalidate(filepath)
+  if #body_lines > 0 then
+    pcall(function() require('pkm.citations').update_references(filepath) end)
+  end
 
   return filepath, nil, {
     number   = note_number,
@@ -386,6 +412,56 @@ function M.write_new_note(note_type, opts)
     tags     = frontmatter_data.tags or {},
     author   = author,
   }
+end
+
+--- Write a note's body (everything after the frontmatter), preserving the
+--- frontmatter exactly. The prose is free; the structural parts are not — so
+--- after the write the citation graph is reconciled to the new body's tokens,
+--- keeping cites/cited_by auditable rather than letting a raw edit desync them.
+---
+--- Like the other write paths, it refuses to run behind an unsaved buffer and
+--- reloads an open buffer afterwards. `mode` is `'replace'` (default — swap the
+--- whole body) or `'append'` (add after the existing body).
+---@param path string  Absolute note path
+---@param content string|string[]  the body, a string or a list of lines
+---@param opts table|nil  { mode?: 'replace'|'append' }
+---@return boolean ok
+---@return string|nil err
+function M.write_body(path, content, opts)
+  opts = opts or {}
+  path = vim.fn.fnamemodify(path, ':p')
+  if vim.fn.filereadable(path) == 0 then
+    return false, 'note not found: ' .. path
+  end
+
+  local bufsync = require('pkm.bufsync')
+  local bufnr   = bufsync.buffer_for(path)
+  if bufnr and vim.bo[bufnr].modified then
+    return false, 'the note has unsaved changes — save it first'
+  end
+
+  local lines = vim.fn.readfile(path)
+  local fm, content_start = yaml.parse_frontmatter(lines)
+  if not fm then return false, 'note has no frontmatter' end
+
+  local out = {}
+  if opts.mode == 'append' then
+    for _, l in ipairs(lines) do out[#out + 1] = l end
+    if #out > 0 and out[#out]:match('%S') then out[#out + 1] = '' end
+  else
+    for i = 1, content_start - 1 do out[#out + 1] = lines[i] end  -- frontmatter block
+    out[#out + 1] = ''                                            -- one blank separator
+  end
+  for _, l in ipairs(to_lines(content)) do out[#out + 1] = l end
+
+  vim.fn.writefile(out, path)
+  -- Keep the graph consistent with whatever citation tokens the new body holds:
+  -- a replaced body that dropped a token loses that cite (and its backlink), a
+  -- body that gained one registers it — the invariant :PKMCheck asserts.
+  pcall(function() require('pkm.citations').update_references(path) end)
+  require('pkm.index').invalidate(path)
+  bufsync.reload({ path })
+  return true
 end
 
 -- =============================================================================

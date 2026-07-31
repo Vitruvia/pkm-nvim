@@ -26,6 +26,12 @@ collide), hand-copies frontmatter (that drifts), leaves the graph empty, and
 strips your authorship. That failure is exactly why this surface exists. When the
 API cannot express something, say so and ask — do not fall back to raw file edits.
 
+**Prose is not off-limits — it goes through the API too.** Populate a note with
+`create(…, body = …)`, and edit prose with `set_body` / `append_body`; the
+frontmatter and the citation graph stay managed for you. You never need to touch
+the file directly to write content. Citations are the one thing that is *not*
+free prose: add them with `cite`, not by hand-typing tokens.
+
 ## How to call it
 
 You are in a terminal; drive Neovim headless. `require('pkm.api')` returns data
@@ -46,20 +52,36 @@ nvim --headless -u <init> \
 ## Core operations
 
 ```lua
--- create a note (ALWAYS pass by='claude' — it stamps your authorship)
-api.create('note', { title = 'AFO audit', by = 'claude', tags = { 'afo' } })
+-- create a note WITH ITS BODY (ALWAYS pass by='claude' — it stamps authorship)
+api.create('note', { title = 'AFO audit', by = 'claude', tags = { 'afo' },
+                     body = 'What I learned…\n\n## Detail\n…' })
 --   → { ok=true, path=…, number=…, filename='…_ByClaude_…', tags={…,'by-claude'} }
 
+api.set_body(path, text)       -- replace a note's prose (frontmatter preserved)
+api.append_body(path, text)    -- add to a note's prose
 api.cite(source, target_ref)   -- link two notes (keeps both sides of the graph)
 api.tag(paths, { add = { 'x' }, remove = { 'y' } })   -- bulk retag
+api.views()                    -- list projects/views — a subject is often a VIEW, not a tag
+api.view_members(name)         -- the notes in a view
 api.query('tag:afo AND type:note')   -- filter the index → { ok, matches }
 api.get(path)                  -- one note's index entry
+api.notes()                    -- every note (sample to find the real tag spelling)
 api.audit()                    -- vault-integrity findings (read-only)
 api.delete(path)               -- guarded: removes only notes YOU authored, trashes them
 api.actions()                  -- discover the enumerable bulk operations
 ```
 
 See `PKM_API.md` for the complete list and every return shape.
+
+## Finding notes
+
+- **A subject or project is often a view (a saved filter), not a tag.** To find a
+  subject's notes, list `api.views()` and read `api.view_members(name)` — do not
+  assume it is a tag.
+- **A null result is ambiguous.** An empty `query('tag:x')` can mean "absent" *or*
+  "wrong key" — tags may be accented or spelled in full (`administração-…`, not
+  `afo`). Before concluding a subject is absent, check the views and sample
+  `notes()` to find the real spelling, then re-query with it.
 
 ## Authorship — always mark your work
 
