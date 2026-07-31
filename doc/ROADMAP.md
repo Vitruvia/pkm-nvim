@@ -322,6 +322,77 @@ notes that exist, numbering collisions, plus two the vaults add: a
 
 ---
 
+### Roadmap by area
+
+*The forward plan organized by area (author, 31/7/2026). The horizon-based
+**Near / Distant goals** below hold the detailed spec for each item; this is the
+organizing and priority view over them. **Priority rule:** anything that interacts
+with `pkm.api` or external agents — above all anything that **creates or modifies
+commands** — comes first, because it is what the API wraps. Per PRINCIPLES 7, each
+area is tagged: **🔺** build the agent side now, alongside the human side; **▹**
+low API impact, agent side may defer with a noted caveat (but do both when it is
+easy).*
+
+**1 · pkm.api & agents — 🔺 highest priority**
+- Wrap the remaining note-lifecycle **writes** as API + verbs: `rename`,
+  `convert`, `promote`, `transpose`, `changetype`; view membership
+  (`set_membership`, `save_subproject`); `tags.merge`; the vault lifecycle.
+  (Command-creating → first.)
+- Writing into a **user's** note (permission-gated, `By Claude:`-marked) — the
+  protocol is written and the mechanism exists; needs the per-task authorisation.
+- RAG/OKF navigation aids (gestor mode); richer intra-vault graphs; the
+  evaluation loop as the ongoing driver.
+
+**2 · Wrapping — 🔺**
+- **Structure-aware autowrap**: wrap around frontmatter, code, headers, tables,
+  and custom list prefixes, so a continuation line never begins with `N. ` — this
+  is where the wrapped-number highlight symptom is fixed (**folded here** from the
+  old "Fix now" bug; it is a parser-level issue no highlight rule can resolve).
+  Driven by the indentation conventions (Near 1.2). *API impact ▹, but it changes
+  the note text agents read/write — verify against `set_body`/`insert_section`.*
+
+**3 · Navigation + panels/sidebar — 🔺 (command-creating parts first)**
+- **Note-wide bookmark bar**: a navigable index of the current note's headers, in
+  a panel (Near 2.2–2.3).
+- **Container / content refactor**: three containers — **left vertical bar**
+  (today's sidebar slot), **low horizontal bar** (today's buffer slot), and the
+  **telescope panel** (with its vim fallback) — each able to hold any content
+  (netrw, search, views, buffers), adjusted per container. Likely **extract the
+  sidebar from `views`**: a sidebar can show non-view content, whereas `views` is
+  the note-organising filter that a container *displays* and that other commands
+  (e.g. export) interface with. Major; probably its own refactor.
+- **Journal / scratch navigation**: a dedicated browse/preview, built with the
+  panel work (wires the idle `journal.lua` helpers).
+- Active-window motions (list items, blocks); explorer UI customisation (Distant
+  6); relevance ordering in panels (Distant 9). *These create commands/panels an
+  agent reaches for → 🔺.*
+
+**4 · Syntax highlighting — ▹**
+- Extend to **all** markdown files, not only PKM notes (Near 3.1).
+- **Possibly extract as a standalone plugin**, with pkm-nvim taking it as an
+  optional dependency (enabled here; falls back to Neovim default if absent).
+- Extended list-prefix recognition (Distant 7); on/off toggles (Distant 8).
+  *Low API impact — an agent formats unaided — so the agent side defers.*
+
+**5 · Markdown editing features — ▹ (command-creating pieces → 🔺)**
+- List functions over custom prefixes incl. Brazilian legal texts (Near 1.2);
+  displays / tables (Distant 1); insertable folds (Potential). Header/list
+  utilities are largely shipped.
+
+**6 · Other — ▹**
+- Browser preview (`preview.lua`, Distant 2); persistent index (Distant 3);
+  review queue (Distant 5); improved / smart search + relevance ranking (Distant
+  9); note sync (Distant 10); note versions / undo (Distant 11); metadata-system
+  review; image / ASCII support; the forced-save prompt (Near 5.1); `PKMViewStats`.
+
+**Also in the plan, folded above:** **merge / split vaults** (§ below) rises into
+area 1 because it is command-creating and renumbers notes; the **forced-save
+prompt** bug (area 6); and **relevance ranking**, which spans search *and* panels.
+The resolved Design Questions (note relationship, note-type, command clearup) need
+no further planning.
+
+---
+
 #### Merging and splitting vaults — future, and split is further
 
 Both are deferred on purpose. They are the only vault operations that renumber
@@ -664,6 +735,10 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
 ---
 
 ### Near goals (short-term to mid-term)
+
+*Detailed specs. For how these group into areas and what comes first, see
+**§ Roadmap by area** above.*
+
 1.  **Markdown improvements (near):**
     1.  ✅ **done (v1.15.0, `:PKMHeader sibling`).** The `append` verb still does
        current+1 at EOF; the new `sibling` verb takes the highest same-level,

@@ -82,6 +82,18 @@ shrink as work completes, and these do not.
    destructive operations keep their confirmation in both. (Full discussion:
    ROADMAP § Design Questions 4.)
 
+7. **Every change is verified against `pkm.api`, and its agent side ships with
+   it.** A change is checked against the programmatic surface, not only the
+   interactive one. If it could meaningfully affect the API — its shape, what a
+   write reports, what an agent may do — or if it matters to agent behaviour, the
+   agent-facing part is built in the *same* work as the human-facing part; the two
+   are one feature, the way `:PKMNote new by=` and `api.create` are. Only when the
+   API impact is genuinely low may the agent side be deferred, and then it is
+   **noted explicitly with its caveats**. When doing both sides is easy, they are
+   done together regardless of importance — the split is never for its own sake.
+   This is why command-creating and command-modifying work has priority: it is
+   what the API wraps. (Author directive, 31/7/2026.)
+
 ---
 
 ## Standing bug-prevention design rules
