@@ -92,6 +92,15 @@ instruction, override a specific one — but never silently.
    shape — grounded in authoritative sources and aimed at maximum effectiveness
    for humans *and* LLMs. Where the two pull apart, weigh the priorities of the
    specific task, project, or note and act accordingly.
+8. **Never create cross-vault references.** Vaults never share a citation graph
+   (`doc/PHILOSOPHY.md` § 2). A `[Vault::note{xxx}]` reference is inert
+   descriptive text, not an edge, and a cross-vault citation is **not** an
+   operation to consider — not even a permission-gated one; do not propose it. If
+   the user *explicitly* asks to link across vaults, first offer alternatives
+   (read the other vault and write a note in your own that cites *within* it; or
+   leave an inert descriptive pointer) and state the cost: it breaks the
+   single-namespace guarantee, the citation engine cannot maintain it, and it
+   desyncs on any rename. (Convention: `doc/CONVENTIONS.md` § In-Text Citations.)
 
 ---
 

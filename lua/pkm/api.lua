@@ -45,6 +45,22 @@ local function to_path(ref)
   return nil
 end
 
+-- Lower-case and strip common (Portuguese) accents, so a search for `afo` or
+-- `orcamentaria` still matches `AFO` and `orçamentária`.
+local ACCENTS = {
+  ['á'] = 'a', ['à'] = 'a', ['â'] = 'a', ['ã'] = 'a', ['ä'] = 'a',
+  ['é'] = 'e', ['ê'] = 'e', ['è'] = 'e', ['ë'] = 'e',
+  ['í'] = 'i', ['ì'] = 'i', ['î'] = 'i', ['ï'] = 'i',
+  ['ó'] = 'o', ['ô'] = 'o', ['õ'] = 'o', ['ö'] = 'o', ['ò'] = 'o',
+  ['ú'] = 'u', ['ü'] = 'u', ['ù'] = 'u', ['û'] = 'u',
+  ['ç'] = 'c', ['ñ'] = 'n',
+}
+local function fold(s)
+  s = tostring(s or ''):lower()
+  for seq, ascii in pairs(ACCENTS) do s = s:gsub(seq, ascii) end
+  return s
+end
+
 -- =============================================================================
 -- SECTION: Notes
 -- =============================================================================
@@ -216,6 +232,44 @@ function M.query(expr)
     if filter.eval(tree, entry) then matches[#matches + 1] = entry end
   end
   return { ok = true, matches = matches }
+end
+
+--- Find where a subject lives — across views, tags, and note titles at once —
+--- so a subject that is a *view* rather than a tag is not missed, and an
+--- accented or full-form tag is reached from an abbreviation or plain term.
+--- Case- and accent-insensitive substring match. This is the first call to make
+--- for "where are the notes about X"; a bare `query('tag:x')` that comes back
+--- empty is ambiguous, and this disambiguates it.
+---@param term string
+---@return table  { ok, term?, views?, tags?, notes?, error? }
+function M.find(term)
+  if type(term) ~= 'string' or term == '' then
+    return { ok = false, error = 'no search term' }
+  end
+  local needle = fold(term)
+
+  local views = {}
+  for _, name in ipairs(require('pkm.views').list()) do
+    if fold(name):find(needle, 1, true) then views[#views + 1] = name end
+  end
+
+  local tags, seen, notes = {}, {}, {}
+  for _, e in ipairs(require('pkm.index').get_all()) do
+    for _, t in ipairs(e.tags or {}) do
+      if not seen[t] and fold(t):find(needle, 1, true) then
+        seen[t] = true
+        tags[#tags + 1] = t
+      end
+    end
+    local title = e.title or ''
+    if fold(title):find(needle, 1, true)
+      or fold(vim.fn.fnamemodify(e.path, ':t')):find(needle, 1, true) then
+      notes[#notes + 1] = { path = e.path, title = title }
+    end
+  end
+  table.sort(tags)
+
+  return { ok = true, term = term, views = views, tags = tags, notes = notes }
 end
 
 -- =============================================================================

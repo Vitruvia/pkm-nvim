@@ -27,7 +27,7 @@ end
 local pkm = require('pkm')
 local root = vim.fn.tempname() .. '/Note-Vault/00 - Test'
 vim.fn.mkdir(root .. '/03-Consolidated', 'p')
-pkm.setup({ root_path = root })
+pkm.setup({ root_path = root, projects = { ['AFO'] = 'tag:foo' } })
 
 local api = require('pkm.api')
 
@@ -148,6 +148,20 @@ check("Beta gained the backlink to Delta (graph reconciled from the body)", (fun
   for _, l in ipairs(vim.fn.readfile(beta.path)) do if l:find(key, 1, true) then return true end end
   return false
 end)(), 'expected ' .. string.format('%04d', delta.number) .. ' in Beta cited_by')
+
+print("\n== find locates a subject across views, tags, and titles ==")
+local eps = api.create('note', { title = 'Orcamento', by = 'claude', tags = { 'orçamentária' } })
+check("a note for the accent search was created", eps.ok, vim.inspect(eps))
+local fv = api.find('afo')
+check("find('afo') surfaces the AFO view (a view, not a tag)",
+  vim.tbl_contains(fv.views, 'AFO'), vim.inspect(fv.views))
+local fa = api.find('orcamentaria')
+check("find folds accents (orcamentaria matches the orçamentária tag)", (function()
+  for _, t in ipairs(fa.tags) do if t:find('ament', 1, true) then return true end end
+  return false
+end)(), vim.inspect(fa.tags))
+check("find matches a note title", #(api.find('orcam').notes) >= 1)
+check("an empty term is refused", not api.find('').ok)
 
 print("\n== the deletion guard protects human notes and trashes agent notes ==")
 local del_human = api.delete(beta.path)

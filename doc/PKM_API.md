@@ -114,6 +114,7 @@ path.
 
 | Function | Returns |
 |---|---|
+| `find(term)` | `{ ok, term, views, tags, notes }` — case- and accent-insensitive search across view names, tags, and titles at once. The first call for "where are the notes about X", since a subject is often a *view*, not a tag. |
 | `get(path)` | the index entry, or `nil`. |
 | `notes()` | every index entry, as an array. |
 | `query(expr)` | `{ ok, matches }` — entries matching the filter DSL (as `:PKMBrowse`). |

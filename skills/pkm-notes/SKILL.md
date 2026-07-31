@@ -61,6 +61,7 @@ api.set_body(path, text)       -- replace a note's prose (frontmatter preserved)
 api.append_body(path, text)    -- add to a note's prose
 api.cite(source, target_ref)   -- link two notes (keeps both sides of the graph)
 api.tag(paths, { add = { 'x' }, remove = { 'y' } })   -- bulk retag
+api.find('afo')                -- search views + tags + titles at once — START HERE for "where is X"
 api.views()                    -- list projects/views — a subject is often a VIEW, not a tag
 api.view_members(name)         -- the notes in a view
 api.query('tag:afo AND type:note')   -- filter the index → { ok, matches }
@@ -75,13 +76,27 @@ See `PKM_API.md` for the complete list and every return shape.
 
 ## Finding notes
 
-- **A subject or project is often a view (a saved filter), not a tag.** To find a
-  subject's notes, list `api.views()` and read `api.view_members(name)` — do not
-  assume it is a tag.
-- **A null result is ambiguous.** An empty `query('tag:x')` can mean "absent" *or*
-  "wrong key" — tags may be accented or spelled in full (`administração-…`, not
-  `afo`). Before concluding a subject is absent, check the views and sample
-  `notes()` to find the real spelling, then re-query with it.
+- **Start with `api.find('term')`** — it searches view names, tags, and titles at
+  once, case- and accent-insensitively. A subject is often a **view** (a saved
+  filter), not a tag (searching `afo` finds the *AFO view*, not the tag
+  `administração-financeira-orçamentária`), and `find` surfaces all three so you
+  do not miss it. Then read `api.view_members(name)` or re-`query` with the real
+  tag it reported.
+- **A bare `query('tag:x')` that comes back empty is ambiguous** — "absent" or
+  "wrong key". Never conclude a subject is absent from an empty tag query; run
+  `find` first.
+
+## Cross-vault references do not exist
+
+Vaults never share a citation graph (a hard design rule). A `[Vault::note{xxx}]`
+reference is inert descriptive text, **never** a real edge — and this is **not** a
+permission-gated operation you may propose. Do not attempt to create cross-vault
+citations. Only if the user *explicitly* asks to link across vaults: first offer
+alternatives (summarise-and-cite *within* your own vault; or an inert descriptive
+pointer), and explain the cost — it breaks the single-namespace guarantee, the
+citation engine cannot maintain it, and it desyncs on any rename. To bring another
+vault's knowledge across, read it and write your own note that cites within your
+vault.
 
 ## Authorship — always mark your work
 
