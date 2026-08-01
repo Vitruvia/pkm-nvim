@@ -7,7 +7,16 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.26.0** (code-complete on `dev`) — retrieval thread step 4: the RAG assembly (`api.context`)
+## Current version: **v1.26.1** (code-complete on `dev`) — patch: keymap-help panel fixes
+
+*v1.26.1 (patch, author-reported, interactive surface — needs a real-config smoke):
+closing a Telescope picker's `?` help now **resumes the picker** instead of dropping
+to the editor (a `telescope_help` helper closes the picker cleanly, shows the float,
+resumes on close; split/sidebar help was already fine), and the help float's width
+fits the longest line up to the editor width (was hard-capped at 60, overflowing the
+sidebar help). Code in `lua/pkm/views.lua` (`show_keymap_help` + the three Telescope
+`?` handlers). Sits on v1.26.0, which completed the retrieve-before-working surface
+(§ 11.6) with one call.*
 
 *v1.26.0 completes the retrieve-before-working surface (§ 11.6) with one call.
 **`api.context(term, opts?)`** composes the two reads: it `find`s the top

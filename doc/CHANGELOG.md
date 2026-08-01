@@ -61,6 +61,27 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.26.1] - 1/8/2026
+
+*Two keymap-help panel fixes (author-reported). Interactive-surface change: the
+headless suite cannot exercise the Telescope pickers, so this rests on a real-config
+smoke.*
+
+### Fixed
+
+-   **Closing a Telescope picker's `?` help now returns to the picker, not the bare
+    editor.** Opening the help float stole focus, which makes Telescope drop its
+    picker, so dismissing help left the reader in the editor and forced a reopen. The
+    three Telescope `?` handlers (a view's note list, browse-all-notes, the views
+    tree) now route through a `telescope_help` helper that closes the picker cleanly,
+    shows the float, and **resumes** the picker (prompt and selection intact) when
+    help closes. The split-panel and sidebar help never had this problem — their
+    window stays open, so focus returns on its own — and are unchanged in behaviour.
+-   **Help lines no longer overflow into a horizontal scroll.** `show_keymap_help`
+    hard-capped the float at 60 columns; longer rows (notably the sidebar help) ran
+    off the edge. The width now fits the longest line up to the editor width, and
+    measures display width (`strdisplaywidth`) so accented text is sized correctly.
+
 ## [1.26.0] - 1/8/2026
 
 *Retrieval thread, step 4 (ROADMAP Area 1): the RAG assembly. The retrieve-before-

@@ -1039,15 +1039,23 @@ end
 
 ---@param title string
 ---@param lines string[]  Already-formatted "  <key>   description" lines
-local function show_keymap_help(title, lines)
+--- A centred float listing a panel's keymaps. `on_close`, when given, runs after
+--- the float is dismissed — the Telescope pickers pass a `resume` here so that
+--- closing help returns to the picker (Telescope closes itself when the float
+--- steals focus, so without this the reader lands in the editor and must reopen
+--- the panel). The split/float panels keep their own window, so focus returns to
+--- them on its own and they pass nothing.
+local function show_keymap_help(title, lines, on_close)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
   vim.api.nvim_set_option_value('bufhidden',  'wipe', { buf = buf })
 
+  -- Width fits the longest line, capped at the editor width (not a fixed 60) so
+  -- longer rows do not overflow into a horizontal scroll.
   local width = 20
-  for _, l in ipairs(lines) do width = math.max(width, #l + 4) end
-  width = math.min(width, 60)
+  for _, l in ipairs(lines) do width = math.max(width, vim.fn.strdisplaywidth(l) + 4) end
+  width = math.min(width, math.max(20, vim.o.columns - 4))
   local height = #lines + 2
 
   local win = vim.api.nvim_open_win(buf, true, {
@@ -1066,11 +1074,30 @@ local function show_keymap_help(title, lines)
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end
+    if on_close then vim.schedule(on_close) end
   end
   local ko = { noremap = true, silent = true, buffer = buf }
   vim.keymap.set('n', 'q',     close, ko)
   vim.keymap.set('n', '<Esc>', close, ko)
   vim.keymap.set('n', '?',     close, ko)
+end
+
+-- The `on_close` a Telescope picker's help float uses: reopen the picker it came
+-- from, with its prompt and selection intact. Guarded so a missing/renamed
+-- Telescope builtin can never raise from a help keypress.
+local function telescope_resume_on_close()
+  pcall(function() require('telescope.builtin').resume() end)
+end
+
+-- Show a Telescope picker's keymap help so that dismissing it returns to the
+-- picker rather than the bare editor. The picker is closed cleanly first (so
+-- Telescope caches it for resume), the float is shown, and the picker is resumed
+-- when the float closes — prompt and selection intact.
+local function telescope_help(prompt_bufnr, title, lines)
+  require('telescope.actions').close(prompt_bufnr)
+  vim.schedule(function()
+    show_keymap_help(title, lines, telescope_resume_on_close)
+  end)
 end
 
 --- Telescope picker over pre-matched note paths. Exact substring prompt.
@@ -1240,7 +1267,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
       end
 
       local function do_help()
-        show_keymap_help(' PKMView Keymaps ', {
+        telescope_help(prompt_bufnr, ' PKMView Keymaps ', {
           '  <CR>     open note / enter subview',
           '  <Tab>    mark note',
           '  <C-a>    bulk actions on marked notes (or all listed)',
@@ -1711,7 +1738,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
           end)
         end
         local function do_help()
-          show_keymap_help(' Browse All Notes Keymaps ', {
+          telescope_help(prompt_bufnr, ' Browse All Notes Keymaps ', {
             '  <CR>     open note',
             '  <Tab>    mark note',
             '  <C-a>    bulk actions on marked notes (or all listed)',
@@ -1828,7 +1855,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
       end
 
       local function do_help()
-        show_keymap_help(' PKM Views Keymaps ', {
+        telescope_help(prompt_bufnr, ' PKM Views Keymaps ', {
           '  <CR>     open view',
           '  <C-a>    bulk actions on this view\'s notes',
           '  N        new note, already in this view  (or <C-y>)',
