@@ -80,15 +80,24 @@ See `PKM_API.md` for the complete list and every return shape.
 
 ## Finding notes
 
-- **Start with `api.find('term')`** — it searches view names, tags, and titles at
-  once, case- and accent-insensitively. A subject is often a **view** (a saved
-  filter), not a tag (searching `afo` finds the *AFO view*, not the tag
-  `administração-financeira-orçamentária`), and `find` surfaces all three so you
-  do not miss it. Then read `api.view_members(name)` or re-`query` with the real
-  tag it reported.
+- **`find`/`query` search only the *active* vault.** They read one vault's index,
+  so they cannot answer "which of my vaults holds X". For **cross-vault
+  discovery** — when you do not yet know which vault a subject lives in — a
+  **filesystem search** (grep/glob over the vault root) is the right first tool,
+  and reading note files directly is allowed. Once you are in the right vault, use
+  the index.
+- **Within a vault, start with `api.find('term')`** — it searches view names,
+  tags, and titles at once, case- and accent-insensitively. A subject is often a
+  **view** (a saved filter), not a tag (searching `afo` finds the *AFO view*, not
+  the tag `administração-financeira-orçamentária`), and `find` surfaces all three
+  so you do not miss it. Then read `api.view_members(name)` or re-`query` with the
+  real tag it reported.
 - **A bare `query('tag:x')` that comes back empty is ambiguous** — "absent" or
   "wrong key". Never conclude a subject is absent from an empty tag query; run
   `find` first.
+- **Titles default to the filename.** Do not force a hand-written prose title on a
+  note unless a specific title actually helps the project; a filename-derived
+  title is fine.
 
 ## Cross-vault references do not exist
 
@@ -144,11 +153,33 @@ learning and retrieval, as long as provenance holds.
 
 ## Memory and the vault
 
-The vault **enhances** your memory, it does not replace it. Keep using your
-ordinary memory as always; the vault adds *extent and structure* — knowledge kept
-across many disciplines, organised for method-based retrieval (RAG/OKF). Quick
-local facts → ordinary memory; a growing, cross-referenced body of knowledge →
-the vault.
+Two durable stores, two jobs (full doctrine: `AGENT_PROTOCOL.md` § 11). Keep them
+from becoming one pile:
+
+- **Memory is the lean index** — facts about the user, how to operate, project
+  *state*, and **pointers** into the vault. It loads every session, so keep it
+  small and high-signal.
+- **The vault is the body of knowledge** — notes with sources, dates, and a graph.
+  Volume lives here.
+
+**What to write, by seriousness tier:**
+- **Serious / durable** (career study, a major life project) → studied knowledge
+  to the **vault**, with sources + dates + `cite` links. Memory keeps a **pointer
+  and the state**, *not* a copy of the content.
+- **Light / for-fun / side** → a lighter footprint: memory-only, or a light vault
+  note. Don't spend career-grade rigor on a side project.
+- **Explicit task** → make the vault note regardless of tier. **Ephemeral** →
+  neither.
+
+**Organize memory by life-area** (career · personal · worldbuilding/fun · meta),
+and **link** related items rather than duplicating them across areas.
+
+**Authority:** the **vault wins for studied knowledge** (it has the provenance);
+**memory wins for facts about the user and how to operate**. On conflict, defer to
+the authoritative layer and reconcile the stale one; cross-check both (§ 10).
+**Building:** write durable knowledge to the vault and leave memory a pointer —
+never copy the body into memory. **Retrieval:** check memory first to find *where*
+it lives, then open the vault note for depth.
 
 **Long-term learning has a session mode** (`/pkm-learning off|on|expanded`):
 `off` writes to neither; `on` (default) writes to ordinary memory as usual;

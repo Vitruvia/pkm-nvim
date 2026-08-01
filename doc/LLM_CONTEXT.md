@@ -7,9 +7,17 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.20.0** (released, tagged) — UI-state inspection + the provisional-knowledge stance
+## Current version: **v1.21.0** (released, tagged) — memory-organization doctrine + eval refinements
 
-*v1.20.0 added `api.ui_state` — a plain-data snapshot of the interactive UI
+*v1.21.0 is docs-only, driven by the first formal evaluation (the "ringforge" task,
+verified on disk): `doc/AGENT_PROTOCOL.md` § 11 — a memory-organization doctrine
+(memory = lean index/pointer layer; vault = body of studied knowledge; write by
+seriousness tier; organize by life-area; vault authoritative for studied knowledge,
+memory for facts-about-the-user and how-to-operate) — plus § 5.3 directive 6 (ask
+only for genuine forks) and SKILL updates (memory doctrine; filesystem search for
+cross-vault discovery since `find`/`query` are single-vault; titles default to the
+filename). Tracked next (v1.22.0): the bib doctrine + `api.cite_source`. It sits on
+v1.20.0, which added `api.ui_state` — a plain-data snapshot of the interactive UI
 (current buffer, sidebar/buffer-panel open state, the highlighted view) that is
 the *inspect* half of agent-assisted smoke testing: an assistant drives a headless
 Neovim's real mappings with `feedkeys`, then reads `ui_state` to assert the path

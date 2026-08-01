@@ -262,6 +262,14 @@ v1.20.0 MINOR  UI-state inspection + the provisional-knowledge stance  ✅ relea
         the three-level framing) and the CONVENTIONS/SKILL updates. Detail in
         doc/CHANGELOG.md.
 
+v1.21.0 MINOR  Memory-organization doctrine + eval refinements  ✅ released and
+        tagged. Docs only, driven by the first formal eval (the "ringforge" task,
+        verified on disk): AGENT_PROTOCOL § 11 (memory = lean index/pointer layer,
+        vault = body; write by seriousness tier; organize by life-area; vault
+        authoritative for studied knowledge, memory for user/operating facts) and
+        § 5.3 directive 6 (ask only for genuine forks); SKILL memory/finding/title
+        updates. Detail in doc/CHANGELOG.md.
+
 The evaluation is now the loop that drives refinement: each run against the real
 vault reports friction (a missing op, a discovery gap), which becomes the next
 increment. Baseline: [[pkm-eval-first-run]].
@@ -382,16 +390,30 @@ easy).*
   annotate → changetype with citation propagation → clean audit → retrieve). Two
   friction points surfaced, both agent-facing:
   - **Reference recording should route through bib notes, not freetext.** § 10
-    now mandates recording references, but nothing points the agent at the
-    system's existing **bib-note** + `[short [bib-003]]` mechanism, so it defaults
-    to an unstructured `## References` prose block. Strengthen the skill/protocol
-    to prefer a citable bib note for a *substantial* source (freetext only for
-    throwaway mentions); consider an `api.create_bib` / `cite_source` affordance
-    that makes "record a source" one call. **(Refines the § 10 work — likely next.)**
+    mandates recording references, but nothing points the agent at the system's
+    existing **bib-note** + `[short [bib-003]]` mechanism, so it defaults to an
+    unstructured `## References` prose block. **CONFIRMED by the formal eval** (the
+    ringforge note recorded sources as freetext, exactly as the dogfood predicted).
+    **NEXT (v1.22.0): the bib doctrine** (author, 1/8) — the agent should browse
+    `P:\Recursos` and the web and **create a bib note when a source is missing**
+    (bibtex citation at the top, other formats allowed; optional summaries /
+    part-notes). **Writing bib notes into the *user's* vault is the encouraged
+    exception** to "don't write user notes": precise citation info always, any
+    added summary carrying a `By Claude:` + model/time header; bib notes may be
+    copied user↔Claude (adding the right tags/markers); never alter a
+    user-authored bib note without express permission. Mechanism: `create('bib',…)`
+    exists; add an `api.cite_source` that finds-or-creates the bib note and cites
+    it in one call.
   - **`cite` has no token placement.** It appends `[note[NNNN]]` at end-of-body,
     which lands *after* a `## References`/appendix section as a dangling token.
     Consider an optional placement (a heading, like `insert_section`) or a
     conventional "Related" section. (Quality, not blocking.)
+  - **No cross-vault search.** `find`/`query` read only the *active* vault's index,
+    so "which of my vaults holds X" needs a filesystem search (correctly, what the
+    eval agent did). Candidate: an `api.find_all` that sweeps every registered
+    vault's index. (Skill now blesses filesystem search for this until it exists.)
+  - **Memory-organization doctrine** — ✅ shipped in **v1.21.0** (AGENT_PROTOCOL
+    § 11). The tiered/by-area/authority rules for memory vs. vault.
 
 **2 · Wrapping — 🔺**
 - **Structure-aware autowrap**: wrap around frontmatter, code, headers, tables,

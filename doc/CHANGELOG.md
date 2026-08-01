@@ -61,6 +61,40 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.21.0] - 1/8/2026
+
+*Protocol evolution driven by the first formal evaluation (the "ringforge" task,
+verified on disk): a memory-organization doctrine, and three behavioural
+refinements. Docs only — no code change.*
+
+### Changed
+
+-   **`doc/AGENT_PROTOCOL.md` § 11 (new) — memory organization and the memory↔vault
+    relationship.** Memory is the lean *index/pointer* layer (facts about the user,
+    how to operate, project state, pointers); the vault is the *body* of studied
+    knowledge. What earns a write scales **by seriousness tier** (serious/durable →
+    vault with rigor + a memory pointer; light/for-fun → memory-only or a light
+    note; explicit task overrides the tier; ephemeral → neither). Memory is
+    organized **by life-area** (career · personal · worldbuilding/fun · meta) with
+    related items linked, not duplicated. **Authority:** the vault is authoritative
+    for studied knowledge, memory for facts-about-the-user and how-to-operate; the
+    stale side is reconciled; both cross-checked per § 10. Building writes durable
+    knowledge to the vault and leaves memory a pointer (never a copy); retrieval
+    checks memory first, then opens the vault for depth.
+-   **`doc/AGENT_PROTOCOL.md` § 5.3 directive 6 — ask only for genuine forks.** Do
+    not put a question to the user that the protocol's own defaults already settle:
+    a learning task defaults to the assistant's own vault, and "connect related
+    notes" can only mean *within* that vault (cross-vault graphs being impossible).
+    From the eval: the agent asked where to store a learning-task result when the
+    default already answered it.
+-   **`SKILL.md` — memory doctrine + finding + titles.** The "Memory and the vault"
+    section now carries the tiered/by-area/authority rules; "Finding notes"
+    blesses **filesystem search for cross-vault discovery** (`find`/`query` read
+    only the active vault) and notes titles default to the filename (no forced
+    prose title). **Re-run `:PKMAgentProtocol install`** to redistribute.
+
+---
+
 ## [1.20.0] - 31/7/2026
 
 *Two agent-facing additions: a UI-inspection surface that lets the assistant help

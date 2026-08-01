@@ -203,6 +203,15 @@ General to both focuses; a project or an interactive instruction may modify them
 5. **Surface problems for the manager, don't audit.** When you spot problems or
    needs, record them in the right place and form for a Manager-mode session to
    act on later — but this is not itself an audit. Formal audits are Manager work.
+6. **Ask only for genuine forks — not for what the directives already settle.**
+   Before putting a question to the user, check whether the protocol's own
+   defaults resolve it; if they do, proceed. A *learning* task defaults to your
+   own vault, so it needs no "where do I store this?" question. Cross-vault
+   citation graphs are impossible (§ 8 of the general directives), so "connect the
+   related notes" can only mean *within* the vault you are writing in — not a
+   choice to surface. Reserve a question for a fork the directives leave open, or
+   one that would change a **user** vault's structure. Over-asking is friction; a
+   question is warranted only when the answer genuinely changes what you do.
 
 ### 5.4 Long-term learning — a session setting
 
@@ -439,6 +448,63 @@ current best practices for LLM learning and retrieval** (RAG/OKF and successors)
 so the vault serves *its* future use — provided the provenance rules above and the
 protocol's other constraints still hold. This is a standing invitation to improve
 the note form, not a fixed schema.
+
+---
+
+## 11. Memory: what to keep, where it lives, and how it relates to the vault
+
+The assistant has two durable stores: its **memory** (the harness's cross-session
+memory) and the **vault**. Left unmanaged, memory turns into an undifferentiated
+pile — a for-fun side project, a career-grade study project, and personal life
+notes all heaped together. This section governs what goes where, so memory stays a
+useful index and the two stores reinforce rather than duplicate each other. It
+builds on the learning modes (§ 5.4) and the provisional-knowledge stance (§ 10).
+
+**1. Two layers, two jobs.**
+- **Memory** is the lean *index and operating layer*: facts about the user, how to
+  operate, project *state*, and **pointers** into the vault. It loads every
+  session, so it stays small and high-signal.
+- **The vault** is the *body* of studied knowledge: notes carrying sources, dates,
+  and a citation graph (§ 10). Volume lives here, not in memory.
+
+**2. What earns a write — by seriousness tier.** The treatment scales with how
+serious and durable the project is:
+- **Serious / durable** (a career project like exam study; a major life project
+  like the journal work): studied knowledge goes to the **vault**, with full rigor
+  — sources, dates, graph. Memory keeps a **pointer and the project's state**, not
+  a copy of the content.
+- **Light / for-fun / side** (e.g. a worldbuilding side-project): a lighter
+  footprint — memory-only, or a light vault note without the full apparatus. Do
+  not spend career-grade rigor on a side project.
+- **Explicit tasks override the tier.** If the user asks for a full vault note,
+  make it, whatever the tier.
+- **Ephemeral / one-off:** neither store.
+- The learning mode (§ 5.4) still gates whether *background* learning is captured
+  at all; the tier decides *how* and *where* once it is.
+
+**3. Organize memory by life-area.** Every memory item declares its area — e.g.
+**career** · **personal** · **worldbuilding / fun** · **meta** (how to operate) —
+and the index is grouped by area, so unrelated concerns do not blur. Relatedness
+is carried by **links between items** (within and across areas), not by collapsing
+everything into one heap. A topic that spans areas is linked, not duplicated.
+
+**4. Authority, and reconciliation.**
+- The **vault is authoritative for studied knowledge** — it holds the provenance
+  and dates memory lacks.
+- **Memory is authoritative for facts about the user and how to operate.**
+- On a conflict, defer to the authoritative layer and **reconcile the stale one**
+  (update it, or shrink it to a pointer). Per § 10, cross-check both against
+  current knowledge before relying — memory can be dated too.
+
+**5. Building vs. retrieval.**
+- **Building:** when studied knowledge is durable enough for the vault, write it
+  *there* and leave memory a **pointer** — do not copy the body into memory. (A
+  memory that duplicates a vault note's content, rather than pointing at it, is the
+  mess this section exists to prevent.)
+- **Retrieval:** consult memory first — the fast index — to find *where* knowledge
+  lives, then open the vault note for depth. Supplement memory with the vault when
+  sources or detail are needed, and let the vault **override** a memory that has
+  gone stale against it.
 
 ---
 
