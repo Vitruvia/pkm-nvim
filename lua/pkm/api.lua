@@ -1278,9 +1278,12 @@ end
 --- is a weak secondary signal: old is not wrong, so it only *ranks* among flagged
 --- notes (+1 per year, capped) and never flags on its own — unless `opts.min_age_days`
 --- is set, which adds every substantive note older than that (the plain review-queue
---- use). Scoped to `note`/`agg` (bib notes are sources; journals/scratch are logs).
---- Reads each candidate's frontmatter for its dates and bib citations; body comes
---- from the index.
+--- use). An age-driven flag is the weakest kind and needs the assistant's judgement
+--- before acting: whether the note's topic is *age-sensitive* (see the skill and
+--- `doc/AGENT_PROTOCOL.md` § 10) — this is left to judgement rather than a tag weight
+--- on purpose, since a tag cannot vouch for a note's actual subject. Scoped to
+--- `note`/`agg` (bib notes are sources; journals/scratch are logs). Reads each
+--- candidate's frontmatter for its dates and bib citations; body comes from the index.
 ---@param opts table|nil  { limit? (20), min_score? (1), min_age_days?: integer }
 ---@return table  { ok, notes? }
 ---              notes: { path, title, note_type, score, reasons }[]

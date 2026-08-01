@@ -166,6 +166,15 @@ fact (`AGENT_PROTOCOL.md` § 10). Two habits follow:
 - **On writing a note: record provenance.** Author and date, and **references
   consulted** — a book/paper by edition and year, a website by visit date — so a
   future reader can weigh and re-verify it. Attribute a claim to its source.
+- **Weigh age against the topic — old is not wrong.** When `api.stale` flags a note
+  mainly for **age**, judge whether the subject actually changes: fast-moving
+  knowledge (news, tooling, prices) ages quickly; slow, formally-governed knowledge
+  (long-standing law, grammar, mathematics) rarely does. If it is *not* age-sensitive,
+  a **quick** check is enough — a change big enough to matter would be widely known,
+  so verify briefly and, finding nothing, **keep the note and just note its age and
+  that the quick check found no likely change**. If it *is* age-sensitive, re-verify
+  properly. (Judgement, not a tag: a `grammar` tag can't vouch for what the note is
+  really about.)
 - **Record a source as a BIB note, not a freetext line.** Consult `P:\Recursos`
   (WSL `/mnt/p/Recursos`) and, where warranted, the web; then `api.cite_source`
   finds-or-creates the source's bib note (its **citation — BibTeX preferred — at

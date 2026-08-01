@@ -435,6 +435,19 @@ cross-checking reduces error on every front.
 3. **Weigh provenance.** A claim's author, date, and cited sources bear on how far
    to trust it without re-verifying — a recent note citing a current edition
    differs from an old, source-less one.
+4. **Weigh age against the topic's age-sensitivity.** *Old is not wrong.* Before
+   acting on a note flagged (or found) stale mainly for its **age** (`pkm.api`'s
+   `stale`), ask whether the subject is one that changes — fast-moving knowledge
+   (current events, tooling, prices, an evolving field) ages quickly; knowledge that
+   changes only through slow, formal process (long-standing law, grammar,
+   mathematics) rarely does. If the topic is **not** age-sensitive, a *quick* check
+   suffices: a change large enough to matter (a statute amended, a spelling reform)
+   would be widely known, so verify briefly and, finding nothing, **keep the note,
+   noting its age and that the quick check found no likely change**. If it **is**
+   age-sensitive, re-verify properly against current sources. This is left to
+   judgement rather than encoded as a per-tag age weight on purpose: a `grammar` tag
+   cannot vouch that grammar is even the note's main subject, so the reading of the
+   note — not a label — decides.
 
 **On writing a note — record provenance.** So a future reader (human or LLM) can
 weigh it the same way, every note the assistant writes records:
