@@ -61,6 +61,46 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.20.0] - 31/7/2026
+
+*Two agent-facing additions: a UI-inspection surface that lets the assistant help
+run the interactive smoke the headless unit suite can't see, and the epistemic
+stance for reading and writing vault knowledge (author's note, 31/7).*
+
+### Added
+
+-   **`api.ui_state()`** — a plain, JSON-encodable snapshot of the interactive UI:
+    the current buffer (with title/type resolved from the index), whether the
+    views sidebar and the buffer panel are open, and the sidebar's rendered lines
+    plus the view highlighted under the cursor. The *inspect* half of
+    **agent-assisted smoke testing**: an assistant drives a headless Neovim's real
+    mappings with `nvim_feedkeys`, then reads `ui_state()` to assert the
+    interactive path behaved — the part `test/min_init.lua`'s unit suite cannot
+    observe. Proven end-to-end (open the sidebar via `<leader>vs`, read the state
+    back) in `test/test_v1200_p1.lua`. It complements the human smoke run, it does
+    not replace it (prompts / `vim.ui.select` still block unless fed or stubbed).
+
+### Changed
+
+-   **`doc/AGENT_PROTOCOL.md` § 10 (new) — notes as provisional knowledge.** A
+    vault is dynamic note-taking to *enhance learning*, not settled fact. Codifies:
+    cross-check a retrieved note against current knowledge and authoritative
+    sources before relying on it; read a user's note as situated, partial
+    knowledge; record provenance (author, date, references — book/paper by edition
+    and year, website by visit date) on every note written; and the three-level
+    framing (core model / agent / agent-plus-external-tools) that makes `pkm.api`
+    a transparent local tool whose contents are still compared *both* ways against
+    training and sources. General directive 9 points at it. Manager mode gets
+    explicit latitude to adapt its own note form to LLM-learning best practice.
+-   **`doc/CONVENTIONS.md` § Assistant-Authored Notes** — a *Provenance and
+    references* format: author + date, and references with edition/year or visit
+    date, usually in a `## References` section.
+-   **`SKILL.md`** — a "Notes are provisional" section (cross-check on read,
+    provenance on write) and the smoke-assist technique. **Re-run
+    `:PKMAgentProtocol install`** to redistribute.
+
+---
+
 ## [1.19.0] - 31/7/2026
 
 *The permission-gated write into a **user's** note: `pkm.api.annotate` adds a

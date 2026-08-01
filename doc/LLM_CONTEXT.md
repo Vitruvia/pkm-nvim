@@ -7,9 +7,18 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.19.0** (released, tagged) — marked writes into a user's note
+## Current version: **v1.20.0** (released, tagged) — UI-state inspection + the provisional-knowledge stance
 
-*v1.19.0 added `api.annotate` — a `By Claude: `-marked comment added to a note
+*v1.20.0 added `api.ui_state` — a plain-data snapshot of the interactive UI
+(current buffer, sidebar/buffer-panel open state, the highlighted view) that is
+the *inspect* half of agent-assisted smoke testing: an assistant drives a headless
+Neovim's real mappings with `feedkeys`, then reads `ui_state` to assert the path
+behaved (the interactive part the unit suite can't see; proven in
+`test_v1200_p1`). It also added `doc/AGENT_PROTOCOL.md` § 10 — notes are
+provisional knowledge: cross-check a retrieved note against current knowledge and
+sources, read a user's note as situated/partial, and record provenance (author,
+date, references by edition-year or visit-date) on write. It sits on v1.19.0,
+which added `api.annotate` — a `By Claude: `-marked comment added to a note
 that is **not** the assistant's own, at a section or note boundary, marker baked
 in, the user's text untouched (over `notes.annotate` → `write_section`/
 `write_body`). It completes the note-writing surface the protocol described. It

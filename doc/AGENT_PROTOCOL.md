@@ -101,6 +101,12 @@ instruction, override a specific one — but never silently.
    leave an inert descriptive pointer) and state the cost: it breaks the
    single-namespace guarantee, the citation engine cannot maintain it, and it
    desyncs on any rename. (Convention: `doc/CONVENTIONS.md` § In-Text Citations.)
+9. **Treat every note as provisional, and cross-check on use.** A vault is
+   continuous, dynamic note-taking to *enhance* learning — not a store of settled
+   fact. On retrieving or acting on any note, compare its content against current
+   knowledge and authoritative sources before relying on it, and record provenance
+   when writing. This is the epistemic stance of §10; read it before reading or
+   writing knowledge in a vault.
 
 ---
 
@@ -366,11 +372,73 @@ This document is policy; `pkm.api` is how the policy is carried out.
 - **The skill** binds this protocol's intents to concrete API calls and is
   installed globally so an assistant reaches for the surface by default. It
   discovers vaults through the registry; it is not handed a path.
+- **Assisting smoke tests (v1.20.0).** The assistant can help verify the
+  *interactive* paths the headless unit suite cannot see: drive a headless Neovim
+  against the working tree with `vim.api.nvim_feedkeys` through the **real
+  mappings**, then read **`api.ui_state()`** — a plain-data snapshot of the
+  current buffer, whether the sidebar / buffer panel are open, and what the
+  sidebar highlights — to assert the path behaved. It complements the human smoke
+  run (`doc/PRINCIPLES.md` § Standing Verification Protocol), it does not replace
+  it: prompts and `vim.ui.select` still block unless fed or stubbed.
 
 **Creation schema is stated, never reverse-engineered.** The assistant creates
 notes through the API's create call, which owns the numbering and the
 schema-correct frontmatter. It must never hand-write YAML inferred from a template
 note — the failure that opened §0.
+
+---
+
+## 10. Notes as provisional knowledge — recording and interpreting
+
+A vault is **not a store of settled fact.** Like the user's own vault, it is
+continuous, dynamic note-taking whose purpose is to *enhance learning*, not to
+publish definite knowledge. Everything in it — the user's notes and the
+assistant's own — is knowledge *as captured at a moment*, and must be treated as
+such on both writing and reading.
+
+**Three levels, and why the vault is compared against the other two.** It helps
+to see the assistant as three nested things: (1) the **core model** with its
+training data; (2) the **agent** — the core wired to the software, tools, and
+knowledge bases present at its development (e.g. this model in a Claude Code
+session); (3) that agent **connected to external tools**. `pkm.api` is an
+external tool of type (3), but one *we* built and host *locally*, which makes it
+more accessible, safe, and transparent than a remote one. That does not make its
+contents authoritative. What the vault stores and produces is compared **both**
+against authoritative sources **and** against the model's own training — the
+comparison runs both ways on purpose, because each side is fallible (training is
+prone to hallucination and bias; a note is prone to being dated or partial), and
+cross-checking reduces error on every front.
+
+**On reading / retrieving a note:**
+
+1. **Cross-check before relying.** Whenever the assistant retrieves or acts on a
+   note, it checks the content against current knowledge and authoritative
+   sources. A note is evidence, not proof.
+2. **Read a user's note as situated knowledge.** It represents what the user knew
+   *at that time*, within their capacity to express it and shaped by their
+   specific needs — they do not note everything they know, and they may note
+   things they do *not* yet know (captured from a reference while studying). Do
+   not infer the user's present understanding, or its limits, from a note.
+3. **Weigh provenance.** A claim's author, date, and cited sources bear on how far
+   to trust it without re-verifying — a recent note citing a current edition
+   differs from an old, source-less one.
+
+**On writing a note — record provenance.** So a future reader (human or LLM) can
+weigh it the same way, every note the assistant writes records:
+
+- **Author and date** — who wrote it and when (the authorship demarcation of §7
+  plus the creation date).
+- **References consulted** — each with enough to re-find and re-date it: for a
+  book or paper, the **edition and publishing year**; for a website, the **visit
+  date**. A claim taken from a source is attributed to that source.
+
+**Writing to suit LLM learning.** Whether note-taking aids an LLM's learning the
+way it aids a human's is genuinely unknown. The Manager-mode assistant is
+therefore given latitude to **adapt how it structures and writes its own notes to
+current best practices for LLM learning and retrieval** (RAG/OKF and successors),
+so the vault serves *its* future use — provided the provenance rules above and the
+protocol's other constraints still hold. This is a standing invitation to improve
+the note form, not a fixed schema.
 
 ---
 

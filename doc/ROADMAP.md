@@ -253,6 +253,15 @@ v1.19.0 MINOR  Marked writes into a user's note  ✅ released and tagged.
         note-writing mechanism the protocol described but the API lacked. Detail
         in doc/CHANGELOG.md.
 
+v1.20.0 MINOR  UI-state inspection + the provisional-knowledge stance  ✅ released
+        and tagged. api.ui_state (a plain-data snapshot of current buffer /
+        sidebar / buffer-panel / highlighted view) — the inspect half of
+        agent-assisted smoke testing, paired with feedkeys through the real
+        mappings (proven in test_v1200_p1). Plus AGENT_PROTOCOL § 10 (notes are
+        provisional knowledge: cross-check on read, record provenance on write,
+        the three-level framing) and the CONVENTIONS/SKILL updates. Detail in
+        doc/CHANGELOG.md.
+
 The evaluation is now the loop that drives refinement: each run against the real
 vault reports friction (a missing op, a discovery gap), which becomes the next
 increment. Baseline: [[pkm-eval-first-run]].
@@ -358,12 +367,13 @@ easy).*
 - ✅ **v1.19.0** — writing into a **user's** note: `api.annotate` (marker baked
   in, boundary placement). The mechanism is complete; the per-task *authorisation*
   is protocol-level (the skill instructs the agent to obtain permission), not code.
-- **Agent-assisted smoke testing** (author idea, 31/7): drive a headless Neovim
-  with `nvim_input` keystrokes through the real mappings and inspect state
-  (current buffer, highlighted view, visible panel) to run or confirm the
-  interactive smoke the headless *unit* suite can't see. Idea, not built —
-  detail and worked example in `[[pkm-agent-smoke-testing]]`. Next step: a small
-  harness proving one keymap → state-assertion round-trip, then a skill note.
+- **Agent-assisted smoke testing** (author idea, 31/7) — ✅ **proof landed in
+  v1.20.0**: `api.ui_state` is the inspect surface and `feedkeys` through the real
+  mappings the drive half; the round-trip is proven (test_v1200_p1). Still to
+  grow: broaden `ui_state` (telescope active, bufpanel contents, marks/highlights),
+  a stub for `vim.ui.select`/prompts so picker-gated paths are drivable too, and a
+  reusable harness + a skill note so the agent reaches for it by default.
+  Background in `[[pkm-agent-smoke-testing]]`.
 - RAG/OKF navigation aids (gestor mode); richer intra-vault graphs; the
   evaluation loop as the ongoing driver.
 

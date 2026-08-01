@@ -428,6 +428,56 @@ function M.save_subproject(name, parent, filter_expr)
 end
 
 -- =============================================================================
+-- SECTION: UI state (read)
+-- =============================================================================
+
+--- A snapshot of the interactive UI, as plain JSON-encodable data — what buffer
+--- is current, whether the views sidebar and the buffer panel are open, and what
+--- the sidebar is showing and has highlighted. This is the *inspect* half of
+--- agent-assisted smoke testing: drive the real mappings with `feedkeys` in a
+--- headless Neovim, then read this to assert the interactive path behaved — the
+--- part the headless *unit* suite cannot otherwise see. Opens nothing; pure read.
+---@return table  { current = { buf, name, title?, type? },
+---                 sidebar = { open, cursor?, highlighted?, highlighted_view?, lines? },
+---                 bufpanel = { open } }
+function M.ui_state()
+  local views = require('pkm.views')
+
+  local cur_buf  = vim.api.nvim_get_current_buf()
+  local cur_name = vim.api.nvim_buf_get_name(cur_buf)
+  local current  = { buf = cur_buf, name = cur_name }
+  if cur_name ~= '' then
+    local entry = require('pkm.index').get(vim.fn.fnamemodify(cur_name, ':p'))
+    if entry then
+      current.title = entry.title
+      current.type  = entry.note_type
+    end
+  end
+
+  local sidebar = { open = views.is_sidebar_open() }
+  if sidebar.open then
+    local win = views.get_sidebar_win()
+    if win then
+      local buf = vim.api.nvim_win_get_buf(win)
+      sidebar.lines       = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      sidebar.cursor      = vim.api.nvim_win_get_cursor(win)[1]
+      sidebar.highlighted = sidebar.lines[sidebar.cursor]
+      -- Best-effort view name under the cursor, parsed from the "• Name  (n)"
+      -- row the sidebar renders; nil when the cursor is on a non-view line.
+      local label = sidebar.highlighted
+        and sidebar.highlighted:match('•%s*(.-)%s*%(%d+%)%s*$')
+      sidebar.highlighted_view = label and vim.trim(label) or nil
+    end
+  end
+
+  return {
+    current  = current,
+    sidebar  = sidebar,
+    bufpanel = { open = require('pkm.ui').is_bufpanel_open() },
+  }
+end
+
+-- =============================================================================
 -- SECTION: Audit
 -- =============================================================================
 

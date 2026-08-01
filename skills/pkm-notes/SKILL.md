@@ -124,6 +124,24 @@ begin it with `By Claude: `.
   capability, record it for the developer; do not edit the plugin from a vault
   session.
 
+## Notes are provisional — cross-check and record provenance
+
+A vault is dynamic note-taking to **enhance learning**, not a store of settled
+fact (`AGENT_PROTOCOL.md` § 10). Two habits follow:
+
+- **On reading a note: cross-check before you rely on it.** Compare its content
+  against your current knowledge and authoritative sources — a note is evidence,
+  not proof, and may be dated or partial. A *user's* note is what they knew at
+  that time, within their needs; do not infer their present understanding from it.
+  (The check runs both ways: your training can be wrong too, so the note can also
+  correct you.)
+- **On writing a note: record provenance.** Author and date, and **references
+  consulted** — a book/paper by edition and year, a website by visit date — so a
+  future reader can weigh and re-verify it. Attribute a claim to its source.
+
+You have latitude to structure your *own* notes to current best practices for LLM
+learning and retrieval, as long as provenance holds.
+
 ## Memory and the vault
 
 The vault **enhances** your memory, it does not replace it. Keep using your

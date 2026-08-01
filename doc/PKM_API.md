@@ -134,6 +134,12 @@ path.
 | `set_membership(path, view_name, kind)` | `{ ok }` — add/remove a note from a view by writing the tags that define it. `kind` is `"add"`/`"remove"`. Returns an error (never a prompt) when the view is not a single-way tag condition. |
 | `save_subproject(name, parent, filter_expr)` | `{ ok }` — save a sub-view under an existing parent, defined by a filter expression. Fails if the parent is missing or the filter does not parse. |
 
+### UI state (read)
+
+| Function | Returns |
+|---|---|
+| `ui_state()` | `{ current = { buf, name, title?, type? }, sidebar = { open, cursor?, highlighted?, highlighted_view?, lines? }, bufpanel = { open } }` — a plain-data snapshot of the interactive UI. The *inspect* half of agent-assisted smoke testing: drive the real mappings with `feedkeys` in a headless Neovim, then read this to assert the path behaved. Opens nothing. |
+
 ### Audit
 
 | Function | Returns |

@@ -105,6 +105,18 @@ several models edited different passages, name the predominant one followed by
 fits best; the changelog records the model per edit. Long histories may summarise
 the oldest models (e.g. `Claude Opus < 4.0 and Claude Sonnet < 3`).
 
+**Provenance and references** (rationale in `AGENT_PROTOCOL.md` § 10, where a note
+is provisional knowledge, not settled fact). Every assistant-authored note records
+enough for a future reader to weigh and re-verify it:
+-   **Author and date** — the authorship markers above, plus the note's creation
+    date (from the frontmatter).
+-   **References consulted** — each with enough to re-find *and re-date* it: a book
+    or paper by **edition and publishing year**, a website by **visit date**. A
+    claim drawn from a source is attributed to that source, not stated bare. A
+    `## References` (or `## Sources`) section at the note's end is the usual home;
+    an inline `[short [bib-003]]` citation may point into it (see § In-Text
+    Citations).
+
 **Comment placement.** Prefer the top or bottom of a section over inline. Where a
 comment must sit near specific content, place it at the start or end of the
 paragraph or block, not mid-sentence, so user notes stay uncluttered. (The
