@@ -61,6 +61,24 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.26.2] - 1/8/2026
+
+*Two more keymap-help follow-ups after the v1.26.1 smoke (author-reported).
+Interactive surface — rests on a real-config smoke.*
+
+### Fixed
+
+-   **A help float left open by switching away can no longer be orphaned.** The help
+    window is a float — off the buffer bar and skipped by window motions — so leaving
+    it without pressing `q`/`Esc`/`?` (a window switch, a click elsewhere) previously
+    stranded it open until restart. It now closes on `WinLeave`. The dismiss keys run
+    the return hook (Telescope resume); a bare leave only cleans up, so switching away
+    never resumes a picker behind the user.
+-   **The two-chord `<C-y><C-v>` / `<C-y><C-x>` help row now aligns with the rest.** Its
+    wide key column pushed the description far right; it is now an aligned continuation
+    line under the `new note` entry — `the same, split right (<C-y><C-v>) / left
+    (<C-y><C-x>)` — at the shared description column, across all five help panels.
+
 ## [1.26.1] - 1/8/2026
 
 *Two keymap-help panel fixes (author-reported). Interactive-surface change: the

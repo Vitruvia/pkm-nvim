@@ -1070,16 +1070,32 @@ local function show_keymap_help(title, lines, on_close)
     title_pos = 'center',
   })
 
-  local function close()
+  -- `dispose` just cleans the float up; `finish` also runs the return hook
+  -- (Telescope resume). q / Esc / ? finish; leaving the window merely disposes.
+  local function dispose()
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end
+  end
+  local function finish()
+    dispose()
     if on_close then vim.schedule(on_close) end
   end
   local ko = { noremap = true, silent = true, buffer = buf }
-  vim.keymap.set('n', 'q',     close, ko)
-  vim.keymap.set('n', '<Esc>', close, ko)
-  vim.keymap.set('n', '?',     close, ko)
+  vim.keymap.set('n', 'q',     finish, ko)
+  vim.keymap.set('n', '<Esc>', finish, ko)
+  vim.keymap.set('n', '?',     finish, ko)
+
+  -- Leaving the help window without dismissing it (a window switch, a click
+  -- elsewhere) closes it, so it can never be orphaned — it is a float, kept off
+  -- the buffer bar and skipped by window motions, so a stranded one would linger
+  -- until restart. WinLeave rather than the return hook: a deliberate switch away
+  -- should clean up, not resume a picker behind the user's back.
+  vim.api.nvim_create_autocmd('WinLeave', {
+    buffer   = buf,
+    once     = true,
+    callback = dispose,
+  })
 end
 
 -- The `on_close` a Telescope picker's help float uses: reopen the picker it came
@@ -1272,7 +1288,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
           '  <Tab>    mark note',
           '  <C-a>    bulk actions on marked notes (or all listed)',
           '  <C-y>    new note, already in this view',
-          '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
+          '           the same, split right (<C-y><C-v>) / left (<C-y><C-x>)',
           '  <C-b>    back to views panel',
           '  <C-p>    go to parent view',
           '  <C-s>    go to subviews',
@@ -1546,7 +1562,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       '  <Tab>    mark note   (<S-Tab> mark and go up)',
       '  <C-a>    bulk actions on marked notes (or all listed)',
       '  N        new note, already in this view  ([count]N = window N)',
-      '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
+      '           the same, split right (<C-y><C-v>) / left (<C-y><C-x>)',
       '  <C-b>    back to views panel',
       '  <C-p>    go to parent view',
       '  <C-s>    go to subviews',
@@ -1859,7 +1875,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
           '  <CR>     open view',
           '  <C-a>    bulk actions on this view\'s notes',
           '  N        new note, already in this view  (or <C-y>)',
-          '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
+          '           the same, split right (<C-y><C-v>) / left (<C-y><C-x>)',
           '  <C-f>    browse all notes',
           '  n        new view',
           '  u        update view (rename/reparent/edit filter)',
@@ -2139,7 +2155,7 @@ local _views_panel = panel.create({
           '  <CR>     open view',
           '  n        new view',
           '  N        new note, already in this view  ([count]N = window N)',
-          '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
+          '           the same, split right (<C-y><C-v>) / left (<C-y><C-x>)',
           '  u        update view (rename/reparent/edit filter)',
           '  <C-a>    bulk actions on this view\'s notes',
           '  <C-f>    browse all notes',
@@ -2793,7 +2809,7 @@ local function sidebar_show_help()
     '  <Tab>    mark note   (<S-Tab> mark and go up)',
     '  <C-a>    bulk actions on marked notes (or all listed)',
     '  N        new note, already in this view  ([count]N = window N)',
-    '  <C-y><C-v> / <C-y><C-x>   the same, split right / left',
+    '           the same, split right (<C-y><C-v>) / left (<C-y><C-x>)',
     '  <C-v>    open note in new vertical split',
     '  <C-t>    cycle type filter  (all/n/a/b/j/s)',
     '  T        toggle filename / title labels',

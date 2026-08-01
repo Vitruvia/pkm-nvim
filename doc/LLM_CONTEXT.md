@@ -7,7 +7,15 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.26.1** (code-complete on `dev`) — patch: keymap-help panel fixes
+## Current version: **v1.26.2** (code-complete on `dev`) — patch: more keymap-help fixes
+
+*v1.26.2 (patch, author-reported after the v1.26.1 smoke, interactive surface): a help
+float left open by switching away is no longer orphaned — it closes on `WinLeave`
+(dismiss keys run the Telescope-resume hook, a bare leave just cleans up); and the
+two-chord `<C-y><C-v>`/`<C-y><C-x>` help row is realigned as a continuation line at the
+shared description column across all five help panels. Code in `lua/pkm/views.lua`
+(`show_keymap_help`). Sits on v1.26.1, which fixed the Telescope help-close and float
+width.*
 
 *v1.26.1 (patch, author-reported, interactive surface — needs a real-config smoke):
 closing a Telescope picker's `?` help now **resumes the picker** instead of dropping
