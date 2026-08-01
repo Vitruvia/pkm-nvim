@@ -424,12 +424,13 @@ into a living, retrieved, revised store. Doctrine landed in AGENT_PROTOCOL § 11
 (retrieve-before-working + write-to-be-retrieved; revise-and-rearrange). The code
 threads, in order:*
 
-1. **v1.22.0 — Bib & sources (immediate next).** `api.cite_source` (find-or-create
-   a bib note, then cite it in one call), the bib doctrine (browse `P:\Recursos`
-   + web; bib notes as the encouraged user-vault exception; bibtex at the top;
-   copy user↔Claude; never alter a user bib note without permission), CONVENTIONS
-   bib format. Closes the confirmed Finding A, and `cite_source` can place the
-   citation sensibly (addresses the cite-placement nit).
+1. ✅ **v1.22.0 — Bib & sources (done).** `api.cite_source` (find-or-create a bib
+   note, then cite it in one call), the bib doctrine (browse `P:\Recursos` + web;
+   bib notes as the encouraged user-vault exception; bibtex at the top; copy
+   user↔Claude; never alter a user bib note without permission), CONVENTIONS
+   § Bibliography Notes. Closed the confirmed Finding A; `cite_source` places the
+   token under a `## References` heading (created if absent), which also closed the
+   cite-placement nit. `test_v1220_p1`.
 2. **Retrieval thread — make the vault serve retrieval-based learning.**
    - `api.find_all` — cross-vault search (the confirmed gap; `find`/`query` are
      single-vault).

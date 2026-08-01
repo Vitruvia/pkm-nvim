@@ -335,6 +335,10 @@ What is writable, and by what right.
   and places the block at a boundary, so the addition is always attributable and
   never inline. Permission is still yours to obtain — `annotate` supplies the
   mechanism, not the authorisation.
+- **A user's note — the one encouraged exception is a *bib* note:** creating a
+  missing, precise bibliography note in the user's vault is allowed (§ 10, *Record
+  references as bib notes*). Everything else about a user's note stays permission-
+  gated and marked.
 - **A user's note — changing what the user wrote:** *not* a default operation and
   never assumed. Done only under an explicit task authorisation whose purpose is
   exactly that — a grammar pass, a reformat, a restructure — and even then it
@@ -440,6 +444,29 @@ weigh it the same way, every note the assistant writes records:
 - **References consulted** — each with enough to re-find and re-date it: for a
   book or paper, the **edition and publishing year**; for a website, the **visit
   date**. A claim taken from a source is attributed to that source.
+
+**Record references as bib notes, not freetext.** A reference is not a line in a
+prose `## References` block — it is a **bib note**, a first-class, citable node in
+the graph. This is the mechanism § 10 was pointing at; use it.
+
+- **Consult, then record.** Before leaning on a source, look for it: browse the
+  read-only reference materials under `P:\Recursos` (WSL `/mnt/p/Recursos`) and,
+  where the task warrants, the web. *(If your reference tree lives elsewhere, that
+  path is the only thing to adjust here.)*
+- **Find or create the bib note.** If a bib note for the source exists, cite it;
+  if not, **create one** — its **standard citation at the top** (BibTeX preferred,
+  other formats allowed), optionally followed by a source summary or notes on
+  specific parts. Do this in one call with **`api.cite_source`**, which finds the
+  bib note by title or creates it (bibtex at the top) and places the citation for
+  you, so the token lands *in* a References section rather than dangling.
+- **A bib note is the encouraged exception to "don't write the user's vault."**
+  Writing a *precise* bib note into the user's vault when one is missing is
+  allowed and even encouraged. But precision is the price: the citation must be
+  exact, and **any added summary or commentary carries a `By Claude:` header with
+  the model and time** (it is your provisional reading, not the source). A bib
+  note is the same on both sides, so you may **copy it between the user's vault and
+  your own** (adding the right authorship tags/markers on the copy). **Never alter
+  a user-authored bib note** without an express reason and the user's permission.
 
 **Writing to suit LLM learning.** Whether note-taking aids an LLM's learning the
 way it aids a human's is genuinely unknown. The Manager-mode assistant is

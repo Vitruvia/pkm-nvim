@@ -7,16 +7,33 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.21.0** (released, tagged) — memory-organization doctrine + eval refinements
+## Current version: **v1.22.0** (code-complete on `dev`) — bib & sources: `api.cite_source` + the bib doctrine
 
-*v1.21.0 is docs-only, driven by the first formal evaluation (the "ringforge" task,
-verified on disk): `doc/AGENT_PROTOCOL.md` § 11 — a memory-organization doctrine
-(memory = lean index/pointer layer; vault = body of studied knowledge; write by
-seriousness tier; organize by life-area; vault authoritative for studied knowledge,
-memory for facts-about-the-user and how-to-operate) — plus § 5.3 directive 6 (ask
-only for genuine forks) and SKILL updates (memory doctrine; filesystem search for
-cross-vault discovery since `find`/`query` are single-vault; titles default to the
-filename). Tracked next (v1.22.0): the bib doctrine + `api.cite_source`. It sits on
+*v1.22.0 is the first code thread of the post-eval plan (ROADMAP Area 1): it closes
+the reference-recording gap both evals flagged, so a source becomes a citable **bib
+note**, not a freetext line. **`api.cite_source(citing_ref, source, opts?)`** finds
+the source's bib note (by `source.title`, exact then substring, among indexed `bib`
+notes in the active vault) or creates one with the standard citation at the top
+(`source.bibtex`, BibTeX preferred; optional `source.notes`; `by` defaults to
+`claude`), then cites it — placing the token **under a `## References` heading**
+(default, created if absent; `opts.heading = false` appends at the body's end, the
+old `cite` behaviour). Idempotent (`cited = false` when already present),
+single-vault like every citation, and it wraps `notes.write_new_note` + `citations`
++ `write_section`/`write_body` without reimplementing a core (`test_v1220_p1`). The
+**bib doctrine** landed in `doc/AGENT_PROTOCOL.md` § 10 (consult `P:\Recursos` + web;
+find-or-create the bib note; a precise bib note is the one encouraged exception to
+"don't write the user's vault"; copy between vaults with markers; never alter a
+user-authored bib note without permission), with `doc/CONVENTIONS.md`
+§ Bibliography Notes for the format and § 7 naming the exception. **Re-run
+`:PKMAgentProtocol install`** to redistribute the skill. It sits on v1.21.0
+(docs-only, driven by the first formal evaluation, the "ringforge" task, verified on
+disk): `doc/AGENT_PROTOCOL.md` § 11 — a memory-organization doctrine (memory = lean
+index/pointer layer; vault = body of studied knowledge; write by seriousness tier;
+organize by life-area; vault authoritative for studied knowledge, memory for
+facts-about-the-user and how-to-operate) — plus § 5.3 directive 6 (ask only for
+genuine forks) and SKILL updates (memory doctrine; filesystem search for cross-vault
+discovery since `find`/`query` are single-vault; titles default to the filename),
+and § 11.6 (learning is retrieval + revision, not only capture). It sits on
 v1.20.0, which added `api.ui_state` — a plain-data snapshot of the interactive UI
 (current buffer, sidebar/buffer-panel open state, the highlighted view) that is
 the *inspect* half of agent-assisted smoke testing: an assistant drives a headless

@@ -57,6 +57,28 @@ resolve".
 
 ---
 
+## Bibliography Notes
+
+A `bib` note records a *source*, so other notes can cite it (`[bib[xxx]]`) instead
+of repeating the reference inline.
+
+-   **The standard citation goes at the top**, as the first content after the
+    frontmatter — **BibTeX preferred** (`@book{…}`, `@article{…}`), other citation
+    formats allowed. This is the one part every bib note must carry precisely.
+-   **Summaries and part-notes are optional**, and follow the citation. When an
+    assistant adds them, they carry the assistant authorship markers (a
+    `By Claude:` header with model and time), because a summary is a *reading* of
+    the source, not the source itself; the citation block is not so marked.
+-   A bib note is **the same source on both sides**, so it may be copied between
+    vaults (the user's and an assistant's), adding the destination's authorship
+    tags/markers on the copy. A user-authored bib note is not altered without the
+    user's permission. (Assistant doctrine: `AGENT_PROTOCOL.md` § 10.)
+
+`api.cite_source` writes a new bib note in exactly this shape (bibtex at the top)
+and cites it in one call.
+
+---
+
 ## Header and Body Organization
 
 -   At most one `#`-level header per note (the note title, if shown at all).

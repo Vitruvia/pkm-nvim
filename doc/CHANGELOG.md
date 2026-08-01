@@ -61,6 +61,44 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.22.0] - 1/8/2026
+
+*Bib & sources — the first code thread of the post-eval plan (ROADMAP Area 1).
+Closes the reference-recording gap the dogfood and the formal eval both flagged:
+a source is now a citable **bib note**, not a freetext `## References` line.*
+
+### Added
+
+-   **`api.cite_source(citing_ref, source, opts?)`** — record a source in one call.
+    It finds the source's bib note (by `source.title`, exact then substring, among
+    indexed `bib` notes in the active vault) or **creates** one with the standard
+    citation at the top (`source.bibtex`, BibTeX preferred; optional `source.notes`
+    below it; `by` defaults to `claude`), then cites it. The citation token is
+    placed **under `opts.heading`** (default `References`, created if absent) or, with
+    `opts.heading = false`, at the body's end — which fixes the dangling-token nit
+    where `cite` appended after an appendix section. Idempotent (`cited = false` when
+    the token is already present); single-vault, like every citation. Returns
+    `{ ok, bib = { path, number, title, created }, cited, heading, token }`. Wraps
+    `notes.write_new_note` + `citations` + `notes.write_section`/`write_body`; no
+    core reimplemented. `test/test_v1220_p1.lua` (creation, placement, graph
+    symmetry, idempotency, reuse-by-title, end-of-body fallback, guards).
+
+### Changed
+
+-   **The bib doctrine — `doc/AGENT_PROTOCOL.md` § 10.** A reference is recorded as a
+    **bib note**, not a prose line: consult `P:\Recursos` (WSL `/mnt/p/Recursos`) and,
+    where warranted, the web; find-or-create the source's bib note (standard citation
+    at the top) via `cite_source`. A **precise bib note is the one encouraged
+    exception to "don't write the user's vault"** — the citation must be exact, any
+    added summary carries a `By Claude:` header, bib notes may be copied between
+    vaults with the right markers, and a user-authored bib note is never altered
+    without permission. § 7's "user's note" rule now names this exception.
+-   **`doc/CONVENTIONS.md` § Bibliography Notes (new).** The bib note shape: standard
+    citation (BibTeX preferred) at the top; optional, authorship-marked summaries
+    after it; the copy-between-vaults and don't-alter-user-bib rules.
+-   **`skills/pkm-notes/SKILL.md`, `doc/PKM_API.md`** updated for `cite_source` and
+    the bib doctrine. **Re-run `:PKMAgentProtocol install`** to redistribute the skill.
+
 ## [1.21.0] - 1/8/2026
 
 *Protocol evolution driven by the first formal evaluation (the "ringforge" task,

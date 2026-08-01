@@ -105,6 +105,7 @@ path.
 |---|---|
 | `cite(source, target_ref)` | `{ ok }` — appends the citation and syncs both sides of the graph. Idempotent. |
 | `uncite(source, target_ref)` | `{ ok, removed }` — removes every citation to the target; `removed` counts the tokens taken out. |
+| `cite_source(citing_ref, source, opts?)` | `{ ok, bib = { path, number, title, created }, cited, heading, token }` — record a **source**: find its bib note (by `source.title`, exact then substring, among indexed `bib` notes) or **create** one (`source.bibtex` at the top, optional `source.notes`, `by` default `claude`), then cite it. Places the token under `opts.heading` (default `References`, created if absent) or, with `opts.heading = false`, at the body's end. Idempotent (`cited = false` if already present). Single-vault, like every citation. |
 | `resolve(ref)` | `{ ok, identifier, type, short_id, path, title }` — resolve a reference to the note it names. |
 
 ### Tags
@@ -184,6 +185,8 @@ wrapped. The note-lifecycle writes (`rename`, `changetype`, `transpose` — the
 last covering both promote and transpose), the view-membership writes
 (`set_membership`, `save_subproject`), and the vault-wide `rename_tag` (which
 subsumes `tags.merge`) landed in v1.18.0. The marked-comment write into a
-*user's* note (`annotate`) landed in v1.19.0. Still not exposed (use the
-interactive commands, or a later increment): the in-place `convert` normaliser
-and the vault lifecycle (create/merge/split). Track additions here as they land.
+*user's* note (`annotate`) landed in v1.19.0. The UI snapshot (`ui_state`) landed
+in v1.20.0. The find-or-create source citation (`cite_source`) landed in v1.22.0.
+Still not exposed (use the interactive commands, or a later increment): the
+in-place `convert` normaliser, cross-vault search (`find_all`, planned next), and
+the vault lifecycle (create/merge/split). Track additions here as they land.

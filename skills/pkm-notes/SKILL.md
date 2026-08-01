@@ -64,6 +64,7 @@ api.rename(ref, new_name)      -- rename, keeping a consolidated note's number/t
 api.changetype(ref, 'agg')     -- change a consolidated note's type (note|agg|bib)
 api.transpose(ref, 'journal')  -- move a note between folders (promote/transpose)
 api.cite(source, target_ref)   -- link two notes (keeps both sides of the graph)
+api.cite_source(note, { title='Stein 2003', bibtex='@book{...}' })  -- find/create a source's BIB note, then cite it — use for SOURCES
 api.tag(paths, { add = { 'x' }, remove = { 'y' } })   -- bulk retag
 api.find('afo')                -- search views + tags + titles at once — START HERE for "where is X"
 api.views()                    -- list projects/views — a subject is often a VIEW, not a tag
@@ -147,6 +148,13 @@ fact (`AGENT_PROTOCOL.md` § 10). Two habits follow:
 - **On writing a note: record provenance.** Author and date, and **references
   consulted** — a book/paper by edition and year, a website by visit date — so a
   future reader can weigh and re-verify it. Attribute a claim to its source.
+- **Record a source as a BIB note, not a freetext line.** Consult `P:\Recursos`
+  (WSL `/mnt/p/Recursos`) and, where warranted, the web; then `api.cite_source`
+  finds-or-creates the source's bib note (its **citation — BibTeX preferred — at
+  the top**) and cites it, placing the token in a `## References` section. A
+  precise bib note is **the one kind of note you may create in a user's vault**
+  when it is missing; any *summary* you add to it carries a `By Claude:` header,
+  and you never alter a user-authored bib note without permission.
 
 You have latitude to structure your *own* notes to current best practices for LLM
 learning and retrieval, as long as provenance holds.

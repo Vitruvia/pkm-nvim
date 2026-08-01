@@ -267,6 +267,139 @@ function M.resolve(ref)
   }
 end
 
+--- Cite a *source* from a note — find the source's bib note, or create one, and
+--- record the citation, in a single call. This is the affordance § 10 was missing:
+--- it points reference-recording at the vault's **bib-note** mechanism instead of
+--- a freetext `## References` prose block, so a source becomes a citable,
+--- graph-linked note rather than a dangling line.
+---
+--- `source` names the bibliographic source; `citing_ref` is the note that cites it:
+---   - `source.title`   the source's name — the search key, and the title of a new
+---                      bib note. Required unless `source.ref` is given.
+---   - `source.ref`     an explicit existing bib note (path / identifier / token),
+---                      skipping the search.
+---   - `source.bibtex`  the BibTeX entry, placed at the top of a *newly created*
+---                      bib note (`doc/CONVENTIONS.md` § Assistant-Authored Notes).
+---   - `source.notes`   an optional summary / part-notes, added below the bibtex.
+---   - `source.by`      authorship for a created bib note (default `'claude'`);
+---                      pass `''` for an unmarked, citation-only bib note.
+---   - `source.source_author` / `source.source_type`  provenance frontmatter.
+---   - `source.create`  set false to error rather than create when none is found.
+---
+--- The bib note is matched by its title (exact first, then substring, then the
+--- filename), among indexed notes of type `bib`, in the **active vault only** —
+--- like every citation, this never crosses vaults. The token is placed under
+--- `opts.heading` (default `'References'`, created if absent); pass
+--- `opts.heading = false` to append it at the body's end instead. Idempotent: a
+--- note already carrying the token is left as it is (`cited = false`).
+---@param citing_ref string  the note that will cite the source (path or ref)
+---@param source table  { title?, ref?, bibtex?, notes?, by?, source_author?, source_type?, create? }
+---@param opts table|nil  { heading?: string|false }
+---@return table  { ok, bib?={ path, number, title, created }, cited?, heading?, token?, error? }
+function M.cite_source(citing_ref, source, opts)
+  source = source or {}
+  opts   = opts or {}
+
+  local citing = to_path(citing_ref)
+  if not citing then
+    return { ok = false, error = 'citing note not found: ' .. tostring(citing_ref) }
+  end
+
+  local citations = require('pkm.citations')
+  local index     = require('pkm.index')
+
+  -- 1. Resolve the bib note: an explicit ref, else a title search over indexed
+  --    bib notes (exact title, then substring, then filename) in this vault.
+  local bib_path, created = nil, false
+  if type(source.ref) == 'string' and source.ref ~= '' then
+    bib_path = to_path(source.ref)
+    if not bib_path then
+      return { ok = false, error = 'bib note not found: ' .. source.ref }
+    end
+  else
+    if type(source.title) ~= 'string' or source.title == '' then
+      return { ok = false, error = 'a source needs a title (or an explicit ref)' }
+    end
+    local needle, partial = fold(source.title), nil
+    for _, e in ipairs(index.get_all()) do
+      if e.note_type == 'bib' then
+        if fold(e.title or '') == needle then bib_path = e.path break end
+        if not partial and (fold(e.title or ''):find(needle, 1, true)
+            or fold(vim.fn.fnamemodify(e.path, ':t')):find(needle, 1, true)) then
+          partial = e.path
+        end
+      end
+    end
+    bib_path = bib_path or partial
+  end
+
+  -- 2. Create the bib note when none matched — bibtex at the top, optional notes.
+  if not bib_path then
+    if source.create == false then
+      return { ok = false, error = 'no bib note matches "' .. source.title .. '"; creation disabled' }
+    end
+    local body = {}
+    if type(source.bibtex) == 'string' and source.bibtex ~= '' then
+      vim.list_extend(body, vim.split(source.bibtex, '\n', { plain = true }))
+    end
+    if type(source.notes) == 'string' and source.notes ~= '' then
+      if #body > 0 then body[#body + 1] = '' end
+      vim.list_extend(body, vim.split(source.notes, '\n', { plain = true }))
+    end
+    local path, err = require('pkm.notes').write_new_note('bib', {
+      title         = source.title,
+      by            = (source.by ~= nil) and source.by or 'claude',
+      body          = body,
+      source_author = source.source_author,
+      source_type   = source.source_type,
+    })
+    if not path then return { ok = false, error = err } end
+    bib_path, created = path, true
+  end
+
+  -- 3. Cite the bib note from the citing note — idempotent, placement-aware.
+  local item, rerr = citations.resolve_citable(bib_path)
+  if not item then return { ok = false, error = rerr or 'could not resolve the bib note' } end
+  local token   = string.format('%s[%s]', item.type, item.short_id)  -- bib[NNNN]
+  local bib_title = (index.get(bib_path) or {}).title
+
+  local already = false
+  for _, l in ipairs(vim.fn.readfile(citing)) do
+    if l:find(token, 1, true) then already = true break end
+  end
+
+  local heading = opts.heading
+  if heading == nil then heading = 'References' end
+  local place_heading = (type(heading) == 'string' and heading ~= '') and heading or nil
+
+  local cited = false
+  if not already then
+    if place_heading then
+      local wrapped = string.format('[%s]', token)
+      local ok, werr = require('pkm.notes').write_section(
+        citing, place_heading, wrapped, { mode = 'append' })
+      if not ok and type(werr) == 'string' and werr:find('no section', 1, true) then
+        -- No such section yet: open one at the note's end, then the token under it.
+        ok, werr = require('pkm.notes').write_body(
+          citing, { '## ' .. place_heading, '', wrapped }, { mode = 'append' })
+      end
+      if not ok then return { ok = false, error = werr } end
+    else
+      local ok, cerr = citations.cite(citing, bib_path)
+      if not ok then return { ok = false, error = cerr } end
+    end
+    cited = true
+  end
+
+  return {
+    ok      = true,
+    bib     = { path = bib_path, number = tonumber(item.short_id), title = bib_title, created = created },
+    cited   = cited,
+    heading = place_heading,
+    token   = token,
+  }
+end
+
 -- =============================================================================
 -- SECTION: Tags
 -- =============================================================================
