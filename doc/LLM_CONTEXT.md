@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.31.0** (code-complete on `dev`) — revision thread step 5a: the note-merge lifecycle write
+## Current version: **v1.32.0** (code-complete on `dev`) — revision thread step 5b: the near-duplicate detector
+
+*v1.32.0 adds **`api.duplicates(opts?)`** — near-duplicate notes (the candidates for
+`merge`), completing the detect→act loop. Where `unlinked_pairs` finds *related*
+notes, this finds notes that are nearly the *same*: similarity is a weighted Jaccard
+blend of **body** words (0.5, the truest signal), **title** terms (0.3), and **tags**
+(0.2, `by-claude` ignored), over every pair of substantive `note`/`agg` notes (bodies
+from the index; all pairs compared so a body copy under a different title is caught —
+quadratic, a deliberate sweep). Each pair `{ a, b, similarity, body_sim, title_sim,
+tag_sim }` at/above `opts.threshold` (0.5); `opts.limit` (10). `test_v1320_p1` covers
+the detect→`merge`→gone round-trip; **re-run `:PKMAgentProtocol install`**. This
+**substantially completes the revision/evolution thread** (related-unlinked ·
+stale · duplicates · merge); the eval loop resumes as the driver. It sits on v1.31.0
+(the note-merge lifecycle write).*
 
 *v1.31.0 adds **`api.merge(survivor_ref, absorbed_ref, opts?)`** (over
 `notes.merge_notes`) — the missing primitive to *act* on duplicate findings. It folds

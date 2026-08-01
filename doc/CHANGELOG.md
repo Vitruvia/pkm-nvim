@@ -61,6 +61,32 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.32.0] - 1/8/2026
+
+*Revision/evolution thread, step 5b (ROADMAP Area 1): the near-duplicate detector,
+which pairs with the v1.31.0 merge write — detect, then fold together. This
+substantially completes the revision thread.*
+
+### Added
+
+-   **`api.duplicates(opts?)`** — near-duplicate notes: pairs whose content is
+    substantially the same, the candidates for `merge`. Where `unlinked_pairs` finds
+    notes that are *related*, this finds notes that are nearly the *same*. Similarity
+    is a weighted Jaccard blend of **body** words (0.5 — the truest signal: same body
+    ⇒ duplicate), **title** terms (0.3), and **tags** (0.2, the `by-claude` marker
+    ignored), over every pair of substantive `note`/`agg` notes (bodies from the
+    index, no file reads). All pairs are compared, so a body copy under a different
+    title is still caught — quadratic in the substantive-note count, a deliberate
+    sweep. Each pair: `{ a, b, similarity, body_sim, title_sim, tag_sim }`,
+    most-similar first, at/above `opts.threshold` (0.5); `opts.limit` (10). Advisory
+    and read-only; single-vault. `test/test_v1320_p1.lua` (detection, non-duplicate
+    exclusion, threshold, and the detect→`merge`→gone round-trip).
+
+### Changed
+
+-   **`skills/pkm-notes/SKILL.md`, `doc/PKM_API.md`** document `duplicates`. **Re-run
+    `:PKMAgentProtocol install`** for the skill.
+
 ## [1.31.0] - 1/8/2026
 
 *Revision/evolution thread, step 5a (ROADMAP Area 1): the note-merge lifecycle

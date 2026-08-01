@@ -85,6 +85,7 @@ api.audit()                    -- vault-integrity findings (read-only)
 api.related_unlinked(ref)      -- notes related to this one but NOT linked yet — candidates to cite (revise the graph)
 api.unlinked_pairs()           -- VAULT-WIDE: every related-but-unlinked pair, ranked — sweep for missing links
 api.stale()                    -- notes likely needing a re-check: missing references/date (§10 review queue)
+api.duplicates()               -- near-identical notes (body/title/tag similarity) → candidates for api.merge
 api.delete(path)               -- guarded: removes only notes YOU authored, trashes them
 api.merge(survivor, absorbed)  -- fold one note into another: body + redirected graph, then trash (both must be yours) — DESTRUCTIVE
 api.actions()                  -- discover the enumerable bulk operations

@@ -494,8 +494,12 @@ threads, in order:*
        absorbed)`: fold one note into another with the graph redirected (not left
        dangling) and the absorbed note trashed; both must be assistant-authored. The
        primitive to *act* on duplicate findings.
-   - **Next: the near-duplicate detector** (`api.duplicates` — the similarity engine
-     at a high threshold → merge candidates), then the eval loop resumes as driver.
+     - ✅ **v1.32.0** — the **near-duplicate detector** `api.duplicates()`: pairs whose
+       content is substantially the same (weighted body/title/tag Jaccard), the
+       candidates for `merge`. Detect → merge closes the loop.
+   - **Revision/evolution thread substantially complete:** related-unlinked
+     (focus + graph + vault-wide) · stale/provenance · duplicates · merge. The eval
+     loop resumes as the driver for what comes next.
    - then act with the existing lifecycle writes.
 4. **The eval loop stays the driver** — each real-task run reports the next
    friction. (First formal eval: the "ringforge" task, 1/8 — verified on disk.)

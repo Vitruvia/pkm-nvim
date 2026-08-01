@@ -155,6 +155,21 @@ local function title_terms(title)
   return out
 end
 
+-- Jaccard overlap of two sets (tables used as sets): |A ∩ B| / |A ∪ B|, in [0,1].
+-- Empty-vs-empty is 0. Used to measure how near-duplicate two notes are.
+local function jaccard(a, b)
+  local na, inter = 0, 0
+  for k in pairs(a) do
+    na = na + 1
+    if b[k] then inter = inter + 1 end
+  end
+  local nb = 0
+  for _ in pairs(b) do nb = nb + 1 end
+  local uni = na + nb - inter
+  if uni == 0 then return 0 end
+  return inter / uni
+end
+
 -- The unique tags matching the needle, ordered by relevance: an exact tag first,
 -- then a prefix match, then alphabetical.
 local function ranked_tags(entries, needle)
@@ -1325,6 +1340,77 @@ function M.stale(opts)
   for i = 1, math.min(limit, #out) do limited[i] = out[i] end
 
   return { ok = true, notes = limited }
+end
+
+--- Near-**duplicate** notes — pairs whose content is substantially the same, the
+--- candidates for `merge`. Where `unlinked_pairs` finds notes that are *related*,
+--- this finds notes that are nearly the *same*, so a fork or an accidental
+--- re-creation can be folded back together. Advisory and read-only.
+---
+--- Similarity is a weighted blend of three Jaccard overlaps — **body** words (0.5,
+--- the truest signal: two notes with the same body are duplicates), **title** terms
+--- (0.3), and **tags** (0.2, the `by-claude` marker ignored) — over every pair of
+--- *substantive* `note`/`agg` notes (bodies compared from the index, so no file
+--- reads). All pairs are compared, so a pure body copy under a different title is
+--- still caught; the cost is quadratic in the substantive-note count — a deliberate
+--- sweep. Pairs at or above `opts.threshold` are returned, most-similar first.
+---@param opts table|nil  { limit? (10), threshold?: number 0..1 (0.5) }
+---@return table  { ok, pairs? }
+---              pairs: { a, b, similarity, body_sim, title_sim, tag_sim }[]
+---              a / b: { path, title, note_type }
+function M.duplicates(opts)
+  opts = opts or {}
+  local limit     = opts.limit or 10
+  local threshold = opts.threshold or 0.5
+
+  local index = require('pkm.index')
+  local items = {}
+  for _, e in ipairs(index.get_all()) do
+    if e.note_type == 'note' or e.note_type == 'agg' then
+      local bw, wc = title_terms(e.body or ''), 0
+      for _ in pairs(bw) do wc = wc + 1 end
+      if wc >= 5 then                    -- enough content to compare meaningfully
+        local tags = {}
+        for _, t in ipairs(e.tags or {}) do if t ~= 'by-claude' then tags[t] = true end end
+        items[#items + 1] = {
+          path = e.path, title = e.title, note_type = e.note_type,
+          tt = title_terms(e.title), tags = tags, bw = bw,
+        }
+      end
+    end
+  end
+
+  local function round2(x) return math.floor(x * 100 + 0.5) / 100 end
+
+  local out = {}
+  for i = 1, #items - 1 do
+    for j = i + 1, #items do
+      local A, B = items[i], items[j]
+      local body_sim  = jaccard(A.bw, B.bw)
+      local title_sim = jaccard(A.tt, B.tt)
+      local tag_sim   = jaccard(A.tags, B.tags)
+      local sim = 0.5 * body_sim + 0.3 * title_sim + 0.2 * tag_sim
+      if sim >= threshold then
+        out[#out + 1] = {
+          a = { path = A.path, title = A.title, note_type = A.note_type },
+          b = { path = B.path, title = B.title, note_type = B.note_type },
+          similarity = round2(sim),
+          body_sim = round2(body_sim), title_sim = round2(title_sim), tag_sim = round2(tag_sim),
+        }
+      end
+    end
+  end
+
+  table.sort(out, function(x, y)
+    if x.similarity ~= y.similarity then return x.similarity > y.similarity end
+    local xk = (x.a.title or '') .. '\0' .. (x.b.title or '')
+    local yk = (y.a.title or '') .. '\0' .. (y.b.title or '')
+    return xk < yk
+  end)
+  local limited = {}
+  for i = 1, math.min(limit, #out) do limited[i] = out[i] end
+
+  return { ok = true, pairs = limited }
 end
 
 -- =============================================================================
