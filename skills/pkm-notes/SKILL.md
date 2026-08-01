@@ -100,7 +100,9 @@ See `PKM_API.md` for the complete list and every return shape.
   **view** (a saved filter), not a tag (searching `afo` finds the *AFO view*, not
   the tag `administração-financeira-orçamentária`), and `find` surfaces all three
   so you do not miss it. Then read `api.view_members(name)` or re-`query` with the
-  real tag it reported.
+  real tag it reported. **Results come relevance-ranked** — notes closest to the
+  term first, each with a `score` (an exact title beats a buried substring), tags
+  leading with the exact match — so the top of the list is usually what you want.
 - **A bare `query('tag:x')` that comes back empty is ambiguous** — "absent" or
   "wrong key". Never conclude a subject is absent from an empty tag query; run
   `find` first.

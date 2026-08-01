@@ -435,8 +435,10 @@ threads, in order:*
    - ✅ **v1.23.0** — `api.find_all` — cross-vault search (the confirmed gap;
      `find`/`query` are single-vault). Backed by `index.scan_root`, a
      non-disruptive per-root reader. Skill now routes cross-vault discovery here.
-   - Relevance ranking for search/find (was Distant 9) — surface the *most
-     relevant* first, not just matches. **(Next in this thread.)**
+   - ✅ **v1.24.0** — relevance ranking for `find`/`find_all` (was Distant 9): notes
+     ordered best-first with a `score` (exact title > prefix > word-boundary >
+     substring > filename; tag boost; recency tiebreak), tags leading with the exact
+     match. (Also fixed `find_all`'s no-registry active-root fallback.)
    - **Persistent index — considered for LLM interop, deferred (decision 1/8).**
      Weighed *because of* interop: the agent invokes `pkm.api` headless, **one cold
      process per call**, so it re-pays the full index `build()` every time, and

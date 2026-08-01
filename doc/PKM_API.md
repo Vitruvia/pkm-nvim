@@ -128,8 +128,8 @@ path.
 
 | Function | Returns |
 |---|---|
-| `find(term)` | `{ ok, term, views, tags, notes }` — case- and accent-insensitive search across view names, tags, and titles at once, in the **active** vault. The first call for "where are the notes about X", since a subject is often a *view*, not a tag. |
-| `find_all(term)` | `{ ok, term, vaults }` — the **cross-vault** twin of `find`: sweeps every registered vault (and the active root), grouping matches per vault (`{ vault, number, root, active, notes, tags }`). Answers "which of my vaults holds X". Reads non-active vaults from disk without switching the active root (`index.scan_root`); matches titles/filenames/tags, not views. |
+| `find(term)` | `{ ok, term, views, tags, notes }` — case- and accent-insensitive search across view names, tags, and titles at once, in the **active** vault. The first call for "where are the notes about X", since a subject is often a *view*, not a tag. `notes` are **relevance-ranked** (each with a `score`, best first: exact title > prefix > word-boundary > substring > filename, a matching tag boosting, recency breaking ties); `tags` lead with the exact match. |
+| `find_all(term)` | `{ ok, term, vaults }` — the **cross-vault** twin of `find`: sweeps every registered vault (and the active root), grouping matches per vault (`{ vault, number, root, active, notes, tags }`), each vault's `notes` **relevance-ranked** with a `score` exactly as `find`. Answers "which of my vaults holds X". Reads non-active vaults from disk without switching the active root (`index.scan_root`); matches titles/filenames/tags, not views. |
 | `get(path)` | the index entry, or `nil`. |
 | `notes()` | every index entry, as an array. |
 | `query(expr)` | `{ ok, matches }` — entries matching the filter DSL (as `:PKMBrowse`). |

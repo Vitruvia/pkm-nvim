@@ -61,6 +61,35 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.24.0] - 1/8/2026
+
+*Retrieval thread, step 2 (ROADMAP Area 1): relevance ranking. `find`/`find_all`
+now surface the closest match first, not whatever order the index iterated.*
+
+### Added
+
+-   **Relevance ranking in `api.find` and `api.find_all`.** Each matched note now
+    carries a `score` and the `notes` list is ordered best-first. Clear tiers,
+    strongest first: an exact title (100), a title prefix (70), a word-boundary hit
+    mid-title (50), a substring mid-word (35), then a filename prefix (25) /
+    substring (15); an earlier position adds a small within-tier bonus, and a
+    matching tag boosts (exact +15, partial +5) — a tag only *lifts* a note already
+    matched by title/filename, never makes one a match on its own. Recency (mtime)
+    breaks ties. `tags` now lead with the exact match, then prefix, then
+    alphabetical. Shared `score_note` / `ranked_notes` / `ranked_tags` helpers back
+    both functions. `test/test_v1240_p1.lua`. (`query` is a boolean filter DSL, so
+    it is deliberately not ranked.)
+
+### Fixed
+
+-   **`api.find_all` returned no vaults when none were registered** (or when the
+    active root was itself unregistered). The active-root fallback read
+    `require('pkm.config').root_path`, which is always `nil` — the resolved config
+    lives at `require('pkm').config`. Registered-vault sweeps were unaffected (they
+    never reached the fallback), so v1.23.0's registry case was correct; this fixes
+    the root_path-only and unregistered-active cases. Caught by the ranking test's
+    no-registry `find_all` assertion.
+
 ## [1.23.0] - 1/8/2026
 
 *Retrieval thread, step 1 (ROADMAP Area 1): cross-vault search. Closes the gap the

@@ -7,9 +7,28 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.23.0** (code-complete on `dev`) — retrieval thread step 1: cross-vault search (`api.find_all`)
+## Current version: **v1.24.0** (code-complete on `dev`) — retrieval thread step 2: relevance ranking
 
-*v1.23.0 is step 1 of the retrieval thread (ROADMAP Area 1): it closes the gap the
+*v1.24.0 is step 2 of the retrieval thread (ROADMAP Area 1): `find`/`find_all` now
+surface the closest match first. Each matched note carries a `score` and the `notes`
+list is ordered best-first — tiers, strongest first: exact title (100), prefix (70),
+word-boundary mid-title (50), substring mid-word (35), filename prefix (25)/substring
+(15); an earlier position adds a small within-tier bonus, a matching tag boosts
+(exact +15, partial +5, only lifting a note already matched by title/filename), and
+recency (mtime) breaks ties. `tags` lead with the exact match. Shared `score_note` /
+`ranked_notes` / `ranked_tags` helpers back both (`query`, a boolean filter, is not
+ranked). It also **fixed** a `find_all` bug from v1.23.0: the no-registry active-root
+fallback read `require('pkm.config').root_path` (always nil — resolved config is at
+`require('pkm').config`), so `find_all` returned no vaults when none were registered;
+registered-vault sweeps were unaffected. `test_v1240_p1`. Also this session, a
+**persistent-index decision** (docs+bench, unversioned): weighed for interop —
+headless agent calls are cold per call, so each re-pays the index build and
+`find_all`'s `scan_root` re-reads every non-active vault (`bench.find_all_bench`:
+~0.16 ms/note → ~96–975 ms for a 3-vault `find_all` at 200–2000 notes/vault) —
+**deferred** behind two gates (let retrieval features define the read shape; build
+only on a real-vault baseline), with the interim win shipped: the skill tells the
+agent to **batch a task into one headless session** (index builds once, stays warm).
+It sits on v1.23.0, step 1 of the retrieval thread: it closes the gap the
 formal eval confirmed — `find`/`query` read only the active vault, so "which of my
 vaults holds X" forced a filesystem grep. **`api.find_all(term)`** is the
 cross-vault twin of `find`: it sweeps every registered vault (and the active root)

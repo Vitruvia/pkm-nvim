@@ -61,6 +61,95 @@ local function fold(s)
   return s
 end
 
+-- Relevance of one index entry to a folded search needle, for ordering find /
+-- find_all results best-first instead of in the index's iteration order. Clear
+-- tiers, strongest first: an exact title (100), a title prefix (70), a
+-- word-boundary hit mid-title (50), a substring mid-word (35), then a filename
+-- prefix (25) / substring (15). A small bonus rewards an earlier position within
+-- a tier; a matching tag boosts (exact +15, partial +5) — but tags only lift a
+-- note already matched by its title or filename, they never make one a match on
+-- their own (that is the tag list's job). Recency is the caller's tiebreaker, not
+-- part of the score. Returns 0 when neither title nor filename matches.
+local function score_note(entry, needle)
+  local title = fold(entry.title or '')
+  local fname = fold(entry.filename or vim.fn.fnamemodify(entry.path or '', ':t:r'))
+  local ti    = title:find(needle, 1, true)
+  local fi    = fname:find(needle, 1, true)
+
+  local score
+  if title == needle then
+    score = 100
+  elseif ti == 1 then
+    score = 70
+  elseif ti and title:sub(ti - 1, ti - 1):match('%W') then
+    score = 50
+  elseif ti then
+    score = 35
+  elseif fi == 1 then
+    score = 25
+  elseif fi then
+    score = 15
+  else
+    return 0
+  end
+
+  if ti and ti > 1 then
+    score = score + math.max(0, 8 - math.floor((ti - 1) / 5))
+  end
+  for _, t in ipairs(entry.tags or {}) do
+    local ft = fold(t)
+    if ft == needle then
+      score = score + 15
+    elseif ft:find(needle, 1, true) then
+      score = score + 5
+    end
+  end
+  return score
+end
+
+-- Score the matching entries and return them best-first: relevance, then recency
+-- (mtime), then title. Each note carries its `score` so the ranking is legible.
+local function ranked_notes(entries, needle)
+  local out = {}
+  for _, e in ipairs(entries) do
+    local s = score_note(e, needle)
+    if s > 0 then
+      out[#out + 1] = {
+        path = e.path, title = e.title or '', note_type = e.note_type,
+        score = s, mtime = e.mtime,
+      }
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.score ~= b.score then return a.score > b.score end
+    if (a.mtime or 0) ~= (b.mtime or 0) then return (a.mtime or 0) > (b.mtime or 0) end
+    return (a.title or '') < (b.title or '')
+  end)
+  return out
+end
+
+-- The unique tags matching the needle, ordered by relevance: an exact tag first,
+-- then a prefix match, then alphabetical.
+local function ranked_tags(entries, needle)
+  local seen, tags = {}, {}
+  for _, e in ipairs(entries) do
+    for _, t in ipairs(e.tags or {}) do
+      if not seen[t] and fold(t):find(needle, 1, true) then
+        seen[t] = true
+        tags[#tags + 1] = t
+      end
+    end
+  end
+  table.sort(tags, function(a, b)
+    local fa, fb = fold(a), fold(b)
+    local ra = (fa == needle) and 0 or (fa:find(needle, 1, true) == 1 and 1 or 2)
+    local rb = (fb == needle) and 0 or (fb:find(needle, 1, true) == 1 and 1 or 2)
+    if ra ~= rb then return ra < rb end
+    return a < b
+  end)
+  return tags
+end
+
 -- =============================================================================
 -- SECTION: Notes
 -- =============================================================================
@@ -482,7 +571,9 @@ end
 --- accented or full-form tag is reached from an abbreviation or plain term.
 --- Case- and accent-insensitive substring match. This is the first call to make
 --- for "where are the notes about X"; a bare `query('tag:x')` that comes back
---- empty is ambiguous, and this disambiguates it.
+--- empty is ambiguous, and this disambiguates it. `notes` are **relevance-ranked**
+--- (each carries its `score`, best first: exact title > prefix > word-boundary >
+--- substring > filename, recency breaking ties); `tags` lead with the exact match.
 ---@param term string
 ---@return table  { ok, term?, views?, tags?, notes?, error? }
 function M.find(term)
@@ -496,21 +587,9 @@ function M.find(term)
     if fold(name):find(needle, 1, true) then views[#views + 1] = name end
   end
 
-  local tags, seen, notes = {}, {}, {}
-  for _, e in ipairs(require('pkm.index').get_all()) do
-    for _, t in ipairs(e.tags or {}) do
-      if not seen[t] and fold(t):find(needle, 1, true) then
-        seen[t] = true
-        tags[#tags + 1] = t
-      end
-    end
-    local title = e.title or ''
-    if fold(title):find(needle, 1, true)
-      or fold(vim.fn.fnamemodify(e.path, ':t')):find(needle, 1, true) then
-      notes[#notes + 1] = { path = e.path, title = title }
-    end
-  end
-  table.sort(tags)
+  local all   = require('pkm.index').get_all()
+  local tags  = ranked_tags(all, needle)
+  local notes = ranked_notes(all, needle)
 
   return { ok = true, term = term, views = views, tags = tags, notes = notes }
 end
@@ -524,8 +603,10 @@ end
 --- active vault is read once, from the live index.
 ---
 --- Matches note titles and filenames and tags, case- and accent-insensitively (the
---- same folding as `find`). Views are a per-vault concept and are *not* swept here
---- — use `find` for the active vault's views. Only vaults with at least one match
+--- same folding as `find`), and each vault's `notes` are **relevance-ranked** best
+--- first, exactly as `find` ranks them (with a `score` per note). Views are a
+--- per-vault concept and are *not* swept here — use `find` for the active vault's
+--- views. Only vaults with at least one match
 --- appear in `vaults`.
 ---@param term string
 ---@return table  { ok, term?, vaults?, error? }
@@ -539,7 +620,7 @@ function M.find_all(term)
   local index  = require('pkm.index')
 
   local active      = vault.active()
-  local active_root = require('pkm.config').root_path
+  local active_root = (require('pkm').config or {}).root_path
 
   -- The roots to sweep: every registered vault, plus the active root when it is
   -- not itself registered. Deduplicated so the active vault is read once (from the
@@ -560,20 +641,8 @@ function M.find_all(term)
   local out = {}
   for _, r in ipairs(roots) do
     local entries = r.live and index.get_all() or index.scan_root(r.root)
-    local notes, tags, seen = {}, {}, {}
-    for _, e in ipairs(entries) do
-      for _, t in ipairs(e.tags or {}) do
-        if not seen[t] and fold(t):find(needle, 1, true) then
-          seen[t] = true
-          tags[#tags + 1] = t
-        end
-      end
-      if fold(e.title or ''):find(needle, 1, true)
-        or fold(e.filename or vim.fn.fnamemodify(e.path, ':t')):find(needle, 1, true) then
-        notes[#notes + 1] = { path = e.path, title = e.title, note_type = e.note_type }
-      end
-    end
-    table.sort(tags)
+    local notes = ranked_notes(entries, needle)
+    local tags  = ranked_tags(entries, needle)
     if #notes > 0 or #tags > 0 then
       out[#out + 1] = {
         vault  = r.name,
