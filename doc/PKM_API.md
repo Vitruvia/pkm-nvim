@@ -163,6 +163,7 @@ path.
 | Function | Returns |
 |---|---|
 | `related_unlinked(ref, opts?)` | `{ ok, note, candidates }` — notes **related to** `ref` but **not linked to it**, ranked, so you can decide whether to `cite`. Three signals: shared tag (2), shared title term (1), and **co-citation** (2 each — a source both notes cite, so notes leaning on the same references surface without a shared tag). Each candidate: `{ path, title, note_type, score, shared_tags, shared_terms, co_citations }`. Already-linked notes and non-topical tags (`by-claude`, near-ubiquitous) excluded. `opts.limit` (10), `opts.min_score` (2), `opts.graph` (true; `false` = cheap index-only, no candidate edge reads). Advisory, read-only; single-vault. |
+| `unlinked_pairs(opts?)` | `{ ok, pairs }` — the **vault-wide** twin: every *pair* of notes related but unlinked, ranked — the "review the whole vault for missing links" sweep. Same signals/exclusions as `related_unlinked`, over all pairs via inverted buckets; a bucket (tag / term / shared source) with more than `opts.bucket_cap` (30) members is skipped as non-discriminating. Each pair: `{ a, b, score, shared = { tags, terms, co_citations } }`. `opts.limit` (20), `opts.min_score` (3), `opts.graph` (true). Cost: one read of every note's edges — a deliberate sweep. Advisory, read-only; single-vault. |
 
 ### Export
 

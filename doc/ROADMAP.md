@@ -483,11 +483,13 @@ threads, in order:*
        notes it is not yet linked to (shared tags / title terms, non-topical tags
        excluded), ranked, to `cite`.
      - ✅ **v1.28.0** — **co-citation** signal added (`opts.graph`, default on): notes
-       that cite the same sources surface as related even without a shared tag. Still
-       to add: a **vault-wide** clustering pass (all unlinked pairs at once), and the
-       **near-duplicate** and **stale** detectors (near-dup shares the same
-       similarity engine at a higher threshold → merge; stale = age + missing
-       provenance).
+       that cite the same sources surface as related even without a shared tag.
+     - ✅ **v1.29.0** — **vault-wide** `api.unlinked_pairs()`: every related-but-
+       unlinked pair across the vault, ranked (inverted buckets, bucket-cap bounded)
+       — the sweep for missing links. Still to add: the **near-duplicate** detector
+       (same similarity engine at a higher threshold → merge; note-merge has no API
+       primitive yet, so it pairs with adding that lifecycle write) and the **stale**
+       detector (age + missing provenance, § 10).
    - then act with the existing lifecycle writes.
 4. **The eval loop stays the driver** — each real-task run reports the next
    friction. (First formal eval: the "ringforge" task, 1/8 — verified on disk.)

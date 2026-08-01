@@ -1068,6 +1068,135 @@ function M.related_unlinked(ref, opts)
   return { ok = true, note = { path = path, title = focus.title }, candidates = limited }
 end
 
+--- Vault-wide relatedness sweep: every **pair** of notes that is related (shared
+--- tags, title terms, or co-citations) but has **no citation edge** between them —
+--- the "review the whole vault for missing links" pass, where `related_unlinked`
+--- answers the same for a single focus note. Advisory and read-only; the assistant
+--- reviews the pairs and `cite`s the ones that belong together.
+---
+--- Same signals and weights as `related_unlinked` (shared tag 2, title term 1,
+--- co-citation 2), the same non-topical-tag exclusion, the same direct-edge
+--- exclusion — over every unordered pair. To stay bounded, a signal *bucket* (a
+--- tag, a term, a shared source) with more than `opts.bucket_cap` members is
+--- skipped: it is too common to implicate any specific pair — the same reasoning
+--- that drops ubiquitous tags. Cost: one read of every note's edges, then a
+--- co-occurrence accumulation; a deliberate sweep, not a hot path.
+---@param opts table|nil  { limit? (20), min_score? (3), bucket_cap? (30), graph? (true) }
+---@return table  { ok, pairs?, error? }
+---              pairs: { a, b, score, shared = { tags, terms, co_citations } }[]
+---              a / b: { path, title, note_type }
+function M.unlinked_pairs(opts)
+  opts = opts or {}
+  local limit      = opts.limit or 20
+  local min_score  = opts.min_score or 3
+  local bucket_cap = opts.bucket_cap or 30
+  local graph      = opts.graph ~= false
+
+  local index     = require('pkm.index')
+  local citations = require('pkm.citations')
+  local export    = require('pkm.export')
+
+  local entries = index.get_all()
+  local n = #entries
+  if n < 2 then return { ok = true, pairs = {} } end
+
+  -- Per-note identity + terms; tag document frequency for the topical filter.
+  local items, by_id, df = {}, {}, {}
+  for _, e in ipairs(entries) do
+    local _, id = citations.get_note_type_and_id(e.path)
+    if id then
+      local it = {
+        id = id, path = e.path, title = e.title, note_type = e.note_type,
+        tags = e.tags or {}, terms = title_terms(e.title),
+      }
+      items[#items + 1] = it
+      by_id[id] = it
+    end
+    for _, t in ipairs(e.tags or {}) do df[t] = (df[t] or 0) + 1 end
+  end
+  local function topical(tag)
+    if tag == 'by-claude' then return false end
+    if n >= 5 and df[tag] and df[tag] > 0.8 * n then return false end
+    return true
+  end
+
+  -- Direct edges (to exclude), and each note's neighbours (for co-citation).
+  local direct = {}
+  local function pairkey(a, b) if a > b then a, b = b, a end return a .. '\0' .. b end
+  for _, it in ipairs(items) do
+    local edges, nb = export.read_citation_edges(it.path), {}
+    for _, x in ipairs(edges.cites) do nb[#nb + 1] = x; direct[pairkey(it.id, x)] = true end
+    for _, x in ipairs(edges.cited_by) do nb[#nb + 1] = x; direct[pairkey(it.id, x)] = true end
+    it.neighbors = nb
+  end
+
+  -- Inverted buckets: a signal value → the note ids carrying it.
+  local tag_b, term_b, cocite_b = {}, {}, {}
+  local function push(bucket, key, id)
+    local b = bucket[key]; if not b then b = {}; bucket[key] = b end
+    b[#b + 1] = id
+  end
+  for _, it in ipairs(items) do
+    for _, t in ipairs(it.tags) do if topical(t) then push(tag_b, t, it.id) end end
+    for term in pairs(it.terms) do push(term_b, term, it.id) end
+    if graph then for _, x in ipairs(it.neighbors) do push(cocite_b, x, it.id) end end
+  end
+
+  -- Accumulate pair scores across the buckets, skipping direct pairs and buckets
+  -- too large to discriminate.
+  local scored = {}
+  local function accumulate(bucket, weight, kind)
+    for key, ids in pairs(bucket) do
+      if #ids >= 2 and #ids <= bucket_cap then
+        for i = 1, #ids - 1 do
+          for j = i + 1, #ids do
+            local pk = pairkey(ids[i], ids[j])
+            if not direct[pk] then
+              local p = scored[pk]
+              if not p then
+                p = { a = ids[i], b = ids[j], score = 0, tags = {}, terms = {}, co = 0 }
+                scored[pk] = p
+              end
+              p.score = p.score + weight
+              if kind == 'tag' then p.tags[#p.tags + 1] = key
+              elseif kind == 'term' then p.terms[#p.terms + 1] = key
+              else p.co = p.co + 1 end
+            end
+          end
+        end
+      end
+    end
+  end
+  accumulate(tag_b, 2, 'tag')
+  accumulate(term_b, 1, 'term')
+  accumulate(cocite_b, 2, 'cocite')
+
+  local out = {}
+  for _, p in pairs(scored) do
+    if p.score >= min_score then
+      local ia, ib = by_id[p.a], by_id[p.b]
+      if ia and ib then
+        out[#out + 1] = {
+          a = { path = ia.path, title = ia.title, note_type = ia.note_type },
+          b = { path = ib.path, title = ib.title, note_type = ib.note_type },
+          score = p.score,
+          shared = { tags = p.tags, terms = p.terms, co_citations = p.co },
+        }
+      end
+    end
+  end
+  table.sort(out, function(x, y)
+    if x.score ~= y.score then return x.score > y.score end
+    local xk = (x.a.title or '') .. '\0' .. (x.b.title or '')
+    local yk = (y.a.title or '') .. '\0' .. (y.b.title or '')
+    return xk < yk
+  end)
+  local limited = {}
+  for i = 1, math.min(limit, #out) do limited[i] = out[i] end
+
+  return { ok = true, pairs = limited }
+end
+
 -- =============================================================================
 -- SECTION: Export
 -- =============================================================================

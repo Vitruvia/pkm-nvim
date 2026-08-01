@@ -83,6 +83,7 @@ api.context('subject')         -- ONE-CALL retrieval: find the subject + pull in
 api.notes()                    -- every note (sample to find the real tag spelling)
 api.audit()                    -- vault-integrity findings (read-only)
 api.related_unlinked(ref)      -- notes related to this one but NOT linked yet — candidates to cite (revise the graph)
+api.unlinked_pairs()           -- VAULT-WIDE: every related-but-unlinked pair, ranked — sweep for missing links
 api.delete(path)               -- guarded: removes only notes YOU authored, trashes them
 api.actions()                  -- discover the enumerable bulk operations
 ```

@@ -61,6 +61,31 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.29.0] - 1/8/2026
+
+*Revision/evolution thread, step 3 (ROADMAP Area 1): the vault-wide sweep. Where
+`related_unlinked` answers "what should this note link to", `unlinked_pairs` answers
+"where across the whole vault are links missing".*
+
+### Added
+
+-   **`api.unlinked_pairs(opts?)`** — every **pair** of notes that is related (shared
+    tags, title terms, or co-citations) but has no citation edge between them, ranked
+    — the review-the-whole-vault-for-missing-links pass. Same signals, weights, and
+    exclusions as `related_unlinked` (shared tag 2, title term 1, co-citation 2;
+    `by-claude`/near-ubiquitous tags and already-linked pairs excluded), computed
+    over all pairs through inverted buckets. To stay bounded, a signal bucket (a tag,
+    a term, a shared source) with more than `opts.bucket_cap` (30) members is skipped
+    as too common to implicate any specific pair. Each pair: `{ a, b, score, shared =
+    { tags, terms, co_citations } }`. `opts.limit` (20), `opts.min_score` (3),
+    `opts.graph` (true). Cost: one read of every note's edges, then a co-occurrence
+    accumulation — a deliberate sweep, not a hot path. `test/test_v1290_p1.lua`.
+
+### Changed
+
+-   **`skills/pkm-notes/SKILL.md`, `doc/PKM_API.md`** document `unlinked_pairs`
+    alongside `related_unlinked`. **Re-run `:PKMAgentProtocol install`** for the skill.
+
 ## [1.28.0] - 1/8/2026
 
 *Revision/evolution thread, step 2 (ROADMAP Area 1): the graph signal for

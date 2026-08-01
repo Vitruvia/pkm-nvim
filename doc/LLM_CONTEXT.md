@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.28.0** (code-complete on `dev`) — revision thread step 2: co-citation signal
+## Current version: **v1.29.0** (code-complete on `dev`) — revision thread step 3: vault-wide unlinked-pairs sweep
+
+*v1.29.0 adds **`api.unlinked_pairs(opts?)`** — the vault-wide twin of
+`related_unlinked`: every *pair* of notes related (shared tags / title terms /
+co-citations) but with no citation edge between them, ranked, so the assistant can
+review the whole vault for missing links and `cite`. Same signals/weights/exclusions,
+computed over all pairs via inverted buckets; a bucket (tag / term / shared source)
+with more than `opts.bucket_cap` (30) members is skipped as non-discriminating. Each
+pair `{ a, b, score, shared = { tags, terms, co_citations } }`; `opts.limit` (20),
+`min_score` (3), `graph` (true). Cost: one read of every note's edges — a deliberate
+sweep. `test_v1290_p1`; **re-run `:PKMAgentProtocol install`**. Remaining in the
+thread: the near-duplicate detector (same engine, higher threshold → merge; needs a
+note-merge lifecycle write) and the stale detector (age + missing provenance, § 10).
+It sits on v1.28.0, which added the co-citation signal to `related_unlinked`.*
 
 *v1.28.0 adds the graph signal to `api.related_unlinked`: beyond shared tags and
 title terms, a **co-citation** (weight 2 each) — a source both the focus and a
