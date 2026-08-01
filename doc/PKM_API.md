@@ -133,6 +133,7 @@ path.
 | `get(path)` | the index entry, or `nil`. |
 | `read(ref)` | `{ ok, path, title, note_type, tags, author, body, cites, cited_by }` — one note **in full**: its body plus its **resolved** citation edges (`cites`/`cited_by`, each `{ ref, title, path, note_type }`). The retrieval atom for "retrieve before working" (§ 11.6); accepts a path or a citation reference. |
 | `neighborhood(ref, opts?)` | `{ ok, seed, notes }` — the citation-connected **neighbourhood** of a note as readable entries (`{ path, title, note_type }`), walking the graph to `opts.cites_depth` / `opts.cited_by_depth` (default 1 each). The seed is returned separately and excluded from `notes`. Built on `export.collect_deep`; single-vault. |
+| `context(term, opts?)` | `{ ok, query, seeds, notes }` — the one-call **RAG assembly** for a subject: `find`s the top `opts.seeds` (default 3, relevance-ranked) and expands each by its `neighborhood`, then merges/de-dupes/annotates — `notes` carry `relation` (`'seed'` \| `'linked'`) with seeds first by score, then linked by title. "Retrieve the relevant cluster before working" in one call. Composes `find` + `neighborhood`; single-vault. |
 | `notes()` | every index entry, as an array. |
 | `query(expr)` | `{ ok, matches }` — entries matching the filter DSL (as `:PKMBrowse`). |
 
@@ -198,6 +199,7 @@ subsumes `tags.merge`) landed in v1.18.0. The marked-comment write into a
 *user's* note (`annotate`) landed in v1.19.0. The UI snapshot (`ui_state`) landed
 in v1.20.0. The find-or-create source citation (`cite_source`) landed in v1.22.0.
 Cross-vault search (`find_all`) landed in v1.23.0, relevance ranking in v1.24.0,
-and the retrieval reads (`read`, `neighborhood`) in v1.25.0. Still not exposed (use
-the interactive commands, or a later increment): the in-place `convert` normaliser
-and the vault lifecycle (create/merge/split). Track additions here as they land.
+the retrieval reads (`read`, `neighborhood`) in v1.25.0, and the RAG assembly
+(`context`) in v1.26.0. Still not exposed (use the interactive commands, or a later
+increment): the in-place `convert` normaliser and the vault lifecycle
+(create/merge/split). Track additions here as they land.

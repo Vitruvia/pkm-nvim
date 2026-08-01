@@ -651,6 +651,77 @@ function M.neighborhood(ref, opts)
   return { ok = true, seed = info(path), notes = notes }
 end
 
+--- Assemble the relevant, connected cluster of notes for a **subject** — the
+--- one-call "retrieve before working" (`doc/AGENT_PROTOCOL.md` § 11.6). It composes
+--- the two reads: `find` locates the best matches for `term` (relevance-ranked,
+--- active vault), and each of the top `opts.seeds` is expanded by its citation
+--- `neighborhood`, then the whole set is merged, de-duplicated, and annotated —
+--- `relation = 'seed'` for a search hit, `'linked'` for a note pulled in by the
+--- graph. So a subject arrives *with its context*, ready to read, instead of one
+--- lookup at a time. For a note you already hold, use `neighborhood` directly.
+---@param term string  the subject to retrieve
+---@param opts table|nil  { seeds?: integer (default 3), cites_depth?, cited_by_depth?: integer (default 1 each) }
+---@return table  { ok, query?, seeds?, notes?, error? }
+---              seeds: { path, title, note_type, score }[] (the search hits used)
+---              notes: { path, title, note_type, relation, score? }[] (the whole
+---                     cluster, seeds first by score, then linked by title)
+function M.context(term, opts)
+  if type(term) ~= 'string' or term == '' then
+    return { ok = false, error = 'no search term' }
+  end
+  opts = opts or {}
+  local max_seeds = opts.seeds or 3
+  local cd, cbd = opts.cites_depth or 1, opts.cited_by_depth or 1
+
+  local found = M.find(term)
+  local seeds = {}
+  for i, n in ipairs(found.notes or {}) do
+    if i > max_seeds then break end
+    seeds[i] = { path = n.path, title = n.title, note_type = n.note_type, score = n.score }
+  end
+
+  local seen, notes = {}, {}
+  local function keyof(p) return vim.fs.normalize(tostring(p or '')):lower() end
+  local function add(entry, relation, score)
+    local k = keyof(entry.path)
+    local prior = seen[k]
+    if prior then
+      -- A note reached both as a search hit and via the graph is a seed: the
+      -- stronger relation and its score win.
+      if relation == 'seed' and prior.relation ~= 'seed' then
+        prior.relation, prior.score = 'seed', score
+      end
+      return
+    end
+    local e = {
+      path = entry.path, title = entry.title, note_type = entry.note_type,
+      relation = relation, score = score,
+    }
+    seen[k] = e
+    notes[#notes + 1] = e
+  end
+
+  for _, s in ipairs(seeds) do add(s, 'seed', s.score) end
+  for _, s in ipairs(seeds) do
+    local nb = M.neighborhood(s.path, { cites_depth = cd, cited_by_depth = cbd })
+    if nb.ok then
+      for _, n in ipairs(nb.notes) do add(n, 'linked', nil) end
+    end
+  end
+
+  table.sort(notes, function(a, b)
+    local ar = (a.relation == 'seed') and 0 or 1
+    local br = (b.relation == 'seed') and 0 or 1
+    if ar ~= br then return ar < br end
+    if ar == 0 and (a.score or 0) ~= (b.score or 0) then
+      return (a.score or 0) > (b.score or 0)
+    end
+    return (a.title or '') < (b.title or '')
+  end)
+
+  return { ok = true, query = term, seeds = seeds, notes = notes }
+end
+
 --- Every note the index knows about, as a flat array of entries.
 ---@return table[]
 function M.notes()

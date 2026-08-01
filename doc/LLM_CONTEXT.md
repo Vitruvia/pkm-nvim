@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.25.0** (code-complete on `dev`) — retrieval thread step 3: the RAG/OKF navigation reads
+## Current version: **v1.26.0** (code-complete on `dev`) — retrieval thread step 4: the RAG assembly (`api.context`)
+
+*v1.26.0 completes the retrieve-before-working surface (§ 11.6) with one call.
+**`api.context(term, opts?)`** composes the two reads: it `find`s the top
+`opts.seeds` (default 3, relevance-ranked, active vault), expands each by its
+citation `neighborhood` (`cites_depth`/`cited_by_depth`, default 1 each), then
+merges, de-duplicates, and annotates — every note carries `relation` (`'seed'` for a
+search hit, `'linked'` for a graph pull-in), seeds first by score then linked by
+title, and a note reached both ways stays a `seed` with no duplicate row. Returns
+`{ ok, query, seeds, notes }`; pure composition of `find` + `neighborhood`,
+single-vault. The retrieval thread is now substantially complete: `find` · `find_all`
+· relevance ranking · `read` · `neighborhood` · `context`. `test_v1260_p1`;
+**re-run `:PKMAgentProtocol install`** for the skill. It sits on v1.25.0, step 3
+(the RAG/OKF navigation reads):*
 
 *v1.25.0 is step 3 of the retrieval thread (ROADMAP Area 1): the protocol's
 "retrieve before working" (§ 11.6) becomes two API reads over the citation graph.

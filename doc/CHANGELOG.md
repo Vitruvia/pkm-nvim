@@ -61,6 +61,30 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.26.0] - 1/8/2026
+
+*Retrieval thread, step 4 (ROADMAP Area 1): the RAG assembly. The retrieve-before-
+working surface (§ 11.6) reaches one call — give it a subject, get back the relevant
+notes and everything linked to them, ready to read.*
+
+### Added
+
+-   **`api.context(term, opts?)`** — the one-call RAG assembly. It composes the two
+    retrieval reads: `find`s the top `opts.seeds` (default 3, relevance-ranked in
+    the active vault), expands each by its citation `neighborhood`
+    (`opts.cites_depth` / `cited_by_depth`, default 1 each), then merges,
+    de-duplicates, and annotates the result — every note carries `relation`
+    (`'seed'` for a search hit, `'linked'` for a graph pull-in), seeds first by
+    score, then linked by title. Returns `{ ok, query, seeds, notes }`. A note
+    reached both ways stays a `seed` (no duplicate row). Purely a composition of
+    `find` + `neighborhood`; single-vault. `test/test_v1260_p1.lua`.
+
+### Changed
+
+-   **`skills/pkm-notes/SKILL.md`** names `context` as the one-call
+    retrieve-before-working option (§ 11.6). `doc/PKM_API.md` documents it. **Re-run
+    `:PKMAgentProtocol install`** to redistribute the skill.
+
 ## [1.25.0] - 1/8/2026
 
 *Retrieval thread, step 3 (ROADMAP Area 1): the RAG/OKF navigation reads. The

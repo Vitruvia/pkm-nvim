@@ -464,8 +464,12 @@ threads, in order:*
    - ✅ **v1.25.0** — RAG/OKF navigation reads: `api.read` (a note in full — body +
      resolved cites/cited_by) and `api.neighborhood` (the citation-connected cluster
      to a depth). The retrieve-before-working surface (§ 11.6) over the graph the
-     assistant builds. More may follow (relevance-ranked neighbourhoods; a
-     term→cluster `context` call that composes `find` + `neighborhood`).
+     assistant builds.
+   - ✅ **v1.26.0** — `api.context(term)`, the one-call RAG assembly: `find` the
+     subject + expand each hit by `neighborhood`, merged and annotated (seed vs
+     linked). The retrieve-before-working surface reaches one call. *(Retrieval
+     thread substantially complete: find · find_all · ranking · read · neighborhood
+     · context. Possible later: relevance-ranked neighbourhoods, body-text search.)*
    - "Structure a note for retrieval" is now protocol (§ 11.6); watch for tooling
      that helps (orienting-summary/section scaffolds).
 3. **Revision / evolution thread — the agent evolves its knowledge, not just
