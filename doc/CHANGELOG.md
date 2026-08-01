@@ -61,6 +61,33 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.30.0] - 1/8/2026
+
+*Revision/evolution thread, step 4 (ROADMAP Area 1): the stale/provenance review
+queue. Surfaces notes to re-check against § 10 (a vault is provisional knowledge).*
+
+### Added
+
+-   **`api.stale(opts?)`** — substantive `note`/`agg` notes that likely need
+    re-checking, ranked. The strong, actionable signal is a **provenance gap**: a
+    note with a real body but **no references** — neither a bib citation nor a
+    `## References`/`## Sources` section — cannot be weighed (weight 3), as cannot one
+    with **no date** (weight 1). **Age** is a weak secondary signal: it only ranks
+    among flagged notes (+1/yr, capped) and never flags on its own, unless
+    `opts.min_age_days` is set (then every substantive note older than that is
+    included — the plain review-queue use). Each result: `{ path, title, note_type,
+    score, reasons = { no_references?, no_date?, age_days? } }`. Advisory and
+    heuristic — it says "look again", never "this is wrong"; the judgement is the
+    assistant's, cross-checking against current knowledge and sources. Bib notes
+    (sources) and journals/scratch (logs) are out of scope. `opts.limit` (20),
+    `opts.min_score` (1). Reads each candidate's frontmatter for dates and bib
+    citations; body comes from the index. `test/test_v1300_p1.lua`.
+
+### Changed
+
+-   **`skills/pkm-notes/SKILL.md`, `doc/PKM_API.md`** document `stale`. **Re-run
+    `:PKMAgentProtocol install`** for the skill.
+
 ## [1.29.0] - 1/8/2026
 
 *Revision/evolution thread, step 3 (ROADMAP Area 1): the vault-wide sweep. Where

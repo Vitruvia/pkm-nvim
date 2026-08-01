@@ -1197,6 +1197,110 @@ function M.unlinked_pairs(opts)
   return { ok = true, pairs = limited }
 end
 
+-- Age in whole days of an ISO-8601 date (`2026-08-01T12:21:30`), or nil if it does
+-- not parse. Only the calendar day is read, which is all the staleness heuristic
+-- needs.
+local function iso_age_days(iso, now)
+  local y, m, d = tostring(iso or ''):match('^(%d%d%d%d)%-(%d%d)%-(%d%d)')
+  if not y then return nil end
+  local t = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = 12 })
+  if not t then return nil end
+  return math.max(0, math.floor((now - t) / 86400))
+end
+
+-- True when the body carries a references/sources section — a heading named
+-- References, Sources, Fontes, Bibliografia (or "…consultadas"). One of the two
+-- ways a note records provenance (the other is a bib citation).
+local function has_references_section(body)
+  for line in (tostring(body or '') .. '\n'):gmatch('(.-)\n') do
+    local h = line:match('^%s*#+%s*(.-)%s*$')
+    if h then
+      local hl = fold(h)
+      if hl:match('^references') or hl:match('^sources')
+        or hl:match('^fontes') or hl:match('^bibliografia') or hl:match('consultad') then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+--- Notes that likely need **re-checking** — the review queue for § 10 (a vault is
+--- provisional knowledge, weighed by its provenance). It is advisory and heuristic:
+--- it says "look at this again", never "this is wrong" — the judgement is the
+--- assistant's, cross-checking the note against current knowledge and sources.
+---
+--- The strong, actionable signal is a **provenance gap**: a *substantive* note
+--- (real body) that records **no references** — neither a bib citation nor a
+--- `## References`/`## Sources` section — cannot be weighed, so it is flagged
+--- (weight 3), as is a note with **no date** in its frontmatter (weight 1). **Age**
+--- is a weak secondary signal: old is not wrong, so it only *ranks* among flagged
+--- notes (+1 per year, capped) and never flags on its own — unless `opts.min_age_days`
+--- is set, which adds every substantive note older than that (the plain review-queue
+--- use). Scoped to `note`/`agg` (bib notes are sources; journals/scratch are logs).
+--- Reads each candidate's frontmatter for its dates and bib citations; body comes
+--- from the index.
+---@param opts table|nil  { limit? (20), min_score? (1), min_age_days?: integer }
+---@return table  { ok, notes? }
+---              notes: { path, title, note_type, score, reasons }[]
+---              reasons: { no_references?, no_date?, age_days? }
+function M.stale(opts)
+  opts = opts or {}
+  local limit        = opts.limit or 20
+  local min_score    = opts.min_score or 1
+  local min_age_days = opts.min_age_days
+  local now          = os.time()
+
+  local index = require('pkm.index')
+  local yaml  = require('pkm.yaml')
+  local out   = {}
+
+  for _, e in ipairs(index.get_all()) do
+    if e.note_type == 'note' or e.note_type == 'agg' then
+      local body = e.body or ''
+      if #(body:gsub('%s+', '')) >= 40 then   -- substantive: has claims worth sourcing
+        local fm      = yaml.parse_frontmatter(vim.fn.readfile(e.path))
+        local has_bib = fm and type(fm.cites) == 'table'
+          and type(fm.cites.bib) == 'table' and #fm.cites.bib > 0
+        local updated = fm and (fm.last_updated_on or fm.created_on)
+        local age     = updated and iso_age_days(updated, now) or nil
+
+        local reasons, score = {}, 0
+        if not (has_bib or has_references_section(body)) then
+          reasons.no_references = true
+          score = score + 3
+        end
+        if not (updated and updated ~= '') then
+          reasons.no_date = true
+          score = score + 1
+        end
+        if age then
+          reasons.age_days = age
+          score = score + math.min(3, math.floor(age / 365))
+        end
+
+        local flagged = reasons.no_references or reasons.no_date
+          or (min_age_days and age and age >= min_age_days)
+        if flagged and score >= min_score then
+          out[#out + 1] = {
+            path = e.path, title = e.title, note_type = e.note_type,
+            score = score, reasons = reasons,
+          }
+        end
+      end
+    end
+  end
+
+  table.sort(out, function(a, b)
+    if a.score ~= b.score then return a.score > b.score end
+    return (a.title or '') < (b.title or '')
+  end)
+  local limited = {}
+  for i = 1, math.min(limit, #out) do limited[i] = out[i] end
+
+  return { ok = true, notes = limited }
+end
+
 -- =============================================================================
 -- SECTION: Export
 -- =============================================================================

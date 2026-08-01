@@ -486,10 +486,13 @@ threads, in order:*
        that cite the same sources surface as related even without a shared tag.
      - ✅ **v1.29.0** — **vault-wide** `api.unlinked_pairs()`: every related-but-
        unlinked pair across the vault, ranked (inverted buckets, bucket-cap bounded)
-       — the sweep for missing links. Still to add: the **near-duplicate** detector
-       (same similarity engine at a higher threshold → merge; note-merge has no API
-       primitive yet, so it pairs with adding that lifecycle write) and the **stale**
-       detector (age + missing provenance, § 10).
+       — the sweep for missing links.
+     - ✅ **v1.30.0** — **stale** `api.stale()`: the § 10 review queue — substantive
+       notes with a provenance gap (no references / no date), ranked; age is a weak
+       secondary signal (`opts.min_age_days` for a plain aged-notes sweep). Still to
+       add: the **near-duplicate** detector (same similarity engine at a higher
+       threshold → **merge**) together with a **note-merge lifecycle write** (no API
+       primitive for merging two notes into one yet).
    - then act with the existing lifecycle writes.
 4. **The eval loop stays the driver** — each real-task run reports the next
    friction. (First formal eval: the "ringforge" task, 1/8 — verified on disk.)

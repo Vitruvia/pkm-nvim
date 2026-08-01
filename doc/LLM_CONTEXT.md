@@ -7,7 +7,19 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.29.0** (code-complete on `dev`) — revision thread step 3: vault-wide unlinked-pairs sweep
+## Current version: **v1.30.0** (code-complete on `dev`) — revision thread step 4: stale / provenance review queue
+
+*v1.30.0 adds **`api.stale(opts?)`** — the § 10 review queue: substantive `note`/`agg`
+notes likely to need re-checking, ranked. The strong signal is a **provenance gap** —
+no references (no bib citation, no `## References`/`## Sources` section) [3] or no date
+[1]; **age** only ranks among flagged notes (+1/yr, capped) and never flags alone
+unless `opts.min_age_days` is set (a plain aged-notes sweep). Each `{ path, title,
+note_type, score, reasons = { no_references?, no_date?, age_days? } }`. Advisory and
+heuristic ("look again", not "this is wrong"); bib notes and journals/scratch are out
+of scope. Reads each candidate's frontmatter for dates/bib-cites, body from the index.
+`test_v1300_p1`; **re-run `:PKMAgentProtocol install`**. Remaining in the thread: the
+near-duplicate detector plus a note-merge lifecycle write (next). It sits on v1.29.0
+(the vault-wide `unlinked_pairs` sweep).*
 
 *v1.29.0 adds **`api.unlinked_pairs(opts?)`** — the vault-wide twin of
 `related_unlinked`: every *pair* of notes related (shared tags / title terms /
