@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.24.0** (code-complete on `dev`) — retrieval thread step 2: relevance ranking
+## Current version: **v1.25.0** (code-complete on `dev`) — retrieval thread step 3: the RAG/OKF navigation reads
+
+*v1.25.0 is step 3 of the retrieval thread (ROADMAP Area 1): the protocol's
+"retrieve before working" (§ 11.6) becomes two API reads over the citation graph.
+**`api.read(ref)`** returns one note in full — its body plus its **resolved**
+citation edges (`cites`/`cited_by`, each `{ ref, title, path, note_type }`) — the
+retrieval atom, accepting a path or a citation reference (with a direct-parse
+fallback for a note the active index does not hold). **`api.neighborhood(ref,
+opts?)`** returns the citation-connected cluster around a note as readable entries,
+walking `export.collect_deep` to `cites_depth`/`cited_by_depth` (default 1 each),
+seed excluded. Both single-vault (the graph never crosses vaults). The skill now
+names them as the retrieve-before-working mechanisms; **re-run `:PKMAgentProtocol
+install`**. `test_v1250_p1` (a Referrer→Hub→{two sources} graph). It sits on
+v1.24.0 (relevance ranking), step 2 of the retrieval thread:*
 
 *v1.24.0 is step 2 of the retrieval thread (ROADMAP Area 1): `find`/`find_all` now
 surface the closest match first. Each matched note carries a `score` and the `notes`

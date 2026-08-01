@@ -76,7 +76,9 @@ api.find_all('afo')            -- CROSS-VAULT: which of my vaults holds X? (grou
 api.views()                    -- list projects/views — a subject is often a VIEW, not a tag
 api.view_members(name)         -- the notes in a view
 api.query('tag:afo AND type:note')   -- filter the index → { ok, matches }
-api.get(path)                  -- one note's index entry
+api.get(path)                  -- one note's index entry (metadata)
+api.read(ref)                  -- a note IN FULL: body + resolved cites/cited_by — retrieve-before-working
+api.neighborhood(ref, {cites_depth=1, cited_by_depth=1})  -- the citation-connected cluster around a note
 api.notes()                    -- every note (sample to find the real tag spelling)
 api.audit()                    -- vault-integrity findings (read-only)
 api.delete(path)               -- guarded: removes only notes YOU authored, trashes them
@@ -200,7 +202,10 @@ never copy the body into memory. **Retrieval:** check memory first to find *wher
 it lives, then open the vault note for depth.
 
 **Learning is retrieval and revision, not just capture.** Start a task by
-*retrieving* what the vault already holds and building on it, not from cold; write
+*retrieving* what the vault already holds and building on it, not from cold —
+`find`/`find_all` to locate, then **`read`** for a note in full (body + its
+resolved links) and **`neighborhood`** for the cluster of notes linked to it, so a
+subject arrives with its context. Then write
 each note **to be found again** (clear title, right tags/views, links, a short
 summary up top). And **revise** — knowledge evolves, so update stale notes, merge
 duplicates, link newly-seen relationships, split overgrown notes (lifecycle writes

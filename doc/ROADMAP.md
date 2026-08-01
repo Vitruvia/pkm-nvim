@@ -461,7 +461,11 @@ threads, in order:*
      an authority (a lost/corrupt one just rebuilds; keep it **off** the synced
      drive to avoid `.conflict` churn). The risk to design for is two writers — the
      agent process and the user's editor.
-   - RAG/OKF navigation aids (structured retrieval surfaces for the agent).
+   - ✅ **v1.25.0** — RAG/OKF navigation reads: `api.read` (a note in full — body +
+     resolved cites/cited_by) and `api.neighborhood` (the citation-connected cluster
+     to a depth). The retrieve-before-working surface (§ 11.6) over the graph the
+     assistant builds. More may follow (relevance-ranked neighbourhoods; a
+     term→cluster `context` call that composes `find` + `neighborhood`).
    - "Structure a note for retrieval" is now protocol (§ 11.6); watch for tooling
      that helps (orienting-summary/section scaffolds).
 3. **Revision / evolution thread — the agent evolves its knowledge, not just

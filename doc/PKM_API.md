@@ -131,6 +131,8 @@ path.
 | `find(term)` | `{ ok, term, views, tags, notes }` — case- and accent-insensitive search across view names, tags, and titles at once, in the **active** vault. The first call for "where are the notes about X", since a subject is often a *view*, not a tag. `notes` are **relevance-ranked** (each with a `score`, best first: exact title > prefix > word-boundary > substring > filename, a matching tag boosting, recency breaking ties); `tags` lead with the exact match. |
 | `find_all(term)` | `{ ok, term, vaults }` — the **cross-vault** twin of `find`: sweeps every registered vault (and the active root), grouping matches per vault (`{ vault, number, root, active, notes, tags }`), each vault's `notes` **relevance-ranked** with a `score` exactly as `find`. Answers "which of my vaults holds X". Reads non-active vaults from disk without switching the active root (`index.scan_root`); matches titles/filenames/tags, not views. |
 | `get(path)` | the index entry, or `nil`. |
+| `read(ref)` | `{ ok, path, title, note_type, tags, author, body, cites, cited_by }` — one note **in full**: its body plus its **resolved** citation edges (`cites`/`cited_by`, each `{ ref, title, path, note_type }`). The retrieval atom for "retrieve before working" (§ 11.6); accepts a path or a citation reference. |
+| `neighborhood(ref, opts?)` | `{ ok, seed, notes }` — the citation-connected **neighbourhood** of a note as readable entries (`{ path, title, note_type }`), walking the graph to `opts.cites_depth` / `opts.cited_by_depth` (default 1 each). The seed is returned separately and excluded from `notes`. Built on `export.collect_deep`; single-vault. |
 | `notes()` | every index entry, as an array. |
 | `query(expr)` | `{ ok, matches }` — entries matching the filter DSL (as `:PKMBrowse`). |
 
@@ -195,6 +197,7 @@ last covering both promote and transpose), the view-membership writes
 subsumes `tags.merge`) landed in v1.18.0. The marked-comment write into a
 *user's* note (`annotate`) landed in v1.19.0. The UI snapshot (`ui_state`) landed
 in v1.20.0. The find-or-create source citation (`cite_source`) landed in v1.22.0.
-Cross-vault search (`find_all`) landed in v1.23.0. Still not exposed (use the
-interactive commands, or a later increment): the in-place `convert` normaliser and
-the vault lifecycle (create/merge/split). Track additions here as they land.
+Cross-vault search (`find_all`) landed in v1.23.0, relevance ranking in v1.24.0,
+and the retrieval reads (`read`, `neighborhood`) in v1.25.0. Still not exposed (use
+the interactive commands, or a later increment): the in-place `convert` normaliser
+and the vault lifecycle (create/merge/split). Track additions here as they land.

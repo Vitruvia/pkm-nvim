@@ -128,6 +128,15 @@ local function ranked_notes(entries, needle)
   return out
 end
 
+-- Two absolute paths naming the same file, tolerant of separator and (on
+-- case-insensitive filesystems) case differences — for excluding a seed from its
+-- own neighbourhood, where the seed path and the graph-resolved paths are spelled
+-- by different code.
+local function samepath(a, b)
+  return vim.fs.normalize(tostring(a or '')):lower()
+      == vim.fs.normalize(tostring(b or '')):lower()
+end
+
 -- The unique tags matching the needle, ordered by relevance: an exact tag first,
 -- then a prefix match, then alphabetical.
 local function ranked_tags(entries, needle)
@@ -544,6 +553,102 @@ end
 ---@return table|nil entry
 function M.get(path)
   return require('pkm.index').get(vim.fn.fnamemodify(path, ':p'))
+end
+
+--- Read one note in full — the retrieval *atom* for "retrieve before working"
+--- (`doc/AGENT_PROTOCOL.md` § 11.6). Unlike `get` (an index entry) this returns the
+--- note's **body** plus its **resolved** citation edges: who it cites and who
+--- cites it, each as `{ ref, title, path, note_type }` you can hand straight to
+--- another `read`. Accepts a path or a citation reference. Single vault, like the
+--- graph it reads.
+---@param ref string  path or citation reference
+---@return table  { ok, path?, title?, note_type?, tags?, author?, body?, cites?, cited_by?, error? }
+function M.read(ref)
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+
+  local entry = require('pkm.index').get(path)
+  local title, note_type, tags, body
+  if entry then
+    title, note_type, tags, body = entry.title, entry.note_type, entry.tags, entry.body
+  else
+    -- A readable note the active index does not hold (e.g. an odd folder): parse
+    -- the minimum from the file so read still answers.
+    local lines = vim.fn.readfile(path)
+    local fm, cs = require('pkm.yaml').parse_frontmatter(lines)
+    title = (fm and type(fm.title) == 'string' and fm.title ~= '' and fm.title)
+      or vim.fn.fnamemodify(path, ':t:r')
+    tags = (fm and type(fm.tags) == 'table') and fm.tags or {}
+    local parts = {}
+    if cs then for i = cs, #lines do parts[#parts + 1] = lines[i] end end
+    body = table.concat(parts, '\n')
+  end
+
+  local edges = require('pkm.export').read_citation_edges(path)
+  local map   = require('pkm.citations').get_citable_items_map()
+  local function resolve(ids)
+    local out = {}
+    for _, id in ipairs(ids) do
+      local it = map[id]
+      if it then
+        out[#out + 1] = { ref = id, title = it.title, path = it.path, note_type = it.type }
+      end
+    end
+    return out
+  end
+
+  return {
+    ok        = true,
+    path      = path,
+    title     = title,
+    note_type = note_type,
+    tags      = tags or {},
+    author    = require('pkm.notes').agent_authored(path),
+    body      = body or '',
+    cites     = resolve(edges.cites),
+    cited_by  = resolve(edges.cited_by),
+  }
+end
+
+--- The citation-connected **neighbourhood** of a note — the navigation aid for
+--- "retrieve everything linked before working". Walks the graph the assistant
+--- built (`cite`) out to a depth and returns the reachable notes as readable
+--- entries, so a subject and its context arrive together rather than one lookup at
+--- a time. `opts.cites_depth` / `opts.cited_by_depth` bound the walk (default 1
+--- each: what this note cites and what cites it, one hop). The seed is returned
+--- separately and excluded from `notes`. Single vault (the graph never crosses
+--- vaults); built on `export.collect_deep`.
+---@param ref string  path or citation reference
+---@param opts table|nil  { cites_depth?: integer, cited_by_depth?: integer }
+---@return table  { ok, seed?, notes?, error? }
+---              seed/notes entries: { path, title, note_type }
+function M.neighborhood(ref, opts)
+  opts = opts or {}
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+
+  local index = require('pkm.index')
+  local function info(p)
+    local e = index.get(p)
+    return {
+      path = p,
+      title = (e and e.title) or vim.fn.fnamemodify(p, ':t:r'),
+      note_type = e and e.note_type,
+    }
+  end
+
+  local paths = require('pkm.export').collect_deep({ path }, {
+    cites_depth    = opts.cites_depth    or 1,
+    cited_by_depth = opts.cited_by_depth or 1,
+  })
+
+  local notes = {}
+  for _, p in ipairs(paths) do
+    if not samepath(p, path) then notes[#notes + 1] = info(p) end
+  end
+  table.sort(notes, function(a, b) return (a.title or '') < (b.title or '') end)
+
+  return { ok = true, seed = info(path), notes = notes }
 end
 
 --- Every note the index knows about, as a flat array of entries.

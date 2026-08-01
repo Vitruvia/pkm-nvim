@@ -61,6 +61,36 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.25.0] - 1/8/2026
+
+*Retrieval thread, step 3 (ROADMAP Area 1): the RAG/OKF navigation reads. The
+protocol's "retrieve before working" (§ 11.6) becomes two calls — read a note in
+full, and read the cluster of notes linked to it — over the citation graph the
+assistant builds.*
+
+### Added
+
+-   **`api.read(ref)`** — one note in full, the retrieval *atom*. Unlike `get` (an
+    index entry) it returns the note's **body** plus its **resolved** citation
+    edges: `cites` and `cited_by`, each `{ ref, title, path, note_type }` that can
+    be handed straight to another `read`. Accepts a path or a citation reference;
+    single-vault. Falls back to parsing the file directly for a readable note the
+    active index does not hold.
+-   **`api.neighborhood(ref, opts?)`** — the citation-connected **neighbourhood** of
+    a note, the navigation aid for "retrieve everything linked before working". It
+    walks the graph to `opts.cites_depth` / `opts.cited_by_depth` (default 1 each —
+    what the note cites and what cites it, one hop) and returns the reachable notes
+    as readable `{ path, title, note_type }` entries, seed returned separately and
+    excluded. Built on `export.collect_deep`; single-vault. `test/test_v1250_p1.lua`
+    (a `Referrer → Hub → { two sources }` graph: resolved edges, ref-not-just-path,
+    seed exclusion, depth honoured, guards).
+
+### Changed
+
+-   **`skills/pkm-notes/SKILL.md`** now names `read` + `neighborhood` as the
+    retrieve-before-working mechanisms (§ 11.6). `doc/PKM_API.md` documents both.
+    **Re-run `:PKMAgentProtocol install`** to redistribute the skill.
+
 ## [1.24.0] - 1/8/2026
 
 *Retrieval thread, step 2 (ROADMAP Area 1): relevance ranking. `find`/`find_all`
