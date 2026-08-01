@@ -31,6 +31,8 @@
 --
 -- Usage:
 --   :lua require('pkm.bench').baseline()
+--   :lua require('pkm.bench').find_all_bench()
+--   :lua require('pkm.bench').find_all_bench({ vaults = 4, note_count = 1000 })
 --   :lua require('pkm.bench').run_suite()
 --   :lua require('pkm.bench').run_suite(nil, { keep = true })
 --   :lua require('pkm.bench').run_suite(nil, { extended = true })
@@ -45,6 +47,7 @@
 --   gen_notes(n, dest)             → count of files written
 --   cleanup(bench_dir)             → delete bench_dir and all contents
 --   baseline()                     → timed raw scan on real corpus (read-only)
+--   find_all_bench(opts?)          → cold cross-vault scan_root cost (synthetic)
 --   run_suite(bench_dir?, opts?)   → four-phase suite; cleans up afterward
 --   views_suite(opts?)             → view × note scaling bench (overview scenario)
 --   views_open(opts?)              → :PKMView list open-path bench on the live
@@ -341,6 +344,48 @@ function M.baseline()
     vim.log.levels.INFO)
 
   return total_ms
+end
+
+-- =============================================================================
+-- SECTION: Cross-vault cold read — pkm.api.find_all
+-- =============================================================================
+
+--- Measure the cold cross-vault read cost — what `pkm.api.find_all` pays per
+--- invocation. find_all reads every non-active vault with `index.scan_root` (a
+--- full glob + read_entry sweep) on each call, and a headless agent call starts
+--- cold every time, so this is the exact number the persistent-index decision
+--- hinges on (`doc/ROADMAP.md` Area 1, retrieval thread). Synthetic and
+--- self-cleaning; it reads through `scan_root`, which never touches the live
+--- singleton index, so the run is side-effect-free.
+---
+--- Reports, per tier, the minimum of three cold `scan_root` timings (min sheds GC
+--- and first-touch noise) and the projected find_all cost = per-vault × vaults.
+---@param opts table|nil  { note_count?: number|number[], vaults?: number, bench_dir?: string, keep?: boolean }
+---@return nil
+function M.find_all_bench(opts)
+  opts = opts or {}
+  local index = require('pkm.index')
+  local tiers = opts.note_count or { 200, 500, 1000, 2000 }
+  if type(tiers) == 'number' then tiers = { tiers } end
+  local vaults = opts.vaults or 3
+  local bench_dir = M._resolve_bench_dir(opts.bench_dir, '_pkmfindall')
+
+  print(string.format(
+    'find_all cold-read bench — projected across %d vault(s):', vaults))
+  for _, n in ipairs(tiers) do
+    local root = utils.join(bench_dir, tostring(n) .. '_v')
+    M.gen_notes(n, utils.join(root, '03-Consolidated'))
+    local best = math.huge
+    for _ = 1, 3 do
+      local ms = M.time(function() index.scan_root(root, { '03-Consolidated' }) end)
+      best = math.min(best, ms)
+    end
+    print(string.format(
+      '  %5d notes/vault: scan_root %.1f ms  → find_all ~%.1f ms across %d vaults',
+      n, best, best * vaults, vaults))
+  end
+
+  if not opts.keep then M.cleanup(bench_dir) end
 end
 
 -- =============================================================================

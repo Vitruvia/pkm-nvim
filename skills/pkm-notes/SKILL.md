@@ -48,6 +48,11 @@ nvim --headless -u <init> \
 - A **write** returns `{ ok, … }`. If `ok` is false, read `error`, stop, and
   report — never retry blindly or edit the file instead.
 - A **read** returns its data directly.
+- **Batch a task into one headless session.** Each `nvim --headless` starts cold
+  and builds the vault index on first use; several operations in *one* session
+  (chain `-c "lua …"` calls, or run one `lua` block) build it once and reuse it
+  warm. Prefer **one session per task**, not one per call — the difference grows
+  with vault size, and `find`/`query`/`find_all` each need the index.
 
 ## Core operations
 

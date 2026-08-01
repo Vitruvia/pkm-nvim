@@ -73,6 +73,13 @@ registry default, or `$PKM_VAULT` — nothing outside the registry names a vault
 An assistant defaults to writing in its own vault; writing in another is an
 explicit choice of `root_path` (see `doc/AGENT_PROTOCOL.md` § 5).
 
+**Batch a task into one session.** Every headless launch starts cold and builds
+the index on first use, so several operations belong in *one* invocation — chain
+`-c "lua …"` calls or run one `lua` block — rather than one process per call. The
+index then builds once and stays warm for the whole task; the saving grows with
+vault size and applies to every `find`/`query`/`find_all`. (This is why a
+persistent on-disk index is not needed yet — `doc/ROADMAP.md` Area 1.)
+
 *A single-entry dispatcher (`pkm.api.cli(fn, json_args)`) is deliberately not
 added yet; the raw form above is enough until the skill shows a concrete need.*
 

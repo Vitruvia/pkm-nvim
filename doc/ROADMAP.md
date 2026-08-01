@@ -437,6 +437,28 @@ threads, in order:*
      non-disruptive per-root reader. Skill now routes cross-vault discovery here.
    - Relevance ranking for search/find (was Distant 9) — surface the *most
      relevant* first, not just matches. **(Next in this thread.)**
+   - **Persistent index — considered for LLM interop, deferred (decision 1/8).**
+     Weighed *because of* interop: the agent invokes `pkm.api` headless, **one cold
+     process per call**, so it re-pays the full index `build()` every time, and
+     `find_all`'s `scan_root` re-reads every non-active vault from disk on each
+     call. Measured cold cost (`bench.find_all_bench`, synthetic on temp fs):
+     ~0.16 ms/note → a 3-vault `find_all` runs **~96 ms at 200 notes/vault, ~470 ms
+     at 1000, ~975 ms at 2000**; Drive-backed vaults are likely slower. Verdict:
+     tolerable now, a real cost past ~1k notes/vault. **Deferred behind two gates:**
+     (a) let the retrieval features below define the read pattern first — RAG may
+     want body text/embeddings, so persisting a shape now risks persisting the
+     wrong one; (b) build only once a bench baseline **on the real vaults** shows a
+     bottleneck (the standing rule: no optimisation without a `bench.lua`
+     baseline). **Cheaper interim win, shipped:** the skill now tells the agent to
+     **batch a task into one headless session** (index builds once, stays warm),
+     reclaiming most of the cost for multi-op tasks with zero cache. **When built,
+     the low-risk shape:** an **mtime-keyed cache** — `scandir` is cheap and
+     `read_entry` is the cost, so reuse entries whose mtime is unchanged and re-read
+     only the rest (an incremental rebuild that **self-heals staleness on load**),
+     written atomically (the `vaults.json` precedent), treated as a cache and never
+     an authority (a lost/corrupt one just rebuilds; keep it **off** the synced
+     drive to avoid `.conflict` churn). The risk to design for is two writers — the
+     agent process and the user's editor.
    - RAG/OKF navigation aids (structured retrieval surfaces for the agent).
    - "Structure a note for retrieval" is now protocol (§ 11.6); watch for tooling
      that helps (orienting-summary/section scaffolds).
@@ -488,10 +510,12 @@ threads, in order:*
   utilities are largely shipped.
 
 **6 · Other — ▹**
-- Browser preview (`preview.lua`, Distant 2); persistent index (Distant 3);
-  review queue (Distant 5); improved / smart search + relevance ranking (Distant
-  9); note sync (Distant 10); note versions / undo (Distant 11); metadata-system
-  review; image / ASCII support; the forced-save prompt (Near 5.1); `PKMViewStats`.
+- Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —
+  considered for interop and deferred; the decision, gates, and cache design live
+  in Area 1's retrieval thread**; review queue (Distant 5); improved / smart search
+  + relevance ranking (Distant 9, now Area 1's retrieval thread); note sync (Distant
+  10); note versions / undo (Distant 11); metadata-system review; image / ASCII
+  support; the forced-save prompt (Near 5.1); `PKMViewStats`.
 - **Documentation debt** (deferred, tracked — `[[pkm-doc-debt]]`). The user-facing
   docs lag the pkm.api / agent-protocol wave; OK to defer, do in a focused pass:
   - **`doc/pkm.txt`** (`:help`) — still cites the ~46 commands deleted in v1.14.0
