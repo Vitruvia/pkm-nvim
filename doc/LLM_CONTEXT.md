@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.26.2** (code-complete on `dev`) — patch: more keymap-help fixes
+## Current version: **v1.27.0** (code-complete on `dev`) — revision thread step 1: related-but-unlinked
+
+*v1.27.0 opens the revision/evolution thread (ROADMAP Area 1): the first tool that
+surfaces what to *revise*, not just retrieve. **`api.related_unlinked(ref, opts?)`**
+returns, for a focus note, the notes related to it (shared tags / title terms) but
+**not linked to it** (no citation edge either way) — `{ ok, note, candidates }`, each
+`{ path, title, note_type, score, shared_tags, shared_terms }`, ranked (tag = 2, term
+= 1) — so the assistant can `cite` the ones that belong together (the eval-flagged
+gap: related-yet-ungraphed notes). Non-topical tags are excluded so they can't make
+everything look related: `by-claude` (on every assistant note) always, plus any tag
+on >80% of the vault. Already-linked notes excluded. Advisory/read-only, single-vault,
+cheap (index + one edge read). `test_v1270_p1`; **re-run `:PKMAgentProtocol install`**.
+Focus-mode for now — co-citation signal, vault-wide clustering, and near-duplicate /
+stale detectors are the planned continuations. It sits on v1.26.2 (help-panel patch).*
 
 *v1.26.2 (patch, author-reported after the v1.26.1 smoke, interactive surface): a help
 float left open by switching away is no longer orphaned — it closes on `WinLeave`

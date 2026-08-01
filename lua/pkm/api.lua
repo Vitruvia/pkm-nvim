@@ -137,6 +137,24 @@ local function samepath(a, b)
       == vim.fs.normalize(tostring(b or '')):lower()
 end
 
+-- The meaningful words of a title, folded, as a set — for measuring title
+-- overlap between notes. Words shorter than four characters and a few common
+-- 4+-letter stop words are dropped, so the overlap reflects subject terms, not
+-- glue words. (Sub-four-letter stop words — the, and, for, de, da, os — fall out
+-- on length alone.)
+local TITLE_STOP = {
+  that = true, this = true, with = true, from = true, into = true, your = true,
+  para = true, como = true, mais = true, pelo = true, pela = true, sobre = true,
+  entre = true, uma = true, nao = true,
+}
+local function title_terms(title)
+  local out = {}
+  for w in fold(title or ''):gmatch('[%w]+') do
+    if #w >= 4 and not TITLE_STOP[w] then out[w] = true end
+  end
+  return out
+end
+
 -- The unique tags matching the needle, ordered by relevance: an exact tag first,
 -- then a prefix match, then alphabetical.
 local function ranked_tags(entries, needle)
@@ -938,6 +956,98 @@ end
 ---@return { kind: string, severity: string, path: string|nil, message: string }[]
 function M.audit()
   return require('pkm.check').run()
+end
+
+-- =============================================================================
+-- SECTION: Revision (surfacing what to revise)
+-- =============================================================================
+
+--- Notes **related to** a given note but **not linked to it** — the revision aid
+--- for "a vault is a graph, not a pile" (`doc/AGENT_PROTOCOL.md` §§ 7, 11.6). It
+--- surfaces candidates the assistant can then connect with `cite`: notes that
+--- share the focus note's tags or title terms yet have no citation edge to it in
+--- either direction. Advisory, read-only — it proposes, the assistant (and the
+--- user) decide; a shared tag is a hint, not a mandate to link.
+---
+--- Scoring: each shared tag counts 2 (a shared tag is a strong same-subject
+--- signal), each shared title term counts 1. Notes the focus already cites or is
+--- cited by are excluded (that is the point — they are *already* linked). Ranked
+--- best first. Single vault. Cheap: index tags/titles plus one read of the focus
+--- note's own edges; no per-candidate file reads.
+---@param ref string  the note to find unlinked relations for (path or citation reference)
+---@param opts table|nil  { limit?: integer (default 10), min_score?: integer (default 2) }
+---@return table  { ok, note?, candidates?, error? }
+---              candidates: { path, title, note_type, score, shared_tags, shared_terms }[]
+function M.related_unlinked(ref, opts)
+  opts = opts or {}
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+
+  local index = require('pkm.index')
+  local focus = index.get(path)
+  if not focus then return { ok = false, error = 'note not indexed: ' .. path } end
+
+  local limit     = opts.limit or 10
+  local min_score = opts.min_score or 2
+
+  local ftags = {}
+  for _, t in ipairs(focus.tags or {}) do ftags[t] = true end
+  local fterms = title_terms(focus.title)
+
+  -- A tag only counts toward relatedness if it is *topical*. The `by-claude`
+  -- authorship tag rides every assistant note, and any tag on almost the whole
+  -- vault is glue, not subject — either would make every note "related" to every
+  -- other. Compute each tag's document frequency once and drop the ubiquitous.
+  local entries = index.get_all()
+  local n, df = #entries, {}
+  for _, e in ipairs(entries) do
+    for _, t in ipairs(e.tags or {}) do df[t] = (df[t] or 0) + 1 end
+  end
+  local function topical(tag)
+    if tag == 'by-claude' then return false end
+    if n >= 5 and df[tag] and df[tag] > 0.8 * n then return false end
+    return true
+  end
+
+  -- The notes the focus is already linked to (either direction), by identifier —
+  -- one read of its frontmatter edges, so they can be excluded.
+  local linked = {}
+  local edges  = require('pkm.export').read_citation_edges(path)
+  for _, id in ipairs(edges.cites) do linked[id] = true end
+  for _, id in ipairs(edges.cited_by) do linked[id] = true end
+
+  local citations = require('pkm.citations')
+  local out = {}
+  for _, e in ipairs(entries) do
+    if not samepath(e.path, path) then
+      local _, eid = citations.get_note_type_and_id(e.path)
+      if not (eid and linked[eid]) then
+        local shared_tags = {}
+        for _, t in ipairs(e.tags or {}) do
+          if ftags[t] and topical(t) then shared_tags[#shared_tags + 1] = t end
+        end
+        local shared_terms, et = {}, title_terms(e.title)
+        for term in pairs(fterms) do if et[term] then shared_terms[#shared_terms + 1] = term end end
+
+        local score = 2 * #shared_tags + #shared_terms
+        if score >= min_score then
+          out[#out + 1] = {
+            path = e.path, title = e.title, note_type = e.note_type,
+            score = score, shared_tags = shared_tags, shared_terms = shared_terms,
+          }
+        end
+      end
+    end
+  end
+
+  table.sort(out, function(a, b)
+    if a.score ~= b.score then return a.score > b.score end
+    return (a.title or '') < (b.title or '')
+  end)
+  local limited = {}
+  for i = 1, math.min(limit, #out) do limited[i] = out[i] end
+
+  return { ok = true, note = { path = path, title = focus.title }, candidates = limited }
 end
 
 -- =============================================================================

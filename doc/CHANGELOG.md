@@ -61,6 +61,33 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.27.0] - 1/8/2026
+
+*Revision/evolution thread, step 1 (ROADMAP Area 1): the first tool that surfaces
+what to revise, not just what to retrieve. Operationalises the "revise and rearrange"
+half of § 11.6 — a vault is a graph, not a pile.*
+
+### Added
+
+-   **`api.related_unlinked(ref, opts?)`** — for a focus note, the notes **related to
+    it but not linked to it**: those sharing its tags or title terms yet with no
+    citation edge in either direction. Returns `{ ok, note, candidates }`, each
+    candidate `{ path, title, note_type, score, shared_tags, shared_terms }`, ranked
+    (shared tag = 2, shared title term = 1). The assistant reviews and `cite`s the
+    ones that belong together — the exact gap the formal eval flagged (the user's
+    magic notes were related yet ungraphed). **Non-topical tags are excluded** so
+    they cannot make everything look related: the `by-claude` authorship tag (on
+    every assistant note) always, and any tag on more than 80% of the vault. Already-
+    linked notes are excluded (that is the point). `opts.limit` (10), `opts.min_score`
+    (2). Advisory and read-only; single-vault; cheap (index tags/titles plus one read
+    of the focus note's own edges). `test/test_v1270_p1.lua`.
+
+### Changed
+
+-   **`skills/pkm-notes/SKILL.md`** names `related_unlinked` as the tool for "link
+    newly-seen relationships" (§ 11.6). `doc/PKM_API.md` documents it under a new
+    Revision section. **Re-run `:PKMAgentProtocol install`** to redistribute the skill.
+
 ## [1.26.2] - 1/8/2026
 
 *Two more keymap-help follow-ups after the v1.26.1 smoke (author-reported).

@@ -479,6 +479,13 @@ threads, in order:*
    - audit / graph extensions: stale notes (§ 10), duplicate / near-duplicate
      notes, and **related-but-unlinked** notes (the eval flagged the user's magic
      notes as related yet ungraphed).
+     - ✅ **v1.27.0** — `api.related_unlinked(ref)`: for a focus note, the related
+       notes it is not yet linked to (shared tags / title terms, non-topical tags
+       excluded), ranked, to `cite`. Focus-mode; still to add: **co-citation /
+       graph-coupling** as a signal, a **vault-wide** clustering pass, and the
+       **near-duplicate** and **stale** detectors (near-dup shares the same
+       similarity engine at a higher threshold → merge; stale = age + missing
+       provenance).
    - then act with the existing lifecycle writes.
 4. **The eval loop stays the driver** — each real-task run reports the next
    friction. (First formal eval: the "ringforge" task, 1/8 — verified on disk.)

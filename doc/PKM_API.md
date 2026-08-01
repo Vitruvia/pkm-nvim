@@ -158,6 +158,12 @@ path.
 |---|---|
 | `audit()` | `{ kind, severity, path, message }[]` — vault-integrity findings, errors before warnings. Read-only. |
 
+### Revision (surfacing what to revise)
+
+| Function | Returns |
+|---|---|
+| `related_unlinked(ref, opts?)` | `{ ok, note, candidates }` — notes **related to** `ref` (shared tags / title terms) but **not linked to it**, ranked, so you can decide whether to `cite`. Each candidate: `{ path, title, note_type, score, shared_tags, shared_terms }` (shared tag = 2, term = 1). Already-linked notes and non-topical tags (`by-claude`, near-ubiquitous) are excluded. `opts.limit` (10), `opts.min_score` (2). Advisory, read-only; single-vault. |
+
 ### Export
 
 | Function | Returns |
@@ -199,7 +205,8 @@ subsumes `tags.merge`) landed in v1.18.0. The marked-comment write into a
 *user's* note (`annotate`) landed in v1.19.0. The UI snapshot (`ui_state`) landed
 in v1.20.0. The find-or-create source citation (`cite_source`) landed in v1.22.0.
 Cross-vault search (`find_all`) landed in v1.23.0, relevance ranking in v1.24.0,
-the retrieval reads (`read`, `neighborhood`) in v1.25.0, and the RAG assembly
-(`context`) in v1.26.0. Still not exposed (use the interactive commands, or a later
-increment): the in-place `convert` normaliser and the vault lifecycle
-(create/merge/split). Track additions here as they land.
+the retrieval reads (`read`, `neighborhood`) in v1.25.0, the RAG assembly
+(`context`) in v1.26.0, and the first revision aid (`related_unlinked`) in v1.27.0.
+Still not exposed (use the interactive commands, or a later increment): the in-place
+`convert` normaliser and the vault lifecycle (create/merge/split). Track additions
+here as they land.

@@ -82,6 +82,7 @@ api.neighborhood(ref, {cites_depth=1, cited_by_depth=1})  -- the citation-connec
 api.context('subject')         -- ONE-CALL retrieval: find the subject + pull in its linked cluster (seeds + linked)
 api.notes()                    -- every note (sample to find the real tag spelling)
 api.audit()                    -- vault-integrity findings (read-only)
+api.related_unlinked(ref)      -- notes related to this one but NOT linked yet — candidates to cite (revise the graph)
 api.delete(path)               -- guarded: removes only notes YOU authored, trashes them
 api.actions()                  -- discover the enumerable bulk operations
 ```
@@ -212,7 +213,9 @@ each note **to be found again** (clear title, right tags/views, links, a short
 summary up top). And **revise** — knowledge evolves, so update stale notes, merge
 duplicates, link newly-seen relationships, split overgrown notes (lifecycle writes
 in your own vault; with permission in the user's). Appending without ever revising
-is how a vault rots.
+is how a vault rots. To find what to link, **`api.related_unlinked(ref)`** surfaces
+notes related to one you're working on but not yet linked to it — decide, then
+`cite` the ones that belong together.
 
 **Long-term learning has a session mode** (`/pkm-learning off|on|expanded`):
 `off` writes to neither; `on` (default) writes to ordinary memory as usual;
