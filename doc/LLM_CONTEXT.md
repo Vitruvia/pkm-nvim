@@ -7,7 +7,18 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.27.0** (code-complete on `dev`) — revision thread step 1: related-but-unlinked
+## Current version: **v1.28.0** (code-complete on `dev`) — revision thread step 2: co-citation signal
+
+*v1.28.0 adds the graph signal to `api.related_unlinked`: beyond shared tags and
+title terms, a **co-citation** (weight 2 each) — a source both the focus and a
+candidate cite/are-cited-by — so notes that lean on the same references surface as
+related even with no shared tag. Each candidate now carries `co_citations`. It reads
+each candidate's edges, so it sits behind **`opts.graph`** (default true); `graph =
+false` is the prior cheap index-only pass. `test_v1280_p1` (notes related only by a
+shared source, ranked by how many they share, absent under `graph=false`). Still to
+come in the thread: a vault-wide unlinked-pairs pass, and the near-duplicate and
+stale detectors. It sits on v1.27.0, which opened the revision/evolution thread with
+`related_unlinked`.*
 
 *v1.27.0 opens the revision/evolution thread (ROADMAP Area 1): the first tool that
 surfaces what to *revise*, not just retrieve. **`api.related_unlinked(ref, opts?)`**

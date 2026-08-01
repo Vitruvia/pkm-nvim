@@ -162,7 +162,7 @@ path.
 
 | Function | Returns |
 |---|---|
-| `related_unlinked(ref, opts?)` | `{ ok, note, candidates }` — notes **related to** `ref` (shared tags / title terms) but **not linked to it**, ranked, so you can decide whether to `cite`. Each candidate: `{ path, title, note_type, score, shared_tags, shared_terms }` (shared tag = 2, term = 1). Already-linked notes and non-topical tags (`by-claude`, near-ubiquitous) are excluded. `opts.limit` (10), `opts.min_score` (2). Advisory, read-only; single-vault. |
+| `related_unlinked(ref, opts?)` | `{ ok, note, candidates }` — notes **related to** `ref` but **not linked to it**, ranked, so you can decide whether to `cite`. Three signals: shared tag (2), shared title term (1), and **co-citation** (2 each — a source both notes cite, so notes leaning on the same references surface without a shared tag). Each candidate: `{ path, title, note_type, score, shared_tags, shared_terms, co_citations }`. Already-linked notes and non-topical tags (`by-claude`, near-ubiquitous) excluded. `opts.limit` (10), `opts.min_score` (2), `opts.graph` (true; `false` = cheap index-only, no candidate edge reads). Advisory, read-only; single-vault. |
 
 ### Export
 

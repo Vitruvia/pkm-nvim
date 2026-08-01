@@ -481,8 +481,10 @@ threads, in order:*
      notes as related yet ungraphed).
      - ✅ **v1.27.0** — `api.related_unlinked(ref)`: for a focus note, the related
        notes it is not yet linked to (shared tags / title terms, non-topical tags
-       excluded), ranked, to `cite`. Focus-mode; still to add: **co-citation /
-       graph-coupling** as a signal, a **vault-wide** clustering pass, and the
+       excluded), ranked, to `cite`.
+     - ✅ **v1.28.0** — **co-citation** signal added (`opts.graph`, default on): notes
+       that cite the same sources surface as related even without a shared tag. Still
+       to add: a **vault-wide** clustering pass (all unlinked pairs at once), and the
        **near-duplicate** and **stale** detectors (near-dup shares the same
        similarity engine at a higher threshold → merge; stale = age + missing
        provenance).

@@ -61,6 +61,28 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.28.0] - 1/8/2026
+
+*Revision/evolution thread, step 2 (ROADMAP Area 1): the graph signal for
+relatedness. `related_unlinked` now uses the citation graph, not just tags/titles.*
+
+### Added
+
+-   **Co-citation in `api.related_unlinked`.** A third relatedness signal beyond
+    shared tags and title terms: a **co-citation** (weight 2 each) is a source both
+    the focus and the candidate cite (or are cited by), so two notes that lean on the
+    same references surface as related even with no shared tag — the graph-native
+    case the content signals miss. Each candidate now carries `co_citations`. It
+    reads each candidate's edges, so it is behind **`opts.graph`** (default `true`);
+    pass `graph = false` for the previous cheap index-only pass (tags/titles plus one
+    read of the focus note's edges). `test/test_v1280_p1.lua` (notes related *only*
+    by a shared source, ranked by how many they share, absent under `graph = false`).
+
+### Changed
+
+-   **`doc/PKM_API.md`** documents the co-citation signal and `opts.graph`. The skill
+    text is unchanged (it already points at `related_unlinked` for linking relations).
+
 ## [1.27.0] - 1/8/2026
 
 *Revision/evolution thread, step 1 (ROADMAP Area 1): the first tool that surfaces

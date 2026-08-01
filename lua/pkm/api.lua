@@ -972,12 +972,18 @@ end
 --- Scoring: each shared tag counts 2 (a shared tag is a strong same-subject
 --- signal), each shared title term counts 1. Notes the focus already cites or is
 --- cited by are excluded (that is the point — they are *already* linked). Ranked
---- best first. Single vault. Cheap: index tags/titles plus one read of the focus
---- note's own edges; no per-candidate file reads.
+--- best first. Single vault.
+---
+--- Three relatedness signals: a shared tag (2), a shared title term (1), and — the
+--- graph one — a **co-citation** (2 each): a third note both the focus and the
+--- candidate cite (or are cited by), so notes that lean on the same sources surface
+--- even with no shared tag. Co-citation reads each candidate's edges, so it is set
+--- behind `opts.graph` (default on); pass `graph = false` for the cheap index-only
+--- pass (tags/titles plus one read of the focus note's own edges).
 ---@param ref string  the note to find unlinked relations for (path or citation reference)
----@param opts table|nil  { limit?: integer (default 10), min_score?: integer (default 2) }
+---@param opts table|nil  { limit?: integer (10), min_score?: integer (2), graph?: boolean (true) }
 ---@return table  { ok, note?, candidates?, error? }
----              candidates: { path, title, note_type, score, shared_tags, shared_terms }[]
+---              candidates: { path, title, note_type, score, shared_tags, shared_terms, co_citations }[]
 function M.related_unlinked(ref, opts)
   opts = opts or {}
   local path = to_path(ref)
@@ -989,6 +995,7 @@ function M.related_unlinked(ref, opts)
 
   local limit     = opts.limit or 10
   local min_score = opts.min_score or 2
+  local graph     = opts.graph ~= false
 
   local ftags = {}
   for _, t in ipairs(focus.tags or {}) do ftags[t] = true end
@@ -1029,11 +1036,22 @@ function M.related_unlinked(ref, opts)
         local shared_terms, et = {}, title_terms(e.title)
         for term in pairs(fterms) do if et[term] then shared_terms[#shared_terms + 1] = term end end
 
-        local score = 2 * #shared_tags + #shared_terms
+        -- Co-citation: sources this candidate cites (or is cited by) that the
+        -- focus also links to. `linked` already holds the focus's own neighbours,
+        -- so a candidate edge landing in it is a shared third note.
+        local co = 0
+        if graph then
+          local ce = require('pkm.export').read_citation_edges(e.path)
+          for _, id in ipairs(ce.cites) do if linked[id] then co = co + 1 end end
+          for _, id in ipairs(ce.cited_by) do if linked[id] then co = co + 1 end end
+        end
+
+        local score = 2 * #shared_tags + #shared_terms + 2 * co
         if score >= min_score then
           out[#out + 1] = {
             path = e.path, title = e.title, note_type = e.note_type,
             score = score, shared_tags = shared_tags, shared_terms = shared_terms,
+            co_citations = co,
           }
         end
       end
