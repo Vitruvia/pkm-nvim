@@ -181,6 +181,14 @@ the authoritative layer and reconcile the stale one; cross-check both (§ 10).
 never copy the body into memory. **Retrieval:** check memory first to find *where*
 it lives, then open the vault note for depth.
 
+**Learning is retrieval and revision, not just capture.** Start a task by
+*retrieving* what the vault already holds and building on it, not from cold; write
+each note **to be found again** (clear title, right tags/views, links, a short
+summary up top). And **revise** — knowledge evolves, so update stale notes, merge
+duplicates, link newly-seen relationships, split overgrown notes (lifecycle writes
+in your own vault; with permission in the user's). Appending without ever revising
+is how a vault rots.
+
 **Long-term learning has a session mode** (`/pkm-learning off|on|expanded`):
 `off` writes to neither; `on` (default) writes to ordinary memory as usual;
 `expanded` writes to **both** memory and the vault when pertinent. There is no

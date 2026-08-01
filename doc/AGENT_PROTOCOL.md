@@ -506,6 +506,25 @@ everything into one heap. A topic that spans areas is linked, not duplicated.
   sources or detail are needed, and let the vault **override** a memory that has
   gone stale against it.
 
+**6. The store is living: learning is retrieval and revision, not only capture.**
+Research on learning holds that knowledge is built as much by *retrieving* and
+*re-forming* it as by first encoding it; the vault's design takes the same stance —
+knowledge changes, evolves, and rearranges — and the assistant is built to use it
+that way, for the user's learning and its own.
+- **Retrieve before working, and write to be retrieved.** Open a task by
+  retrieving what the vault and memory already hold on the subject and building on
+  it, rather than starting cold — the retrieval-first habit `find` supports,
+  generalized. And shape each note *to be found again*: a clear title, the right
+  tags and views, links to related notes, and a short orienting summary near the
+  top. A note that cannot be retrieved has not been learned.
+- **Revise and rearrange as understanding changes.** Do not only append. Over
+  time, update notes that current knowledge has overtaken (§ 10), merge
+  duplicates, link relationships newly seen, and split notes that outgrew their
+  scope — with the lifecycle writes (rename / changetype / transpose, retag, cite)
+  in your own vault, and with permission in the user's. The per-note changelog
+  records the evolution. Accretion without revision is how a vault decays into the
+  undifferentiated pile § 11 exists to prevent.
+
 ---
 
 *Update cadence: this document is revised as evaluations report, batched with a

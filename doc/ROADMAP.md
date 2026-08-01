@@ -415,6 +415,40 @@ easy).*
   - **Memory-organization doctrine** — ✅ shipped in **v1.21.0** (AGENT_PROTOCOL
     § 11). The tiered/by-area/authority rules for memory vs. vault.
 
+#### Next steps — the ordered plan (post-eval direction, 1/8/2026)
+
+*The framing (author, 1/8): learning is not only encoding/consolidation but
+**retrieval**; and the vault is designed around knowledge that **changes, evolves,
+and rearranges**. The build so far is write-heavy; these threads turn the vault
+into a living, retrieved, revised store. Doctrine landed in AGENT_PROTOCOL § 11.6
+(retrieve-before-working + write-to-be-retrieved; revise-and-rearrange). The code
+threads, in order:*
+
+1. **v1.22.0 — Bib & sources (immediate next).** `api.cite_source` (find-or-create
+   a bib note, then cite it in one call), the bib doctrine (browse `P:\Recursos`
+   + web; bib notes as the encouraged user-vault exception; bibtex at the top;
+   copy user↔Claude; never alter a user bib note without permission), CONVENTIONS
+   bib format. Closes the confirmed Finding A, and `cite_source` can place the
+   citation sensibly (addresses the cite-placement nit).
+2. **Retrieval thread — make the vault serve retrieval-based learning.**
+   - `api.find_all` — cross-vault search (the confirmed gap; `find`/`query` are
+     single-vault).
+   - Relevance ranking for search/find (was Distant 9) — surface the *most
+     relevant* first, not just matches.
+   - RAG/OKF navigation aids (structured retrieval surfaces for the agent).
+   - "Structure a note for retrieval" is now protocol (§ 11.6); watch for tooling
+     that helps (orienting-summary/section scaffolds).
+3. **Revision / evolution thread — the agent evolves its knowledge, not just
+   accretes.** The rearrangement *mechanisms* already exist (rename / changetype /
+   transpose / rename_tag / cite); what's missing is the *practice* (now in
+   § 11.6) and the tooling to **surface what needs revising**:
+   - audit / graph extensions: stale notes (§ 10), duplicate / near-duplicate
+     notes, and **related-but-unlinked** notes (the eval flagged the user's magic
+     notes as related yet ungraphed).
+   - then act with the existing lifecycle writes.
+4. **The eval loop stays the driver** — each real-task run reports the next
+   friction. (First formal eval: the "ringforge" task, 1/8 — verified on disk.)
+
 **2 · Wrapping — 🔺**
 - **Structure-aware autowrap**: wrap around frontmatter, code, headers, tables,
   and custom list prefixes, so a continuation line never begins with `N. ` — this
