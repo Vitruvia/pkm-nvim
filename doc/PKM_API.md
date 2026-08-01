@@ -104,6 +104,7 @@ path.
 | `changetype(ref, new_type)` | `{ ok, path, filename, type, title }` — change a consolidated note's type (`"note"`/`"agg"`/`"bib"`); renames the file to the new prefix and propagates through citations. Twin of `:PKMNote changetype`. |
 | `transpose(ref, target, opts)` | `{ ok, path, filename, type, title, original_deleted }` — move a note to another PKM type (`target` = `"note"`/`"journal"`/`"scratchpad"`). This is both **promote** and **transpose**: the original is deleted unless `opts.keep_original`. For `target="note"`, `opts.subtype` picks note/agg/bib and `opts.title` names it. Twin of `:PKMNote promote`/`transpose`. |
 | `delete(path)` | `{ ok, author, trashed }` — through the guard: refuses any note with no `By<Author>` marker, and trashes rather than hard-deletes. |
+| `merge(survivor_ref, absorbed_ref, opts?)` | `{ ok, survivor, redirected, absorbed_title }` — fold `absorbed` into `survivor`: append its body (under `opts.heading` if given), **redirect** its citation graph onto the survivor (inbound citers re-pointed, the survivor gains the absorbed note's outbound cites), union its topical tags, then trash it. The graph is redirected *before* the trash, so nothing dangles. **Both notes must be assistant-authored.** Destructive — the act on `duplicates`/`unlinked_pairs` findings. |
 | `authored_by(path)` | the agent author read from the filename, or `nil` for a human note. |
 
 ### Citations

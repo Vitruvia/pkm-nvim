@@ -489,10 +489,13 @@ threads, in order:*
        — the sweep for missing links.
      - ✅ **v1.30.0** — **stale** `api.stale()`: the § 10 review queue — substantive
        notes with a provenance gap (no references / no date), ranked; age is a weak
-       secondary signal (`opts.min_age_days` for a plain aged-notes sweep). Still to
-       add: the **near-duplicate** detector (same similarity engine at a higher
-       threshold → **merge**) together with a **note-merge lifecycle write** (no API
-       primitive for merging two notes into one yet).
+       secondary signal (`opts.min_age_days` for a plain aged-notes sweep).
+     - ✅ **v1.31.0** — the **note-merge lifecycle write** `api.merge(survivor,
+       absorbed)`: fold one note into another with the graph redirected (not left
+       dangling) and the absorbed note trashed; both must be assistant-authored. The
+       primitive to *act* on duplicate findings.
+   - **Next: the near-duplicate detector** (`api.duplicates` — the similarity engine
+     at a high threshold → merge candidates), then the eval loop resumes as driver.
    - then act with the existing lifecycle writes.
 4. **The eval loop stays the driver** — each real-task run reports the next
    friction. (First formal eval: the "ringforge" task, 1/8 — verified on disk.)

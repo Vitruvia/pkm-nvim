@@ -7,7 +7,21 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.30.0** (code-complete on `dev`) — revision thread step 4: stale / provenance review queue
+## Current version: **v1.31.0** (code-complete on `dev`) — revision thread step 5a: the note-merge lifecycle write
+
+*v1.31.0 adds **`api.merge(survivor_ref, absorbed_ref, opts?)`** (over
+`notes.merge_notes`) — the missing primitive to *act* on duplicate findings. It folds
+the absorbed note into the survivor: appends its body (under `opts.heading` if given),
+**redirects its citation graph** onto the survivor (inbound citers re-pointed; the
+survivor gains the absorbed note's outbound cites via the copied body), unions its
+topical tags, then trashes it. Because `trash.trash_note` preserves backlinks for
+restore, the graph is redirected **before** the trash so nothing dangles, and a copied
+token pointing back at the survivor is stripped (no self-citation). **Both notes must
+be assistant-authored** (the survivor is rewritten, the absorbed note deleted). Returns
+`{ ok, survivor, redirected, absorbed_title }`; reuses `write_body` +
+`citations.cite`/`uncite` + `agent_delete`. `test_v1310_p1`; **re-run
+`:PKMAgentProtocol install`**. Next: the near-duplicate detector (`api.duplicates`)
+that produces merge candidates. It sits on v1.30.0 (the `stale` review queue).*
 
 *v1.30.0 adds **`api.stale(opts?)`** — the § 10 review queue: substantive `note`/`agg`
 notes likely to need re-checking, ranked. The strong signal is a **provenance gap** —

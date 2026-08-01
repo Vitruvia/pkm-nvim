@@ -338,6 +338,32 @@ function M.annotate(ref, content, opts)
   return { ok = true }
 end
 
+--- Merge the `absorbed` note into the `survivor`: fold its body in, **redirect** its
+--- citation graph onto the survivor (inbound citers are re-pointed; the survivor
+--- gains the absorbed note's outbound cites via the copied body), union its topical
+--- tags, and trash it. The graph is redirected before the trash, so nothing dangles.
+--- Both notes must be assistant-authored — the survivor's body is rewritten and the
+--- absorbed note deleted. The act on `unlinked_pairs`/`duplicates` findings.
+---@param survivor_ref string  the note that remains (path or citation reference)
+---@param absorbed_ref string  the note folded in and trashed
+---@param opts table|nil  { heading?: string }  place the absorbed body under a heading
+---@return table  { ok, survivor?, redirected?, absorbed_title?, error? }
+function M.merge(survivor_ref, absorbed_ref, opts)
+  local survivor = to_path(survivor_ref)
+  if not survivor then return { ok = false, error = 'survivor not found: ' .. tostring(survivor_ref) } end
+  local absorbed = to_path(absorbed_ref)
+  if not absorbed then return { ok = false, error = 'absorbed not found: ' .. tostring(absorbed_ref) } end
+
+  local path, err, meta = require('pkm.notes').merge_notes(survivor, absorbed, opts or {})
+  if not path then return { ok = false, error = err } end
+  return {
+    ok             = true,
+    survivor       = path,
+    redirected     = meta.redirected,
+    absorbed_title = meta.absorbed_title,
+  }
+end
+
 -- =============================================================================
 -- SECTION: Citations
 -- =============================================================================

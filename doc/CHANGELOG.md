@@ -61,6 +61,34 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.31.0] - 1/8/2026
+
+*Revision/evolution thread, step 5a (ROADMAP Area 1): the note-merge lifecycle
+write — the missing primitive to *act* on duplicate findings. The near-duplicate
+detector (5b) builds on it next.*
+
+### Added
+
+-   **`api.merge(survivor_ref, absorbed_ref, opts?)`** (over `notes.merge_notes`) —
+    fold the `absorbed` note into the `survivor`: append its body (under
+    `opts.heading` if given), **redirect its citation graph** onto the survivor
+    (every note that cited the absorbed note is re-pointed at the survivor; the
+    survivor gains the absorbed note's outbound cites via the copied body), union its
+    topical tags, then trash it through the deletion guard. Because trashing
+    *preserves* backlinks for restore (`trash.trash_note`), the graph is redirected
+    **before** the trash, so no dangling edge is left — and a copied token pointing
+    back at the survivor is stripped, so a merge never yields a self-citation. **Both
+    notes must be assistant-authored** (the survivor's body is rewritten and the
+    absorbed note deleted). Returns `{ ok, survivor, redirected, absorbed_title }`.
+    Reuses `write_body` + `citations.cite`/`uncite` + `agent_delete`; no core
+    reimplemented. `test/test_v1310_p1.lua` (inbound redirect, outbound carried,
+    no-dangling, self-citation stripped, tag union, and the guards).
+
+### Changed
+
+-   **`skills/pkm-notes/SKILL.md`, `doc/PKM_API.md`** document `merge` (flagged
+    destructive). **Re-run `:PKMAgentProtocol install`** for the skill.
+
 ## [1.30.0] - 1/8/2026
 
 *Revision/evolution thread, step 4 (ROADMAP Area 1): the stale/provenance review

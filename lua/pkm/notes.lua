@@ -578,6 +578,105 @@ function M.annotate(path, content, opts)
   return M.write_body(path, marked, { mode = 'append' })
 end
 
+--- Merge one note into another — the lifecycle write behind duplicate resolution.
+--- `absorbed` is folded into `survivor`: its body is appended, its citation graph
+--- is **redirected** onto the survivor (every note that cited the absorbed note now
+--- cites the survivor; everything the absorbed note cited, the survivor now cites
+--- via the copied body), its topical tags are unioned in, and it is then trashed
+--- through the deletion guard. Because trashing preserves backlinks for restore
+--- (`trash.trash_note`), the graph is redirected *first*, so no dangling edge is
+--- left behind. **Both notes must be assistant-authored** — the survivor's body is
+--- rewritten and the absorbed note is deleted, neither of which is done to a human's
+--- note here.
+---@param survivor_path string  the note that remains
+---@param absorbed_path string  the note folded in and trashed
+---@param opts table|nil  { heading?: string }  place the absorbed body under a heading
+---@return string|nil survivor  the survivor path, or nil on error
+---@return string|nil err
+---@return table|nil meta  { redirected, absorbed_title }
+function M.merge_notes(survivor_path, absorbed_path, opts)
+  opts = opts or {}
+  survivor_path = vim.fn.fnamemodify(survivor_path, ':p')
+  absorbed_path = vim.fn.fnamemodify(absorbed_path, ':p')
+
+  local function same(a, b)
+    return vim.fs.normalize(a):lower() == vim.fs.normalize(b):lower()
+  end
+  if same(survivor_path, absorbed_path) then return nil, 'a note cannot merge into itself' end
+  if vim.fn.filereadable(survivor_path) == 0 then return nil, 'survivor note not found: ' .. survivor_path end
+  if vim.fn.filereadable(absorbed_path) == 0 then return nil, 'absorbed note not found: ' .. absorbed_path end
+  if not M.agent_authored(survivor_path) then
+    return nil, 'refusing to merge into a note no agent authored'
+  end
+  if not M.agent_authored(absorbed_path) then
+    return nil, 'refusing to absorb a note no agent authored'
+  end
+
+  local citations = require('pkm.citations')
+  local index     = require('pkm.index')
+  local export    = require('pkm.export')
+
+  local _, surv_id = citations.get_note_type_and_id(survivor_path)
+  local _, abs_id  = citations.get_note_type_and_id(absorbed_path)
+
+  -- Capture the absorbed note's neighbours as paths before anything mutates.
+  local id_to_path = {}
+  for id, d in pairs(citations.get_citable_items_map()) do id_to_path[id] = d.path end
+  local edges = export.read_citation_edges(absorbed_path)
+  local inbound = {}
+  for _, id in ipairs(edges.cited_by) do if id_to_path[id] then inbound[#inbound + 1] = id_to_path[id] end end
+
+  local abs_entry = index.get(absorbed_path)
+  local abs_title = abs_entry and abs_entry.title
+  local abs_body  = abs_entry and abs_entry.body or ''
+
+  -- 1. Absorbed body → survivor (the survivor gains the absorbed note's cites).
+  if #(abs_body:gsub('%s+', '')) > 0 then
+    local block = {}
+    if type(opts.heading) == 'string' and opts.heading ~= '' then
+      block[#block + 1] = '## ' .. opts.heading
+      block[#block + 1] = ''
+    end
+    for _, l in ipairs(to_lines(abs_body)) do block[#block + 1] = l end
+    M.write_body(survivor_path, block, { mode = 'append' })
+    -- The copy may carry a token pointing at the survivor (the absorbed note cited
+    -- it): strip the resulting self-citation.
+    if surv_id then pcall(function() citations.uncite(survivor_path, surv_id) end) end
+  end
+
+  -- 2. Redirect every note that cited the absorbed note onto the survivor.
+  local redirected = 0
+  for _, c in ipairs(inbound) do
+    pcall(function() citations.uncite(c, abs_id) end)
+    if not same(c, survivor_path) then
+      pcall(function() citations.cite(c, survivor_path) end)
+      redirected = redirected + 1
+    end
+  end
+
+  -- 3. Clear the absorbed note's body so its targets drop it from their cited_by,
+  --    leaving it graph-isolated before it is trashed.
+  M.write_body(absorbed_path, '', { mode = 'replace' })
+
+  -- 4. Union the absorbed note's topical tags into the survivor (best-effort).
+  if abs_entry and type(abs_entry.tags) == 'table' then
+    local add = {}
+    for _, t in ipairs(abs_entry.tags) do if t ~= 'by-claude' then add[#add + 1] = t end end
+    if #add > 0 then
+      pcall(function() require('pkm.tags').write_note_tags(survivor_path, { add = add }) end)
+    end
+  end
+
+  -- 5. Trash the absorbed note through the guard (it is assistant-authored).
+  local ok, err = M.agent_delete(absorbed_path)
+  if not ok then
+    return nil, 'merged the body and graph, but could not trash the absorbed note: ' .. tostring(err)
+  end
+
+  index.invalidate(survivor_path)
+  return survivor_path, nil, { redirected = redirected, absorbed_title = abs_title }
+end
+
 -- =============================================================================
 -- SECTION: Agent authorship
 -- =============================================================================
