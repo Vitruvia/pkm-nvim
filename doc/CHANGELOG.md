@@ -61,6 +61,29 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.19.0] - 31/7/2026
+
+*The permission-gated write into a **user's** note: `pkm.api.annotate` adds a
+marked comment to a note that is not the assistant's own — the last note-writing
+mechanism the protocol described but the API did not yet carry.*
+
+### Added
+
+-   **`api.annotate(ref, content, opts)`** — add a **marked comment** to a note
+    that is not the assistant's own. The `By <Author>: ` marker is baked in (not
+    optional, unlike `set_body`/`append_body`), and the block lands at a
+    boundary — the end of `opts.heading`'s section, or the note's end — never
+    woven inline. It writes only the assistant's own block; the user's text is
+    untouched. Backed by `notes.annotate`, which delegates to
+    `write_section`/`write_body`, so the frontmatter is preserved, the citation
+    graph reconciled, and the unsaved-buffer guard applies. Authorisation stays
+    the caller's (protocol §§ 5.3, 7); the function supplies mechanism + marker,
+    not permission. In `doc/PKM_API.md`, `doc/AGENT_PROTOCOL.md` § 7 (Writing into
+    notes), and the skill — **re-run `:PKMAgentProtocol install`** to redistribute
+    the updated `SKILL.md`. Driven by `test/test_v1190_p1.lua`.
+
+---
+
 ## [1.18.0] - 31/7/2026
 
 *The note-lifecycle **writes** reach `pkm.api`, so a gestor-mode agent can

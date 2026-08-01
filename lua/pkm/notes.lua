@@ -543,6 +543,41 @@ function M.write_section(path, heading, content, opts)
   return true
 end
 
+--- Append a *marked comment* to a note — the safe way to write into a note that
+--- is not the assistant's own (`doc/AGENT_PROTOCOL.md` § 7). Unlike write_body,
+--- the marker is not optional: the block begins with `By <Author>: `, so an
+--- addition to someone else's note is always attributable, and it lands at a
+--- boundary — the end of a named section (`opts.heading`) or the end of the note
+--- — never woven inline. It writes only the assistant's own block and never
+--- touches what the user wrote; frontmatter is preserved and the graph reconciled
+--- (it delegates to write_section / write_body, so it also refuses behind an
+--- unsaved buffer).
+---@param path string  Absolute note path
+---@param content string|string[]  the comment body
+---@param opts table|nil  { heading?: string, by?: string }
+---@return boolean ok
+---@return string|nil err
+function M.annotate(path, content, opts)
+  opts = opts or {}
+  local by     = (type(opts.by) == 'string' and opts.by ~= '') and opts.by or 'Claude'
+  local author = by:sub(1, 1):upper() .. by:sub(2)
+
+  local lines = to_lines(content)
+  local has_text = false
+  for _, l in ipairs(lines) do if l:match('%S') then has_text = true break end end
+  if not has_text then return false, 'no content to add' end
+
+  -- The block begins with the marker; the boundary blank lines that write_section
+  -- and write_body insert around an append keep it a distinct, attributable block.
+  local marked = { string.format('By %s: %s', author, lines[1]) }
+  for i = 2, #lines do marked[#marked + 1] = lines[i] end
+
+  if type(opts.heading) == 'string' and opts.heading ~= '' then
+    return M.write_section(path, opts.heading, marked, { mode = 'append' })
+  end
+  return M.write_body(path, marked, { mode = 'append' })
+end
+
 -- =============================================================================
 -- SECTION: Agent authorship
 -- =============================================================================

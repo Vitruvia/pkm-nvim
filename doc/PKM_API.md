@@ -92,6 +92,7 @@ path.
 | `set_body(path, content)` | `{ ok }` — replace a note's body (the prose after the frontmatter); the frontmatter is preserved and the citation graph is reconciled to the new body. Refuses behind an unsaved buffer. |
 | `append_body(path, content)` | `{ ok }` — add to a note's body, same rules. |
 | `insert_section(path, heading, content, opts)` | `{ ok }` — write into a *named section* (found by heading text); `opts.mode` is `'append'` (default) or `'replace'`. Frontmatter preserved, graph reconciled. |
+| `annotate(ref, content, opts)` | `{ ok }` — add a **marked comment** to a note that is **not** your own. The `By <Author>: ` marker is applied for you (not optional) and the block lands at a boundary — the end of `opts.heading`'s section, or the note's end — never inline. `opts = { heading?, by? }` (`by` defaults to `claude`). It writes only your block; the user's text is untouched. Authorisation is the caller's (see §§ 5.3, 7 in `doc/AGENT_PROTOCOL.md`); this supplies mechanism + marker, not permission. |
 | `rename(ref, new_name)` | `{ ok, path, filename, title }` — rename a note. A consolidated note keeps its number and type prefix; `new_name` is the *human* part only, sanitised for you. Propagates through every citation. Headless twin of `:PKMNote rename`. |
 | `changetype(ref, new_type)` | `{ ok, path, filename, type, title }` — change a consolidated note's type (`"note"`/`"agg"`/`"bib"`); renames the file to the new prefix and propagates through citations. Twin of `:PKMNote changetype`. |
 | `transpose(ref, target, opts)` | `{ ok, path, filename, type, title, original_deleted }` — move a note to another PKM type (`target` = `"note"`/`"journal"`/`"scratchpad"`). This is both **promote** and **transpose**: the original is deleted unless `opts.keep_original`. For `target="note"`, `opts.subtype` picks note/agg/bib and `opts.title` names it. Twin of `:PKMNote promote`/`transpose`. |
@@ -176,8 +177,7 @@ The surface above is the base layer; it grows as the protocol's operations are
 wrapped. The note-lifecycle writes (`rename`, `changetype`, `transpose` — the
 last covering both promote and transpose), the view-membership writes
 (`set_membership`, `save_subproject`), and the vault-wide `rename_tag` (which
-subsumes `tags.merge`) landed in v1.18.0. Still not exposed (use the interactive
-commands, or a later increment): the in-place `convert` normaliser, the vault
-lifecycle (create/merge/split), and a safe "append a marked comment to a
-*user's* note" operation (distinct from `set_body`, which is for your own
-notes). Track additions here as they land.
+subsumes `tags.merge`) landed in v1.18.0. The marked-comment write into a
+*user's* note (`annotate`) landed in v1.19.0. Still not exposed (use the
+interactive commands, or a later increment): the in-place `convert` normaliser
+and the vault lifecycle (create/merge/split). Track additions here as they land.

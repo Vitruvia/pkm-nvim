@@ -315,7 +315,11 @@ What is writable, and by what right.
 - **Your own notes:** write freely.
 - **A user's note — adding content:** only with the user's permission for that
   act, always marked (`By Claude: …`), and placed at a section or note boundary
-  rather than woven inline (§ 5.3).
+  rather than woven inline (§ 5.3). The mechanism is **`api.annotate`** (not
+  `set_body`/`append_body`, which are for your own notes): it bakes the marker in
+  and places the block at a boundary, so the addition is always attributable and
+  never inline. Permission is still yours to obtain — `annotate` supplies the
+  mechanism, not the authorisation.
 - **A user's note — changing what the user wrote:** *not* a default operation and
   never assumed. Done only under an explicit task authorisation whose purpose is
   exactly that — a grammar pass, a reformat, a restructure — and even then it

@@ -57,8 +57,12 @@ api.create('note', { title = 'AFO audit', by = 'claude', tags = { 'afo' },
                      body = 'What I learned…\n\n## Detail\n…' })
 --   → { ok=true, path=…, number=…, filename='…_ByClaude_…', tags={…,'by-claude'} }
 
-api.set_body(path, text)       -- replace a note's prose (frontmatter preserved)
-api.append_body(path, text)    -- add to a note's prose
+api.set_body(path, text)       -- replace a note's prose (frontmatter preserved) — YOUR OWN notes
+api.append_body(path, text)    -- add to a note's prose — YOUR OWN notes
+api.annotate(ref, text, { heading = 'Notes' })  -- add a By-Claude-marked comment to a USER's note (with permission)
+api.rename(ref, new_name)      -- rename, keeping a consolidated note's number/type prefix
+api.changetype(ref, 'agg')     -- change a consolidated note's type (note|agg|bib)
+api.transpose(ref, 'journal')  -- move a note between folders (promote/transpose)
 api.cite(source, target_ref)   -- link two notes (keeps both sides of the graph)
 api.tag(paths, { add = { 'x' }, remove = { 'y' } })   -- bulk retag
 api.find('afo')                -- search views + tags + titles at once — START HERE for "where is X"
@@ -146,10 +150,13 @@ for vault notes proceeds regardless.
 - **Place content where it belongs** — `insert_section(path, heading, text)` adds
   under a named section (or `mode='replace'` to swap its body); `append_body` adds
   at the end; `set_body` rewrites the whole prose. Not scattered inline.
-- **Your own notes:** write freely. **A user's note:** add content only with
-  permission, marked `By Claude: …`, at a section boundary. **Changing what the
-  user wrote** is never a default — only under an explicit task (grammar,
-  reformat), preserving meaning, and reversible.
+- **Your own notes:** write freely with `set_body`/`append_body`/`insert_section`.
+  **A user's note:** add content only with permission, and use **`annotate`** —
+  `annotate(path, text, { heading = … })` — which bakes in the `By Claude: ` marker
+  and places the block at a boundary for you. Do **not** use `set_body`/
+  `append_body` on a user's note. **Changing what the user wrote** is never a
+  default — only under an explicit task (grammar, reformat), preserving meaning,
+  and reversible.
 
 ## When in doubt
 

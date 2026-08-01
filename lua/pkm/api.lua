@@ -201,6 +201,27 @@ function M.transpose(ref, target, opts)
   }
 end
 
+--- Add a *marked comment* to a note — the mechanism for writing into a note that
+--- is **not** the assistant's own. The `By <Author>: ` marker is applied for you
+--- and the block lands at a boundary (the end of `opts.heading`'s section, or the
+--- note's end), never inline. For your own notes, set_body/append_body/
+--- insert_section write freely; this is for a *user's* note.
+---
+--- Authorisation is the caller's, not this function's: the protocol requires the
+--- user's permission for that specific act (`doc/AGENT_PROTOCOL.md` §§ 5.3, 7).
+--- This supplies the mechanism and the attribution marker, not the permission.
+---@param ref string  path or citation reference
+---@param content string|string[]
+---@param opts table|nil  { heading?, by? }
+---@return table  { ok, error? }
+function M.annotate(ref, content, opts)
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+  local ok, err = require('pkm.notes').annotate(path, content, opts or {})
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
 -- =============================================================================
 -- SECTION: Citations
 -- =============================================================================

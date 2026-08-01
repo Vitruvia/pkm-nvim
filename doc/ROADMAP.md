@@ -246,6 +246,13 @@ v1.18.0 MINOR  Note-lifecycle writes through pkm.api  ✅ released and tagged.
         agent can now restructure a vault through the API, not just create and
         annotate. Detail in doc/CHANGELOG.md.
 
+v1.19.0 MINOR  Marked writes into a user's note  ✅ released and tagged.
+        api.annotate (over notes.annotate → write_section/write_body): a marked
+        `By Claude: ` comment added to a note that is not the assistant's own, at
+        a section or note boundary, marker baked in, user text untouched. The last
+        note-writing mechanism the protocol described but the API lacked. Detail
+        in doc/CHANGELOG.md.
+
 The evaluation is now the loop that drives refinement: each run against the real
 vault reports friction (a missing op, a discovery gap), which becomes the next
 increment. Baseline: [[pkm-eval-first-run]].
@@ -348,9 +355,15 @@ easy).*
   (`set_membership`, `save_subproject`); the vault-wide `rename_tag` (subsuming
   `tags.merge`). Left: the in-place `convert` normaliser and the **vault
   lifecycle** (create/merge/split — deferred until a real `Unregistered/` folder).
-- Writing into a **user's** note (permission-gated, `By Claude:`-marked) — the
-  protocol is written and the mechanism exists; needs the per-task authorisation.
-  **Next up in this area.**
+- ✅ **v1.19.0** — writing into a **user's** note: `api.annotate` (marker baked
+  in, boundary placement). The mechanism is complete; the per-task *authorisation*
+  is protocol-level (the skill instructs the agent to obtain permission), not code.
+- **Agent-assisted smoke testing** (author idea, 31/7): drive a headless Neovim
+  with `nvim_input` keystrokes through the real mappings and inspect state
+  (current buffer, highlighted view, visible panel) to run or confirm the
+  interactive smoke the headless *unit* suite can't see. Idea, not built —
+  detail and worked example in `[[pkm-agent-smoke-testing]]`. Next step: a small
+  harness proving one keymap → state-assertion round-trip, then a skill note.
 - RAG/OKF navigation aids (gestor mode); richer intra-vault graphs; the
   evaluation loop as the ongoing driver.
 
@@ -395,6 +408,18 @@ easy).*
   review queue (Distant 5); improved / smart search + relevance ranking (Distant
   9); note sync (Distant 10); note versions / undo (Distant 11); metadata-system
   review; image / ASCII support; the forced-save prompt (Near 5.1); `PKMViewStats`.
+- **Documentation debt** (deferred, tracked — `[[pkm-doc-debt]]`). The user-facing
+  docs lag the pkm.api / agent-protocol wave; OK to defer, do in a focused pass:
+  - **`doc/pkm.txt`** (`:help`) — still cites the ~46 commands deleted in v1.14.0
+    (needs the by-context rewrite the README got) **and** covers none of pkm.api /
+    agent protocol / skill / lifecycle writes.
+  - **`README.md`** — rewritten by-context through v1.14.0, but has nothing on
+    `require('pkm.api')`, the agent protocol, the skill + `:PKMAgentProtocol`, the
+    `/pkm-learning` modes, body writing, the lifecycle API writes, or `annotate`.
+  - **Check** whether `CLAUDE.md` / `doc/LLM_PROJECT_INSTRUCTIONS.md` should note
+    the agent/pkm.api layer once the wave settles (author's suggestion — check,
+    don't assume). The per-version docs (PKM_API, AGENT_PROTOCOL, CONVENTIONS,
+    CHANGELOG, ROADMAP, LLM_CONTEXT, SKILL) stay current on cadence.
 
 **Also in the plan, folded above:** **merge / split vaults** (§ below) rises into
 area 1 because it is command-creating and renumbers notes; the **forced-save

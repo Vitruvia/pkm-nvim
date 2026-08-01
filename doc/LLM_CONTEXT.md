@@ -7,9 +7,14 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.18.0** (released, tagged) — note-lifecycle writes through pkm.api
+## Current version: **v1.19.0** (released, tagged) — marked writes into a user's note
 
-*v1.18.0 added the note-lifecycle **writes** to `pkm.api`: `api.rename`,
+*v1.19.0 added `api.annotate` — a `By Claude: `-marked comment added to a note
+that is **not** the assistant's own, at a section or note boundary, marker baked
+in, the user's text untouched (over `notes.annotate` → `write_section`/
+`write_body`). It completes the note-writing surface the protocol described. It
+sits on v1.18.0, which added the note-lifecycle **writes** to `pkm.api`:
+`api.rename`,
 `api.changetype`, and `api.transpose` (covering promote + transpose), backed by
 three pure headless seams in `notes.lua` (`convert_file`, `changetype_file`,
 `rename_note_at`) — the twins of the interactive commands, which are left
