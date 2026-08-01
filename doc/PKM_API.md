@@ -121,7 +121,8 @@ path.
 
 | Function | Returns |
 |---|---|
-| `find(term)` | `{ ok, term, views, tags, notes }` — case- and accent-insensitive search across view names, tags, and titles at once. The first call for "where are the notes about X", since a subject is often a *view*, not a tag. |
+| `find(term)` | `{ ok, term, views, tags, notes }` — case- and accent-insensitive search across view names, tags, and titles at once, in the **active** vault. The first call for "where are the notes about X", since a subject is often a *view*, not a tag. |
+| `find_all(term)` | `{ ok, term, vaults }` — the **cross-vault** twin of `find`: sweeps every registered vault (and the active root), grouping matches per vault (`{ vault, number, root, active, notes, tags }`). Answers "which of my vaults holds X". Reads non-active vaults from disk without switching the active root (`index.scan_root`); matches titles/filenames/tags, not views. |
 | `get(path)` | the index entry, or `nil`. |
 | `notes()` | every index entry, as an array. |
 | `query(expr)` | `{ ok, matches }` — entries matching the filter DSL (as `:PKMBrowse`). |
@@ -187,6 +188,6 @@ last covering both promote and transpose), the view-membership writes
 subsumes `tags.merge`) landed in v1.18.0. The marked-comment write into a
 *user's* note (`annotate`) landed in v1.19.0. The UI snapshot (`ui_state`) landed
 in v1.20.0. The find-or-create source citation (`cite_source`) landed in v1.22.0.
-Still not exposed (use the interactive commands, or a later increment): the
-in-place `convert` normaliser, cross-vault search (`find_all`, planned next), and
+Cross-vault search (`find_all`) landed in v1.23.0. Still not exposed (use the
+interactive commands, or a later increment): the in-place `convert` normaliser and
 the vault lifecycle (create/merge/split). Track additions here as they land.

@@ -7,10 +7,23 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.22.0** (code-complete on `dev`) — bib & sources: `api.cite_source` + the bib doctrine
+## Current version: **v1.23.0** (code-complete on `dev`) — retrieval thread step 1: cross-vault search (`api.find_all`)
 
-*v1.22.0 is the first code thread of the post-eval plan (ROADMAP Area 1): it closes
-the reference-recording gap both evals flagged, so a source becomes a citable **bib
+*v1.23.0 is step 1 of the retrieval thread (ROADMAP Area 1): it closes the gap the
+formal eval confirmed — `find`/`query` read only the active vault, so "which of my
+vaults holds X" forced a filesystem grep. **`api.find_all(term)`** is the
+cross-vault twin of `find`: it sweeps every registered vault (and the active root)
+and groups matches per vault (`{ vault, number, root, active, notes, tags }`),
+case- and accent-insensitively over titles, filenames, and tags (views stay
+per-vault, `find`'s job). It reads each non-active vault straight from disk via the
+new **`index.scan_root(root)`** — a per-root reader that builds nothing and never
+touches the active singleton index — so it is safe to call from any vault. The
+skill now routes cross-vault discovery to `find_all` instead of a filesystem grep
+(grep stays a deeper fallback for body text); **re-run `:PKMAgentProtocol
+install`**. `test_v1230_p1` proves the decisive case (a term unique to the
+non-active vault, which `find` misses and `find_all` catches). It sits on v1.22.0
+(released, tagged), the first code thread of the post-eval plan: it closes the
+reference-recording gap both evals flagged, so a source becomes a citable **bib
 note**, not a freetext line. **`api.cite_source(citing_ref, source, opts?)`** finds
 the source's bib note (by `source.title`, exact then substring, among indexed `bib`
 notes in the active vault) or creates one with the standard citation at the top

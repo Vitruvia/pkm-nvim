@@ -515,6 +515,80 @@ function M.find(term)
   return { ok = true, term = term, views = views, tags = tags, notes = notes }
 end
 
+--- Find where a subject lives **across every vault** — the cross-vault twin of
+--- `find`. `find`/`query` read one vault's index, so they cannot answer "which of
+--- my vaults holds X"; this sweeps each registered vault (and the active root, even
+--- if unregistered) and reports the matches grouped by vault. Each non-active vault
+--- is read straight from its files (`index.scan_root`) without switching the active
+--- root or rebuilding the live index, so it is safe to call from anywhere; the
+--- active vault is read once, from the live index.
+---
+--- Matches note titles and filenames and tags, case- and accent-insensitively (the
+--- same folding as `find`). Views are a per-vault concept and are *not* swept here
+--- — use `find` for the active vault's views. Only vaults with at least one match
+--- appear in `vaults`.
+---@param term string
+---@return table  { ok, term?, vaults?, error? }
+---              vaults: { vault, number?, root, active, notes, tags }[]
+function M.find_all(term)
+  if type(term) ~= 'string' or term == '' then
+    return { ok = false, error = 'no search term' }
+  end
+  local needle = fold(term)
+  local vault  = require('pkm.vault')
+  local index  = require('pkm.index')
+
+  local active      = vault.active()
+  local active_root = require('pkm.config').root_path
+
+  -- The roots to sweep: every registered vault, plus the active root when it is
+  -- not itself registered. Deduplicated so the active vault is read once (from the
+  -- live index), never also re-scanned from disk.
+  local roots, saw_active = {}, false
+  for _, v in ipairs(vault.list()) do
+    local root = vault.path_of(v)
+    if root then
+      local is_active = active ~= nil and active.number == v.number
+      saw_active = saw_active or is_active
+      roots[#roots + 1] = { name = v.name, number = v.number, root = root, live = is_active }
+    end
+  end
+  if not saw_active and active_root and active_root ~= '' then
+    roots[#roots + 1] = { name = active and active.name or 'active', root = active_root, live = true }
+  end
+
+  local out = {}
+  for _, r in ipairs(roots) do
+    local entries = r.live and index.get_all() or index.scan_root(r.root)
+    local notes, tags, seen = {}, {}, {}
+    for _, e in ipairs(entries) do
+      for _, t in ipairs(e.tags or {}) do
+        if not seen[t] and fold(t):find(needle, 1, true) then
+          seen[t] = true
+          tags[#tags + 1] = t
+        end
+      end
+      if fold(e.title or ''):find(needle, 1, true)
+        or fold(e.filename or vim.fn.fnamemodify(e.path, ':t')):find(needle, 1, true) then
+        notes[#notes + 1] = { path = e.path, title = e.title, note_type = e.note_type }
+      end
+    end
+    table.sort(tags)
+    if #notes > 0 or #tags > 0 then
+      out[#out + 1] = {
+        vault  = r.name,
+        number = r.number,
+        root   = r.root,
+        active = r.live or nil,
+        notes  = notes,
+        tags   = tags,
+      }
+    end
+  end
+
+  return { ok = true, term = term, vaults = out }
+end
+
 -- =============================================================================
 -- SECTION: Views (read)
 -- =============================================================================

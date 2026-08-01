@@ -432,10 +432,11 @@ threads, in order:*
    token under a `## References` heading (created if absent), which also closed the
    cite-placement nit. `test_v1220_p1`.
 2. **Retrieval thread — make the vault serve retrieval-based learning.**
-   - `api.find_all` — cross-vault search (the confirmed gap; `find`/`query` are
-     single-vault).
+   - ✅ **v1.23.0** — `api.find_all` — cross-vault search (the confirmed gap;
+     `find`/`query` are single-vault). Backed by `index.scan_root`, a
+     non-disruptive per-root reader. Skill now routes cross-vault discovery here.
    - Relevance ranking for search/find (was Distant 9) — surface the *most
-     relevant* first, not just matches.
+     relevant* first, not just matches. **(Next in this thread.)**
    - RAG/OKF navigation aids (structured retrieval surfaces for the agent).
    - "Structure a note for retrieval" is now protocol (§ 11.6); watch for tooling
      that helps (orienting-summary/section scaffolds).

@@ -265,6 +265,32 @@ function M.get(path)
   return _index[norm(path)]
 end
 
+--- Scan an arbitrary vault root and return its note entries, **without** building
+--- or touching the active singleton index. It reuses the same per-file reader as
+--- build(), so the entries match get_all()'s shape exactly. This is the
+--- non-disruptive seam for cross-vault reads (e.g. `pkm.api.find_all`): searching
+--- another vault must neither switch the active root nor rebuild the live index,
+--- and this reads straight from that root's files instead.
+---@param root string  Absolute vault root to scan
+---@param folders string[]|nil  Folder names under root (default: the configured note folders)
+---@return table[] entries
+function M.scan_root(root, folders)
+  if type(root) ~= 'string' or root == '' or not _config then return {} end
+  folders = folders or {
+    _config.folders.consolidated,
+    _config.folders.journal,
+    _config.folders.scratchpad,
+  }
+  local out = {}
+  for _, folder in ipairs(folders) do
+    for _, path in ipairs(glob_md(utils.join(root, folder))) do
+      local entry = read_entry(path)
+      if entry then out[#out + 1] = entry end
+    end
+  end
+  return out
+end
+
 --- Re-read one file and update its index entry.
 --- If the file no longer exists, its entry is removed.
 --- Called automatically by the BufWritePost autocmd.

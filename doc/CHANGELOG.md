@@ -61,6 +61,35 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.23.0] - 1/8/2026
+
+*Retrieval thread, step 1 (ROADMAP Area 1): cross-vault search. Closes the gap the
+formal eval confirmed — `find`/`query` read only the active vault, so "which of my
+vaults holds X" forced a filesystem grep.*
+
+### Added
+
+-   **`api.find_all(term)`** — the cross-vault twin of `find`. It sweeps every
+    registered vault (and the active root, even if unregistered) and groups the
+    matches per vault: `{ ok, term, vaults = { { vault, number, root, active,
+    notes, tags } } }`. Case- and accent-insensitive over note titles, filenames,
+    and tags (views are per-vault; `find` covers the active vault's). Only vaults
+    with a match appear. `test/test_v1230_p1.lua` (the decisive case: a term unique
+    to the *non-active* vault, which `find` misses and `find_all` catches; plus the
+    shared-term grouping and the guards).
+-   **`index.scan_root(root, folders?)`** — reads an arbitrary vault root's note
+    entries **without** building or touching the active singleton index, reusing
+    the same per-file reader as the index build. This is the non-disruptive seam
+    `find_all` relies on: searching another vault switches neither the active root
+    nor the live index.
+
+### Changed
+
+-   **`skills/pkm-notes/SKILL.md`** now sends the agent to `api.find_all` for
+    cross-vault discovery instead of a filesystem grep (grep stays a documented
+    deeper fallback for body text). `doc/PKM_API.md` documents `find_all`. **Re-run
+    `:PKMAgentProtocol install`** to redistribute the skill.
+
 ## [1.22.0] - 1/8/2026
 
 *Bib & sources — the first code thread of the post-eval plan (ROADMAP Area 1).

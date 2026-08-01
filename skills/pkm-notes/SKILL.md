@@ -66,7 +66,8 @@ api.transpose(ref, 'journal')  -- move a note between folders (promote/transpose
 api.cite(source, target_ref)   -- link two notes (keeps both sides of the graph)
 api.cite_source(note, { title='Stein 2003', bibtex='@book{...}' })  -- find/create a source's BIB note, then cite it — use for SOURCES
 api.tag(paths, { add = { 'x' }, remove = { 'y' } })   -- bulk retag
-api.find('afo')                -- search views + tags + titles at once — START HERE for "where is X"
+api.find('afo')                -- search views + tags + titles at once (ACTIVE vault) — START HERE for "where is X"
+api.find_all('afo')            -- CROSS-VAULT: which of my vaults holds X? (groups matches per vault)
 api.views()                    -- list projects/views — a subject is often a VIEW, not a tag
 api.view_members(name)         -- the notes in a view
 api.query('tag:afo AND type:note')   -- filter the index → { ok, matches }
@@ -83,10 +84,12 @@ See `PKM_API.md` for the complete list and every return shape.
 
 - **`find`/`query` search only the *active* vault.** They read one vault's index,
   so they cannot answer "which of my vaults holds X". For **cross-vault
-  discovery** — when you do not yet know which vault a subject lives in — a
-  **filesystem search** (grep/glob over the vault root) is the right first tool,
-  and reading note files directly is allowed. Once you are in the right vault, use
-  the index.
+  discovery** — when you do not yet know which vault a subject lives in — use
+  **`api.find_all('term')`**: it sweeps every registered vault (and the active
+  root) and groups the matching notes and tags per vault, reading the non-active
+  ones without switching your active vault. (A raw filesystem grep still works and
+  is allowed as a deeper fallback, e.g. for body text `find_all` does not index,
+  but `find_all` is the first tool now.) Once you know the vault, use its index.
 - **Within a vault, start with `api.find('term')`** — it searches view names,
   tags, and titles at once, case- and accent-insensitively. A subject is often a
   **view** (a saved filter), not a tag (searching `afo` finds the *AFO view*, not
