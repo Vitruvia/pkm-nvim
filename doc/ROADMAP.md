@@ -376,6 +376,22 @@ easy).*
   Background in `[[pkm-agent-smoke-testing]]`.
 - RAG/OKF navigation aids (gestor mode); richer intra-vault graphs; the
   evaluation loop as the ongoing driver.
+- **Dogfood-eval findings (dev-side, 31/7 — a composition check, not the formal
+  eval).** Driving the v1.16–1.20 surface end-to-end as an agent would: the
+  operations *compose* cleanly (find → create+provenance → intra-vault cite →
+  annotate → changetype with citation propagation → clean audit → retrieve). Two
+  friction points surfaced, both agent-facing:
+  - **Reference recording should route through bib notes, not freetext.** § 10
+    now mandates recording references, but nothing points the agent at the
+    system's existing **bib-note** + `[short [bib-003]]` mechanism, so it defaults
+    to an unstructured `## References` prose block. Strengthen the skill/protocol
+    to prefer a citable bib note for a *substantial* source (freetext only for
+    throwaway mentions); consider an `api.create_bib` / `cite_source` affordance
+    that makes "record a source" one call. **(Refines the § 10 work — likely next.)**
+  - **`cite` has no token placement.** It appends `[note[NNNN]]` at end-of-body,
+    which lands *after* a `## References`/appendix section as a dangling token.
+    Consider an optional placement (a heading, like `insert_section`) or a
+    conventional "Related" section. (Quality, not blocking.)
 
 **2 · Wrapping — 🔺**
 - **Structure-aware autowrap**: wrap around frontmatter, code, headers, tables,
