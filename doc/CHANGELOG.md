@@ -61,6 +61,39 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.37.0] - 2/8/2026
+
+*Parallel work (Area 5), the first increment of the **Brazilian legal-text list
+hierarchy**: the roman *inciso* family is retargeted to its canonical form. Author
+decision (AskUserQuestion): legal `-` form only.*
+
+### Changed
+
+-   **Roman incisos now use the legal `-` separator (`I -`, `II -`), not `.`/`)`.**
+    LC 95/1998 writes incisos as an uppercase roman numeral followed by ` - `; the
+    v1.33.0 generic roman list (`I.`/`I)`) was a first approximation. The renumber
+    family (`markdown.renumber_sequence`) and the highlight
+    (`syntax.inciso_list_pattern`, renamed from `roman_list_pattern`) both now match
+    `I - ` and no longer match `I.`/`I)`. The ` - ` separator (spaces required around
+    the hyphen) keeps incisos distinct from the lowercase-roman *subalínea* (`i.`)
+    coming next. Nesting, blockquote handling, and the `\C` case-sensitivity fix
+    (v1.36.1) carry over. `to_roman` is unchanged.
+
+### Migration
+
+-   Notes written with the old `I.`/`I)` roman list form will no longer renumber or
+    highlight as incisos; rewrite them as `I - ` (or use a plain digit list). This is
+    the deliberate "legal `-` only" choice — the `.`/`)` roman form is dropped, not
+    kept as an alias.
+
+### Tests / smoke
+
+-   `test_v1330_p1` (renumber) and `test_v1350_p1` (highlight) retargeted to the `-`
+    form, asserting the dropped `.`/`)` form no longer matches; `test_v1340_p1`'s
+    additive roman case updated. Smoke note 0280 (`00 - NotesTeste`) updated via
+    `pkm.api` to the `I -` inciso form, with `I.`/`I)` moved to the "must not
+    highlight" section. Whole suite green (69).
+
 ## [1.36.1] - 2/8/2026
 
 *Fix for the list-marker highlighting shipped in v1.35.0 / v1.36.0.*

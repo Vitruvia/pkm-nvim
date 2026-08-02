@@ -1,11 +1,10 @@
 -- test/test_v1350_p1.lua
--- syntax.roman_list_pattern — the matchadd pattern that highlights roman-numeral
--- list markers (legal *incisos*: I., II., VII) …). Tree-sitter emits no list node
--- for uppercase-roman markers, so they are highlighted via matchadd instead of the
--- .scm node captures. This test asserts the exposed pattern matches the intended
--- markers (including behind blockquote/indent prefixes) and rejects near-misses.
--- Highlighting itself is per-window visual state the headless suite cannot see —
--- that rides the real-config smoke; here we pin the pattern.
+-- syntax.inciso_list_pattern — the matchadd pattern that highlights legal *inciso*
+-- markers (LC 95/1998: uppercase roman + ' - ': I -, II -, III -). Tree-sitter emits
+-- no list node for these, so they are highlighted via matchadd. Introduced in
+-- v1.35.0 for the roman '.'/')' form; **retargeted in v1.37.0** to the ' - ' form
+-- (the '.'/')' roman form was dropped). This test pins the pattern; the visual
+-- highlight rides the real-config smoke.
 --
 -- Run from repo root:
 --   nvim --headless -u test/min_init.lua -c "luafile test/test_v1350_p1.lua" -c "qa!"
@@ -22,35 +21,34 @@ end
 
 local syntax = require('pkm.syntax')
 
-check("roman_list_pattern is exposed",
-  type(syntax.roman_list_pattern) == 'string' and #syntax.roman_list_pattern > 0,
-  vim.inspect(syntax.roman_list_pattern))
+check("inciso_list_pattern is exposed",
+  type(syntax.inciso_list_pattern) == 'string' and #syntax.inciso_list_pattern > 0,
+  vim.inspect(syntax.inciso_list_pattern))
 
-local pat = syntax.roman_list_pattern
+local pat = syntax.inciso_list_pattern
 
 -- Force 'ignorecase' on: matchadd honours it, and the author's real config sets
 -- it. Without `\C` in the pattern, [IVXLCDM] would fold to also match lowercase
--- roman letters and highlight ordinary words (civil., id.). Assert it here.
+-- roman letters and highlight ordinary words (civil -). Assert it here.
 vim.o.ignorecase = true
 
 -- { input line, expected matched marker ('' = must not match) }
 local cases = {
-  { 'I. primeiro inciso',     'I.'   },
-  { 'II. segundo',            'II.'  },
-  { 'III. terceiro',          'III.' },
-  { 'VII) parenthesis form',  'VII)' },
-  { '    IV. indented',       'IV.'  },   -- leading indentation allowed
-  { '> I. inside a quote',    'I.'   },   -- blockquote prefix allowed
-  { 'I.',                     'I.'   },   -- empty item at end of line
-  { 'X)',                     'X)'   },
-  { 'I.e. an abbreviation',   ''     },   -- no space after the dot → not a marker
-  { '1. arabic list',         ''     },   -- arabic is a tree-sitter marker, not ours
-  { 'a) lowercase alinea',    ''     },   -- lowercase letters are not roman
-  { 'Investigate. the case',  ''     },   -- word beginning with I, not roman-only
-  { 'Hello world',            ''     },   -- plain prose
-  { 'civil. word',            ''     },   -- lowercase roman letters, must NOT fold-match
-  { 'id. abbreviation',       ''     },   -- lowercase i/d, must NOT fold-match
-  { 'i. lowercase roman',     ''     },   -- lowercase i, must NOT fold-match
+  { 'I - primeiro inciso',   'I -'   },
+  { 'II - segundo',          'II -'  },
+  { 'III - terceiro',        'III -' },
+  { '    IV - indented',     'IV -'  },   -- leading indentation allowed
+  { '> I - inside a quote',  'I -'   },   -- blockquote prefix allowed
+  { 'I -',                   'I -'   },   -- empty item at end of line
+  { 'I. dot form',           ''      },   -- the dropped '.'/')' roman form
+  { 'I) paren form',         ''      },   -- likewise dropped
+  { 'I-word',                ''      },   -- hyphenation, not ' - '
+  { '1 - arabic',            ''      },   -- digit, not roman
+  { 'a - lowercase',         ''      },   -- lowercase letter
+  { 'civil - word',          ''      },   -- lowercase roman letters, must NOT fold-match
+  { 'i - lowercase roman',   ''      },   -- lowercase i, must NOT fold-match
+  { 'A - not roman',         ''      },   -- A is not a roman letter
+  { 'Hello world',           ''      },   -- plain prose
 }
 
 for _, c in ipairs(cases) do

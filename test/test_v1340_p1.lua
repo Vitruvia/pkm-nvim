@@ -93,11 +93,11 @@ md.renumber_sequence(1, 3)
 check("a plain digit list still renumbers 1,2,3 (not treated as alpha)",
   same(lines(), { '1. a', '2. b', '3. c' }), vim.inspect(lines()))
 
-print("== additive: an uppercase-roman list is still handled by the roman family ==")
-set_buf({ 'III. x', 'I. y', 'II. z' })
+print("== additive: an uppercase-roman inciso list is still its own family ==")
+set_buf({ 'III - x', 'I - y', 'II - z' })
 md.renumber_sequence(1, 3)
-check("uppercase roman renumbers I, II, III (not lowercased to alpha)",
-  same(lines(), { 'I. x', 'II. y', 'III. z' }), vim.inspect(lines()))
+check("uppercase roman incisos renumber I -, II -, III - (not lowercased to alpha)",
+  same(lines(), { 'I - x', 'II - y', 'III - z' }), vim.inspect(lines()))
 
 print("== a prose line (>2 leading letters before punctuation) is not swept ==")
 set_buf({

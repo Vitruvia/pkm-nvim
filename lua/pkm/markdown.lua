@@ -361,7 +361,8 @@ end
 --- Supported families (detection order: list → hdr_prefix → hdr_suffix):
 ---   list (plain)      BLOCKQUOTE? INDENT N[.)] text    — any indent depth
 ---   list (emph)       BLOCKQUOTE? INDENT *N*[.)] text  — single or double *
----   list (roman)      BLOCKQUOTE? INDENT R[.)] text    — uppercase roman (incisos)
+---   list (inciso)     BLOCKQUOTE? INDENT R - text      — uppercase roman + ' - ' (legal incisos)
+---   list (alpha)      BLOCKQUOTE? INDENT a) text       — lowercase letter + ')' (legal alíneas)
 ---   hdr_prefix        BLOCKQUOTE? ## N[.)] text        — any header level
 ---   hdr_suffix        BLOCKQUOTE? ## text-N            — trailing annotation preserved
 ---
@@ -461,12 +462,13 @@ function M.renumber_sequence(start_line, end_line)
       kind = 'hdr_suffix'; break
     end
 
-    -- Roman-numeral list (legal *incisos*: I, II, III …). Uppercase roman only,
-    -- so it never collides with a lowercase-letter list, and tried last so the
-    -- digit / emphasis / header families always win a line they could both match.
-    s = rest:match('^%s*[IVXLCDM]+([.)]) ')
-     or rest:match('^%s*[IVXLCDM]+([.)])%s*$')
-    if s then kind, sep = 'list_roman', s; break end
+    -- Legal *inciso* (LC 95/1998): uppercase roman + ' - ' separator (I -, II -).
+    -- Uppercase only, and the ' - ' separator distinguishes it from a lowercase-
+    -- roman *subalínea* (roman + '.'). Tried after the digit / emphasis / header
+    -- families so they win a line they could both match.
+    s = rest:match('^%s*[IVXLCDM]+%s+(%-)%s')
+     or rest:match('^%s*[IVXLCDM]+%s+(%-)%s*$')
+    if s then kind, sep = 'list_inciso', s; break end
 
     -- Lettered list (legal *alíneas*: a, b, c …). Lowercase letters only, and
     -- tried LAST because `%l` is the most permissive family — a prose line like
@@ -565,18 +567,20 @@ function M.renumber_sequence(start_line, end_line)
         end
       end
 
-    elseif kind == 'list_roman' then
-      local ind, _, s, body = rest:match('^(%s*)([IVXLCDM]+)([.)]) (.*)$')
-      if not (ind and s == sep) then
-        local ind2, _, s2 = rest:match('^(%s*)([IVXLCDM]+)([.)])%s*$')
-        if ind2 and s2 == sep then ind, body = ind2, nil end
+    elseif kind == 'list_inciso' then
+      -- Legal inciso: uppercase roman + ' - ' (LC 95/1998); one separator form,
+      -- so there is no sep variant to match.
+      local ind, _, body = rest:match('^(%s*)([IVXLCDM]+)%s+%-%s+(.*)$')
+      if not ind then
+        local ind2 = rest:match('^(%s*)[IVXLCDM]+%s+%-%s*$')
+        if ind2 then ind, body = ind2, nil end
       end
       if ind then
         local n   = next_count(eff_depth(bq, ind))
         local num = to_roman(n) or tostring(n)
         new_lines[#new_lines + 1] = body ~= nil
-          and bq .. ind .. num .. sep .. ' ' .. body
-          or  bq .. ind .. num .. sep
+          and bq .. ind .. num .. ' - ' .. body
+          or  bq .. ind .. num .. ' -'
         changed, replaced = changed + 1, true
       end
 

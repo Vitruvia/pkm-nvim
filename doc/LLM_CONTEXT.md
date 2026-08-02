@@ -7,7 +7,21 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.36.1** (code-complete on `dev`) — fix: marker highlighting is case-sensitive (Area 4)
+## Current version: **v1.37.0** (code-complete on `dev`) — legal inciso retarget (Area 5)
+
+*v1.37.0 begins the Brazilian legal-text list hierarchy (author decision: legal `-`
+form). The roman **inciso** family is retargeted from the v1.33.0 generic `.`/`)`
+form to the canonical `I - ` (LC 95/1998: uppercase roman + ` - `), in both
+`renumber_sequence` and the highlight (`syntax.inciso_list_pattern`, renamed from
+`roman_list_pattern`). The `.`/`)` roman form is **dropped** (not kept as an alias).
+The ` - ` separator keeps incisos distinct from the lowercase-roman subalínea (`i.`)
+coming next. `test_v1330_p1`/`test_v1350_p1` retargeted; smoke 0280 updated via
+pkm.api. Remaining hierarchy: subalínea `i.` (needs a roman-validity check for
+false positives like `civil.`), artigo `Art. Nº.`/`Art. N.`, parágrafo `§ N`, and a
+one-pass nested renumber across all levels. Then the structure-aware autowrap
+(Area 2), then extract highlighting as a standalone plugin (Area 4), then the
+markdown conventions doc.*
+
 
 *v1.36.1 fixes a false positive in the v1.35.0/v1.36.0 marker highlighting: matchadd
 honours `'ignorecase'` (the real config sets it), so `[IVXLCDM]` folded case and a

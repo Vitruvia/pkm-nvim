@@ -102,11 +102,12 @@ local function setup_hl_groups()
     vim.api.nvim_set_hl(0, 'PKMCitation', { link = 'Special' })
   end
 
-  -- PKMListMarker: roman-numeral list markers (I., II., …). Tree-sitter emits
-  -- no list node for uppercase roman markers (verified — they are not ordered-
-  -- list markers to the markdown grammar), so they are highlighted via matchadd
-  -- rather than the .scm captures. Linked to @markup.list so they read exactly
-  -- like the native list markers in queries/markdown/highlights.scm.
+  -- PKMListMarker: legal list markers with no tree-sitter node — inciso (I -,
+  -- II -) and alínea (a), b)). The markdown grammar does not treat uppercase roman
+  -- or lowercase letters as ordered-list markers (verified), so they are
+  -- highlighted via matchadd rather than the .scm captures. Linked to @markup.list
+  -- so they read exactly like the native list markers in
+  -- queries/markdown/highlights.scm.
   vim.api.nvim_set_hl(0, 'PKMListMarker', { link = '@markup.list' })
 
   -- §9 meta-comment highlight: ((text)) double-paren convention.
@@ -134,22 +135,20 @@ end
 local CITATION_PATTERN = [=[\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]]=]
 M.citation_pattern = CITATION_PATTERN
 
---- The matchadd pattern for roman-numeral list markers — `I.`, `II.`, `VII)` …
---- at the start of a line (legal *incisos*), optionally behind blockquote `>`
---- prefixes and indentation. Uppercase roman is not an ordered-list marker to
---- the markdown grammar, so tree-sitter never captures these (verified) and they
---- are highlighted here instead. `\zs`/`\ze` limit the highlight to the marker
---- itself; the trailing `\s`/end-of-line lookahead keeps it off prose like
---- `I.e.`. Uppercase-only, mirroring the renumber detector — the
---- `I. `-at-line-start-in-prose match is the same accepted heuristic limit (the
---- roman analogue of the Area-2 wrapped-number case). Exposed so a test can
---- assert it.
---- Leads with `\C` (force case-sensitive): matchadd honours 'ignorecase', which
---- the real config sets, and without `\C` the collection `[IVXLCDM]` would also
---- match the lowercase roman letters — highlighting ordinary words like `civil.`
---- or `id.` at line start.
-local ROMAN_LIST_PATTERN = [=[\C\v^[ \t>]*\zs[IVXLCDM]+[.)]\ze(\s|$)]=]
-M.roman_list_pattern = ROMAN_LIST_PATTERN
+--- The matchadd pattern for legal *inciso* markers — `I -`, `II -`, `III -` …
+--- at the start of a line (LC 95/1998: uppercase roman + ' - '), optionally
+--- behind blockquote `>` prefixes and indentation. Uppercase roman is not an
+--- ordered-list marker to the markdown grammar, so tree-sitter never captures
+--- these (verified) and they are highlighted here instead. `\zs`/`\ze` limit the
+--- highlight to the marker itself (through the hyphen); the trailing `\s`/end-of-
+--- line lookahead keeps it off `I-word` hyphenation. The ' - ' separator (spaces
+--- required around the hyphen) distinguishes it from a lowercase-roman subalínea
+--- (roman + '.'). Leads with `\C` (force case-sensitive): matchadd honours
+--- 'ignorecase', which the real config sets, and without `\C` the collection
+--- `[IVXLCDM]` would also fold to lowercase and paint words like `civil -`.
+--- Exposed so a test can assert it.
+local INCISO_LIST_PATTERN = [=[\C\v^[ \t>]*\zs[IVXLCDM]+ +-\ze(\s|$)]=]
+M.inciso_list_pattern = INCISO_LIST_PATTERN
 
 --- The matchadd pattern for lettered list markers — `a)`, `b)`, `aa)` … at the
 --- start of a line (legal *alíneas*), optionally behind indentation and blockquote
@@ -185,9 +184,9 @@ local function setup_win_matches(win_id)
   -- Citations: note[id], bib[id], journal[id], scratch[id]
   add('PKMCitation', CITATION_PATTERN, 10, { window = win_id })
 
-  -- Roman-numeral list markers (I., II., …): tree-sitter emits no list node for
-  -- them, so highlight the marker here to match the native list-marker colour.
-  add('PKMListMarker', ROMAN_LIST_PATTERN, 10, { window = win_id })
+  -- Legal inciso markers (I -, II -, …): tree-sitter emits no list node for them,
+  -- so highlight the marker here to match the native list-marker colour.
+  add('PKMListMarker', INCISO_LIST_PATTERN, 10, { window = win_id })
 
   -- Lettered list markers (a), b), …): likewise no tree-sitter list node — the
   -- paren form only, to keep prose (abbreviations like "vs.") unpainted.

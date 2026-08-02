@@ -544,14 +544,17 @@ threads, in order:*
   *Low API impact — an agent formats unaided — so the agent side defers.*
 
 **5 · Markdown editing features — ▹ (command-creating pieces → 🔺)**
-- List functions over custom prefixes incl. Brazilian legal texts (Near 1.2):
-  ✅ **v1.33.0** roman-numeral lists (incisos: I, II, III) and ✅ **v1.34.0**
-  lettered lists (alíneas: a, b, c; bounded to 1–2 letters, starts-at-`a`
-  unambiguous) in `renumber_sequence`; still to add — the **artigo/§/inciso/alínea
-  nested hierarchy** as a single one-pass renumber (today one family is detected per
-  pass, so mixed-level blocks renumber a level at a time). Displays / tables
-  (Distant 1); insertable folds (Potential). Header/list utilities are largely
-  shipped.
+- **Brazilian legal-text list hierarchy (Near 1.2) — in progress.** Author decision:
+  legal `-` form for incisos. Marker forms (LC 95/1998):
+  artigo `Art. Nº.`/`Art. N.` · parágrafo `§ N` · **inciso** roman + ` - ` ·
+  **alínea** letter + `)` · **subalínea** lowercase-roman + `.`. Shipped in
+  `renumber_sequence` (+ matchadd highlight): ✅ **v1.34.0** alíneas `a) b) c)`
+  (bounded 1–2 letters, starts-at-`a` unambiguous) · ✅ **v1.37.0** incisos retargeted
+  to the legal `I - ` form (the v1.33.0 `.`/`)` roman form dropped). Still to add —
+  **subalínea** `i.` (lowercase-roman; needs a validity check to avoid painting
+  words like `civil.`), **artigo/§** prefixes, and the **one-pass nested renumber**
+  that walks all levels (today one family is detected per pass). Displays / tables
+  (Distant 1); insertable folds (Potential).
 
 **6 · Other — ▹**
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —
