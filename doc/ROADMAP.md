@@ -537,11 +537,13 @@ threads, in order:*
 
 **5 · Markdown editing features — ▹ (command-creating pieces → 🔺)**
 - List functions over custom prefixes incl. Brazilian legal texts (Near 1.2):
-  ✅ **v1.33.0** roman-numeral lists (incisos: I, II, III) in `renumber_sequence`;
-  still to add — **letters** (alíneas a/b/c; needs prose-vs-ordinal disambiguation)
-  and the **artigo/§/inciso/alínea nested hierarchy** (multi-type per level).
-  Displays / tables (Distant 1); insertable folds (Potential). Header/list utilities
-  are largely shipped.
+  ✅ **v1.33.0** roman-numeral lists (incisos: I, II, III) and ✅ **v1.34.0**
+  lettered lists (alíneas: a, b, c; bounded to 1–2 letters, starts-at-`a`
+  unambiguous) in `renumber_sequence`; still to add — the **artigo/§/inciso/alínea
+  nested hierarchy** as a single one-pass renumber (today one family is detected per
+  pass, so mixed-level blocks renumber a level at a time). Displays / tables
+  (Distant 1); insertable folds (Potential). Header/list utilities are largely
+  shipped.
 
 **6 · Other — ▹**
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —

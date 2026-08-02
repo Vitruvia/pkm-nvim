@@ -7,17 +7,18 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.33.0** (code-complete on `dev`) — parallel: roman-numeral lists (Area 5)
+## Current version: **v1.34.0** (code-complete on `dev`) — parallel: lettered lists (Area 5)
 
-*v1.33.0 is parallel work (Area 5, markdown editing, not agent-facing): a **roman-
-numeral list family** in `markdown.renumber_sequence` — `I.`/`II.`/`III.` (legal
-*incisos*) are now recognised and renumbered (roman output via a `to_roman`
-converter), nesting via the same per-depth counters, `.`/`)` separators and
-blockquote handling as the other families. Additive — detected after the digit /
-emphasis / header families (nothing they match changes), uppercase-only so it never
-collides with a future lowercase-letter family. `test_v1330_p1`. Letters (alíneas)
-and the full nested legal hierarchy are deferred. It sits on v1.32.0 (the
-near-duplicate detector), which substantially completed the Area-1 revision thread.*
+*v1.34.0 is parallel work (Area 5, markdown editing, not agent-facing): a **lettered
+list family** in `markdown.renumber_sequence` — `a)`/`b)`/`c)` (legal *alíneas*) are
+now recognised and renumbered (letter labels via a `to_alpha` bijective-base-26
+converter: a … z, aa …), nesting via the same per-depth counters, `.`/`)` separators
+and blockquote handling as the other families. Additive — detected **last** (after
+digit / emphasis / header / roman), bounded to 1–2 letters so prose is not swept;
+a list starting at `a` is unambiguous (a lowercase i/v/x-start is not disambiguated
+from roman). `test_v1340_p1`. **One family per pass** — a mixed roman-inciso +
+alpha-alínea block renumbers only the detected level; full one-pass nested-hierarchy
+renumbering is a later step. Sits on v1.33.0 (roman incisos, `to_roman`).*
 
 *v1.32.0 adds **`api.duplicates(opts?)`** — near-duplicate notes (the candidates for
 `merge`), completing the detect→act loop. Where `unlinked_pairs` finds *related*

@@ -61,6 +61,41 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.34.0] - 2/8/2026
+
+*Parallel work (Area 5, markdown editing): lettered ordered lists (Brazilian legal
+*alíneas*), the next legal ordinal after the v1.33.0 roman *incisos*.*
+
+### Added
+
+-   **Lettered list family in `markdown.renumber_sequence`.** A lowercase-letter
+    ordered list — `a)`, `b)`, `c)` … (legal *alíneas*) — is now recognised and
+    renumbered, each position rendered as its letter label (bijective base-26:
+    `a … z`, then `aa`, `ab` …), with the same per-depth counters as the other list
+    families (nested alínea sub-lists restart under each parent) and the same `.`/`)`
+    separators and blockquote handling. A `to_alpha` converter backs it. Additive: it
+    is detected **last** — after the digit / emphasis / header / roman families — so
+    nothing they match changes. `test/test_v1340_p1.lua` (out-of-order renumber, `.`
+    separator, the past-`z` two-letter wrap, nesting, the additive guarantees for
+    digit and roman lists, and a prose line left intact).
+
+### Known limitations (this feature)
+
+-   **The alpha family is bounded to one or two leading letters.** Detection and the
+    renumber branch match `%l%l?` before the separator, so alínea labels (`a … z`,
+    `aa …`) are recognised while an ordinary prose line (`word) text`) is not swept.
+    A list whose labels run three letters deep (`aaa)`) is out of scope — alíneas
+    never do.
+-   **A lowercase list that *starts* at `i`/`v`/`x`/`l`/`c`/`d`/`m` is ambiguous**
+    with lowercase roman and is not disambiguated. Alíneas start at `a`, the
+    unambiguous case; uppercase roman (incisos) is a separate family, so there is no
+    collision with it.
+-   **One family per renumber pass.** `renumber_sequence` detects a single family from
+    the first matching line, so a mixed roman-inciso + alpha-alínea block renumbers
+    only the detected level in one pass; a true legal hierarchy is renumbered a level
+    at a time (or a selection at a time). Full one-pass nested-hierarchy renumbering
+    is a later step.
+
 ## [1.33.0] - 1/8/2026
 
 *Parallel work (Area 5, markdown editing): roman-numeral ordered lists, the first

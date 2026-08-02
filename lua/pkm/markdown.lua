@@ -409,6 +409,23 @@ function M.renumber_sequence(start_line, end_line)
     return table.concat(out)
   end
 
+  -- Positional integer → lowercase-letter label, for alínea-style lists
+  -- (a, b, c, …, z, aa, ab, …). Bijective base-26 (there is no "zero"
+  -- digit), so 1→a, 26→z, 27→aa. nil below 1.
+  local function to_alpha(n)
+    if n < 1 then return nil end
+    local out = {}
+    while n > 0 do
+      local r = (n - 1) % 26
+      out[#out + 1] = string.char(97 + r)   -- 97 = 'a'
+      n = math.floor((n - 1) / 26)
+    end
+    -- built least-significant first; reverse into place
+    local rev = {}
+    for i = #out, 1, -1 do rev[#rev + 1] = out[i] end
+    return table.concat(rev)
+  end
+
   -- ── 1. detect family ─────────────────────────────────────────────────────
 
   local kind   = nil
@@ -450,6 +467,17 @@ function M.renumber_sequence(start_line, end_line)
     s = rest:match('^%s*[IVXLCDM]+([.)]) ')
      or rest:match('^%s*[IVXLCDM]+([.)])%s*$')
     if s then kind, sep = 'list_roman', s; break end
+
+    -- Lettered list (legal *alíneas*: a, b, c …). Lowercase letters only, and
+    -- tried LAST because `%l` is the most permissive family — a prose line like
+    -- "hello. world" could otherwise be misread as a list. Bounded to one or two
+    -- letters so it matches alínea labels (a … z, aa …) but not ordinary words.
+    -- A list that *starts* at a lowercase roman letter (i/v/x/…) is ambiguous
+    -- with lowercase roman and is not disambiguated; alíneas start at 'a', which
+    -- is unambiguous.
+    s = rest:match('^%s*%l%l?([.)]) ')
+     or rest:match('^%s*%l%l?([.)])%s*$')
+    if s then kind, sep = 'list_alpha', s; break end
   end
 
   if not kind then
@@ -546,6 +574,23 @@ function M.renumber_sequence(start_line, end_line)
       if ind then
         local n   = next_count(eff_depth(bq, ind))
         local num = to_roman(n) or tostring(n)
+        new_lines[#new_lines + 1] = body ~= nil
+          and bq .. ind .. num .. sep .. ' ' .. body
+          or  bq .. ind .. num .. sep
+        changed, replaced = changed + 1, true
+      end
+
+    elseif kind == 'list_alpha' then
+      -- Bounded to one or two letters (matching the family detection) so a
+      -- mid-range prose line like "word) text" is never swept as an item.
+      local ind, _, s, body = rest:match('^(%s*)(%l%l?)([.)]) (.*)$')
+      if not (ind and s == sep) then
+        local ind2, _, s2 = rest:match('^(%s*)(%l%l?)([.)])%s*$')
+        if ind2 and s2 == sep then ind, body = ind2, nil end
+      end
+      if ind then
+        local n   = next_count(eff_depth(bq, ind))
+        local num = to_alpha(n) or tostring(n)
         new_lines[#new_lines + 1] = body ~= nil
           and bq .. ind .. num .. sep .. ' ' .. body
           or  bq .. ind .. num .. sep

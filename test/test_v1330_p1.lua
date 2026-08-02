@@ -81,10 +81,10 @@ md.renumber_sequence(1, 3)
 check("a plain digit list still renumbers 1,2,3 (not treated as roman)",
   same(lines(), { '1. a', '2. b', '3. c' }), vim.inspect(lines()))
 
-print("== a lowercase-letter list is NOT captured as roman (left for later) ==")
-set_buf({ 'a. one', 'b. two' })
+print("== a lowercase-letter list is NOT romanised (handled by the alpha family) ==")
+set_buf({ 'b. one', 'a. two' })
 md.renumber_sequence(1, 2)
-check("lowercase 'a.'/'b.' are not roman, so left unchanged",
+check("lowercase list is not turned into I/II; the alpha family renumbers a, b",
   same(lines(), { 'a. one', 'b. two' }), vim.inspect(lines()))
 
 print("")
