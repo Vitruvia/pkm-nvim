@@ -58,6 +58,14 @@ local repo_root = vim.fn.fnamemodify(this_file, ':p:h:h')  -- test/min_init.lua 
 
 vim.opt.runtimepath:prepend(repo_root)
 
+-- The highlighting was extracted to the sibling `pkm-syntax` plugin (pkm-nvim now
+-- depends on it). Add it to the runtimepath so tests and smoke sessions load it
+-- like a real install; without it, pkm.syntax degrades to a no-op stub.
+local pkm_syntax_root = vim.fn.fnamemodify(repo_root, ':h') .. '/pkm-syntax'
+if vim.fn.isdirectory(pkm_syntax_root) == 1 then
+  vim.opt.runtimepath:prepend(pkm_syntax_root)
+end
+
 -- Disposable test run: never read or write the user's real ShaDa file
 -- (marks, registers, command/search history, oldfiles). Equivalent to
 -- passing -i NONE on the command line, set here so it applies automatically

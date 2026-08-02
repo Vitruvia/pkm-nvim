@@ -61,6 +61,36 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.44.0] - 2/8/2026
+
+*Phase X completed: the markdown highlighting is now a **separate plugin**,
+`pkm-syntax`, and pkm-nvim depends on it. Author decision: separate repos (not a
+monorepo); renamed `pkm-highlight` → `pkm-syntax` for the broader scope (folding
+and more to come).*
+
+### Changed — ⚠️ new dependency
+
+-   **`pkm-nvim` now requires the `pkm-syntax` plugin** (github.com/Vitruvia/pkm-syntax)
+    for markdown highlighting. **Add it to your plugin manager as a dependency of
+    pkm-nvim** (e.g. lazy.nvim `dependencies = { "Vitruvia/pkm-syntax" }`). Without it,
+    highlighting is absent but pkm-nvim still loads — `pkm.syntax` degrades to a no-op
+    stub with a one-time warning, so nothing else breaks.
+-   `lua/pkm/syntax.lua` is now a **thin facade** that re-exports `require('pkm-syntax')`
+    unchanged, so every caller — `enable`/`disable`/`refresh_fold`/`foldtext` and the
+    `*_list_pattern` / `_find_*` exports — keeps working. The highlighting code and
+    `queries/markdown/*.scm` **moved out** of this repo into pkm-syntax (kept in only
+    one place so the `; extends` query is not applied twice).
+-   `test/min_init.lua` prepends the sibling `../pkm-syntax` to the runtimepath, so the
+    suite (and smoke sessions) load the plugin like a real install.
+
+### Notes
+
+-   pkm-syntax is a standalone plugin: it highlights **any** markdown via
+    `require('pkm-syntax').setup()`, with no dependency on pkm-nvim. The
+    `highlight_all_markdown` flag (v1.42.0) still works through the facade.
+-   Whole suite green (74) through the facade; behaviour is unchanged (the code was
+    moved verbatim). No new luacheck warnings.
+
 ## [1.43.0] - 2/8/2026
 
 *Autowrap follow-ups from the smoke: fenced-code content now wraps, and `gq` routes

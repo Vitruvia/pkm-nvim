@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.43.0** (code-complete on `dev`) — autowrap follow-ups: code wrap + gq
+## Current version: **v1.44.0** (code-complete on `dev`) — highlighting extracted to pkm-syntax
+
+*v1.44.0 completes the extraction: the markdown highlighting is now the standalone
+**`pkm-syntax`** plugin (sibling repo `P:/Active/pkm-syntax`, remote Vitruvia/pkm-syntax,
+renamed from pkm-highlight). `lua/pkm/syntax.lua` is a thin facade re-exporting
+`require('pkm-syntax')` (graceful no-op stub + warning if the plugin is absent), so all
+callers are unchanged. The highlighting code and `queries/markdown/*.scm` MOVED to
+pkm-syntax (removed here — two copies would double-apply the `; extends` query).
+`test/min_init.lua` prepends `../pkm-syntax` to the runtimepath. **pkm-nvim now DEPENDS
+on pkm-syntax** — the author must add it to the real Lazy config. Suite 74/0 through the
+facade; behaviour unchanged (code moved verbatim). Architecture rule: pkm-syntax stays
+`Dependencies: none`; its API (enable/disable/refresh_fold/foldtext/setup + patterns/
+`_find_*`) is the contract — change in lockstep across both repos.*
+
 
 *v1.43.0 (from the autowrap smoke): fenced-code **content** now wraps per line (fences
 left untouched like headings); and `markdown.formatexpr()` is set as `formatexpr` on
