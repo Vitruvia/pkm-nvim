@@ -61,6 +61,26 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.33.0] - 1/8/2026
+
+*Parallel work (Area 5, markdown editing): roman-numeral ordered lists, the first
+step toward Brazilian legal-text list support (incisos).*
+
+### Added
+
+-   **Roman-numeral list family in `markdown.renumber_sequence`.** An uppercase-roman
+    ordered list — `I.`, `II.`, `III.` … (legal *incisos*) — is now recognised and
+    renumbered, each position rendered in roman form, with the same per-depth counters
+    as the other list families (so nested roman sub-lists restart under each parent)
+    and the same `.`/`)` separators and blockquote handling. Additive: it is detected
+    **after** the digit / emphasis / header families, so nothing they match changes;
+    uppercase-only, so it never collides with a (future) lowercase-letter family. A
+    `to_roman` converter (subtractive form, 1..3999) backs it. `test/test_v1330_p1.lua`
+    (out-of-order renumber, `)` separator, counts past X, nesting, and the additive
+    guarantees). *(Letters — alíneas a/b/c — and the full nested legal hierarchy are
+    left for a later step; letters carry prose-vs-ordinal ambiguity that wants its own
+    design.)*
+
 ## [1.32.0] - 1/8/2026
 
 *Revision/evolution thread, step 5b (ROADMAP Area 1): the near-duplicate detector,

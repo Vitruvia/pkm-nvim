@@ -361,6 +361,7 @@ end
 --- Supported families (detection order: list → hdr_prefix → hdr_suffix):
 ---   list (plain)      BLOCKQUOTE? INDENT N[.)] text    — any indent depth
 ---   list (emph)       BLOCKQUOTE? INDENT *N*[.)] text  — single or double *
+---   list (roman)      BLOCKQUOTE? INDENT R[.)] text    — uppercase roman (incisos)
 ---   hdr_prefix        BLOCKQUOTE? ## N[.)] text        — any header level
 ---   hdr_suffix        BLOCKQUOTE? ## text-N            — trailing annotation preserved
 ---
@@ -392,6 +393,20 @@ function M.renumber_sequence(start_line, end_line)
     local d = 0
     for _ in bq:gmatch('>') do d = d + 2 end
     return d + ind_depth(ind)
+  end
+
+  -- Positional integer → uppercase Roman numeral, for inciso-style lists
+  -- (I, II, III, …). Standard subtractive form; nil outside 1..3999.
+  local function to_roman(n)
+    if n < 1 or n > 3999 then return nil end
+    local map = { { 1000, 'M' }, { 900, 'CM' }, { 500, 'D' }, { 400, 'CD' },
+                  { 100, 'C' }, { 90, 'XC' }, { 50, 'L' }, { 40, 'XL' },
+                  { 10, 'X' }, { 9, 'IX' }, { 5, 'V' }, { 4, 'IV' }, { 1, 'I' } }
+    local out = {}
+    for _, p in ipairs(map) do
+      while n >= p[1] do out[#out + 1] = p[2]; n = n - p[1] end
+    end
+    return table.concat(out)
   end
 
   -- ── 1. detect family ─────────────────────────────────────────────────────
@@ -428,6 +443,13 @@ function M.renumber_sequence(start_line, end_line)
     if rest:match('^#+%s') and rest:match('%-(%d+)%D*$') then
       kind = 'hdr_suffix'; break
     end
+
+    -- Roman-numeral list (legal *incisos*: I, II, III …). Uppercase roman only,
+    -- so it never collides with a lowercase-letter list, and tried last so the
+    -- digit / emphasis / header families always win a line they could both match.
+    s = rest:match('^%s*[IVXLCDM]+([.)]) ')
+     or rest:match('^%s*[IVXLCDM]+([.)])%s*$')
+    if s then kind, sep = 'list_roman', s; break end
   end
 
   if not kind then
@@ -513,6 +535,21 @@ function M.renumber_sequence(start_line, end_line)
           new_lines[#new_lines + 1] = bq .. pre .. '-' .. hdr_counter .. suf
           changed, replaced = changed + 1, true
         end
+      end
+
+    elseif kind == 'list_roman' then
+      local ind, _, s, body = rest:match('^(%s*)([IVXLCDM]+)([.)]) (.*)$')
+      if not (ind and s == sep) then
+        local ind2, _, s2 = rest:match('^(%s*)([IVXLCDM]+)([.)])%s*$')
+        if ind2 and s2 == sep then ind, body = ind2, nil end
+      end
+      if ind then
+        local n   = next_count(eff_depth(bq, ind))
+        local num = to_roman(n) or tostring(n)
+        new_lines[#new_lines + 1] = body ~= nil
+          and bq .. ind .. num .. sep .. ' ' .. body
+          or  bq .. ind .. num .. sep
+        changed, replaced = changed + 1, true
       end
     end
 

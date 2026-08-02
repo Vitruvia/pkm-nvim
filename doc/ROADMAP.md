@@ -536,9 +536,12 @@ threads, in order:*
   *Low API impact — an agent formats unaided — so the agent side defers.*
 
 **5 · Markdown editing features — ▹ (command-creating pieces → 🔺)**
-- List functions over custom prefixes incl. Brazilian legal texts (Near 1.2);
-  displays / tables (Distant 1); insertable folds (Potential). Header/list
-  utilities are largely shipped.
+- List functions over custom prefixes incl. Brazilian legal texts (Near 1.2):
+  ✅ **v1.33.0** roman-numeral lists (incisos: I, II, III) in `renumber_sequence`;
+  still to add — **letters** (alíneas a/b/c; needs prose-vs-ordinal disambiguation)
+  and the **artigo/§/inciso/alínea nested hierarchy** (multi-type per level).
+  Displays / tables (Distant 1); insertable folds (Potential). Header/list utilities
+  are largely shipped.
 
 **6 · Other — ▹**
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —
