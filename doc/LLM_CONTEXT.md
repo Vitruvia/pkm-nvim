@@ -7,7 +7,16 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.36.0** (code-complete on `dev`) — parallel: alínea marker highlighting (Area 4)
+## Current version: **v1.36.1** (code-complete on `dev`) — fix: marker highlighting is case-sensitive (Area 4)
+
+*v1.36.1 fixes a false positive in the v1.35.0/v1.36.0 marker highlighting: matchadd
+honours `'ignorecase'` (the real config sets it), so `[IVXLCDM]` folded case and a
+lowercase word like `civil.`/`id.` at line start was painted as a roman inciso. Both
+patterns now lead with `\C` (case-sensitive): roman uppercase-only, alpha
+lowercase-only. Caught by the v1.36.0 smoke-fixture prediction (a lowercase `c)`
+matched the roman pattern). `test_v1350_p1`/`test_v1360_p1` set `'ignorecase'` and
+assert it. Smoke note 0280 in `00 - NotesTeste`.*
+
 
 *v1.36.0 is parallel work (Area 4, syntax highlighting): **lettered list markers now
 highlight** — `a)`/`b)`/`aa)` (legal *alíneas*), completing the visual parity with

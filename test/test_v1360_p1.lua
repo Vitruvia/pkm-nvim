@@ -27,6 +27,10 @@ check("alpha_list_pattern is exposed",
 
 local pat = syntax.alpha_list_pattern
 
+-- Force 'ignorecase' on (matchadd honours it; the real config sets it): assert
+-- the `\C` in the pattern keeps an uppercase `A)` from being painted as an alínea.
+vim.o.ignorecase = true
+
 -- { input line, expected matched marker ('' = must not match) }
 local cases = {
   { 'a) primeira alínea',   'a)'  },
@@ -40,6 +44,8 @@ local cases = {
   { '1) arabic paren',      ''    },   -- digit
   { 'options a) or b)',     ''    },   -- inline enumeration mid-line, not line-start
   { 'the cat sat',          ''    },   -- plain prose
+  { 'A) uppercase',         ''    },   -- uppercase must NOT fold-match as an alínea
+  { 'C) uppercase',         ''    },   -- (C is roman-ish, but this is the alpha pattern)
 }
 
 for _, c in ipairs(cases) do

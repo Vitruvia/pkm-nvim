@@ -144,7 +144,11 @@ M.citation_pattern = CITATION_PATTERN
 --- `I. `-at-line-start-in-prose match is the same accepted heuristic limit (the
 --- roman analogue of the Area-2 wrapped-number case). Exposed so a test can
 --- assert it.
-local ROMAN_LIST_PATTERN = [=[\v^[ \t>]*\zs[IVXLCDM]+[.)]\ze(\s|$)]=]
+--- Leads with `\C` (force case-sensitive): matchadd honours 'ignorecase', which
+--- the real config sets, and without `\C` the collection `[IVXLCDM]` would also
+--- match the lowercase roman letters — highlighting ordinary words like `civil.`
+--- or `id.` at line start.
+local ROMAN_LIST_PATTERN = [=[\C\v^[ \t>]*\zs[IVXLCDM]+[.)]\ze(\s|$)]=]
 M.roman_list_pattern = ROMAN_LIST_PATTERN
 
 --- The matchadd pattern for lettered list markers — `a)`, `b)`, `aa)` … at the
@@ -157,7 +161,10 @@ M.roman_list_pattern = ROMAN_LIST_PATTERN
 --- prose; the paren form is how alíneas are actually written and is clean at line
 --- start. Bounded to one or two letters, matching the renumber detector. Exposed
 --- so a test can assert it.
-local ALPHA_LIST_PATTERN = [=[\v^[ \t>]*\zs\l\l?\)\ze(\s|$)]=]
+--- Leads with `\C` for the same reason as the roman pattern (matchadd honours
+--- 'ignorecase'): it keeps the highlight to lowercase labels even though the
+--- config folds case, so an uppercase `A)` is not painted as an alínea.
+local ALPHA_LIST_PATTERN = [=[\C\v^[ \t>]*\zs\l\l?\)\ze(\s|$)]=]
 M.alpha_list_pattern = ALPHA_LIST_PATTERN
 
 --- Register match-based highlights in a single window.

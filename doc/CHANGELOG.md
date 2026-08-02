@@ -61,6 +61,23 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.36.1] - 2/8/2026
+
+*Fix for the list-marker highlighting shipped in v1.35.0 / v1.36.0.*
+
+### Fixed
+
+-   **Roman list-marker highlighting no longer paints lowercase words.** `matchadd`
+    honours `'ignorecase'`, which the real config sets, so the `[IVXLCDM]`
+    collection was folding case and matching lowercase roman letters — a line
+    beginning `civil.` or `id.` was highlighted as an inciso. Both marker patterns
+    now lead with `\C` (force case-sensitive): roman matches uppercase only, alpha
+    lowercase only (`A)` is not painted as an alínea). Caught while building the
+    v1.36.0 smoke fixture (the highlight prediction over the real note showed a
+    lowercase `c)` matching the *roman* pattern). `test_v1350_p1` / `test_v1360_p1`
+    now set `'ignorecase'` and assert the case-sensitivity (`civil.`, `id.`, `i.`
+    reject for roman; `A)`, `C)` reject for alpha).
+
 ## [1.36.0] - 2/8/2026
 
 *Parallel work (Area 4, syntax highlighting): lettered list markers now highlight,

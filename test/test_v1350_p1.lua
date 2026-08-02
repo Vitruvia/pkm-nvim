@@ -28,6 +28,11 @@ check("roman_list_pattern is exposed",
 
 local pat = syntax.roman_list_pattern
 
+-- Force 'ignorecase' on: matchadd honours it, and the author's real config sets
+-- it. Without `\C` in the pattern, [IVXLCDM] would fold to also match lowercase
+-- roman letters and highlight ordinary words (civil., id.). Assert it here.
+vim.o.ignorecase = true
+
 -- { input line, expected matched marker ('' = must not match) }
 local cases = {
   { 'I. primeiro inciso',     'I.'   },
@@ -43,6 +48,9 @@ local cases = {
   { 'a) lowercase alinea',    ''     },   -- lowercase letters are not roman
   { 'Investigate. the case',  ''     },   -- word beginning with I, not roman-only
   { 'Hello world',            ''     },   -- plain prose
+  { 'civil. word',            ''     },   -- lowercase roman letters, must NOT fold-match
+  { 'id. abbreviation',       ''     },   -- lowercase i/d, must NOT fold-match
+  { 'i. lowercase roman',     ''     },   -- lowercase i, must NOT fold-match
 }
 
 for _, c in ipairs(cases) do
