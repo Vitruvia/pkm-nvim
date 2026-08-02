@@ -60,7 +60,7 @@ print("== a tight list renumbers each item separately ==")
 r = wrap({ 'i. one', 'ii. two' })
 check("'i.' padded 2, 'ii.' padded 1", same(r, { 'i.  one', 'ii. two' }), vim.inspect(r))
 
-print("== headers, tables, and fenced code are left untouched ==")
+print("== headers/tables/fences untouched; fenced CODE content wraps per line ==")
 r = wrap({
   '# A header far longer than twenty columns wide',
   '| a very wide table row kept intact |',
@@ -69,11 +69,13 @@ r = wrap({
   '```',
   'i. short',
 })
-check("structural lines unchanged; only the list item wrapped", same(r, {
+check("header/table/fences intact; the code line wrapped, the list item wrapped", same(r, {
   '# A header far longer than twenty columns wide',
   '| a very wide table row kept intact |',
   '```',
-  'a code line far longer than twenty columns',
+  'a code line far',
+  'longer than twenty',
+  'columns',
   '```',
   'i.  short',
 }), vim.inspect(r))
@@ -96,6 +98,21 @@ print("== idempotent: wrapping twice equals wrapping once ==")
 local once = wrap({ 'i. aa bb cc dd ee ff gg' })
 local twice = wrap(once)
 check("second wrap is a no-op", same(once, twice), vim.inspect(twice))
+
+print("== formatexpr: gqq routes through the wrap ==")
+do
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buf)
+  vim.bo[buf].filetype = 'markdown'
+  vim.bo[buf].textwidth = 20
+  vim.bo[buf].formatexpr = "v:lua.require('pkm.markdown').formatexpr()"
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'i. aa bb cc dd ee ff gg' })
+  vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  vim.cmd('normal! gqq')
+  local g = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  check("gqq wrapped the item just like :PKMList wrap",
+    same(g, { 'i.  aa bb cc dd ee', '    ff gg' }), vim.inspect(g))
+end
 
 print("")
 if failures == 0 then print("ALL PASS") else print(string.format("%d FAILURE(S)", failures)) end

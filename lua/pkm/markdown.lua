@@ -23,6 +23,7 @@
 --   convert_list_at_cursor(direction?)             → Same, paragraph around cursor
 --   wrap_range(start_line, end_line)           → Structure-aware reflow to textwidth (Option A indent)
 --   wrap_at_cursor()                           → Same, paragraph around cursor
+--   formatexpr()                               → 'formatexpr' hook so gq/gw route through wrap_range
 -- =============================================================================
 
 local M = {}
@@ -864,8 +865,9 @@ local function wrap_marker(line)
 end
 
 -- A line the autowrap must never reflow (and which closes any open block).
-local function wrap_structural(line, in_fence)
-  if in_fence then return true end
+-- Fenced-code content is handled separately by the caller (wrapped per line), so
+-- this is only reached outside a fence.
+local function wrap_structural(line)
   return line:match('^%s*$')             -- blank
       or line:match('^%s*#')             -- ATX header
       or line:match('^%s*|')             -- table row
@@ -879,8 +881,9 @@ end
 --- continuation lines are re-indented to **marker_indent + 4** — never the marker
 --- width (Option A) — with short markers padded to the 4-space tab stop and long
 --- markers (`xiii.`, `100.`) overflowing only the first line. Plain paragraphs
---- reflow at their own indent. Headers, tables, blockquotes, fenced code and
---- frontmatter are left untouched. Idempotent.
+--- reflow at their own indent. Fenced-code **content** wraps per line (each line
+--- on its own, at its indent), but the ``` fences, headers, tables, blockquotes
+--- and frontmatter are left untouched. Idempotent.
 ---@param start_line integer  1-indexed, inclusive
 ---@param end_line   integer  1-indexed, inclusive
 ---@return nil
@@ -911,7 +914,21 @@ function M.wrap_range(start_line, end_line)
   for _, line in ipairs(lines) do
     if line:match('^%s*```') or line:match('^%s*~~~') then
       flush(); out[#out + 1] = line; in_fence = not in_fence
-    elseif wrap_structural(line, in_fence) then
+    elseif in_fence then
+      -- Fenced-code content wraps per line — each line on its own (no joining,
+      -- no marker detection), kept at its indent; the ``` fences themselves are
+      -- left untouched, like headings.
+      flush()
+      if line:match('^%s*$') then
+        out[#out + 1] = line
+      else
+        local cind = line:match('^(%s*)')
+        local cw   = math.max(1, tw - #cind)
+        for _, seg in ipairs(reflow(vim.trim(line), cw, cw)) do
+          out[#out + 1] = cind .. seg
+        end
+      end
+    elseif wrap_structural(line) then
       flush(); out[#out + 1] = line
     else
       local ind, marker, body = wrap_marker(line)
@@ -935,6 +952,20 @@ end
 function M.wrap_at_cursor()
   local s, e = paragraph_bounds()
   M.wrap_range(s, e)
+end
+
+--- 'formatexpr' hook: routes `gq`/`gw` (and any motion — `gqq`, `gq3j`, `gqap`,
+--- visual `gq`) through the structure-aware wrap. Set as the buffer's formatexpr
+--- on PKM notes, so the author's existing gq muscle memory just works. Falls back
+--- to Neovim's internal formatter for insert-mode auto-wrap (`fo` t/a), which
+--- passes one line at a time and expects character-level behaviour.
+---@return integer  0 = handled, 1 = fall back to the internal formatter
+function M.formatexpr()
+  if vim.fn.mode():match('[iR]') then return 1 end
+  local lnum  = vim.v.lnum
+  local count = math.max(vim.v.count, 1)
+  M.wrap_range(lnum, lnum + count - 1)
+  return 0
 end
 
 -- =============================================================================

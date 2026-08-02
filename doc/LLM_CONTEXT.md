@@ -7,7 +7,16 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.42.0** (code-complete on `dev`) — highlighter extraction prep (Area 4/3)
+## Current version: **v1.43.0** (code-complete on `dev`) — autowrap follow-ups: code wrap + gq
+
+*v1.43.0 (from the autowrap smoke): fenced-code **content** now wraps per line (fences
+left untouched like headings); and `markdown.formatexpr()` is set as `formatexpr` on
+PKM notes (`mode.lua` `enable_note_buffer`), so `gq`/`gw` and any motion (`gqq`,
+`gq3j`, visual `gq`) route through the structure-aware wrap with no new keymap. Legal
+format confirmed by the author. `test_v1410_p1` updated. Next: the physical highlighter
+extraction into the `pkm-highlight`→`pkm-syntax` repo (sibling `P:/Active/pkm-highlight`,
+remote Vitruvia/pkm-highlight).*
+
 
 *v1.42.0 prepares the highlighter for extraction: `syntax.enable(bufnr, highlight_only)`
 splits pure highlighting (tree-sitter, matchadd/extmark markers, YAML injection) from

@@ -61,6 +61,34 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.43.0] - 2/8/2026
+
+*Autowrap follow-ups from the smoke: fenced-code content now wraps, and `gq` routes
+through the structure-aware wrap.*
+
+### Changed
+
+-   **Fenced-code content now wraps** (`markdown.wrap_range`). Previously the whole
+    fenced block was skipped; now the ``` / ~~~ fences are left untouched (like
+    headings) but the code lines inside wrap **per line** — each line on its own, at
+    its own indent, never joined and with no marker detection. (Word-based, so runs
+    of internal spaces collapse; suited to prose-in-code-blocks. Tell me if you want a
+    whitespace-preserving hard break instead.)
+
+### Added
+
+-   **`markdown.formatexpr()` and `formatexpr` on PKM notes** — `gq`/`gw` and every
+    motion (`gqq`, `gq3j`, `gqap`, visual `gq`) now route through the structure-aware
+    wrap automatically, so the existing muscle memory just works — no new keymap, no
+    extra keystrokes. Insert-mode auto-wrap (`fo` t/a) falls back to Neovim's internal
+    formatter. Wired in `mode.lua` at the note-enable path (`enable_note_buffer`).
+
+### Tests
+
+-   `test_v1410_p1` updated: fenced-code content wraps while fences/headers/tables stay
+    intact, and `gqq` reflows an item exactly like `:PKMList wrap`. Whole suite green
+    (74). No new luacheck warnings.
+
 ## [1.42.0] - 2/8/2026
 
 *Phase X of the legal-lists arc: prepare the highlighter for extraction as a

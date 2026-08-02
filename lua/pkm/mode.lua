@@ -64,15 +64,21 @@ local function cwd_is_pkm()
       or cwd:lower():sub(1, #root + 1) == root:lower() .. '/'
 end
 
+--- Enable PKM highlighting and note-editing behaviour on one note buffer:
+--- the syntax, plus `formatexpr` so gq/gw route through the structure-aware wrap.
+local function enable_note_buffer(bufnr)
+  require('pkm.syntax').enable(bufnr)
+  vim.bo[bufnr].formatexpr = "v:lua.require('pkm.markdown').formatexpr()"
+end
+
 --- Enable PKM syntax on every listed PKM buffer currently open.
 local function syntax_enable_all()
-  local syntax = require('pkm.syntax')
-  local root   = require('pkm').config.root_path:gsub('\\', '/'):gsub('[/\\]+$', '')
+  local root = require('pkm').config.root_path:gsub('\\', '/'):gsub('[/\\]+$', '')
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].buflisted then
       local name = vim.api.nvim_buf_get_name(bufnr):gsub('\\', '/')
       if name:lower():sub(1, #root + 1) == root:lower() .. '/' then
-        syntax.enable(bufnr)
+        enable_note_buffer(bufnr)
       end
     end
   end
@@ -114,7 +120,7 @@ function M.setup(cfg)
       if not is_pkm_file(path) then return end
       if _active then
         if _config.syntax.enabled then
-          require('pkm.syntax').enable(vim.api.nvim_get_current_buf())
+          enable_note_buffer(vim.api.nvim_get_current_buf())
         end
         return
       end
