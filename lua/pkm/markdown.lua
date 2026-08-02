@@ -21,6 +21,8 @@
 --   renumber_range(start_line, end_line)       → Route a range: nested legal if ≥2 levels, else single-family
 --   convert_list(start_line, end_line, direction?) → Convert list ordered ↔ unordered
 --   convert_list_at_cursor(direction?)             → Same, paragraph around cursor
+--   wrap_range(start_line, end_line)           → Structure-aware reflow to textwidth (Option A indent)
+--   wrap_at_cursor()                           → Same, paragraph around cursor
 -- =============================================================================
 
 local M = {}
@@ -812,6 +814,127 @@ function M.renumber_range(start_line, end_line)
   else
     M.renumber_sequence(start_line, end_line)
   end
+end
+
+-- =============================================================================
+-- SECTION: Structure-aware autowrap
+-- =============================================================================
+
+-- Greedy word-wrap: the first line fits `first_w` columns, the rest `rest_w`.
+-- Words are never split, so a word wider than the column budget overflows.
+local function reflow(text, first_w, rest_w)
+  local out, cur, width = {}, '', first_w
+  for w in text:gmatch('%S+') do
+    if cur == '' then
+      cur = w
+    elseif #cur + 1 + #w <= width then
+      cur = cur .. ' ' .. w
+    else
+      out[#out + 1] = cur
+      cur, width = w, rest_w
+    end
+  end
+  if cur ~= '' then out[#out + 1] = cur end
+  if #out == 0 then out[1] = '' end
+  return out
+end
+
+-- Marker families recognised by the autowrap, in detection order; each returns
+-- (indent, marker, body). Legal markers reuse the same shapes as the renumber.
+local WRAP_MARKERS = {
+  '^(%s*)(%d+[.)])%s+(.*)$',         -- digit list
+  '^(%s*)([%-%*%+])%s+(.*)$',        -- bullet
+  '^(%s*)(Art%.%s+%d+º?)%s+(.*)$',   -- artigo
+  '^(%s*)(§%s+%d+º?)%s+(.*)$',       -- parágrafo
+  '^(%s*)([IVXLCDM]+%s+%-)%s+(.*)$', -- inciso
+  '^(%s*)(%l%l?%))%s+(.*)$',         -- alínea
+}
+
+--- Detect a list marker at the start of a line. Returns indent, marker, body, or
+--- nil for a non-marker line. The subalínea (lowercase roman + '.') is validated
+--- as a canonical roman, so `civil.`/`mil.` are treated as prose, not markers.
+local function wrap_marker(line)
+  for _, pat in ipairs(WRAP_MARKERS) do
+    local ind, marker, body = line:match(pat)
+    if ind then return ind, marker, body end
+  end
+  local ind, tok, body = line:match('^(%s*)([ivxlcdm]+)%.%s+(.*)$')
+  if ind and is_valid_roman(tok) then return ind, tok .. '.', body end
+  return nil
+end
+
+-- A line the autowrap must never reflow (and which closes any open block).
+local function wrap_structural(line, in_fence)
+  if in_fence then return true end
+  return line:match('^%s*$')             -- blank
+      or line:match('^%s*#')             -- ATX header
+      or line:match('^%s*|')             -- table row
+      or line:match('^%s*>')             -- blockquote (deferred to a later pass)
+      or line:match('^%s*%-%-%-+%s*$')   -- frontmatter fence / thematic break
+      or line:match('^%s*%*%*%*+%s*$')
+      or line:match('^%s*___+%s*$')
+end
+
+--- Reflow a line range to `textwidth` (or 80), list-aware. A list item's
+--- continuation lines are re-indented to **marker_indent + 4** — never the marker
+--- width (Option A) — with short markers padded to the 4-space tab stop and long
+--- markers (`xiii.`, `100.`) overflowing only the first line. Plain paragraphs
+--- reflow at their own indent. Headers, tables, blockquotes, fenced code and
+--- frontmatter are left untouched. Idempotent.
+---@param start_line integer  1-indexed, inclusive
+---@param end_line   integer  1-indexed, inclusive
+---@return nil
+function M.wrap_range(start_line, end_line)
+  local tw = (vim.bo.textwidth and vim.bo.textwidth > 0) and vim.bo.textwidth or 80
+  local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+  local out, in_fence, blk = {}, false, nil
+
+  local function flush()
+    if not blk then return end
+    local body = table.concat(blk.parts, ' ')
+    if blk.marker then
+      local mi   = #blk.indent
+      local pad  = math.max(1, 4 - #blk.marker)
+      local fcol = mi + #blk.marker + pad
+      local cont = mi + 4
+      local segs = reflow(body, math.max(1, tw - fcol), math.max(1, tw - cont))
+      out[#out + 1] = blk.indent .. blk.marker .. string.rep(' ', pad) .. segs[1]
+      for i = 2, #segs do out[#out + 1] = string.rep(' ', cont) .. segs[i] end
+    else
+      local base = #blk.indent
+      local segs = reflow(body, math.max(1, tw - base), math.max(1, tw - base))
+      for _, seg in ipairs(segs) do out[#out + 1] = blk.indent .. seg end
+    end
+    blk = nil
+  end
+
+  for _, line in ipairs(lines) do
+    if line:match('^%s*```') or line:match('^%s*~~~') then
+      flush(); out[#out + 1] = line; in_fence = not in_fence
+    elseif wrap_structural(line, in_fence) then
+      flush(); out[#out + 1] = line
+    else
+      local ind, marker, body = wrap_marker(line)
+      if marker then
+        flush()
+        blk = { indent = ind, marker = marker, parts = { body } }
+      elseif blk then
+        blk.parts[#blk.parts + 1] = vim.trim(line)   -- lazy continuation
+      else
+        blk = { indent = line:match('^(%s*)'), marker = nil, parts = { vim.trim(line) } }
+      end
+    end
+  end
+  flush()
+
+  vim.api.nvim_buf_set_lines(0, start_line - 1, end_line, false, out)
+end
+
+--- Reflow the paragraph surrounding the cursor (blank-line bounded).
+---@return nil
+function M.wrap_at_cursor()
+  local s, e = paragraph_bounds()
+  M.wrap_range(s, e)
 end
 
 -- =============================================================================

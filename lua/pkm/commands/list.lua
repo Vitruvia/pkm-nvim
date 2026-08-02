@@ -40,6 +40,17 @@ local function do_renumber(opts)
   end
 end
 
+--- Structure-aware reflow (autowrap), over a range or the current paragraph.
+---@param opts table  command opts (reads range/line1/line2)
+local function do_wrap(opts)
+  local md = require('pkm.markdown')
+  if opts.range > 0 then
+    md.wrap_range(opts.line1, opts.line2)
+  else
+    md.wrap_at_cursor()
+  end
+end
+
 local M = {}
 
 function M.register()
@@ -47,7 +58,7 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- :PKMList — the context form
   -- ---------------------------------------------------------------------------
-  local LIST_VERBS = { 'convert', 'renumber' }
+  local LIST_VERBS = { 'convert', 'renumber', 'wrap' }
 
   vim.api.nvim_create_user_command('PKMList', function(opts)
     local p = require('pkm.args').parse(opts, { verbs = LIST_VERBS })
@@ -55,8 +66,10 @@ function M.register()
       do_convert(p.positional[1], opts)
     elseif p.verb == 'renumber' then
       do_renumber(opts)
+    elseif p.verb == 'wrap' then
+      do_wrap(opts)
     else
-      vim.notify('[pkm] :PKMList convert [to_ordered|to_unordered] | renumber',
+      vim.notify('[pkm] :PKMList convert [to_ordered|to_unordered] | renumber | wrap',
         vim.log.levels.WARN)
     end
   end, {
@@ -72,7 +85,7 @@ function M.register()
       local lead = (arg_lead or ''):lower()
       return vim.tbl_filter(function(t) return t:lower():find(lead, 1, true) == 1 end, out)
     end,
-    desc = 'Lists: :PKMList convert [to_ordered|to_unordered] | renumber',
+    desc = 'Lists: :PKMList convert [to_ordered|to_unordered] | renumber | wrap',
   })
 
 end

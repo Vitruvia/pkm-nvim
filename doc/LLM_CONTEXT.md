@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.40.0** (code-complete on `dev`) — legal-marker highlighting (Area 4)
+## Current version: **v1.41.0** (code-complete on `dev`) — structure-aware autowrap (Area 2)
+
+*v1.41.0 adds `markdown.wrap_range(l1,l2)` / `wrap_at_cursor()` / `:PKMList wrap` — a
+reflow to textwidth (or 80), **Option A**: a list item's continuation lines go to
+marker_indent + 4 (never the prefix width; short markers padded to the 4-space tab
+stop, long markers overflow only the first line), plain paragraphs reflow at their own
+indent, and headers/tables/fenced-code/frontmatter/blockquotes are left untouched. All
+marker families recognised (digit/bullet + the five legal markers, subalínea validated
+so `civil.` is prose); idempotent. Fixes the wrapped-number highlight symptom at the
+source (a continuation line never begins with `N. `). `test_v1410_p1`. SIGNALS A SMOKE
+(feel of the wrap; note 0282). NEXT: extract highlighting as a standalone plugin
+(Area 3 — needs a packaging decision), then the conventions doc. Blockquote reflow and
+formatexpr integration deferred.*
+
 
 *v1.40.0 opens the highlighting phase: the legal markers tree-sitter can't see now
 highlight, completing parity with the renumber. **artigo** `Art. Nº` + **parágrafo**

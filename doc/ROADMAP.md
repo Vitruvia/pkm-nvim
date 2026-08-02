@@ -504,13 +504,16 @@ threads, in order:*
 4. **The eval loop stays the driver** — each real-task run reports the next
    friction. (First formal eval: the "ringforge" task, 1/8 — verified on disk.)
 
-**2 · Wrapping — 🔺**
-- **Structure-aware autowrap**: wrap around frontmatter, code, headers, tables,
-  and custom list prefixes, so a continuation line never begins with `N. ` — this
-  is where the wrapped-number highlight symptom is fixed (**folded here** from the
-  old "Fix now" bug; it is a parser-level issue no highlight rule can resolve).
-  Driven by the indentation conventions (Near 1.2). *API impact ▹, but it changes
-  the note text agents read/write — verify against `set_body`/`insert_section`.*
+**2 · Wrapping — ▹ (core shipped)**
+- ✅ **v1.41.0** structure-aware autowrap (`markdown.wrap_range` / `:PKMList wrap`):
+  Option A indent (continuation at marker_indent + 4, never the prefix width; short
+  markers padded to the tab stop, long markers overflow the first line), all marker
+  families recognised (digit/bullet + the five legal markers, subalínea validated),
+  and frontmatter/code/headers/tables/blockquotes left untouched. This fixes the
+  wrapped-number highlight symptom at the source (a continuation line never begins
+  with `N. `). Still to do: **blockquote reflow** (deferred), and optional
+  **`formatexpr` integration** so `gq`/auto-format routes through it. *Changes the
+  note text agents read/write — the reflow is idempotent and marker-preserving.*
 
 **3 · Navigation + panels/sidebar — 🔺 (command-creating parts first)**
 - **Note-wide bookmark bar**: a navigable index of the current note's headers, in

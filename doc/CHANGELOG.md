@@ -61,6 +61,36 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.41.0] - 2/8/2026
+
+*Structure-aware autowrap (Area 2). Author decision: **Option A** — continuation
+lines at the level indent, never the prefix width.*
+
+### Added
+
+-   **`markdown.wrap_range(l1, l2)` / `wrap_at_cursor()` and `:PKMList wrap`** — a
+    reflow to `textwidth` (or 80) that understands PKM/legal structure:
+    -   a **list item**'s continuation lines are re-indented to **marker_indent + 4**
+        (never the marker width); a short marker is padded to the 4-space tab stop
+        (`1.`+2, `-`+3), a long marker (`xiii.`, `100.`) overflows only the first line
+        while the continuation stays at marker_indent + 4 (**Option A** — no false
+        level-alignment);
+    -   a **plain paragraph** reflows at its own indent;
+    -   **left untouched**: ATX headers, table rows, fenced code (```/~~~), frontmatter
+        `---`, thematic breaks, and blockquotes (blockquote reflow deferred);
+    -   all marker families are recognised (digit, bullet, and the five legal
+        markers), the subalínea validated as canonical roman so `civil.` reflows as
+        prose; the reflow is **idempotent**.
+-   This **resolves the Area-2 wrapped-number issue at the source**: a continuation
+    line is indented content, never a line that begins with `N. `, so there is
+    nothing for the highlighter to false-positive on.
+
+### Tests / smoke
+
+-   `test_v1410_p1` (short/long-marker Option-A indent, plain paragraph, tight list,
+    structural skips, the `civil.`/`iv.` validity split, idempotency). Whole suite
+    green (73). **Signals a smoke** (feel of the wrap) — note 0282 (`00 - NotesTeste`).
+
 ## [1.40.0] - 2/8/2026
 
 *The highlighting phase (Area 4) begins: the legal markers tree-sitter cannot see —
