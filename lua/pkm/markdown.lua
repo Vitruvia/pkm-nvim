@@ -362,6 +362,7 @@ end
 ---   list (plain)      BLOCKQUOTE? INDENT N[.)] text    — any indent depth
 ---   list (emph)       BLOCKQUOTE? INDENT *N*[.)] text  — single or double *
 ---   list (inciso)     BLOCKQUOTE? INDENT R - text      — uppercase roman + ' - ' (legal incisos)
+---   list (subalinea)  BLOCKQUOTE? INDENT r. text       — lowercase roman + '.' (legal subalíneas)
 ---   list (alpha)      BLOCKQUOTE? INDENT a) text       — lowercase letter + ')' (legal alíneas)
 ---   hdr_prefix        BLOCKQUOTE? ## N[.)] text        — any header level
 ---   hdr_suffix        BLOCKQUOTE? ## text-N            — trailing annotation preserved
@@ -427,6 +428,29 @@ function M.renumber_sequence(start_line, end_line)
     return table.concat(rev)
   end
 
+  -- Lowercase roman numeral → integer, or nil if the token contains a non-roman
+  -- letter. Read right-to-left, subtracting any symbol smaller than the running
+  -- maximum (the standard subtractive rule).
+  local ROMAN_VAL = { i = 1, v = 5, x = 10, l = 50, c = 100, d = 500, m = 1000 }
+  local function from_roman(s)
+    local total, prev = 0, 0
+    for k = #s, 1, -1 do
+      local v = ROMAN_VAL[s:sub(k, k)]
+      if not v then return nil end
+      if v < prev then total = total - v else total = total + v; prev = v end
+    end
+    return total
+  end
+
+  -- True only for a *canonical* lowercase roman numeral (subalínea marker): the
+  -- token must round-trip through to_roman, so ordinary words made of roman
+  -- letters (civil., mil., mix., did.) are rejected — they parse but do not
+  -- re-encode to themselves.
+  local function is_valid_roman(s)
+    local n = from_roman(s)
+    return n ~= nil and n >= 1 and to_roman(n):lower() == s
+  end
+
   -- ── 1. detect family ─────────────────────────────────────────────────────
 
   local kind   = nil
@@ -470,13 +494,20 @@ function M.renumber_sequence(start_line, end_line)
      or rest:match('^%s*[IVXLCDM]+%s+(%-)%s*$')
     if s then kind, sep = 'list_inciso', s; break end
 
+    -- Legal *subalínea*: lowercase roman + '.' (i., ii., iii …). Validated as a
+    -- canonical roman numeral so ordinary words (civil., mil.) are not mistaken
+    -- for markers. Tried BEFORE the alpha family so 'i.' is read as roman i, not
+    -- the 9th letter; the alpha family keeps '.' for non-roman letters (a., g.).
+    local subr = rest:match('^%s*([ivxlcdm]+)%. ')
+              or rest:match('^%s*([ivxlcdm]+)%.%s*$')
+    if subr and is_valid_roman(subr) then kind, sep = 'list_subalinea', '.'; break end
+
     -- Lettered list (legal *alíneas*: a, b, c …). Lowercase letters only, and
     -- tried LAST because `%l` is the most permissive family — a prose line like
     -- "hello. world" could otherwise be misread as a list. Bounded to one or two
     -- letters so it matches alínea labels (a … z, aa …) but not ordinary words.
-    -- A list that *starts* at a lowercase roman letter (i/v/x/…) is ambiguous
-    -- with lowercase roman and is not disambiguated; alíneas start at 'a', which
-    -- is unambiguous.
+    -- The lowercase-roman-'.' case is already claimed by the subalínea family
+    -- above, so a '.' here is a non-roman letter (a., g.).
     s = rest:match('^%s*%l%l?([.)]) ')
      or rest:match('^%s*%l%l?([.)])%s*$')
     if s then kind, sep = 'list_alpha', s; break end
@@ -581,6 +612,24 @@ function M.renumber_sequence(start_line, end_line)
         new_lines[#new_lines + 1] = body ~= nil
           and bq .. ind .. num .. ' - ' .. body
           or  bq .. ind .. num .. ' -'
+        changed, replaced = changed + 1, true
+      end
+
+    elseif kind == 'list_subalinea' then
+      -- Legal subalínea: lowercase roman + '.'; the token is validated so a
+      -- continuation or prose line beginning with roman letters (civil.) is
+      -- skipped rather than renumbered.
+      local ind, tok, body = rest:match('^(%s*)([ivxlcdm]+)%. (.*)$')
+      if not (ind and is_valid_roman(tok)) then
+        local ind2, tok2 = rest:match('^(%s*)([ivxlcdm]+)%.%s*$')
+        if ind2 and is_valid_roman(tok2) then ind, body = ind2, nil else ind = nil end
+      end
+      if ind then
+        local n   = next_count(eff_depth(bq, ind))
+        local num = (to_roman(n) or tostring(n)):lower()
+        new_lines[#new_lines + 1] = body ~= nil
+          and bq .. ind .. num .. '. ' .. body
+          or  bq .. ind .. num .. '.'
         changed, replaced = changed + 1, true
       end
 

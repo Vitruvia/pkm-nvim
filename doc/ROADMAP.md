@@ -550,11 +550,13 @@ threads, in order:*
   **alínea** letter + `)` · **subalínea** lowercase-roman + `.`. Shipped in
   `renumber_sequence` (+ matchadd highlight): ✅ **v1.34.0** alíneas `a) b) c)`
   (bounded 1–2 letters, starts-at-`a` unambiguous) · ✅ **v1.37.0** incisos retargeted
-  to the legal `I - ` form (the v1.33.0 `.`/`)` roman form dropped). Still to add —
-  **subalínea** `i.` (lowercase-roman; needs a validity check to avoid painting
-  words like `civil.`), **artigo/§** prefixes, and the **one-pass nested renumber**
-  that walks all levels (today one family is detected per pass). Displays / tables
-  (Distant 1); insertable folds (Potential).
+  to the legal `I - ` form (the v1.33.0 `.`/`)` roman form dropped) · ✅ **v1.38.0**
+  subalíneas `i.` (lowercase-roman + `.`, canonical-roman validated so `civil.` etc.
+  are skipped; renumber only — highlight deferred). Still to add — **artigo/§**
+  prefixes (`Art. Nº.`/`Art. N.`, `§ N`), the **one-pass nested renumber** that walks
+  all levels (today one family is detected per pass), and **subalínea highlighting**
+  (highlighting phase, via a validity-checked buffer scan + extmarks). Displays /
+  tables (Distant 1); insertable folds (Potential).
 
 **6 · Other — ▹**
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —

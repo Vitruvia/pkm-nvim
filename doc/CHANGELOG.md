@@ -61,6 +61,41 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.38.0] - 2/8/2026
+
+*Parallel work (Area 5), the legal hierarchy continues: the **subalínea** family
+(lowercase roman + '.'). Renumber only — highlighting deferred to the highlighting
+phase (it needs a validity check the matchadd regex cannot do).*
+
+### Added
+
+-   **Subalínea renumbering** (`markdown.renumber_sequence`): a lowercase-roman + `.`
+    list — `i.`, `ii.`, `iii.` … — is recognised and renumbered, with the same
+    per-depth counters (nested subalíneas restart under each parent) and blockquote
+    handling as the other families. The marker token is **validated as a canonical
+    roman numeral** (it must round-trip through `to_roman`), so ordinary words made
+    of roman letters — `civil.`, `mil.`, `mix.`, `did.` — are *not* mistaken for
+    markers and are left untouched even mid-range. Backed by new `from_roman` /
+    `is_valid_roman` helpers. `test_v1380_p1` (out-of-order renumber, counts past x,
+    nesting, the `civil.` validity guard, and the alpha/subalínea disambiguation).
+
+### Disambiguation
+
+-   The subalínea family is tried **before** the alpha family, so `i.` reads as
+    roman *i* (not the 9th letter). The alpha family keeps `.` for **non-roman**
+    letters (`a.`, `g.`) and `)` for all letters. Consequence: a `.`-form list whose
+    first item is a valid lowercase roman numeral (`i.`, `v.`, `x.` …) renumbers as
+    roman; one starting at a non-roman letter (`a.`, `b.` …) renumbers as letters.
+    Lists start at `a`/`i` in practice, so this matches intent.
+
+### Deferred
+
+-   **Subalínea highlighting** is not in this version. Highlighting lowercase-roman
+    markers via matchadd would paint prose (`civil.`), and the regex cannot apply the
+    roman-validity check the renumber path uses. It will land in the highlighting
+    phase via a buffer scan + extmarks (the meta-comment mechanism), where the
+    validity check runs in Lua.
+
 ## [1.37.0] - 2/8/2026
 
 *Parallel work (Area 5), the first increment of the **Brazilian legal-text list

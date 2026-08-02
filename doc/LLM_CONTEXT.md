@@ -7,7 +7,19 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.37.0** (code-complete on `dev`) — legal inciso retarget (Area 5)
+## Current version: **v1.38.0** (code-complete on `dev`) — legal subalínea renumber (Area 5)
+
+*v1.38.0 adds the **subalínea** family (lowercase roman + `.`: i., ii., iii …) to
+`renumber_sequence`. The marker token is validated as a **canonical roman numeral**
+(round-trips through `to_roman`; new `from_roman`/`is_valid_roman` helpers), so words
+made of roman letters (`civil.`, `mil.`, `mix.`) are not renumbered even mid-range.
+Tried **before** the alpha family so `i.` is roman i, not the 9th letter; alpha keeps
+`.` for non-roman letters (`a.`). Renumber only — subalínea **highlighting is
+deferred** to the highlighting phase (matchadd can't do the validity check; it'll use
+a buffer scan + extmarks like the meta-comments). `test_v1380_p1`; no interactive
+smoke needed (renumber is headless-proven). Remaining hierarchy: artigo `Art. Nº.`/
+`Art. N.`, parágrafo `§ N`, then the one-pass nested renumber.*
+
 
 *v1.37.0 begins the Brazilian legal-text list hierarchy (author decision: legal `-`
 form). The roman **inciso** family is retargeted from the v1.33.0 generic `.`/`)`
