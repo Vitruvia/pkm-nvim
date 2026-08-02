@@ -66,11 +66,17 @@ not an independently maintained release line. Upcoming work is organised under
 - ✅ Sequence renumbering: nested lists, blockquote-prefixed lists, emphasis-wrapped
      ordinals (`*N*`, `**N**`), `**N. body**` bold-line items, header families
 - ✅ `:PKMConvertList` — ordered ↔ unordered list conversion with depth prompting
+- ✅ Legal-text list hierarchy (LC 95/1998): `:PKMList renumber` renumbers artigo /
+     parágrafo / inciso / alínea / subalínea (one-pass nested `renumber_legal`);
+     `pkm-syntax` highlights every legal marker
+- ✅ Structure-aware autowrap `:PKMList wrap` (also `gq`/`gqq`/motions via formatexpr):
+     Option-A list indent, blockquote reflow, whitespace-preserving fenced code
 - ✅ `:PKMMode [on|off]` — session context toggle; activates explorer UI, pre-builds
      index, enables tree-sitter syntax highlighting on PKM notes
 - ✅ `:PKMExplorer` — toggle sidebar + buffer panel as a unit
-- ✅ Tree-sitter syntax highlighting (PKMMode): frontmatter folding/foldtext,
-     citation highlighting (`PKMCitation`), meta-comment highlighting (`PKMMetaComment`)
+- ✅ Markdown highlighting — now the standalone **pkm-syntax** plugin (a dependency):
+     legal + native list markers, citations (`PKMCitation`), `((meta-comments))`
+     (`PKMMetaComment`), YAML frontmatter injection, frontmatter folding/foldtext
 - ✅ Metadata commands (buffer-only, no disk write): `:PKMSetTitle`, `:PKMAddTag`,
      `:PKMRemoveTag`
 
@@ -536,23 +542,29 @@ threads, in order:*
   6); relevance ordering in panels (Distant 9). *These create commands/panels an
   agent reaches for → 🔺.*
 
-**4 · Syntax highlighting — ▹**
+**4 · Syntax highlighting — ✅ core complete; now the standalone `pkm-syntax` plugin**
 - **All legal markers now highlight** (tree-sitter emits no list node for any of
   them), via the `PKMListMarker` group: ✅ **v1.35** inciso `I -` · ✅ **v1.36**
   alínea `a)` (matchadd) · ✅ **v1.40** artigo `Art. Nº` + parágrafo `§ Nº` (matchadd)
   + subalínea `i.` (validated buffer-scan + extmark, since matchadd can't roman-check
   `civil.`). Author decision: standalone forms + own highlight (not the `- ` dash).
-- ✅ **v1.42.0 extraction PREPARED (in-repo).** `syntax.enable(bufnr, highlight_only)`
-  separates the pure highlighting from the note behaviour (fold/winopts/zE); a
-  `highlight_all_markdown` flag (default off) pure-enables non-PKM markdown via a
-  `FileType` autocmd in `mode.lua`. `syntax.lua` stays `Dependencies: none`. **Still
-  to do: the physical split into a separate published repo** (author-owned) — the
-  code is ready to move.
-- On/off toggles (Distant 8). *Low API impact — an agent formats unaided — so the
-  agent side defers.*
+- ✅ **v1.42.0** in-repo extraction prep: `syntax.enable(bufnr, highlight_only)`
+  separates the pure highlighting from note behaviour (fold/winopts/zE); a
+  `highlight_all_markdown` flag pure-enables non-PKM markdown via a `FileType`
+  autocmd in `mode.lua`. ✅ **v1.44.0 — the physical split shipped.** Highlighting is
+  the standalone **`pkm-syntax`** plugin (separate repo, github.com/Vitruvia/pkm-syntax);
+  pkm-nvim **depends on it** and consumes it through the thin `pkm.syntax` facade
+  (no-op stub if absent). Queries + module live there only (two copies double-apply
+  `; extends`). Cross-repo rule: pkm-syntax stays `Dependencies: none`; its API is
+  the contract — change both repos in lockstep. Further syntax/fold features now
+  land **in pkm-syntax**.
+- ✅ standalone `pkm-syntax.setup({ number = false })` — line-number suppression
+  decoupled from the frontmatter fold (default keeps numbers; opt into the note look).
+- On/off toggles (Distant 8) — now a **pkm-syntax** concern. *Low API impact — an
+  agent formats unaided — so the agent side defers.*
 
-**5 · Markdown editing features — ▹ (command-creating pieces → 🔺)**
-- **Brazilian legal-text list hierarchy (Near 1.2) — in progress.** Author decision:
+**5 · Markdown editing features — ✅ legal lists complete**
+- **Brazilian legal-text list hierarchy (Near 1.2) — DONE.** Author decision:
   legal `-` form for incisos. Marker forms (LC 95/1998):
   artigo `Art. Nº.`/`Art. N.` · parágrafo `§ N` · **inciso** roman + ` - ` ·
   **alínea** letter + `)` · **subalínea** lowercase-roman + `.`. Shipped in
@@ -563,11 +575,14 @@ threads, in order:*
   are skipped; renumber only — highlight deferred) · ✅ **v1.39.0** the **one-pass
   nested renumber** `renumber_legal` (all five levels — artigo `Art. Nº`/`N`,
   parágrafo `§ Nº`/`N`, inciso, alínea, subalínea — reset by marker type; the
-  `renumber_range` router picks nested vs flat; `:PKMList renumber` uses it). Legal
-  list **renumbering is now complete**. Still to add — **subalínea highlighting**
-  (highlighting phase, via a validity-checked buffer scan + extmarks); *parágrafo
-  único* is left unclassified (deferred). Displays / tables (Distant 1); insertable
-  folds (Potential).
+  `renumber_range` router picks nested vs flat; `:PKMList renumber` uses it). ✅
+  **v1.40.0** subalínea **highlighting** (validity-checked buffer scan + extmarks).
+  **Legal lists are now COMPLETE end-to-end:** renumber (v1.34/1.37/1.38/1.39) +
+  highlight (v1.35/1.36/1.40) + structure-aware wrap incl. Option-A indent,
+  blockquote reflow and whitespace-preserving code (Area 2, v1.41/1.43/1.45/1.46) +
+  `CONVENTIONS.md` § Lists. Only *parágrafo único* is left unclassified (deferred —
+  needs a per-article § count). Displays / tables (Distant 1); insertable folds
+  (Potential).
 
 **6 · Other — ▹**
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —
@@ -576,17 +591,24 @@ threads, in order:*
   + relevance ranking (Distant 9, now Area 1's retrieval thread); note sync (Distant
   10); note versions / undo (Distant 11); metadata-system review; image / ASCII
   support; the forced-save prompt (Near 5.1); `PKMViewStats`.
-- **Documentation debt** (deferred, tracked — `[[pkm-doc-debt]]`). The user-facing
-  docs lag the pkm.api / agent-protocol wave; OK to defer, do in a focused pass:
-  - **`doc/pkm.txt`** (`:help`) — still cites the ~46 commands deleted in v1.14.0
-    (needs the by-context rewrite the README got) **and** covers none of pkm.api /
-    agent protocol / skill / lifecycle writes.
-  - **`README.md`** — rewritten by-context through v1.14.0, but has nothing on
-    `require('pkm.api')`, the agent protocol, the skill + `:PKMAgentProtocol`, the
-    `/pkm-learning` modes, body writing, the lifecycle API writes, or `annotate`.
-  - **Check** whether `CLAUDE.md` / `doc/LLM_PROJECT_INSTRUCTIONS.md` should note
-    the agent/pkm.api layer once the wave settles (author's suggestion — check,
-    don't assume). The per-version docs (PKM_API, AGENT_PROTOCOL, CONVENTIONS,
+- **Documentation debt** (partly cleared 2/8/2026, commit `d07d6ea`; rest tracked —
+  `[[pkm-doc-debt]]`):
+  - ✅ **`README.md`** — pkm-syntax documented as a required dependency; `:PKMList
+    wrap` + legal markers; a "For assistants — pkm.api" section (PKM_API,
+    AGENT_PROTOCOL, CONVENTIONS, `:PKMAgentProtocol`).
+  - ✅ **`doc/ARCHITECTURE.md`** — syntax.lua = facade + the pkm-syntax split note.
+  - ✅ **`doc/pkm.txt`** Requirements/Installation (real repo name + pkm-syntax dep);
+    ✅ **SKILL + AGENT_PROTOCOL** point at `CONVENTIONS.md § Lists`.
+  - **Still stale (its own focused session):** the **`doc/pkm.txt` body** — WORKFLOW
+    (~98–255) + COMMANDS (~257–500) still cite the ~46 commands deleted in v1.14.0
+    (~100 occurrences, e.g. `:PKMNewScratchpad`) and cover none of pkm.api / agent
+    protocol / skill / lifecycle writes. A large, error-prone by-context rewrite.
+  - **Also stale (this doc):** the **Current State** "Working features" list above
+    uses pre-v1.14.0 command names (`:PKMConvertList`, `:PKMMode`, `:PKMViewNew`, …).
+    CHANGELOG is canonical for behaviour; fold this into the pkm.txt-body pass.
+  - **Check** whether `CLAUDE.md` / `doc/LLM_PROJECT_INSTRUCTIONS.md` should note the
+    agent/pkm.api layer and the **two-repo structure** (edit highlighting in
+    pkm-syntax). The per-version docs (PKM_API, AGENT_PROTOCOL, CONVENTIONS,
     CHANGELOG, ROADMAP, LLM_CONTEXT, SKILL) stay current on cadence.
 
 **Also in the plan, folded above:** **merge / split vaults** (§ below) rises into
