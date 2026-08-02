@@ -230,6 +230,14 @@ is how a vault rots. To find what to link, **`api.related_unlinked(ref)`** surfa
 notes related to one you're working on but not yet linked to it — decide, then
 `cite` the ones that belong together.
 
+**The revision detectors are read-only — run them on *any* vault you're studying,
+not only your own.** `unlinked_pairs`, `duplicates`, and `stale` write nothing, so
+when you are analysing or auditing a vault (yours, or a user's you are reading),
+point the init at that vault and let them surface what you would otherwise find by
+hand: superseded / near-duplicate notes, missing links, a provenance gap. Report the
+findings; **act** only where you may (freely in your own vault; in a user's, only
+with permission, via `annotate`/lifecycle writes).
+
 **Long-term learning has a session mode** (`/pkm-learning off|on|expanded`):
 `off` writes to neither; `on` (default) writes to ordinary memory as usual;
 `expanded` writes to **both** memory and the vault when pertinent. There is no
