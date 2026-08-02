@@ -5,7 +5,8 @@ how it acts safely, and through what surface. This document is policy — the
 **what** and the **when**. The mechanism it assumes is `pkm.api` (the programmatic
 surface) and the skill that points an assistant at it. Read it alongside
 `doc/PHILOSOPHY.md` (scope), `doc/PRINCIPLES.md` (standing rules), and
-`doc/CONVENTIONS.md` (note formats).*
+`doc/CONVENTIONS.md` (note formats — including § Lists for the list marker forms
+the plugin renumbers/highlights/wraps, and § In-Text Citations).*
 
 *This is a living document. It was written from the author's expectations for
 assistant behaviour and is refined by evaluation — driving an assistant on real

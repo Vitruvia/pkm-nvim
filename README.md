@@ -5,6 +5,7 @@ A personal knowledge management plugin for Neovim. Plain markdown notes with YAM
 ## Requirements
 
 - Neovim ≥ 0.10
+- [pkm-syntax](https://github.com/Vitruvia/pkm-syntax) — the markdown highlighting, extracted into its own plugin (see Installation). Without it pkm-nvim still loads, just without highlighting.
 - [Telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) *(optional — fallback UI provided for all pickers)*
 
 ## Installation
@@ -14,6 +15,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 ~~~lua
 {
   'Vitruvia/pkm-nvim',
+  dependencies = { 'Vitruvia/pkm-syntax' },   -- markdown highlighting (required)
   config = function()
     require('pkm').setup({
       root_path = vim.fn.expand('~/Notes'),
@@ -21,6 +23,9 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
   end,
 }
 ~~~
+
+`pkm-syntax` also stands alone: `require('pkm-syntax').setup()` highlights **every**
+markdown buffer, independent of pkm-nvim.
 
 ## Note Types
 
@@ -129,9 +134,17 @@ Views are named filter expressions stored in `views.json` at your notes root. Th
 | `:PKMHeader levelup` / `:PKMHeader leveldown` | Shift header level in range (default: whole buffer) |
 | `:PKMList renumber` | Renumber an ordered sequence in range or current paragraph |
 | `:PKMList convert [to_ordered\|to_unordered]` | Convert list style in range or current paragraph |
+| `:PKMList wrap` | Structure-aware reflow to `textwidth` (range or current paragraph) |
 
 The header-motion **keymaps** (`]h` / `[h` by default) still take a Vim count
 (`3]h`); on the command, the count is an argument (`:PKMHeader next 3`).
+
+`:PKMList` understands the **legal (LC 95/1998) marker hierarchy** — artigo
+`Art. Nº`, parágrafo `§ Nº`, inciso `I -`, alínea `a)`, subalínea `i.` — for both
+renumber and highlight, alongside ordinary digit/bullet lists. `:PKMList wrap`
+(also `gq`/`gqq`/`gq{motion}` on a note) keeps list continuations at a 4-column
+indent and reflows blockquotes with a repeated `>` prefix. See `doc/CONVENTIONS.md`
+§ Lists for the full marker table and wrap rules.
 
 ### Panels, Trash and Utilities — `:PKMPanel` · `:PKMTrash`
 
@@ -264,6 +277,24 @@ require('pkm').setup({
 ~~~
 
 Views are stored in `views.json` alongside your notes and can be version-controlled with them.
+
+## For assistants — `pkm.api`
+
+PKM.nvim exposes a stable Lua API so an LLM coding assistant drives the vault
+through the plugin's own cores instead of hand-editing files (which desyncs the
+citation graph, numbering, and index). `require('pkm.api')` covers reads
+(retrieval, backlinks, views) and the note lifecycle — create, body writing
+(`set_body`/`append_body`/`insert_section`), `rename`/`changetype`/`transpose`,
+tag and membership writes, `annotate`, and more.
+
+- **`doc/PKM_API.md`** — the API reference (functions, arguments, return shapes).
+- **`doc/AGENT_PROTOCOL.md`** — the doctrine: how an assistant is expected to
+  behave in a vault (authorship marker, citation discipline, memory organisation).
+- **`doc/CONVENTIONS.md`** — note formats, in-text citations, and the list marker
+  conventions the renumber/highlight/wrap recognise.
+- **`:PKMAgentProtocol install`** — installs the bundled **`pkm-notes`** skill and
+  the **`/pkm-learning`** slash command into your assistant's config, so the
+  protocol travels with the tooling. `update` refreshes it; `path` reports where.
 
 ## Help
 

@@ -43,13 +43,13 @@ pkm.nvim/
 │   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
 │   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle)
 │   ├── mode.lua        # PKMMode: session context toggle, syntax enable/disable
-│   ├── syntax.lua      # Tree-sitter syntax management: highlights, folding, matches
+│   ├── syntax.lua      # FACADE re-exporting the pkm-syntax plugin (highlighting
+│   │                   #   moved out; graceful no-op stub if the plugin is absent)
 │   ├── trash.lua       # Soft-delete: manifest, trash/restore/empty/purge_old
-│   ├── markdown.lua    # Markdown editing: headers, renumber, convert_list, symbols
+│   ├── markdown.lua    # Markdown editing: headers, renumber, convert_list, wrap, symbols
 │   └── bench.lua       # Benchmarking utilities (developer, not user-facing)
-├── queries/markdown/
-│   ├── highlights.scm  # PKM tree-sitter captures: indented code, list markers
-│   └── injections.scm  # YAML injection into frontmatter (minus_metadata nodes)
+│   (queries/markdown/*.scm and the highlighting module now live in the separate
+│    pkm-syntax repo — see "Highlighting: the pkm-syntax split" below)
 ├── plugin/pkm.lua      # Auto-load marker
 ├── doc/
 │   ├── pkm.txt                    # Vim :help documentation (end-user, in-editor)
@@ -279,12 +279,25 @@ sidebar + bufpanel, enables syntax on all PKM buffers. `setup(config)` registers
 BufReadPost (open_note trigger) and DirChanged (enter_dir trigger) autocmds.
 Idempotent in both directions.
 
-**syntax.lua** — per-buffer tree-sitter activation. `M.enable(bufnr)`: starts
-markdown TS parser, defines HL groups, registers per-window matchadd highlights
-(PKMCitation, PKMMetaComment) and window opts (foldmethod=expr, foldtext).
-`M.disable(bufnr)`: stops TS, clears matches, restores opts, runs `syntax on`.
-`M.foldexpr(lnum)`, `M.foldtext()`.
+**syntax.lua** — a **thin facade** over the standalone `pkm-syntax` plugin (see
+"Highlighting: the pkm-syntax split" below). It `pcall(require, 'pkm-syntax')`
+and re-exports it unchanged, so every caller — `enable`/`disable`/`refresh_fold`/
+`foldtext` and the `*_list_pattern` / `_find_*` exports — is untouched. If the
+plugin is absent it degrades to a one-time warning plus a no-op stub, so the rest
+of pkm-nvim still loads. The highlighting code itself (tree-sitter activation, the
+PKMCitation/PKMListMarker/PKMMetaComment/subalínea highlights, the frontmatter
+fold, and `queries/markdown/*.scm`) lives in pkm-syntax now.
 **UndoPost does not exist in Neovim ≤ 0.11.x** — do not register it.
+
+**Highlighting: the pkm-syntax split** — as of v1.44.0 the markdown highlighting
+is a **separate plugin**, `pkm-syntax` (sibling repo, github.com/Vitruvia/pkm-syntax),
+and **pkm-nvim depends on it** (add it to your plugin manager). It highlights any
+markdown buffer with no dependency on note state, which is what let it be
+extracted; `mode.lua` drives its `enable(bufnr[, highlight_only])` per buffer.
+Keeping the highlighting in one place matters: two copies of `queries/markdown/`
+on the runtimepath would double-apply the `; extends` query. Cross-repo rule:
+pkm-syntax stays `Dependencies: none`; its public API is the contract this facade
+depends on — change the two repos in lockstep.
 
 **trash.lua** — soft-delete system. Trash folder: `{root}/.pkm-trash/`.
 Manifest: `manifest.json` array of `{filename, original_path, title, deleted_at,

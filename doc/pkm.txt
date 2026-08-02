@@ -41,6 +41,9 @@ note numbers are globally unique and never reused (even after deletion).
 2. REQUIREMENTS                                             *pkm-requirements*
 
   • Neovim ≥ 0.10
+  • Vitruvia/pkm-syntax              (required; the markdown highlighting, now a
+                                     separate plugin — without it pkm-nvim still
+                                     loads, just without highlighting)
   • nvim-telescope/telescope.nvim   (optional but strongly recommended)
   • Tree-sitter markdown parser     (bundled with Neovim 0.10+)
   • Tree-sitter yaml parser         (optional; enables frontmatter syntax)
@@ -50,8 +53,11 @@ note numbers are globally unique and never reused (even after deletion).
 
 lazy.nvim: >
   {
-    'yourusername/pkm.nvim',
-    dependencies = { 'nvim-telescope/telescope.nvim' },
+    'Vitruvia/pkm-nvim',
+    dependencies = {
+      'Vitruvia/pkm-syntax',                 -- markdown highlighting (required)
+      'nvim-telescope/telescope.nvim',       -- optional
+    },
     config = function()
       require('pkm').setup({
         root_path = vim.fn.expand('~/Notes'),
@@ -59,6 +65,8 @@ lazy.nvim: >
     end,
   }
 <
+pkm-syntax also stands alone: `require('pkm-syntax').setup()` highlights every
+markdown buffer, with no dependency on pkm-nvim.
 
 ==============================================================================
 4. SETUP                                                           *pkm-setup*

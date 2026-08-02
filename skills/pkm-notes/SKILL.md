@@ -256,6 +256,12 @@ for vault notes proceeds regardless.
 - **Place content where it belongs** — `insert_section(path, heading, text)` adds
   under a named section (or `mode='replace'` to swap its body); `append_body` adds
   at the end; `set_body` rewrites the whole prose. Not scattered inline.
+- **Write lists in the recognised marker forms** so the plugin can renumber,
+  highlight, and wrap them. Ordinary digit/bullet lists work as expected; for the
+  legal (LC 95/1998) hierarchy use artigo `Art. Nº`, parágrafo `§ Nº`, inciso
+  `I -`, alínea `a)`, subalínea `i.`, indenting each nested level 4 spaces. The
+  full marker table and wrap rules are in **`CONVENTIONS.md` § Lists** — follow it
+  rather than inventing marker styles the tooling won't recognise.
 - **Your own notes:** write freely with `set_body`/`append_body`/`insert_section`.
   **A user's note:** add content only with permission, and use **`annotate`** —
   `annotate(path, text, { heading = … })` — which bakes in the `By Claude: ` marker
