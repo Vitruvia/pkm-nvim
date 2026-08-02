@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.34.0** (code-complete on `dev`) — parallel: lettered lists (Area 5)
+## Current version: **v1.35.0** (code-complete on `dev`) — parallel: roman marker highlighting (Area 4)
+
+*v1.35.0 is parallel work (Area 4, syntax highlighting): **roman-numeral list markers
+now highlight** — `I.`/`II.`/`VII)` (legal *incisos*). A live tree-sitter probe
+confirmed the markdown grammar emits **no** `list_marker_*` node for uppercase roman,
+so a `.scm` capture can't reach them; they're highlighted via a per-window `matchadd`
+(the `PKMCitation` mechanism), a new `PKMListMarker` group linked to `@markup.list`.
+`syntax.roman_list_pattern` (exposed) matches a roman marker at line start behind
+optional indent/blockquote prefixes; `test_v1350_p1`. **The "resume a list after a
+break" case needed no code** — the probe showed tree-sitter already marks arabic
+markers resuming across blank-line/lazy/heading breaks (and every marker in the real
+`ringforge-magia` note); the only unmarked shape (a marker ≠ 1 abutting a non-list
+paragraph) is CommonMark-correct and is the Area-2 wrapped-number domain. Sits on
+v1.34.0 (alíneas, `to_alpha`).*
 
 *v1.34.0 is parallel work (Area 5, markdown editing, not agent-facing): a **lettered
 list family** in `markdown.renumber_sequence` — `a)`/`b)`/`c)` (legal *alíneas*) are

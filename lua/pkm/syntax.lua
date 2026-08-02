@@ -102,6 +102,13 @@ local function setup_hl_groups()
     vim.api.nvim_set_hl(0, 'PKMCitation', { link = 'Special' })
   end
 
+  -- PKMListMarker: roman-numeral list markers (I., II., …). Tree-sitter emits
+  -- no list node for uppercase roman markers (verified — they are not ordered-
+  -- list markers to the markdown grammar), so they are highlighted via matchadd
+  -- rather than the .scm captures. Linked to @markup.list so they read exactly
+  -- like the native list markers in queries/markdown/highlights.scm.
+  vim.api.nvim_set_hl(0, 'PKMListMarker', { link = '@markup.list' })
+
   -- §9 meta-comment highlight: ((text)) double-paren convention.
   vim.api.nvim_set_hl(0, 'PKMMetaComment', { link = 'Comment' })
 
@@ -127,6 +134,19 @@ end
 local CITATION_PATTERN = [=[\v<(note|bib|journal|scratch)\[[0-9A-Za-z_-]+\]]=]
 M.citation_pattern = CITATION_PATTERN
 
+--- The matchadd pattern for roman-numeral list markers — `I.`, `II.`, `VII)` …
+--- at the start of a line (legal *incisos*), optionally behind blockquote `>`
+--- prefixes and indentation. Uppercase roman is not an ordered-list marker to
+--- the markdown grammar, so tree-sitter never captures these (verified) and they
+--- are highlighted here instead. `\zs`/`\ze` limit the highlight to the marker
+--- itself; the trailing `\s`/end-of-line lookahead keeps it off prose like
+--- `I.e.`. Uppercase-only, mirroring the renumber detector — the
+--- `I. `-at-line-start-in-prose match is the same accepted heuristic limit (the
+--- roman analogue of the Area-2 wrapped-number case). Exposed so a test can
+--- assert it.
+local ROMAN_LIST_PATTERN = [=[\v^[ \t>]*\zs[IVXLCDM]+[.)]\ze(\s|$)]=]
+M.roman_list_pattern = ROMAN_LIST_PATTERN
+
 --- Register match-based highlights in a single window.
 --- Idempotent: returns immediately if window already has PKM matches.
 ---@param win_id integer
@@ -144,6 +164,10 @@ local function setup_win_matches(win_id)
 
   -- Citations: note[id], bib[id], journal[id], scratch[id]
   add('PKMCitation', CITATION_PATTERN, 10, { window = win_id })
+
+  -- Roman-numeral list markers (I., II., …): tree-sitter emits no list node for
+  -- them, so highlight the marker here to match the native list-marker colour.
+  add('PKMListMarker', ROMAN_LIST_PATTERN, 10, { window = win_id })
 
   -- §9 meta-comments (( )) are handled via extmarks below, not matchadd —
   -- matchadd() cannot match across line breaks, and meta-comments are

@@ -529,10 +529,17 @@ threads, in order:*
   agent reaches for → 🔺.*
 
 **4 · Syntax highlighting — ▹**
+- ✅ **v1.35.0** roman-numeral list markers (incisos: I., II., …) highlight, via a
+  `PKMListMarker` matchadd (tree-sitter emits no list node for roman) — the visual
+  half of the v1.33.0 roman renumbering. *(A probe found the "resume a list after a
+  break" case already highlights; the only residual gap — a marker ≠ 1 abutting a
+  non-list paragraph — is the Area-2 wrapped-number domain, not the highlight
+  layer.)*
 - Extend to **all** markdown files, not only PKM notes (Near 3.1).
 - **Possibly extract as a standalone plugin**, with pkm-nvim taking it as an
   optional dependency (enabled here; falls back to Neovim default if absent).
-- Extended list-prefix recognition (Distant 7); on/off toggles (Distant 8).
+- Extended list-prefix recognition (Distant 7) — lettered/alínea markers next; on/off
+  toggles (Distant 8).
   *Low API impact — an agent formats unaided — so the agent side defers.*
 
 **5 · Markdown editing features — ▹ (command-creating pieces → 🔺)**

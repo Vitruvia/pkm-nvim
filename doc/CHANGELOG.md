@@ -61,6 +61,46 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.35.0] - 2/8/2026
+
+*Parallel work (Area 4, syntax highlighting): roman-numeral list markers now
+highlight, closing the visual half of the v1.33.0 roman *inciso* renumbering.*
+
+### Added
+
+-   **Roman-numeral list markers are highlighted** (`I.`, `II.`, `VII)` … — legal
+    *incisos*). A live tree-sitter probe confirmed the markdown grammar emits **no**
+    `list_marker_*` node for uppercase-roman markers, so a `.scm` capture cannot
+    reach them; they are highlighted via a per-window `matchadd` instead — the same
+    mechanism as `PKMCitation`. A new `PKMListMarker` group links to `@markup.list`,
+    so a roman marker reads exactly like the native list markers from
+    `queries/markdown/highlights.scm`. The pattern (`syntax.roman_list_pattern`,
+    exposed for tests) matches an uppercase-roman marker at line start, behind
+    optional indentation and blockquote `>` prefixes, and limits the highlight to
+    the marker itself. `test/test_v1350_p1.lua` asserts the pattern matches the
+    intended markers and rejects near-misses (`I.e.`, arabic `1.`, lowercase `a)`,
+    plain prose).
+
+### Notes / non-changes
+
+-   **The "resume a list after a break" case needed no code.** The same probe showed
+    tree-sitter *already* emits a `list_marker_*` node for an arabic marker that
+    resumes a list across a blank-line break, a lazy (no-blank-line) break, or an
+    intervening heading — and for every marker in the real `ringforge-magia` note.
+    The only shape it drops is a marker with number ≠ 1 that directly abuts a
+    non-list paragraph (`paragraph\n2. x`), which is CommonMark-correct; forcing a
+    highlight there would require matching *every* physical line beginning `N. `,
+    reintroducing the Area-2 wrapped-number false positive. So no arabic `matchadd`
+    was added — the residual gap is the structural-autowrap domain (Area 2), not the
+    highlight layer.
+
+### Known limitations (this feature)
+
+-   `matchadd` has no block context, so a roman marker at the start of a
+    hard-wrapped prose line would highlight (the roman analogue of the Area-2
+    wrapped-number case). Uppercase roman at line start in prose is rare; this is the
+    same accepted heuristic the renumber detector uses.
+
 ## [1.34.0] - 2/8/2026
 
 *Parallel work (Area 5, markdown editing): lettered ordered lists (Brazilian legal
