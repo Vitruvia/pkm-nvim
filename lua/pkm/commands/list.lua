@@ -32,7 +32,9 @@ end
 local function do_renumber(opts)
   local md = require('pkm.markdown')
   if opts.range > 0 then
-    md.renumber_sequence(opts.line1, opts.line2)
+    -- Route a range: a genuine legal hierarchy (≥2 levels) renumbers nested;
+    -- a flat single-family list keeps its indentation-based renumber.
+    md.renumber_range(opts.line1, opts.line2)
   else
     md.renumber_at_cursor()
   end

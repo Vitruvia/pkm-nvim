@@ -15,13 +15,88 @@
 --   find_heading_target(lines, cursor, opts)   → Line of the next/previous ATX heading, or nil (pure)
 --   goto_heading(opts)                         → Move the cursor there; true when it moved
 --   setup_symbols(symbols)                     → Register buffer-local insert-mode keymaps (trigger and key)
---   renumber_sequence(start_line, end_line)    → Renumber ordered sequence items in line range
+--   renumber_sequence(start_line, end_line)    → Renumber one ordered family in line range
 --   renumber_at_cursor()                       → Renumber sequence in paragraph around cursor
+--   renumber_legal(start_line, end_line)       → Nested legal renumber (Art/§/inciso/alínea/subalínea)
+--   renumber_range(start_line, end_line)       → Route a range: nested legal if ≥2 levels, else single-family
 --   convert_list(start_line, end_line, direction?) → Convert list ordered ↔ unordered
 --   convert_list_at_cursor(direction?)             → Same, paragraph around cursor
 -- =============================================================================
 
 local M = {}
+
+-- =============================================================================
+-- SECTION: Shared numbering helpers
+-- =============================================================================
+-- Used by both renumber_sequence (single-family, depth-keyed) and renumber_legal
+-- (nested, marker-type-keyed).
+
+--- Split a leading blockquote prefix (`> `, `>> `, …) from the rest of a line.
+---@param line string
+---@return string bq, string rest
+local function strip_bq(line)
+  local bq, rest = line:match('^(>+%s*)(.*)')
+  return (bq or ''), (rest or line)
+end
+
+--- Positional integer → uppercase Roman numeral (I, II, III …). Standard
+--- subtractive form; nil outside 1..3999.
+local function to_roman(n)
+  if n < 1 or n > 3999 then return nil end
+  local map = { { 1000, 'M' }, { 900, 'CM' }, { 500, 'D' }, { 400, 'CD' },
+                { 100, 'C' }, { 90, 'XC' }, { 50, 'L' }, { 40, 'XL' },
+                { 10, 'X' }, { 9, 'IX' }, { 5, 'V' }, { 4, 'IV' }, { 1, 'I' } }
+  local out = {}
+  for _, p in ipairs(map) do
+    while n >= p[1] do out[#out + 1] = p[2]; n = n - p[1] end
+  end
+  return table.concat(out)
+end
+
+--- Positional integer → lowercase-letter label (a … z, aa, ab …). Bijective
+--- base-26 (no "zero" digit): 1→a, 26→z, 27→aa. nil below 1.
+local function to_alpha(n)
+  if n < 1 then return nil end
+  local out = {}
+  while n > 0 do
+    local r = (n - 1) % 26
+    out[#out + 1] = string.char(97 + r)   -- 97 = 'a'
+    n = math.floor((n - 1) / 26)
+  end
+  local rev = {}
+  for i = #out, 1, -1 do rev[#rev + 1] = out[i] end
+  return table.concat(rev)
+end
+
+local ROMAN_VAL = { i = 1, v = 5, x = 10, l = 50, c = 100, d = 500, m = 1000 }
+
+--- Lowercase roman numeral → integer, or nil if the token holds a non-roman
+--- letter. Right-to-left, subtracting any symbol below the running maximum.
+local function from_roman(s)
+  local total, prev = 0, 0
+  for k = #s, 1, -1 do
+    local v = ROMAN_VAL[s:sub(k, k)]
+    if not v then return nil end
+    if v < prev then total = total - v else total = total + v; prev = v end
+  end
+  return total
+end
+
+--- True only for a *canonical* lowercase roman numeral (a subalínea marker): the
+--- token must round-trip through to_roman, so ordinary words made of roman
+--- letters (civil., mil., mix., did.) are rejected — they parse but do not
+--- re-encode to themselves.
+local function is_valid_roman(s)
+  local n = from_roman(s)
+  return n ~= nil and n >= 1 and to_roman(n):lower() == s
+end
+
+--- Brazilian legal ordinal rule (LC 95/1998, art. 10, III): ordinal (with the
+--- `º` indicator) up to the ninth, cardinal from the tenth on.
+local function legal_ordinal(n)
+  if n <= 9 then return tostring(n) .. 'º' end
+  return tostring(n)
+end
 
 -- =============================================================================
 -- SECTION: Header counter
@@ -379,11 +454,9 @@ function M.renumber_sequence(start_line, end_line)
   local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
 
   -- ── helpers ──────────────────────────────────────────────────────────────
-
-  local function strip_bq(line)
-    local bq, rest = line:match('^(>+%s*)(.*)')
-    return (bq or ''), (rest or line)
-  end
+  -- strip_bq, to_roman, to_alpha, is_valid_roman are module-level (shared with
+  -- renumber_legal). ind_depth/eff_depth are specific to this depth-keyed family
+  -- renumber and stay local.
 
   local function ind_depth(ind)
     local d = 0
@@ -395,60 +468,6 @@ function M.renumber_sequence(start_line, end_line)
     local d = 0
     for _ in bq:gmatch('>') do d = d + 2 end
     return d + ind_depth(ind)
-  end
-
-  -- Positional integer → uppercase Roman numeral, for inciso-style lists
-  -- (I, II, III, …). Standard subtractive form; nil outside 1..3999.
-  local function to_roman(n)
-    if n < 1 or n > 3999 then return nil end
-    local map = { { 1000, 'M' }, { 900, 'CM' }, { 500, 'D' }, { 400, 'CD' },
-                  { 100, 'C' }, { 90, 'XC' }, { 50, 'L' }, { 40, 'XL' },
-                  { 10, 'X' }, { 9, 'IX' }, { 5, 'V' }, { 4, 'IV' }, { 1, 'I' } }
-    local out = {}
-    for _, p in ipairs(map) do
-      while n >= p[1] do out[#out + 1] = p[2]; n = n - p[1] end
-    end
-    return table.concat(out)
-  end
-
-  -- Positional integer → lowercase-letter label, for alínea-style lists
-  -- (a, b, c, …, z, aa, ab, …). Bijective base-26 (there is no "zero"
-  -- digit), so 1→a, 26→z, 27→aa. nil below 1.
-  local function to_alpha(n)
-    if n < 1 then return nil end
-    local out = {}
-    while n > 0 do
-      local r = (n - 1) % 26
-      out[#out + 1] = string.char(97 + r)   -- 97 = 'a'
-      n = math.floor((n - 1) / 26)
-    end
-    -- built least-significant first; reverse into place
-    local rev = {}
-    for i = #out, 1, -1 do rev[#rev + 1] = out[i] end
-    return table.concat(rev)
-  end
-
-  -- Lowercase roman numeral → integer, or nil if the token contains a non-roman
-  -- letter. Read right-to-left, subtracting any symbol smaller than the running
-  -- maximum (the standard subtractive rule).
-  local ROMAN_VAL = { i = 1, v = 5, x = 10, l = 50, c = 100, d = 500, m = 1000 }
-  local function from_roman(s)
-    local total, prev = 0, 0
-    for k = #s, 1, -1 do
-      local v = ROMAN_VAL[s:sub(k, k)]
-      if not v then return nil end
-      if v < prev then total = total - v else total = total + v; prev = v end
-    end
-    return total
-  end
-
-  -- True only for a *canonical* lowercase roman numeral (subalínea marker): the
-  -- token must round-trip through to_roman, so ordinary words made of roman
-  -- letters (civil., mil., mix., did.) are rejected — they parse but do not
-  -- re-encode to themselves.
-  local function is_valid_roman(s)
-    local n = from_roman(s)
-    return n ~= nil and n >= 1 and to_roman(n):lower() == s
   end
 
   -- ── 1. detect family ─────────────────────────────────────────────────────
@@ -684,6 +703,118 @@ function M.renumber_at_cursor()
 end
 
 -- =============================================================================
+-- SECTION: Legal nested renumber
+-- =============================================================================
+
+-- Classify a blockquote-stripped line by its legal marker TYPE, returning the
+-- hierarchy level (1 artigo · 2 parágrafo · 3 inciso · 4 alínea · 5 subalínea),
+-- the leading indentation, and the body that follows the marker (with a single
+-- leading space, so a re-emit is marker .. body). nil for a non-legal line.
+local function classify_legal(rest)
+  local ind, body
+  -- 1 · artigo: "Art. N" (+ optional 'º'); the number is discarded and rebuilt.
+  ind, body = rest:match('^(%s*)Art%.%s+%d+(.*)$')
+  if ind then return 1, ind, (body:gsub('^º', '')) end
+  -- 2 · parágrafo: "§ N" (+ optional 'º'). "Parágrafo único" is left
+  --     unclassified — it is the sole §, so there is nothing to renumber.
+  ind, body = rest:match('^(%s*)§%s+%d+(.*)$')
+  if ind then return 2, ind, (body:gsub('^º', '')) end
+  -- 3 · inciso: uppercase roman + ' - '.
+  ind, body = rest:match('^(%s*)[IVXLCDM]+%s+%-%s+(.*)$')
+  if ind then return 3, ind, ' ' .. body end
+  -- 5 · subalínea: lowercase roman + '.', validated (before alínea, so 'i.' is
+  --     roman i, not a lettered item).
+  local si, tok, sb = rest:match('^(%s*)([ivxlcdm]+)%.%s+(.*)$')
+  if si and is_valid_roman(tok) then return 5, si, ' ' .. sb end
+  -- 4 · alínea: lowercase letter + ')'.
+  ind, body = rest:match('^(%s*)%l%l?%)%s+(.*)$')
+  if ind then return 4, ind, ' ' .. body end
+  return nil
+end
+
+-- The marker string for a legal level at position n.
+local function legal_marker(level, n)
+  if level == 1 then return 'Art. ' .. legal_ordinal(n) end
+  if level == 2 then return '§ ' .. legal_ordinal(n) end
+  if level == 3 then return (to_roman(n) or tostring(n)) .. ' -' end
+  if level == 4 then return (to_alpha(n) or tostring(n)) .. ')' end
+  return (to_roman(n) or tostring(n)):lower() .. '.'   -- level 5, subalínea
+end
+
+--- Renumber a Brazilian legal-text block across all five levels in one pass:
+--- artigo (Art. Nº/N) → parágrafo (§ Nº/N) → inciso (R -) → alínea (a)) →
+--- subalínea (r.). Each line is classified by marker TYPE; a counter is kept per
+--- level and every deeper level resets when a shallower one appears, so nesting
+--- is correct regardless of indentation (which is preserved, never reflowed).
+--- Non-legal lines (prose, headers, blanks) are preserved and do not count.
+---@param start_line integer  1-indexed, inclusive
+---@param end_line   integer  1-indexed, inclusive
+---@return nil
+function M.renumber_legal(start_line, end_line)
+  local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+  local counters = {}
+  local changed = 0
+  local new_lines = {}
+  for _, line in ipairs(lines) do
+    local bq, rest = strip_bq(line)
+    local level, ind, body = classify_legal(rest)
+    if level then
+      counters[level] = (counters[level] or 0) + 1
+      for k = level + 1, 5 do counters[k] = nil end
+      local rebuilt = bq .. ind .. legal_marker(level, counters[level]) .. body
+      new_lines[#new_lines + 1] = rebuilt
+      if rebuilt ~= line then changed = changed + 1 end
+    else
+      new_lines[#new_lines + 1] = line
+    end
+  end
+
+  vim.api.nvim_buf_set_lines(0, start_line - 1, end_line, false, new_lines)
+  if changed > 0 then
+    vim.notify(
+      string.format('[pkm] renumbered %d legal %s', changed,
+        changed == 1 and 'item' or 'items'),
+      vim.log.levels.INFO)
+  end
+
+  -- Re-sync tree-sitter after buffer modification (see renumber_sequence).
+  vim.schedule(function()
+    local bufnr = vim.api.nvim_get_current_buf()
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      local ok, mode = pcall(require, 'pkm.mode')
+      if ok and mode.is_active() then
+        pcall(vim.treesitter.start, bufnr, 'markdown')
+      end
+    end
+  end)
+end
+
+--- Renumber a range, routing to the nested legal renumber when the range spans
+--- **two or more** distinct legal levels (a genuine hierarchy), and to the
+--- single-family renumber_sequence otherwise (a flat list — digit, emphasis,
+--- header, or a single legal level, which keeps its indentation-based nesting).
+---@param start_line integer
+---@param end_line   integer
+---@return nil
+function M.renumber_range(start_line, end_line)
+  local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+  local seen, n_levels = {}, 0
+  for _, line in ipairs(lines) do
+    local _, rest = strip_bq(line)
+    local level = classify_legal(rest)
+    if level and not seen[level] then
+      seen[level] = true
+      n_levels = n_levels + 1
+    end
+  end
+  if n_levels >= 2 then
+    M.renumber_legal(start_line, end_line)
+  else
+    M.renumber_sequence(start_line, end_line)
+  end
+end
+
+-- =============================================================================
 -- SECTION: List conversion
 -- =============================================================================
 
@@ -700,10 +831,7 @@ end
 function M.convert_list(start_line, end_line, direction)
   local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
 
-  local function strip_bq(line)
-    local bq, rest = line:match('^(>+%s*)(.*)')
-    return (bq or ''), (rest or line)
-  end
+  -- strip_bq is module-level (SECTION: Shared numbering helpers).
 
   local function ind_depth(ind)
     local d = 0

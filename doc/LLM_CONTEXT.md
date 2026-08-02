@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.38.0** (code-complete on `dev`) — legal subalínea renumber (Area 5)
+## Current version: **v1.39.0** (code-complete on `dev`) — one-pass nested legal renumber (Area 5)
+
+*v1.39.0 lands the headline of the legal hierarchy: **`markdown.renumber_legal(l1,l2)`**
+walks all five levels in one pass — artigo `Art. Nº`/`N`, parágrafo `§ Nº`/`N`, inciso
+`R -`, alínea `a)`, subalínea `r.` — classifying each line by marker TYPE and resetting
+every deeper level when a shallower one appears (nesting independent of indentation,
+which is preserved). Ordinal rule (LC 95: `º`≤9, cardinal from 10). **`renumber_range`**
+routes: ≥2 legal levels → nested, else the flat `renumber_sequence`; `:PKMList renumber`
+uses it. Shared numbering helpers hoisted to module level. `test_v1390_p1`. **Legal
+renumbering is complete.** SIGNALS A SMOKE — the artigo/§ format is a choice to confirm
+(smoke note 0281). Remaining in the arc: subalínea highlighting (extmark scan), then
+structure-aware autowrap (Area 2), extract highlighting as a plugin (Area 3), the
+conventions doc (phase 4). `parágrafo único` deferred.*
+
 
 *v1.38.0 adds the **subalínea** family (lowercase roman + `.`: i., ii., iii …) to
 `renumber_sequence`. The marker token is validated as a **canonical roman numeral**

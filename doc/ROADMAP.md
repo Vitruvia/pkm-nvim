@@ -552,11 +552,14 @@ threads, in order:*
   (bounded 1–2 letters, starts-at-`a` unambiguous) · ✅ **v1.37.0** incisos retargeted
   to the legal `I - ` form (the v1.33.0 `.`/`)` roman form dropped) · ✅ **v1.38.0**
   subalíneas `i.` (lowercase-roman + `.`, canonical-roman validated so `civil.` etc.
-  are skipped; renumber only — highlight deferred). Still to add — **artigo/§**
-  prefixes (`Art. Nº.`/`Art. N.`, `§ N`), the **one-pass nested renumber** that walks
-  all levels (today one family is detected per pass), and **subalínea highlighting**
-  (highlighting phase, via a validity-checked buffer scan + extmarks). Displays /
-  tables (Distant 1); insertable folds (Potential).
+  are skipped; renumber only — highlight deferred) · ✅ **v1.39.0** the **one-pass
+  nested renumber** `renumber_legal` (all five levels — artigo `Art. Nº`/`N`,
+  parágrafo `§ Nº`/`N`, inciso, alínea, subalínea — reset by marker type; the
+  `renumber_range` router picks nested vs flat; `:PKMList renumber` uses it). Legal
+  list **renumbering is now complete**. Still to add — **subalínea highlighting**
+  (highlighting phase, via a validity-checked buffer scan + extmarks); *parágrafo
+  único* is left unclassified (deferred). Displays / tables (Distant 1); insertable
+  folds (Potential).
 
 **6 · Other — ▹**
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —

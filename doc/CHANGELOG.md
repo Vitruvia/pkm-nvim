@@ -61,6 +61,45 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.39.0] - 2/8/2026
+
+*Parallel work (Area 5), the headline of the legal hierarchy: a **one-pass nested
+legal renumber** that walks all five levels at once, plus the artigo and parágrafo
+markers.*
+
+### Added
+
+-   **`markdown.renumber_legal(l1, l2)`** — renumbers a Brazilian legal-text block
+    across the full hierarchy in a single pass: **artigo** `Art. Nº`/`Art. N` →
+    **parágrafo** `§ Nº`/`§ N` → **inciso** `R -` → **alínea** `a)` → **subalínea**
+    `r.`. Each line is classified by marker **type**; a counter is kept per level and
+    every deeper level resets when a shallower one appears, so nesting is correct
+    regardless of indentation (which is preserved, never reflowed). Non-legal lines
+    (prose, headings, blanks) are preserved and do not count. The **ordinal rule**
+    (LC 95/1998, art. 10, III) is applied to artigo and parágrafo: ordinal with the
+    `º` indicator up to the ninth, cardinal from the tenth (`Art. 9º`, `Art. 10`).
+    Subalíneas keep the canonical-roman validity check (`civil.` is skipped).
+-   **`markdown.renumber_range(l1, l2)`** — routes a range: a genuine legal hierarchy
+    (**≥2** distinct legal levels) → `renumber_legal`; a flat list (digit, emphasis,
+    header, or a single legal level, which keeps its indentation-based nesting) →
+    `renumber_sequence`. `:PKMList renumber` over a visual range now goes through it,
+    so the right behaviour is chosen automatically — no new verb.
+
+### Internal
+
+-   The shared numbering helpers (`strip_bq`, `to_roman`, `to_alpha`, `from_roman`,
+    `is_valid_roman`, new `legal_ordinal`) were hoisted to module level so
+    `renumber_sequence` and `renumber_legal` share one copy; a duplicate `strip_bq`
+    in `convert_list` was removed.
+
+### Tests / smoke
+
+-   `test_v1390_p1` (full nested block, the ordinal rule past the ninth, blockquotes,
+    and the router's three cases: multi-level → nested, single legal level → flat,
+    plain digit list → flat). Whole suite green (71). **Signals a smoke** — the format
+    (`Art. 1º`, `§ 1º`, cardinal from 10, no forced trailing period) is a choice worth
+    confirming; smoke note 0281 (`00 - NotesTeste`) has a scrambled block to renumber.
+
 ## [1.38.0] - 2/8/2026
 
 *Parallel work (Area 5), the legal hierarchy continues: the **subalínea** family
