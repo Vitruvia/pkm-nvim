@@ -61,6 +61,32 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.36.0] - 2/8/2026
+
+*Parallel work (Area 4, syntax highlighting): lettered list markers now highlight,
+completing the visual parity with the v1.34.0 alínea renumbering and the v1.35.0
+roman marker highlighting.*
+
+### Added
+
+-   **Lettered list markers are highlighted** (`a)`, `b)`, `aa)` … — legal
+    *alíneas*). Like roman markers, tree-sitter emits no list node for
+    lowercase-letter markers (verified), so they are highlighted via a per-window
+    `matchadd` through the existing `PKMListMarker` group. `syntax.alpha_list_pattern`
+    (exposed for tests) matches a lettered marker at line start behind optional
+    indentation and blockquote `>` prefixes. `test/test_v1360_p1.lua` asserts the
+    pattern matches the intended markers and rejects near-misses.
+
+### Known limitations (this feature)
+
+-   **The `)` form only.** Unlike roman (which highlights both `.` and `)`), the
+    lettered highlight covers only the paren form. The `.` form of a lowercase label
+    collides with two-letter abbreviations that can begin a line (`vs.`, `cf.`,
+    `ed.`, `pp.`), and an always-on highlight there would paint prose; the paren form
+    is how alíneas are actually written and is clean at line start. (Renumbering
+    still handles both `a.` and `a)` — this limit is only about which form is
+    *highlighted*.)
+
 ## [1.35.0] - 2/8/2026
 
 *Parallel work (Area 4, syntax highlighting): roman-numeral list markers now

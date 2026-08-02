@@ -147,6 +147,19 @@ M.citation_pattern = CITATION_PATTERN
 local ROMAN_LIST_PATTERN = [=[\v^[ \t>]*\zs[IVXLCDM]+[.)]\ze(\s|$)]=]
 M.roman_list_pattern = ROMAN_LIST_PATTERN
 
+--- The matchadd pattern for lettered list markers — `a)`, `b)`, `aa)` … at the
+--- start of a line (legal *alíneas*), optionally behind indentation and blockquote
+--- `>` prefixes. Lowercase letters are not ordered-list markers to the markdown
+--- grammar (verified), so tree-sitter captures nothing and they are highlighted
+--- here. **Deliberately the `)` form only** — unlike roman, the `.` form of a
+--- lowercase label collides with two-letter abbreviations that can begin a line
+--- (`vs.`, `cf.`, `ed.`, `pp.`), and an always-on highlight there would paint
+--- prose; the paren form is how alíneas are actually written and is clean at line
+--- start. Bounded to one or two letters, matching the renumber detector. Exposed
+--- so a test can assert it.
+local ALPHA_LIST_PATTERN = [=[\v^[ \t>]*\zs\l\l?\)\ze(\s|$)]=]
+M.alpha_list_pattern = ALPHA_LIST_PATTERN
+
 --- Register match-based highlights in a single window.
 --- Idempotent: returns immediately if window already has PKM matches.
 ---@param win_id integer
@@ -168,6 +181,10 @@ local function setup_win_matches(win_id)
   -- Roman-numeral list markers (I., II., …): tree-sitter emits no list node for
   -- them, so highlight the marker here to match the native list-marker colour.
   add('PKMListMarker', ROMAN_LIST_PATTERN, 10, { window = win_id })
+
+  -- Lettered list markers (a), b), …): likewise no tree-sitter list node — the
+  -- paren form only, to keep prose (abbreviations like "vs.") unpainted.
+  add('PKMListMarker', ALPHA_LIST_PATTERN, 10, { window = win_id })
 
   -- §9 meta-comments (( )) are handled via extmarks below, not matchadd —
   -- matchadd() cannot match across line breaks, and meta-comments are

@@ -7,7 +7,17 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.35.0** (code-complete on `dev`) — parallel: roman marker highlighting (Area 4)
+## Current version: **v1.36.0** (code-complete on `dev`) — parallel: alínea marker highlighting (Area 4)
+
+*v1.36.0 is parallel work (Area 4, syntax highlighting): **lettered list markers now
+highlight** — `a)`/`b)`/`aa)` (legal *alíneas*), completing the visual parity with
+v1.34.0 renumbering and v1.35.0 roman markers. Same mechanism (matchadd via the
+`PKMListMarker` group; tree-sitter emits no list node for lowercase markers either).
+`syntax.alpha_list_pattern` (exposed). **The `)` form only** — the `.` form of a
+lowercase label collides with two-letter abbreviations that can begin a line (`vs.`,
+`cf.`, …), which an always-on highlight would paint; roman highlights both forms
+because uppercase-roman abbreviations are rare. Renumbering still handles both `a.`
+and `a)`. `test_v1360_p1`. Interactive → needs the real-config smoke.*
 
 *v1.35.0 is parallel work (Area 4, syntax highlighting): **roman-numeral list markers
 now highlight** — `I.`/`II.`/`VII)` (legal *incisos*). A live tree-sitter probe
