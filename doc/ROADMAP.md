@@ -537,11 +537,12 @@ threads, in order:*
   alínea `a)` (matchadd) · ✅ **v1.40** artigo `Art. Nº` + parágrafo `§ Nº` (matchadd)
   + subalínea `i.` (validated buffer-scan + extmark, since matchadd can't roman-check
   `civil.`). Author decision: standalone forms + own highlight (not the `- ` dash).
-- **NEXT — extract as a standalone plugin** (Area 3): `syntax.lua` is kept
-  `Dependencies: none` (the roman validator is self-contained) precisely for this. The
-  extracted plugin highlights **all** markdown files, not only PKM notes (Near 3.1),
-  pkm-nvim consuming it as an optional dependency (falls back to Neovim default if
-  absent).
+- ✅ **v1.42.0 extraction PREPARED (in-repo).** `syntax.enable(bufnr, highlight_only)`
+  separates the pure highlighting from the note behaviour (fold/winopts/zE); a
+  `highlight_all_markdown` flag (default off) pure-enables non-PKM markdown via a
+  `FileType` autocmd in `mode.lua`. `syntax.lua` stays `Dependencies: none`. **Still
+  to do: the physical split into a separate published repo** (author-owned) — the
+  code is ready to move.
 - On/off toggles (Distant 8). *Low API impact — an agent formats unaided — so the
   agent side defers.*
 

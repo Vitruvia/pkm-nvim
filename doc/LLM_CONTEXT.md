@@ -7,7 +7,18 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.41.0** (code-complete on `dev`) — structure-aware autowrap (Area 2)
+## Current version: **v1.42.0** (code-complete on `dev`) — highlighter extraction prep (Area 4/3)
+
+*v1.42.0 prepares the highlighter for extraction: `syntax.enable(bufnr, highlight_only)`
+splits pure highlighting (tree-sitter, matchadd/extmark markers, YAML injection) from
+PKM-note behaviour (frontmatter fold, window opts, zE), and `pkm_mode.syntax.
+highlight_all_markdown` (default off) pure-enables non-PKM markdown via a FileType
+autocmd in mode.lua (which owns the vault-path check, keeping syntax.lua
+`Dependencies: none`). The physical repo split is an author-owned follow-up.
+`test_v1420_p1`. No required smoke (default behaviour unchanged; all-markdown is
+opt-in). **This closes the H→C arc**: all legal renumber + highlight + autowrap +
+conventions shipped, and the highlighter is extraction-ready.*
+
 
 *v1.41.0 adds `markdown.wrap_range(l1,l2)` / `wrap_at_cursor()` / `:PKMList wrap` — a
 reflow to textwidth (or 80), **Option A**: a list item's continuation lines go to

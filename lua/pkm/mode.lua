@@ -131,6 +131,23 @@ function M.setup(cfg)
     end,
   })
 
+  -- Optional: highlight ALL markdown files, not only PKM notes. A PKM note is
+  -- left to the open_note trigger above (full behaviour, incl. folds); any other
+  -- markdown buffer gets the pure highlighting (highlight_only), independent of
+  -- PKM mode being active. This is the standalone-plugin path — the highlighter
+  -- runs with no dependency on note state.
+  if _config.syntax.enabled and _config.syntax.highlight_all_markdown then
+    vim.api.nvim_create_autocmd('FileType', {
+      group    = augroup,
+      pattern  = 'markdown',
+      callback = function(ev)
+        local path = vim.api.nvim_buf_get_name(ev.buf)
+        if path ~= '' and is_pkm_file(path) then return end   -- PKM note → full path
+        require('pkm.syntax').enable(ev.buf, true)
+      end,
+    })
+  end
+
   -- Startup check: activate immediately if Neovim was opened from PKM root.
   if _config.triggers.enter_dir and cwd_is_pkm() then
     vim.schedule(function() M.activate() end)

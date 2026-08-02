@@ -547,9 +547,16 @@ end
 
 --- Activate PKM-specific tree-sitter highlighting on the given buffer.
 --- Idempotent: safe to call when already active.
+--- When `highlight_only` is true, apply the **pure highlighting** (tree-sitter,
+--- matchadd/extmark markers, YAML injection) but NOT the PKM-note behaviour
+--- (frontmatter fold, window options, the `zE` remap). That mode is the seam for
+--- highlighting arbitrary markdown files — and for extracting this module as a
+--- standalone plugin, which is why the highlighting path keeps `Dependencies:
+--- none` and never reaches into note-specific state.
 ---@param bufnr integer  Buffer handle (0 = current buffer)
+---@param highlight_only boolean|nil  true = highlighting without note behaviour
 ---@return nil
-function M.enable(bufnr)
+function M.enable(bufnr, highlight_only)
   bufnr = (bufnr == nil or bufnr == 0)
     and vim.api.nvim_get_current_buf() or bufnr
   if not vim.api.nvim_buf_is_valid(bufnr) then return end
@@ -576,7 +583,7 @@ function M.enable(bufnr)
     if not (_active_bufs[bufnr] and vim.api.nvim_buf_is_valid(bufnr)) then return end
     for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
       setup_win_matches(win_id)
-      setup_win_opts(win_id)
+      if not highlight_only then setup_win_opts(win_id) end
     end
     refresh_meta_comments(bufnr)
     refresh_subalinea_markers(bufnr)
@@ -588,11 +595,13 @@ function M.enable(bufnr)
   -- and nothing else observes it -- there is no autocmd for fold-state
   -- changes. Without this remap the fold stays gone until the next
   -- BufWinEnter/BufWritePost (why saving "fixes" it). Torn down in
-  -- disable() to restore native zE for non-PKM use.
-  vim.keymap.set('n', 'zE', function()
-    vim.cmd('normal! zE')
-    setup_win_opts(vim.api.nvim_get_current_win())
-  end, { buffer = bufnr, noremap = true, silent = true })
+  -- disable() to restore native zE for non-PKM use. Note-behaviour only.
+  if not highlight_only then
+    vim.keymap.set('n', 'zE', function()
+      vim.cmd('normal! zE')
+      setup_win_opts(vim.api.nvim_get_current_win())
+    end, { buffer = bufnr, noremap = true, silent = true })
+  end
 
   vim.api.nvim_create_autocmd('BufWinEnter', {
     group    = ag,
@@ -600,7 +609,7 @@ function M.enable(bufnr)
     callback = function()
       local win = vim.api.nvim_get_current_win()
       setup_win_matches(win)
-      setup_win_opts(win)
+      if not highlight_only then setup_win_opts(win) end
     end,
   })
 
@@ -608,10 +617,12 @@ function M.enable(bufnr)
     group    = ag,
     buffer   = bufnr,
     callback = function()
-      vim.b[bufnr]._pkm_fm_end = nil
-      for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
-        pcall(vim.api.nvim_win_call, win_id, function() vim.cmd('silent! normal! zE') end)
-        setup_win_opts(win_id)
+      if not highlight_only then
+        vim.b[bufnr]._pkm_fm_end = nil
+        for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
+          pcall(vim.api.nvim_win_call, win_id, function() vim.cmd('silent! normal! zE') end)
+          setup_win_opts(win_id)
+        end
       end
 
       local ok, parser = pcall(vim.treesitter.get_parser, bufnr, 'markdown')

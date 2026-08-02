@@ -137,6 +137,13 @@ local defaults = {
     },
     syntax = {
       enabled = true,     -- enable PKM syntax highlighting on activation
+      -- Highlight *all* markdown files, not only PKM notes. When true, a plain
+      -- markdown buffer outside the vault gets the pure highlighting (list
+      -- markers, citations, meta-comments, YAML injection) but NOT the note
+      -- behaviour (frontmatter fold, window options). Off by default so opening
+      -- an unrelated README is untouched. (This is the seam for extracting the
+      -- highlighter as a standalone plugin.)
+      highlight_all_markdown = false,
     },
   },
 

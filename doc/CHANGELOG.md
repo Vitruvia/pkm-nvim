@@ -61,6 +61,39 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.42.0] - 2/8/2026
+
+*Phase X of the legal-lists arc: prepare the highlighter for extraction as a
+standalone plugin, and let it highlight all markdown behind a flag. Author decision:
+in-repo preparation now; all-markdown behind a config flag, default off.*
+
+### Added
+
+-   **`syntax.enable(bufnr, highlight_only)`** — a pure-highlighting mode. With
+    `highlight_only = true`, the buffer gets the tree-sitter highlighting, matchadd /
+    extmark markers and YAML injection, but **not** the PKM-note behaviour
+    (frontmatter fold, window options, the `zE` remap). This is the seam for
+    highlighting arbitrary markdown and for pulling `syntax.lua` out as its own
+    plugin — the highlighting path keeps `Dependencies: none` and never touches
+    note-specific state. The existing full path (`enable(bufnr)`) is unchanged.
+-   **`pkm_mode.syntax.highlight_all_markdown`** (default **false**) — when true, a
+    `FileType markdown` autocmd (in `mode.lua`, which owns the vault-path check)
+    pure-enables every markdown buffer that is *not* a PKM note; PKM notes stay on
+    the full path. Off by default, so opening an unrelated README is untouched.
+
+### Notes
+
+-   The physical split into a separate published repo is a follow-up the author owns;
+    this version makes the code ready for it (self-contained module + a pure entry
+    point + the all-markdown activation).
+
+### Tests
+
+-   `test_v1420_p1` (highlight_only places markers but creates no fold; full enable
+    creates the fold; the flag defaults off). Whole suite green (74). No new luacheck
+    warnings. No required smoke — default behaviour is unchanged; the all-markdown
+    path is opt-in (set the flag and open a non-note `.md` to see pure highlighting).
+
 ## [1.41.0] - 2/8/2026
 
 *Structure-aware autowrap (Area 2). Author decision: **Option A** — continuation
