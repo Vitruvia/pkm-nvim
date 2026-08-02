@@ -90,13 +90,65 @@ and cites it in one call.
 
 ## Lists
 
--   Ordered lists that use non-native markdown can either:
-    1.  use PKM-styled markdown; or
-    2.  use simple bullets like `-` followed by the prefix. E.g. `- A) <text>`.
+PKM recognises several ordered-list families automatically — the same forms are
+**renumbered** (`:PKMList renumber`), **highlighted**, and **wrapped**
+(`:PKMList wrap`). Write a marker in one of these forms and it is treated as a list
+item; write anything else and it is prose. These three behaviours agree by design,
+so a human or an assistant only has to learn one rule set.
 
-    The user may choose any of these options differently based on their needs
-    and intent for each file/note. The second option is more externally
-    compatible, while the first is more readable within PKM.
+### Brazilian legal hierarchy
+
+The five legal levels, outermost to innermost (LC 95/1998):
+
+| Level      | Marker                                       | Examples          |
+|------------|----------------------------------------------|-------------------|
+| artigo     | `Art. Nº` (n ≤ 9, ordinal `º`) / `Art. N`    | `Art. 1º`, `Art. 10` |
+| parágrafo  | `§ Nº` / `§ N` (same ordinal rule)           | `§ 1º`, `§ 10`    |
+| inciso     | uppercase roman + ` - `                      | `I -`, `II -`     |
+| alínea     | lowercase letter + `)`                       | `a)`, `b)`        |
+| subalínea  | lowercase roman + `.`                        | `i.`, `ii.`       |
+
+-   Markers are **standalone** — write `§ 1º` and `i.`, never `- § 1º` / `- i.`.
+    (A `- i.` line is a plain markdown bullet whose text happens to start with
+    `i.`; it is not a legal marker and is not renumbered or highlighted as one.)
+-   Renumbering a selection that spans **two or more** levels renumbers the whole
+    block in one pass: each level restarts under its parent (a new inciso resets
+    its alíneas, a new artigo resets everything below it).
+-   **Ordinal rule**: artigo and parágrafo use the `º` ordinal up to the ninth and a
+    plain cardinal from the tenth on. `Parágrafo único` (the sole § of an article)
+    is written out in full and left as-is.
+-   The subalínea token is validated as a canonical roman numeral, so a word made of
+    roman letters (`civil.`, `mil.`) is prose, not a marker.
+
+### Other ordered lists
+
+-   Plain **digit** lists (`1.`/`1)`) and **bullets** (`-`, `*`, `+`) are native
+    markdown and are recognised by wrap and renumber.
+-   The legal forms own the roman/lettered markers (inciso ` - `, alínea `)`,
+    subalínea `.`), so a plain `I.` roman list is **not** recognised — use a digit
+    list, or the legal form.
+
+### Indentation and wrapping
+
+-   **Indent each nested level by 4 spaces** for readability. Renumbering keys off
+    marker *type*, not indentation, so indent is cosmetic to it — but consistent
+    indent makes the hierarchy legible and is what the wrap builds on.
+-   **`:PKMList wrap`** reflows to `textwidth`, keeping continuation lines at
+    **marker-indent + 4** — the level indent, *never* the marker width. A short
+    marker is padded to the 4-space tab stop (`1.` + 2 spaces, `-` + 3); a long
+    marker (`xiii.`, `100.`) overflows only its first line, while continuation stays
+    at marker-indent + 4. Same-level items stay visually aligned, and a long prefix
+    never fakes a deeper level:
+
+    ```
+    i.  primeira linha do item ....................
+        continuação em marker-indent + 4 .........
+
+    xiii. primeira linha (o conteúdo transborda após o marcador)
+        continuação ainda em marker-indent + 4 (Opção A)
+    ```
+
+-   Headers, tables, fenced code, frontmatter and blockquotes are never reflowed.
 
 ---
 
