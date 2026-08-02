@@ -514,10 +514,11 @@ threads, in order:*
   ✅ **v1.43.0** fenced-code **content** wraps per line (fences untouched) +
   **`formatexpr` integration** so `gq`/`gqq`/motions route through it. ✅ **v1.45.0**
   **blockquote reflow** (`>` + 3 spaces per level, marker repeated per line; quoted
-  markers re-prefixed, not folded). Still open (author "best practices or defer"):
-  the **code-whitespace** question — fenced content word-wraps, collapsing internal
-  space runs; a whitespace-preserving hard break for real code is deferred. *Changes
-  the note text agents read/write — the reflow is idempotent and marker-preserving.*
+  markers re-prefixed, not folded). ✅ **v1.46.0** fenced-code content wraps
+  **whitespace-preserving** (indent + internal spacing kept, break only at a fitting
+  space, over-long tokens overflow, lines never joined) — closes the code-whitespace
+  question. **Area 2 (wrapping) is now COMPLETE; no open questions.** *Changes the
+  note text agents read/write — the reflow is idempotent and marker-preserving.*
 
 **3 · Navigation + panels/sidebar — 🔺 (command-creating parts first)**
 - **Note-wide bookmark bar**: a navigable index of the current note's headers, in

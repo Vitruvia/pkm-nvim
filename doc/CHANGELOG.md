@@ -61,6 +61,31 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.46.0] - 2/8/2026
+
+*Closes the last Area-2 wrap open question (author delegated the call: "best
+practices or defer"). Fenced-code content wrapped word-based, collapsing internal
+runs of spaces — fine for prose, wrong for code, where indentation and column
+alignment carry meaning.*
+
+### Changed
+
+-   **Fenced-code content now wraps whitespace-preserving.** `markdown.wrap_range`
+    keeps each code line's leading indentation **and** internal whitespace; it
+    breaks only at a space that fits `textwidth`, and an over-long token overflows
+    rather than being split (matching the prose wrap). Continuation segments repeat
+    the leading indent; code lines are still never joined, so the wrap stays
+    idempotent. A code line that already fits is left byte-for-byte unchanged (bar
+    trailing whitespace). New helper `wrap_code_line`; the fenced branch no longer
+    routes through the space-collapsing `reflow`.
+
+### Notes
+
+-   Prose, list, and blockquote wrapping are unaffected (single-space text wraps
+    identically). `test_v1460_p1.lua`; suite 74/0, no new luacheck warnings.
+-   This resolves the deferred item flagged in v1.45.0 — Area 2 (wrapping) has no
+    open questions left.
+
 ## [1.45.0] - 2/8/2026
 
 *Area 2 (wrap) polish: blockquotes now reflow. Previously `wrap_range` skipped

@@ -840,6 +840,34 @@ local function reflow(text, first_w, rest_w)
   return out
 end
 
+-- Wrap a single fenced-code line, preserving its whitespace. Unlike `reflow`
+-- (which collapses runs of spaces), this keeps the line's leading indentation and
+-- any internal whitespace, breaking only at a space that fits the width — an
+-- over-long token overflows rather than being split (matching the prose wrap).
+-- Continuation segments repeat the leading indent; lines are never joined, so the
+-- wrap stays idempotent. Code indentation and column alignment therefore survive.
+local function wrap_code_line(line, width)
+  local ind  = line:match('^(%s*)')
+  local body = line:sub(#ind + 1)
+  if body == '' then return { line } end
+  local avail = math.max(1, width - #ind)
+  local segs, cur = {}, ''
+  for ws, word in body:gmatch('(%s*)(%S+)') do
+    if cur == '' then
+      cur = word                                -- first word; drop leading break ws
+    elseif #cur + #ws + #word <= avail then
+      cur = cur .. ws .. word                   -- keep the internal whitespace run
+    else
+      segs[#segs + 1] = cur; cur = word         -- break: the break-space is dropped
+    end
+  end
+  if cur ~= '' then segs[#segs + 1] = cur end
+  if #segs == 0 then return { line } end
+  local out = {}
+  for _, s in ipairs(segs) do out[#out + 1] = ind .. s end
+  return out
+end
+
 -- Marker families recognised by the autowrap, in detection order; each returns
 -- (indent, marker, body). Legal markers reuse the same shapes as the renumber.
 local WRAP_MARKERS = {
@@ -900,9 +928,10 @@ end
 --- reflow at their own indent. Blockquotes reflow too, at a normalised `>` + 3
 --- spaces (a 4-column indent) per level with the marker repeated on each wrapped
 --- line; a quoted list/marker line is re-prefixed but not folded into prose.
---- Fenced-code **content** wraps per line (each line on its own, at its indent),
---- but the ``` fences, headers, tables and frontmatter are left untouched.
---- Idempotent.
+--- Fenced-code **content** wraps per line, preserving each line's indentation and
+--- internal whitespace (code alignment survives; over-long tokens overflow rather
+--- than split), while the ``` fences, headers, tables and frontmatter are left
+--- untouched. Idempotent.
 ---@param start_line integer  1-indexed, inclusive
 ---@param end_line   integer  1-indexed, inclusive
 ---@return nil
@@ -943,17 +972,15 @@ function M.wrap_range(start_line, end_line)
     if line:match('^%s*```') or line:match('^%s*~~~') then
       flush(); out[#out + 1] = line; in_fence = not in_fence
     elseif in_fence then
-      -- Fenced-code content wraps per line — each line on its own (no joining,
-      -- no marker detection), kept at its indent; the ``` fences themselves are
-      -- left untouched, like headings.
+      -- Fenced-code content wraps per line — each line on its own (no joining, no
+      -- marker detection), preserving its indentation AND internal whitespace so
+      -- code alignment survives; the ``` fences themselves are left untouched.
       flush()
       if line:match('^%s*$') then
         out[#out + 1] = line
       else
-        local cind = line:match('^(%s*)')
-        local cw   = math.max(1, tw - #cind)
-        for _, seg in ipairs(reflow(vim.trim(line), cw, cw)) do
-          out[#out + 1] = cind .. seg
+        for _, seg in ipairs(wrap_code_line(line, tw)) do
+          out[#out + 1] = seg
         end
       end
     elseif line:match('^%s*>') then

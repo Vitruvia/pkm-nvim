@@ -7,7 +7,15 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.45.0** (code-complete on `dev`) — blockquote reflow
+## Current version: **v1.46.0** (code-complete on `dev`) — whitespace-preserving code wrap
+
+*v1.46.0 closes the last Area-2 wrap open question: fenced-code content now wraps
+**whitespace-preserving** — `markdown.wrap_range` keeps each code line's leading
+indent AND internal whitespace, breaks only at a fitting space, over-long tokens
+overflow (never split), continuations repeat the indent, lines never joined
+(idempotent), a fitting line unchanged. New helper `wrap_code_line`; the fenced
+branch no longer uses the space-collapsing `reflow`. Prose/list/blockquote wrap
+unchanged. Area 2 (wrapping) now has NO open questions. `test_v1460_p1`. Suite 74/0.*
 
 *v1.45.0 (Area-2 wrap polish): blockquotes now reflow in `markdown.wrap_range`
 (`:PKMList wrap` / `gq`). A quoted paragraph reflows to `textwidth` at a normalised
