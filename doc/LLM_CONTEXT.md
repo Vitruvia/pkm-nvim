@@ -7,7 +7,20 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.39.0** (code-complete on `dev`) — one-pass nested legal renumber (Area 5)
+## Current version: **v1.40.0** (code-complete on `dev`) — legal-marker highlighting (Area 4)
+
+*v1.40.0 opens the highlighting phase: the legal markers tree-sitter can't see now
+highlight, completing parity with the renumber. **artigo** `Art. Nº` + **parágrafo**
+`§ Nº` via matchadd (`syntax.artigo_list_pattern`/`paragrafo_list_pattern`, `\C`, `º`
+optional, digit-required so prose is safe); **subalínea** `i.` via a validated buffer
+scan + extmark (`find_subalinea_markers`, reusing the meta-comment mechanism) since
+matchadd can't roman-check `civil.`. The roman validator is **self-contained in
+syntax.lua** (no require of markdown) so the module keeps `Dependencies: none` for the
+coming extraction. Author decision: standalone forms + own highlight, not the `- `
+dash. `test_v1400_p1`. SIGNALS A SMOKE (note 0280, all levels + negatives). NEXT:
+extract syntax as a standalone plugin (Area 3, all markdown), then structure-aware
+autowrap (Area 2), then the conventions doc.*
+
 
 *v1.39.0 lands the headline of the legal hierarchy: **`markdown.renumber_legal(l1,l2)`**
 walks all five levels in one pass — artigo `Art. Nº`/`N`, parágrafo `§ Nº`/`N`, inciso

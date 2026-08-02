@@ -529,19 +529,18 @@ threads, in order:*
   agent reaches for → 🔺.*
 
 **4 · Syntax highlighting — ▹**
-- ✅ **v1.35.0** roman-numeral list markers (incisos: I., II., …) and ✅ **v1.36.0**
-  lettered list markers (alíneas: a), b), … — `)` form only, to keep prose
-  unpainted) highlight, via a `PKMListMarker` matchadd (tree-sitter emits no list
-  node for either) — the visual half of the v1.33.0 / v1.34.0 renumbering. *(A probe
-  found the "resume a list after a break" case already highlights; the only residual
-  gap — a marker ≠ 1 abutting a non-list paragraph — is the Area-2 wrapped-number
-  domain, not the highlight layer.)*
-- Extend to **all** markdown files, not only PKM notes (Near 3.1).
-- **Possibly extract as a standalone plugin**, with pkm-nvim taking it as an
-  optional dependency (enabled here; falls back to Neovim default if absent).
-- Extended list-prefix recognition (Distant 7) — roman + lettered markers done; on/off
-  toggles (Distant 8).
-  *Low API impact — an agent formats unaided — so the agent side defers.*
+- **All legal markers now highlight** (tree-sitter emits no list node for any of
+  them), via the `PKMListMarker` group: ✅ **v1.35** inciso `I -` · ✅ **v1.36**
+  alínea `a)` (matchadd) · ✅ **v1.40** artigo `Art. Nº` + parágrafo `§ Nº` (matchadd)
+  + subalínea `i.` (validated buffer-scan + extmark, since matchadd can't roman-check
+  `civil.`). Author decision: standalone forms + own highlight (not the `- ` dash).
+- **NEXT — extract as a standalone plugin** (Area 3): `syntax.lua` is kept
+  `Dependencies: none` (the roman validator is self-contained) precisely for this. The
+  extracted plugin highlights **all** markdown files, not only PKM notes (Near 3.1),
+  pkm-nvim consuming it as an optional dependency (falls back to Neovim default if
+  absent).
+- On/off toggles (Distant 8). *Low API impact — an agent formats unaided — so the
+  agent side defers.*
 
 **5 · Markdown editing features — ▹ (command-creating pieces → 🔺)**
 - **Brazilian legal-text list hierarchy (Near 1.2) — in progress.** Author decision:

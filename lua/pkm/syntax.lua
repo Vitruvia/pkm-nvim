@@ -15,10 +15,14 @@
 --                 queries/markdown/injections.scm  (YAML frontmatter; needs yaml parser)
 --               match-based highlight via vim.fn.matchadd (per-window):
 --                 PKMCitation   — note[0042], bib[...], journal[...], scratch[...]
+--                 PKMListMarker — legal markers with no tree-sitter node: inciso
+--                 (I -), alínea (a)), artigo (Art. Nº), parágrafo (§ Nº)
 --               extmark-based highlight (buffer-scoped, multi-line capable):
 --                 PKMMetaComment — ((text)) double-paren meta-comments (§9
---                 conventions); rescanned on enable, on save, and (debounced)
---                 on text change
+--                 conventions)
+--                 PKMListMarker — subalínea (i.), validated as canonical roman
+--                 (matchadd cannot); all rescanned on enable, save, and
+--                 (debounced) on text change
 --               fold (foldmethod=manual):
 --                 frontmatter fold created on enable, recreated after save
 --               'markdown' injections query overridden at runtime to drop
@@ -80,6 +84,42 @@ local MAX_META_COMMENT_LINES = 50
 
 -- Debounce handle per buffer for the TextChanged-triggered rescan.
 local _meta_comment_timers = {}
+
+-- Buffer-scoped extmark namespace for subalínea markers (lowercase roman + '.').
+-- Highlighted through a validated buffer scan rather than matchadd, because the
+-- match depends on a canonical-roman check the regex engine cannot express.
+local SUBALINEA_NS = vim.api.nvim_create_namespace('pkm_subalinea')
+
+-- Self-contained roman validator. This module keeps `Dependencies: none`, so it
+-- deliberately does NOT require pkm.markdown for the twin of this check — that
+-- independence is what lets pkm.syntax be extracted as a standalone plugin.
+local ROMAN_VAL = { i = 1, v = 5, x = 10, l = 50, c = 100, d = 500, m = 1000 }
+local ROMAN_ENC = { { 1000, 'M' }, { 900, 'CM' }, { 500, 'D' }, { 400, 'CD' },
+                    { 100, 'C' }, { 90, 'XC' }, { 50, 'L' }, { 40, 'XL' },
+                    { 10, 'X' }, { 9, 'IX' }, { 5, 'V' }, { 4, 'IV' }, { 1, 'I' } }
+local function to_roman(n)
+  if n < 1 or n > 3999 then return nil end
+  local out = {}
+  for _, p in ipairs(ROMAN_ENC) do
+    while n >= p[1] do out[#out + 1] = p[2]; n = n - p[1] end
+  end
+  return table.concat(out)
+end
+
+--- True only for a *canonical* lowercase roman numeral, so ordinary words made of
+--- roman letters (civil., mil., mix.) are rejected — they parse but do not
+--- re-encode to themselves.
+---@param s string
+---@return boolean
+local function is_valid_roman(s)
+  local total, prev = 0, 0
+  for k = #s, 1, -1 do
+    local v = ROMAN_VAL[s:sub(k, k)]
+    if not v then return false end
+    if v < prev then total = total - v else total = total + v; prev = v end
+  end
+  return total >= 1 and to_roman(total):lower() == s
+end
 
 -- =============================================================================
 -- SECTION: Highlight groups
@@ -166,6 +206,19 @@ M.inciso_list_pattern = INCISO_LIST_PATTERN
 local ALPHA_LIST_PATTERN = [=[\C\v^[ \t>]*\zs\l\l?\)\ze(\s|$)]=]
 M.alpha_list_pattern = ALPHA_LIST_PATTERN
 
+--- The matchadd patterns for the two top legal levels — **artigo** `Art. Nº`/`N`
+--- and **parágrafo** `§ Nº`/`N` — at the start of a line, behind optional
+--- indentation/blockquote. Both require a digit after the prefix, so ordinary
+--- prose (`Art. is short for…`, `§ is a symbol`) never matches; the ordinal `º`
+--- is optional (Vim regex treats the multibyte char as one atom, so `º?` makes
+--- the whole indicator optional). Unlike the subalínea, these need no validity
+--- check — the `Art.`/`§` prefix + a number is unambiguous — so they are plain
+--- matchadd. Exposed for tests.
+local ARTIGO_LIST_PATTERN    = [=[\C\v^[ \t>]*\zsArt\. +\d+º?\ze(\s|$)]=]
+local PARAGRAFO_LIST_PATTERN = [=[\C\v^[ \t>]*\zs§ +\d+º?\ze(\s|$)]=]
+M.artigo_list_pattern    = ARTIGO_LIST_PATTERN
+M.paragrafo_list_pattern = PARAGRAFO_LIST_PATTERN
+
 --- Register match-based highlights in a single window.
 --- Idempotent: returns immediately if window already has PKM matches.
 ---@param win_id integer
@@ -191,6 +244,14 @@ local function setup_win_matches(win_id)
   -- Lettered list markers (a), b), …): likewise no tree-sitter list node — the
   -- paren form only, to keep prose (abbreviations like "vs.") unpainted.
   add('PKMListMarker', ALPHA_LIST_PATTERN, 10, { window = win_id })
+
+  -- Legal top levels: artigo (Art. Nº) and parágrafo (§ Nº). Unambiguous
+  -- (prefix + digit), so plain matchadd; no tree-sitter node either.
+  add('PKMListMarker', ARTIGO_LIST_PATTERN, 10, { window = win_id })
+  add('PKMListMarker', PARAGRAFO_LIST_PATTERN, 10, { window = win_id })
+
+  -- Subalínea markers (i., ii., …) need a canonical-roman check matchadd cannot
+  -- do, so they are extmark-highlighted via refresh_subalinea_markers() below.
 
   -- §9 meta-comments (( )) are handled via extmarks below, not matchadd —
   -- matchadd() cannot match across line breaks, and meta-comments are
@@ -405,6 +466,39 @@ local function refresh_meta_comments(bufnr)
   end
 end
 
+--- Scan buffer lines for subalínea markers — a lowercase-roman + '.' at line
+--- start, behind optional indentation/blockquote — validating each token as a
+--- canonical roman numeral (so `civil.`, `mil.` are rejected). Pure function.
+---@param lines string[]
+---@return {row:integer, sc:integer, ec:integer}[]  0-based row, byte cols of the marker
+local function find_subalinea_markers(lines)
+  local results = {}
+  for i, line in ipairs(lines) do
+    local prefix, tok = line:match('^([ \t>]*)([ivxlcdm]+)%. ')
+    if not prefix then prefix, tok = line:match('^([ \t>]*)([ivxlcdm]+)%.%s*$') end
+    if prefix and is_valid_roman(tok) then
+      results[#results + 1] = { row = i - 1, sc = #prefix, ec = #prefix + #tok + 1 }
+    end
+  end
+  return results
+end
+
+--- Rescan a buffer for subalínea markers and reapply PKMListMarker extmarks over
+--- the marker (roman + '.'), so they read like the matchadd-highlighted markers.
+---@param bufnr integer
+local function refresh_subalinea_markers(bufnr)
+  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then return end
+  vim.api.nvim_buf_clear_namespace(bufnr, SUBALINEA_NS, 0, -1)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for _, m in ipairs(find_subalinea_markers(lines)) do
+    pcall(vim.api.nvim_buf_set_extmark, bufnr, SUBALINEA_NS, m.row, m.sc, {
+      end_col  = m.ec,
+      hl_group = 'PKMListMarker',
+      priority = 100,   -- alongside tree-sitter's default list-marker priority
+    })
+  end
+end
+
 --- Debounced wrapper for high-frequency callers (TextChanged/TextChangedI).
 --- A full buffer scan on every keystroke would reintroduce the same
 --- O(n)-per-edit cost the injection override above exists to avoid on
@@ -419,6 +513,7 @@ local function schedule_meta_comment_refresh(bufnr)
     _meta_comment_timers[bufnr] = nil
     if _active_bufs[bufnr] and vim.api.nvim_buf_is_valid(bufnr) then
       refresh_meta_comments(bufnr)
+      refresh_subalinea_markers(bufnr)
     end
   end, 150)
 end
@@ -484,6 +579,7 @@ function M.enable(bufnr)
       setup_win_opts(win_id)
     end
     refresh_meta_comments(bufnr)
+    refresh_subalinea_markers(bufnr)
   end)
 
   local ag = get_augroup()
@@ -522,6 +618,7 @@ function M.enable(bufnr)
       if ok and parser then pcall(function() parser:parse(true) end) end
 
       refresh_meta_comments(bufnr)
+      refresh_subalinea_markers(bufnr)
     end,
   })
 
@@ -573,6 +670,7 @@ function M.disable(bufnr)
     _meta_comment_timers[bufnr] = nil
   end
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, META_COMMENT_NS, 0, -1)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, SUBALINEA_NS, 0, -1)
 
   vim.api.nvim_buf_call(bufnr, function()
     vim.cmd('syntax on')
@@ -580,5 +678,6 @@ function M.disable(bufnr)
 end
 
 M._find_meta_comments = find_meta_comments
+M._find_subalinea_markers = find_subalinea_markers
 
 return M

@@ -61,6 +61,43 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.40.0] - 2/8/2026
+
+*The highlighting phase (Area 4) begins: the legal markers tree-sitter cannot see —
+artigo, parágrafo, subalínea — now highlight, completing visual parity with the
+renumber. Author decision: standalone forms + our own highlight (not the `- ` dash
+workaround).*
+
+### Added
+
+-   **Artigo and parágrafo highlighting** (`Art. Nº`/`Art. N`, `§ Nº`/`§ N`) via
+    matchadd through the `PKMListMarker` group — `syntax.artigo_list_pattern` /
+    `syntax.paragrafo_list_pattern`, `\C`-led, `º` optional. Both require a digit
+    after the prefix, so prose (`Art. is short for…`, `§ is a symbol`) never matches;
+    no validity check is needed (the prefix + number is unambiguous).
+-   **Subalínea highlighting** (`i.`, `ii.`, `xiii.`) via a validated **buffer scan +
+    extmarks** (`find_subalinea_markers` / `refresh_subalinea_markers`), reusing the
+    meta-comment mechanism — matchadd cannot apply the canonical-roman check, so words
+    made of roman letters (`civil.`, `mil.`) are validated out. Rescanned on enable,
+    save, and (debounced) text change; the namespace is cleared on `disable`. The
+    roman validator is **self-contained in `syntax.lua`** (no `require('pkm.markdown')`)
+    so the module keeps `Dependencies: none` for the planned extraction.
+
+### Convention
+
+-   Legal markers are **standalone** — `§ 1º`, `i.` — not `- § 1º`/`- i.`. The `- `
+    dash was only ever a way to borrow the native bullet's highlight; with these
+    markers highlighting on their own it is retired. A `- iii.` line remains a plain
+    markdown bullet whose text starts with `iii.`, intentionally not a legal marker.
+
+### Tests / smoke
+
+-   `test_v1400_p1` (artigo/§ pattern match+reject; the subalínea scan finds
+    `i./ii./iii./iv./xiii.` and rejects `civil./mil./a)`/inline; live extmark
+    placement). Whole suite green (72). **Signals a smoke** — the five legal markers
+    highlighting is interactive; smoke note 0280 (`00 - NotesTeste`) walks every level
+    and the must-not-highlight negatives.
+
 ## [1.39.0] - 2/8/2026
 
 *Parallel work (Area 5), the headline of the legal hierarchy: a **one-pass nested
