@@ -61,6 +61,35 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.45.0] - 2/8/2026
+
+*Area 2 (wrap) polish: blockquotes now reflow. Previously `wrap_range` skipped
+`> ` lines entirely (left untouched, deferred). Author spec: a blockquote is
+indented one `>` plus three spaces — a **4-column indent per nesting level** —
+and the marker repeats on every wrapped line (Neovim's standard).*
+
+### Added
+
+-   **Blockquote reflow in `markdown.wrap_range`** (`:PKMList wrap` / `gq`). A
+    quoted paragraph joins its lazy continuations and reflows to `textwidth`, at a
+    normalised prefix of `>` + 3 spaces per level (`>   ` at depth 1, `>   >   ` at
+    depth 2), with the prefix on every wrapped line. A bare `>` line is kept as a
+    paragraph break; a **quoted list/marker line** (`> - item`, `> i. sub`) is
+    re-prefixed but *not* folded into prose — reflowing structure inside a quote
+    is deliberately out of scope for now. A non-quote line ends the quote.
+    Idempotent.
+
+### Notes
+
+-   `wrap_structural` no longer treats `^%s*>` as untouchable; a dedicated branch
+    in the `wrap_range` loop accumulates and flushes the quote block.
+-   Deferred (author "best practices or defer"): the code-block **whitespace**
+    question — fenced-code content still wraps word-based (internal space runs
+    collapse). A whitespace-preserving hard break for real code remains open.
+-   Suite green (73 files) incl. the new `test/test_v1450_p1.lua`; the stale
+    "blockquotes left untouched" case in `test_v1410_p1.lua` was updated to assert
+    the reflow. No new luacheck warnings.
+
 ## [1.44.0] - 2/8/2026
 
 *Phase X completed: the markdown highlighting is now a **separate plugin**,

@@ -2,8 +2,9 @@
 -- markdown.wrap_range — structure-aware autowrap (Option A): a list item's
 -- continuation lines are re-indented to marker_indent + 4 (never the marker width);
 -- short markers are padded to the 4-space tab stop, long markers overflow the first
--- line; plain paragraphs reflow at their own indent; headers/tables/code/blockquotes
--- are left untouched. textwidth is set to 20 for predictable wrapping.
+-- line; plain paragraphs reflow at their own indent; blockquotes reflow at a
+-- normalised 4-col-per-level prefix; headers/tables/fences are left untouched.
+-- textwidth is set to 20 for predictable wrapping.
 --
 -- Run from repo root:
 --   nvim --headless -u test/min_init.lua -c "luafile test/test_v1410_p1.lua" -c "qa!"
@@ -80,10 +81,13 @@ check("header/table/fences intact; the code line wrapped, the list item wrapped"
   'i.  short',
 }), vim.inspect(r))
 
-print("== blockquote lines are left untouched (deferred) ==")
+print("== blockquotes reflow: '>' + 3 spaces per level, marker repeated ==")
 r = wrap({ '> a quoted line far longer than twenty columns wide' })
-check("blockquote unchanged", same(r, {
-  '> a quoted line far longer than twenty columns wide',
+check("blockquote reflowed at 4-col indent, prefix per line", same(r, {
+  '>   a quoted line',
+  '>   far longer than',
+  '>   twenty columns',
+  '>   wide',
 }), vim.inspect(r))
 
 print("== validity: 'civil.' is prose (col-0 continuation), 'iv.' is a list item ==")

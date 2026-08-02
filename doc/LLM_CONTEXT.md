@@ -7,7 +7,19 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.44.0** (code-complete on `dev`) — highlighting extracted to pkm-syntax
+## Current version: **v1.45.0** (code-complete on `dev`) — blockquote reflow
+
+*v1.45.0 (Area-2 wrap polish): blockquotes now reflow in `markdown.wrap_range`
+(`:PKMList wrap` / `gq`). A quoted paragraph reflows to `textwidth` at a normalised
+prefix of `>` + 3 spaces per nesting level (a 4-column indent — `>   ` at depth 1,
+`>   >   ` at depth 2), marker repeated on every wrapped line. A bare `>` is a
+paragraph break; a quoted list/marker line (`> - x`, `> i. y`) is re-prefixed but
+NOT folded into prose (nested structure inside quotes is out of scope). Non-quote
+line ends the quote. Idempotent. `wrap_structural` no longer swallows `^%s*>`.
+Deferred: the code-block whitespace question (fenced content still word-wraps).
+Standalone pkm-syntax also gained a `setup({ number = false })` opt (line-number
+suppression decoupled from the fold; default keeps numbers) — pkm-nvim's
+enable()-driven note look is unchanged. Suite 73/0.*
 
 *v1.44.0 completes the extraction: the markdown highlighting is now the standalone
 **`pkm-syntax`** plugin (sibling repo `P:/Active/pkm-syntax`, remote Vitruvia/pkm-syntax,

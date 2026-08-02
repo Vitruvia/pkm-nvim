@@ -148,7 +148,14 @@ The five legal levels, outermost to innermost (LC 95/1998):
         continuação ainda em marker-indent + 4 (Opção A)
     ```
 
--   Headers, tables, fenced code, frontmatter and blockquotes are never reflowed.
+-   **Blockquotes reflow** at a normalised prefix of `>` + 3 spaces per nesting
+    level (a 4-column indent — `>   ` at depth 1, `>   >   ` at depth 2), with the
+    marker repeated on every wrapped line. A bare `>` is a paragraph break; a quoted
+    list/marker line (`> - x`, `> i. y`) is re-prefixed but left on one line (nested
+    structure inside a quote is not reflowed).
+-   Headers, tables and frontmatter are never reflowed. Fenced code is preserved —
+    the ` ``` ` fences stay put and the **content** wraps per line (each line at its
+    own indent, never joined).
 
 ---
 

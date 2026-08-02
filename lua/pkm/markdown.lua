@@ -871,28 +871,56 @@ local function wrap_structural(line)
   return line:match('^%s*$')             -- blank
       or line:match('^%s*#')             -- ATX header
       or line:match('^%s*|')             -- table row
-      or line:match('^%s*>')             -- blockquote (deferred to a later pass)
       or line:match('^%s*%-%-%-+%s*$')   -- frontmatter fence / thematic break
       or line:match('^%s*%*%*%*+%s*$')
       or line:match('^%s*___+%s*$')
+end
+
+-- Split a blockquote line into (depth, quoted-text). Depth is the number of `>`
+-- markers; the quoted text has its surrounding whitespace trimmed. Returns nil
+-- for a non-quote line. Any indentation before the first `>` is dropped — a
+-- blockquote is not itself an indented block here.
+local function wrap_blockquote(line)
+  local prefix, rest = line:match('^%s*(>[>%s]*)(.-)%s*$')
+  if not prefix then return nil end
+  local _, depth = prefix:gsub('>', '')
+  return depth, rest
+end
+
+-- The normalised prefix for a blockquote of the given depth: one `>` plus three
+-- spaces (a 4-column indent) per level, so quoted text starts at column 4·depth.
+local function bq_prefix(depth)
+  return ('>   '):rep(depth)
 end
 
 --- Reflow a line range to `textwidth` (or 80), list-aware. A list item's
 --- continuation lines are re-indented to **marker_indent + 4** — never the marker
 --- width (Option A) — with short markers padded to the 4-space tab stop and long
 --- markers (`xiii.`, `100.`) overflowing only the first line. Plain paragraphs
---- reflow at their own indent. Fenced-code **content** wraps per line (each line
---- on its own, at its indent), but the ``` fences, headers, tables, blockquotes
---- and frontmatter are left untouched. Idempotent.
+--- reflow at their own indent. Blockquotes reflow too, at a normalised `>` + 3
+--- spaces (a 4-column indent) per level with the marker repeated on each wrapped
+--- line; a quoted list/marker line is re-prefixed but not folded into prose.
+--- Fenced-code **content** wraps per line (each line on its own, at its indent),
+--- but the ``` fences, headers, tables and frontmatter are left untouched.
+--- Idempotent.
 ---@param start_line integer  1-indexed, inclusive
 ---@param end_line   integer  1-indexed, inclusive
 ---@return nil
 function M.wrap_range(start_line, end_line)
   local tw = (vim.bo.textwidth and vim.bo.textwidth > 0) and vim.bo.textwidth or 80
   local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
-  local out, in_fence, blk = {}, false, nil
+  local out, in_fence, blk, bq = {}, false, nil, nil
 
   local function flush()
+    if bq then
+      local prefix = bq_prefix(bq.depth)
+      local w      = math.max(1, tw - #prefix)
+      for _, seg in ipairs(reflow(table.concat(bq.parts, ' '), w, w)) do
+        out[#out + 1] = prefix .. seg
+      end
+      bq = nil
+      return
+    end
     if not blk then return end
     local body = table.concat(blk.parts, ' ')
     if blk.marker then
@@ -928,9 +956,25 @@ function M.wrap_range(start_line, end_line)
           out[#out + 1] = cind .. seg
         end
       end
+    elseif line:match('^%s*>') then
+      local depth, rest = wrap_blockquote(line)
+      if rest == '' then
+        -- Bare `>` line: a paragraph break inside the quote. Emit the marker(s)
+        -- with trailing padding trimmed, and end the current quote paragraph.
+        flush(); out[#out + 1] = (bq_prefix(depth):gsub('%s+$', ''))
+      elseif wrap_marker(rest) then
+        -- A quoted list/marker line: re-prefix it but do not fold it into prose
+        -- (reflowing structured content inside a quote is not done here).
+        flush(); out[#out + 1] = bq_prefix(depth) .. rest
+      elseif bq and bq.depth == depth then
+        bq.parts[#bq.parts + 1] = rest        -- lazy continuation, same depth
+      else
+        flush(); bq = { depth = depth, parts = { rest } }
+      end
     elseif wrap_structural(line) then
       flush(); out[#out + 1] = line
     else
+      if bq then flush() end   -- a non-quote line ends any open blockquote
       local ind, marker, body = wrap_marker(line)
       if marker then
         flush()

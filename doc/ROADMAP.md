@@ -509,11 +509,15 @@ threads, in order:*
   Option A indent (continuation at marker_indent + 4, never the prefix width; short
   markers padded to the tab stop, long markers overflow the first line), all marker
   families recognised (digit/bullet + the five legal markers, subalínea validated),
-  and frontmatter/code/headers/tables/blockquotes left untouched. This fixes the
-  wrapped-number highlight symptom at the source (a continuation line never begins
-  with `N. `). Still to do: **blockquote reflow** (deferred), and optional
-  **`formatexpr` integration** so `gq`/auto-format routes through it. *Changes the
-  note text agents read/write — the reflow is idempotent and marker-preserving.*
+  and frontmatter/headers/tables left untouched. This fixes the wrapped-number
+  highlight symptom at the source (a continuation line never begins with `N. `).
+  ✅ **v1.43.0** fenced-code **content** wraps per line (fences untouched) +
+  **`formatexpr` integration** so `gq`/`gqq`/motions route through it. ✅ **v1.45.0**
+  **blockquote reflow** (`>` + 3 spaces per level, marker repeated per line; quoted
+  markers re-prefixed, not folded). Still open (author "best practices or defer"):
+  the **code-whitespace** question — fenced content word-wraps, collapsing internal
+  space runs; a whitespace-preserving hard break for real code is deferred. *Changes
+  the note text agents read/write — the reflow is idempotent and marker-preserving.*
 
 **3 · Navigation + panels/sidebar — 🔺 (command-creating parts first)**
 - **Note-wide bookmark bar**: a navigable index of the current note's headers, in
