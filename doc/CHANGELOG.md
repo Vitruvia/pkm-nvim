@@ -61,6 +61,29 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.54.0] - 3/8/2026
+
+*Two buffer-panel additions the author asked for after the v1.53 smoke.*
+
+### Added
+
+-   **`[count]<CR>` in the buffer panel** opens the buffer under the cursor in the
+    Nth editing window (1 = leftmost, sorted left→right) — the same gesture the
+    view sidebar has. A bare `<CR>` is unchanged (alternate / first non-panel
+    window). A count past the last editing window notifies instead of doing
+    nothing. Reuses the sidebar's `_sort_wins_by_col` / `_resolve_window_slot`.
+-   **`/` in the buffer panel** opens a fuzzy pop-up over the open buffers
+    (Telescope when available, `vim.ui.select` fallback) — for when there are too
+    many buffers to scan the panel — and choosing one opens it in an editing
+    window. Built on the `pick_list` primitive from v1.53.0.
+
+### Notes
+
+-   New `ui.lua` helpers `collect_listed_bufs`, `open_buffer`,
+    `open_buffer_in_slot`, `bufpanel_search`; the panel hint line now reads
+    `[N]<CR> open  / find  …`. `test_v1540_p1` drives both through the real keymaps
+    (`vim.ui.select` stubbed for the search). Suite 84/0; luacheck clean.
+
 ## [1.53.1] - 3/8/2026
 
 *Three fixes from the v1.53.0 smoke, two of them one root cause: the autoswitch

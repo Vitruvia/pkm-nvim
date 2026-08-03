@@ -121,7 +121,7 @@ local function bufpanel_build_lines(state)
     header = header .. '  · ' .. vault.indicator()
   end
   local lines   = { header ..
-    '  <CR> open  d close  D force  w save+close  r refresh  T title  C-g path  q close' }
+    '  [N]<CR> open  / find  d close  D force  w save+close  r refresh  T title  C-g path  q close' }
   local buf_map = {}
 
   for _, bufnr in ipairs(listed) do
@@ -197,6 +197,112 @@ local function detach_buf_from_wins(bufnr, panel_win)
   end
 end
 
+--- The listed, file-backed buffers the panel shows (excludes `exclude_buf`, the
+--- panel's own scratch buffer, plus unlisted/non-file/netrw/directory buffers).
+---@param exclude_buf integer|nil
+---@return integer[]
+local function collect_listed_bufs(exclude_buf)
+  local out = {}
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if bufnr ~= exclude_buf
+    and vim.api.nvim_buf_is_valid(bufnr)
+    and vim.bo[bufnr].buflisted
+    and vim.bo[bufnr].buftype == ''
+    and vim.bo[bufnr].filetype ~= 'netrw'
+    and vim.fn.isdirectory(vim.api.nvim_buf_get_name(bufnr)) == 0 then
+      if vim.api.nvim_buf_get_name(bufnr) ~= '' then out[#out + 1] = bufnr end
+    end
+  end
+  return out
+end
+
+local _OPEN_PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
+
+--- Show `bufnr` from the buffer panel in a real editing window: prefer the
+--- alternate window, else the first non-panel window, else a new split.
+---@param bufnr integer
+---@param panel_win integer  the buffer panel's own window (never a target)
+local function open_buffer(bufnr, panel_win)
+  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then return end
+  local target
+  local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
+  if alt_id ~= 0 and alt_id ~= panel_win
+  and vim.api.nvim_win_is_valid(alt_id)
+  and vim.api.nvim_win_get_config(alt_id).relative == '' then
+    if not _OPEN_PANELS[vim.bo[vim.api.nvim_win_get_buf(alt_id)].filetype] then target = alt_id end
+  end
+  if not target then
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if win ~= panel_win and vim.api.nvim_win_get_config(win).relative == '' then
+        if not _OPEN_PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then target = win; break end
+      end
+    end
+  end
+  if target then
+    vim.api.nvim_set_current_win(target)
+    vim.api.nvim_set_current_buf(bufnr)
+  else
+    vim.api.nvim_set_current_win(panel_win)
+    vim.cmd('aboveleft new')
+    vim.bo.bufhidden = 'wipe'
+    vim.api.nvim_set_current_buf(bufnr)
+  end
+end
+
+--- Show `bufnr` in the Nth editing window (1 = leftmost, sorted left→right) —
+--- the buffer panel's `[count]<CR>`. Returns (true) or (false, editing_win_count).
+---@param bufnr integer
+---@param panel_win integer
+---@param n integer
+---@return boolean ok, integer? win_count
+local function open_buffer_in_slot(bufnr, panel_win, n)
+  local candidates = {}
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= panel_win and vim.api.nvim_win_get_config(win).relative == '' then
+      if not _OPEN_PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+        candidates[#candidates + 1] = { win = win, col = vim.api.nvim_win_get_position(win)[2] }
+      end
+    end
+  end
+  local views  = require('pkm.views')
+  local sorted = views._sort_wins_by_col(candidates)
+  local slot   = views._resolve_window_slot(n, #sorted)
+  if not slot then return false, #sorted end
+  vim.api.nvim_set_current_win(sorted[slot].win)
+  vim.api.nvim_set_current_buf(bufnr)
+  return true
+end
+
+--- The buffer panel's `/` : a fuzzy pop-up over the open buffers (Telescope when
+--- available, vim.ui.select fallback) — for when there are too many to scan the
+--- panel. Choosing one opens it in a real editing window.
+---@param panel_win integer
+local function bufpanel_search(panel_win)
+  local index = require('pkm.index')
+  local bufs  = collect_listed_bufs(nil)
+  if #bufs == 0 then
+    vim.notify('[pkm] no open buffers', vim.log.levels.INFO)
+    return
+  end
+  local items = {}
+  for _, bufnr in ipairs(bufs) do
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    local e    = index.get(name)
+    local label
+    if e then
+      local base = (_display_mode == 'title' and e.title and e.title ~= '')
+        and e.title or utils.strip_display_prefix(e.filename, e.note_type)
+      label = string.format('%s %s  (%s)', utils.type_prefix(e.note_type), base, e.filename)
+    else
+      label = string.format('%s %s', utils.type_prefix('file'), vim.fn.fnamemodify(name, ':t'))
+    end
+    if vim.bo[bufnr].modified then label = label .. ' [+]' end
+    items[#items + 1] = { display = label, value = bufnr }
+  end
+  local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
+  backend.pick_list('PKM Buffers', items, function(bufnr) open_buffer(bufnr, panel_win) end)
+end
+
 local _bufpanel = panel.create({
   name           = 'bufpanel',
   split_cmd      = 'noautocmd botright split',
@@ -213,37 +319,22 @@ local _bufpanel = panel.create({
     ['<CR>'] = function(state)
       local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
       if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-
-      local _PANELS = { ['pkm-sidebar'] = true, ['pkm-bufpanel'] = true, ['netrw'] = true }
-      local target
-      local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
-      if alt_id ~= 0 and alt_id ~= state.win
-      and vim.api.nvim_win_is_valid(alt_id)
-      and vim.api.nvim_win_get_config(alt_id).relative == '' then
-        if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(alt_id)].filetype] then
-          target = alt_id
+      -- [count]<CR>: open in the Nth editing window (1 = leftmost), like the view
+      -- sidebar; a bare <CR> uses the alternate / first non-panel window.
+      local count = vim.v.count
+      if count > 0 then
+        local ok, nwins = open_buffer_in_slot(bufnr, state.win, count)
+        if not ok then
+          vim.notify(string.format('[pkm] no window %d (only %d editing window%s)',
+            count, nwins, nwins == 1 and '' or 's'), vim.log.levels.WARN)
         end
+        return
       end
-      if not target then
-        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-          if win ~= state.win
-          and vim.api.nvim_win_get_config(win).relative == '' then
-            if not _PANELS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
-              target = win; break
-            end
-          end
-        end
-      end
-      if target then
-        vim.api.nvim_set_current_win(target)
-        vim.api.nvim_set_current_buf(bufnr)
-      else
-        vim.api.nvim_set_current_win(state.win)
-        vim.cmd('aboveleft new')
-        vim.bo.bufhidden = 'wipe'
-        vim.api.nvim_set_current_buf(bufnr)
-      end
+      open_buffer(bufnr, state.win)
     end,
+
+    -- /: fuzzy pop-up over the open buffers (for when there are too many to scan).
+    ['/'] = function(state) bufpanel_search(state.win) end,
 
     -- <C-g>: echo the full path of the buffer under the cursor — the number the
     -- row labels strip, plus where the file actually lives.
