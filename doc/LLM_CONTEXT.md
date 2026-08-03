@@ -7,21 +7,27 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.53.0** (code-complete on `dev`) — content-consistent sidebar `/` (Area 3 Phase 3.5a)
+## Current version: **v1.54.0** (code-complete on `dev`) — buffer panel [count]<CR> + `/` search; live autoswitch
 
-*v1.53.0 (Area 3 Phase 3.5a, opens the pop-up-as-container work): `/` in the views sidebar
-OVERVIEW now searches VIEWS (a picker of view names), not the all-notes browse — and, launched
-from the sidebar, choosing a view switches THIS sidebar to it (the origin rule; a standalone
-views pop-up in 3.5b will NOT drive the sidebar). Detail `/` unchanged (already searches the
-shown view's notes). New reusable primitive `pkm.telescope.pick_list(title, items{display,value},
-on_select)` + `pkm.ui.pick_list` fallback — the content-agnostic pop-up behind the views `/` and
-the coming nav/headings picker. `sidebar_search()` in views.lua backs the `/` keymap. The
-intricate `open_views_panel` notes browser was left untouched. `test_v1530`. Suite 83/0. NEXT =
-3.5b: nav/headings picker (`/` on nav; open nav in the pop-up); in-pop-up cycle
-file-browse/views/nav; standalone pop-up entries whose select does NOT drive the sidebar. Also
-shipped: v1.52.1 fix — autoswitch → views on focusing ANY non-markdown window (not only when the
-last markdown window closes). KEY MODEL: pop-up & sidebar are SEPARATE containers; the pop-up
-drives the sidebar only when opened from it.*
+*v1.54.0: buffer panel gains **`[count]<CR>`** (open the buffer in the Nth editing window, like the
+view sidebar — reuses `_sort_wins_by_col`/`_resolve_window_slot`) and **`/`** (a fuzzy pop-up over
+open buffers via `pick_list`; choosing one opens it). New ui.lua helpers collect_listed_bufs/
+open_buffer/open_buffer_in_slot/bufpanel_search. `test_v1540`.*
+
+*v1.53.1 (smoke fixes): AUTOSWITCH IS NOW LIVE (removed the transition-seeding — `_autoswitch_last`/
+`seed_autoswitch_context`/`tab_has_markdown` gone). It shows the provider the focused editing window
+asks for (nav for markdown, views otherwise); a manual `<C-n>` cycle is a TRANSIENT PEEK that holds
+while you stay in the sidebar and reverts on refocusing an editing window; pin via `:PKMPanel
+autoswitch off`. **Opening the sidebar (no-name) is context-driven** (focused markdown → opens nav
+directly). Nav header shows the vault only if it FITS the sidebar width (a long note name no longer
+pushes it off-screen). test_v1520 updated (peek reverts); test_v190_p2 pins autoswitch off.*
+
+*v1.53.0 (Area 3 Phase 3.5a): content-consistent `/` — views overview `/` searches VIEWS (a
+`pick_list` of view names); launched from the sidebar so choosing one switches THIS sidebar to it.
+New `pkm.telescope.pick_list` / `pkm.ui.pick_list` primitive. `sidebar_search()` backs the `/`.
+NEXT = 3.5b: nav/headings picker (`/` on nav; open nav in the pop-up); in-pop-up cycle
+file-browse/views/nav; standalone pop-up entries whose select does NOT drive the sidebar. KEY MODEL:
+pop-up & sidebar are SEPARATE; the pop-up drives the sidebar only when opened from it.*
 
 
 *v1.52.0 (Area 3 Phase 3.3b): the sidebar AUTOSWITCHES between its providers by focus. On by

@@ -574,6 +574,15 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   from the sidebar — choosing one switches this sidebar to that view (the origin
   rule). New `pkm.telescope.pick_list` / `pkm.ui.pick_list` primitive. Detail `/`
   unchanged. `test_v1530`. Suite 83/0.
+- ✅ **v1.53.1 (smoke fixes)** — autoswitch made **live** (dropped the transition
+  seeding, which stuck the sidebar on views after a reopen and made the `<C-n>`
+  cycle asymmetric): it now shows the provider the focused editing window asks
+  for, and a manual cycle is a transient peek that reverts on refocus (pin via
+  `:PKMPanel autoswitch off`). Opening the sidebar is context-driven; the nav
+  header shows the vault only when it fits.
+- ✅ **v1.54.0 — buffer panel `[count]<CR>` + `/` search**: open the buffer in the
+  Nth editing window (like the sidebar), and a fuzzy pop-up over the open buffers
+  (`pick_list`). `test_v1540`. Suite 84/0.
 - **Phase 3.5b — the pop-up as a provider container (rest)**: a **nav/headings
   picker** (`/` on the nav provider; "open nav in the pop-up") via `pick_list`; an
   **in-pop-up cycle** across file-browse / views / nav; and **standalone pop-up
