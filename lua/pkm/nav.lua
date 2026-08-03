@@ -71,8 +71,11 @@ local function headings_of(buf, query)
   local heads = md.scan_headings(lines)
   local q     = (query or ''):lower()
 
-  local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ':t')
-  local out  = { '▚ ' .. (name ~= '' and name or '[No Name]') }   -- header; not jumpable
+  local name      = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ':t')
+  local vault_ind = require('pkm.vault').indicator()
+  local header    = '▚ ' .. (name ~= '' and name or '[No Name]')
+  if vault_ind ~= '' then header = header .. '  · ' .. vault_ind end
+  local out  = { header }   -- header; not jumpable
   local map  = {}
 
   for _, h in ipairs(heads) do

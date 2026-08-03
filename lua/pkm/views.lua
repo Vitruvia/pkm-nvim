@@ -2789,6 +2789,7 @@ local function sidebar_show_help()
   end
   vim.list_extend(lines, {
     '  /        search (opens in main window)',
+    '  <C-g>    show full path (filename + number)',
     '  r        refresh',
     '  q        close sidebar',
     '  ?        this help',
@@ -3150,6 +3151,17 @@ local function sidebar_on_open(pstate, _helpers)
     vim.notify('[pkm] sidebar refreshed', vim.log.levels.INFO)
   end, ko)
 
+  -- <C-g>: echo the full path of the note under the cursor (detail mode) — the
+  -- unambiguous "where does this actually live", directory and number included.
+  vim.keymap.set('n', '<C-g>', function()
+    local ct = get_tab()
+    if not ct or ct.mode ~= 'detail' then return end
+    local row = vim.api.nvim_win_get_cursor(ct.win)[1]
+    local idx = row - ct.header_count
+    if idx < 1 or idx > #ct.paths then return end
+    vim.notify(ct.paths[idx], vim.log.levels.INFO)
+  end, ko)
+
   -- q / <Esc>: close
   local function close_sidebar()
     local ct = get_tab()
@@ -3184,14 +3196,11 @@ local function sidebar_on_open(pstate, _helpers)
         local row = vim.api.nvim_win_get_cursor(ct.win)[1]
         local idx = row - ct.header_count
         if idx >= 1 and idx <= #ct.paths then
-          local ui_m = require('pkm.ui')
-          local e    = require('pkm.index').get(ct.paths[idx])
-          if ui_m.get_display_mode() == 'title' and e and e.title and e.title ~= '' then
-            winbar = ' ' .. e.title
-          else
-            local stem = vim.fn.fnamemodify(ct.paths[idx], ':t:r')
-            winbar = ' ' .. (e and utils.strip_display_prefix(stem, e.note_type) or stem)
-          end
+          -- Always title · filename-with-number, regardless of the T display
+          -- mode: the winbar is the one place the suppressed note number stays
+          -- readable while browsing.
+          local e = require('pkm.index').get(ct.paths[idx])
+          winbar = utils.winbar_label(e, ct.paths[idx])
         else
           local filter_label = ct.type_filter and ('  [' .. ct.type_filter .. ']') or ''
           winbar = ' ≡ ' .. (ct.name or '') .. filter_label
@@ -3246,8 +3255,10 @@ function M.open_sidebar(name)
   end
 
   -- Fresh open: seed the provider state so the panel's first build renders the
-  -- right mode, then re-enter that mode to place the cursor (the switch helpers
-  -- are the single source of cursor-placement truth).
+  -- right mode. panel.open already ran sidebar_build (populating t.paths /
+  -- t.header_count), so we place the cursor INLINE here — re-entering the switch
+  -- helpers would rebuild the whole overview/detail a second time (the wasteful
+  -- double-build that made a large views list feel laggy on open).
   local mode = (name and name ~= '') and 'detail' or 'overview'
   _panel.open({
     mode        = mode,
@@ -3256,10 +3267,41 @@ function M.open_sidebar(name)
     history     = {},
     type_filter = nil,
   })
-  if mode == 'detail' then
-    sidebar_switch_to_detail(name)
+  local t = _panel.get_state()
+  if t and t.win and vim.api.nvim_win_is_valid(t.win) then
+    if mode == 'detail' then
+      if #t.paths > 0 then
+        vim.api.nvim_win_set_cursor(t.win, { t.header_count + 1, 0 })
+      end
+    else
+      vim.api.nvim_win_set_cursor(
+        t.win, { math.min(4, vim.api.nvim_buf_line_count(t.buf)), 0 })
+    end
+  end
+end
+
+--- Toggle sidebar focus. From any other window: record it as the return target
+--- and jump into the sidebar. From inside the sidebar: jump back to that
+--- recorded window. Opens the sidebar (overview) if it is closed. This is the
+--- `<leader>s` surface — one key in, one key back — and it keeps the come-from
+--- window stored so the sidebar's own actions (and, later, the nav provider)
+--- target where you were, not wherever the sidebar happened to open from.
+---@return nil
+function M.focus_sidebar()
+  if not _panel.is_open() then
+    M.open_sidebar()
+    return
+  end
+  local t   = _panel.get_state()
+  if not t then return end
+  local cur = vim.api.nvim_get_current_win()
+  if cur == t.win then
+    if t.prev_win and vim.api.nvim_win_is_valid(t.prev_win) then
+      vim.api.nvim_set_current_win(t.prev_win)
+    end
   else
-    sidebar_switch_to_overview()
+    t.prev_win = cur
+    vim.api.nvim_set_current_win(t.win)
   end
 end
 

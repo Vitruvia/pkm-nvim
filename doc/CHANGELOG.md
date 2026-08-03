@@ -61,6 +61,54 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.50.0] - 3/8/2026
+
+*Near-patch from four author notes against the freshly-extracted panels: a
+sidebar focus toggle, the note number made visible in panel winbars, the vault
+shown in the nav panel, and the removal of a v1.49.0 open-time regression.*
+
+### Added
+
+-   **`<leader>s` is now a focus toggle** (`views.focus_sidebar`). From any other
+    window it records that window as the return target and jumps into the
+    sidebar; from inside the sidebar it jumps back to that window; and it opens
+    the sidebar (overview) if it was closed. The come-from window is stored on the
+    panel's `prev_win`, so the sidebar's own actions — and, later, the nav
+    provider — can target where you actually were. (Previously `<leader>s` only
+    one-way-jumped into the sidebar and did nothing if it was closed.)
+-   **Panel winbars show the note number.** Panels strip the leading number from
+    their row labels; the winbar is now the one place it stays readable while
+    browsing. A shared `utils.winbar_label(entry, path)` renders
+    `title · filename` (filename keeps the number) for the row under the cursor.
+    The **sidebar** winbar now uses it (so the number shows even in title-display
+    mode); the **buffer panel** gains a winbar it did not have — shown only while
+    the panel is focused and cleared on `WinLeave`, so the glanceable, unfocused
+    panel keeps its full height (an empty winbar takes no row). Winbar is
+    per-window, so this never touches the active editing window's own winbar.
+-   **`<C-g>` in the sidebar and buffer panel** echoes the full path of the note
+    under the cursor — number and directory included — as an unambiguous
+    "where does this live" that never costs panel space. Advertised in the
+    sidebar `?` help and the buffer panel hint line.
+-   **The nav panel header now shows the current vault** (when a vault indicator
+    is set), matching the sidebar overview and the buffer panel header.
+
+### Fixed
+
+-   **Opening the sidebar no longer builds the overview twice.** The v1.49.0 open
+    path ran `panel.open()` (which builds) and then re-entered the mode switch
+    (which builds again) only to place the cursor — doubling the O(views×notes)
+    `count_many` pass on every open, felt as lag on a large views list. The cursor
+    is now placed inline from the already-built state; `test_v1500_p1` asserts
+    `count_many` runs exactly once on open. (The cold first-open cost that remains
+    is the synchronous index build, unrelated — tracked separately.)
+
+### Notes
+
+-   `test_v1500_p1` (winbar_label pure cases, the single-build proof, the focus
+    toggle round-trip, the nav vault header). Suite 80/0; luacheck clean (the one
+    views warning is a pre-existing long notify string). The winbar rendering and
+    the focus jumps ride the manual smoke.
+
 ## [1.49.0] - 3/8/2026
 
 *Area 3, Phase 3.2 — the views sidebar was extracted onto the generic

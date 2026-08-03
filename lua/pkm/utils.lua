@@ -144,6 +144,28 @@ function M.strip_display_prefix(filename, note_type)
   return filename
 end
 
+--- Build the winbar text for a note row in a panel: "title · filename", where
+--- `filename` is the raw stem *including* the note number. Panels strip the
+--- number from their row labels, so the winbar is the one place it stays
+--- readable; the title rides alongside it, space permitting. Falls back to the
+--- stem alone when there is no distinct title. A leading space insets it from
+--- the window edge, and `%` is doubled so the winbar mini-language treats it
+--- as a literal.
+---@param entry table|nil  index entry (for its `title`), or nil
+---@param path  string     absolute note path
+---@return string  winbar value (already `%`-escaped)
+function M.winbar_label(entry, path)
+  local stem  = vim.fn.fnamemodify(path, ':t:r')
+  local title = entry and entry.title
+  local text
+  if title and title ~= '' and title ~= stem then
+    text = title .. '  ·  ' .. stem
+  else
+    text = stem
+  end
+  return ' ' .. (text:gsub('%%', '%%%%'))
+end
+
 -- =============================================================================
 -- SECTION: Editing windows
 -- =============================================================================

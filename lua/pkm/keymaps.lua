@@ -70,14 +70,8 @@ function M.register(config)
 
   if k.focus_sidebar then
     vim.keymap.set('n', k.focus_sidebar, function()
-      local win = require('pkm.views').get_sidebar_win()
-      if win then
-        vim.api.nvim_set_current_win(win)
-      end
-      -- Silent no-op otherwise: <C-[> is byte-identical to <Esc> in a
-      -- terminal, so this fires on every plain <Esc> press, not just
-      -- deliberate ones -- a notification here would be constant noise.
-    end, { desc = 'PKM: focus sidebar', silent = true })
+      require('pkm.views').focus_sidebar()
+    end, { desc = 'PKM: focus sidebar (toggle in/out)', silent = true })
   end
 
   if k.toggle_mode then

@@ -121,7 +121,7 @@ local function bufpanel_build_lines(state)
     header = header .. '  · ' .. vault.indicator()
   end
   local lines   = { header ..
-    '  <CR> open  d close  D force  w save+close  r refresh  T title  q close' }
+    '  <CR> open  d close  D force  w save+close  r refresh  T title  C-g path  q close' }
   local buf_map = {}
 
   for _, bufnr in ipairs(listed) do
@@ -243,6 +243,15 @@ local _bufpanel = panel.create({
         vim.bo.bufhidden = 'wipe'
         vim.api.nvim_set_current_buf(bufnr)
       end
+    end,
+
+    -- <C-g>: echo the full path of the buffer under the cursor — the number the
+    -- row labels strip, plus where the file actually lives.
+    ['<C-g>'] = function(state)
+      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+      local name = vim.api.nvim_buf_get_name(bufnr)
+      if name ~= '' then vim.notify(name, vim.log.levels.INFO) end
     end,
 
     ['d'] = function(state, helpers)
@@ -527,6 +536,37 @@ function M.setup(user_config)
       vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
         buffer   = ev.buf,
         callback = set_sl,
+      })
+
+      -- Bufpanel winbar: the note under the cursor as "title · filename" with
+      -- the number the row labels strip. Shown only while the panel is FOCUSED
+      -- (set on WinEnter/CursorMoved) and cleared on WinLeave — an empty winbar
+      -- takes no row, so the glanceable unfocused panel keeps its full height.
+      local index = require('pkm.index')
+      local function set_wb()
+        local st = _bufpanel.get_state()
+        if not st or not st.win or not vim.api.nvim_win_is_valid(st.win) then return end
+        local row   = vim.api.nvim_win_get_cursor(st.win)[1]
+        local bufnr = st.map and st.map[row]
+        local wb    = ''
+        if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+          local name = vim.api.nvim_buf_get_name(bufnr)
+          if name ~= '' then wb = utils.winbar_label(index.get(name), name) end
+        end
+        vim.api.nvim_set_option_value('winbar', wb, { win = st.win })
+      end
+      vim.api.nvim_create_autocmd({ 'WinEnter', 'CursorMoved' }, {
+        buffer   = ev.buf,
+        callback = set_wb,
+      })
+      vim.api.nvim_create_autocmd('WinLeave', {
+        buffer   = ev.buf,
+        callback = function()
+          local win = vim.fn.bufwinid(ev.buf)
+          if win ~= -1 then
+            vim.api.nvim_set_option_value('winbar', '', { win = win })
+          end
+        end,
       })
     end,
   })

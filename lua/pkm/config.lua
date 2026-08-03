@@ -184,7 +184,7 @@ local defaults = {
     view_buffers = "<leader>vb",
     nav_panel    = false,   -- :PKMPanel nav — heading index of the focused note
     toggle_file_explorer = false,   -- superseded by view_sidebar + T (filename/title toggle)
-    focus_sidebar = "<leader>s",   -- jump focus directly to sidebar window
+    focus_sidebar = "<leader>s",   -- toggle focus into/out of the sidebar (opens it if closed)
     -- PKM mode
     toggle_mode   = false,   -- :PKMPanel mode toggle
     -- Search and browsing

@@ -7,7 +7,10 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.49.0** (code-complete on `dev`) — sidebar extracted onto `panel.create` (Area 3 Phase 3.2)
+## Current version: **v1.50.0** (code-complete on `dev`) — panel polish near-patch (focus toggle, winbars, vault, double-build fix)
+
+*v1.50.0 (near-patch, 4 author notes): (1) `<leader>s` → `views.focus_sidebar()` is now a TOGGLE — records the come-from window (panel `prev_win`) + jumps in; from inside jumps back; opens if closed. (2) Panel winbars show the suppressed note NUMBER: shared `utils.winbar_label(entry,path)` = `title · filename(with number)`; sidebar winbar uses it (number even in title mode); buffer panel GAINS a winbar (set on WinEnter/CursorMoved, cleared on WinLeave so the glanceable unfocused panel keeps full height); winbar is per-window so it never touches the active editing window. (3) `<C-g>` in sidebar+bufpanel echoes the full path. (4) nav panel header shows the vault (like sidebar/bufpanel). FIX: opening the sidebar no longer builds the overview TWICE (v1.49.0 ran panel.open's build + a switch re-entry just for the cursor → doubled count_many; now cursor placed inline; test asserts count_many runs once). The remaining cold-first-open cost is the synchronous index build (get_all builds on first access; prebuild is on PKMMode activate) — durable fix is the deferred persistent/mtime-cache index. `test_v1500_p1`. Suite 80/0.*
+
 
 *v1.49.0 (Area 3 Phase 3.2): the views sidebar was extracted onto the generic `pkm.panel`
 container, behavior-preserving. `panel.create` grew four seams: `spec.width` (number/thunk —

@@ -544,6 +544,13 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   micro-changes: `<Esc>` now closes (like `q`), and the panel's `WinClosed` net
   keeps a main window alive. `test_v1490_p1`; existing sidebar tests are the
   regression gate (all green). Manual smoke covers the interactive-only bits.
+- ✅ **v1.50.0 (near-patch) — panel polish** (author notes): `<leader>s` focus
+  toggle (records the come-from window + jumps back); panel winbars show the
+  suppressed note number (`utils.winbar_label`; buffer panel gains a focus-only
+  winbar); `<C-g>` full-path echo; vault shown in the nav header; and the v1.49.0
+  double-build on sidebar open removed. *The remaining cold first-open lag is the
+  synchronous index build — the durable fix is the deferred persistent /
+  mtime-cached index (see Area 1 / the index-persistence decision), not the panel.*
 - **Phase 3.3 — containers host multiple providers**: a cycle key to switch a
   container's active provider, and the **sidebar defaults to `nav` when a PKM note
   is focused** (else views) — the "go to sidebar browses headings" UX.
