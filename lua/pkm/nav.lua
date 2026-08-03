@@ -1,24 +1,23 @@
 -- =============================================================================
 -- pkm.nav — current-file navigation: a heading index of the focused note
 -- =============================================================================
--- Dependencies : pkm.panel, pkm.markdown (scan_headings, lazy)
--- Consumed by  : pkm.commands.panel (:PKMPanel nav), pkm.init (setup), keymaps
+-- Dependencies : pkm.markdown (scan_headings, lazy), pkm.vault (lazy)
+-- Consumed by  : pkm.views (registers as a sidebar provider), pkm.init (setup)
 --
--- A persistent side panel listing the ATX headings of the markdown buffer you are
--- working in, indented by level. <CR> jumps the source window to the heading; `/`
--- filters by text; the panel follows the active note as you switch buffers. Built
--- on the generic pkm.panel factory — the same container the buffer and tag panels
--- use — so it is one content provider among others. This is Phase 3.1 of the
--- container/content work: a standalone panel that does not touch views.lua.
+-- A heading index of the markdown buffer you are working in, indented by level.
+-- It is NOT its own container: it is a CONTENT PROVIDER on the one sidebar (the
+-- container pkm.views owns). The sidebar shows either the views provider or this
+-- nav provider; `:PKMPanel nav` switches the sidebar to nav, and the sidebar's
+-- cycle key rotates between them. `<CR>` jumps the source window to the heading;
+-- `/` filters by text. The panel follows the active markdown note as you switch
+-- buffers. (Area 3, Phase 3.3a: nav folded into the one sidebar as content.)
 --
 -- Public API:
---   setup(cfg)        → register the source-tracking autocmd (once)
---   toggle()          → open/close the nav panel in the current tabpage
---   is_open()         → boolean
---   refresh_if_open() → rebuild if open
+--   setup(cfg)         → register source tracking + register the sidebar provider
+--   capture_current()  → remember the current window as the nav source
+--   sidebar_provider   → the provider table consumed by pkm.views
+--   _headings_of       → exposed for tests
 -- =============================================================================
-
-local panel = require('pkm.panel')
 
 local M = {}
 
@@ -46,6 +45,12 @@ local function capture(win)
   if eligible(win) then
     _source = { win = win, buf = vim.api.nvim_win_get_buf(win) }
   end
+end
+
+--- Remember the current window as the nav source (if eligible). Called before
+--- the sidebar switches to nav, since focus moves to the sidebar first.
+function M.capture_current()
+  capture(vim.api.nvim_get_current_win())
 end
 
 -- =============================================================================
@@ -94,7 +99,7 @@ end
 
 M._headings_of = headings_of   -- for tests
 
---- Panel build_lines(state): the headings of the current source buffer.
+--- Provider build_lines(state): the headings of the current source buffer.
 local function build_lines(state)
   if not (_source and vim.api.nvim_buf_is_valid(_source.buf)) then
     return { '  (no markdown buffer)' }, {}
@@ -103,7 +108,7 @@ local function build_lines(state)
 end
 
 -- =============================================================================
--- SECTION: Keymap actions
+-- SECTION: Keymap actions (provider keymaps: fn(state, helpers))
 -- =============================================================================
 
 --- Jump the source window to the heading under the cursor.
@@ -136,57 +141,51 @@ local function on_clear(state, helpers)
 end
 
 -- =============================================================================
--- SECTION: Panel + public API
+-- SECTION: Sidebar provider + setup
 -- =============================================================================
 
-local _panel = panel.create({
-  name          = 'nav',
-  split_cmd     = 'noautocmd topleft vsplit',
-  build_lines   = build_lines,
-  win_opts      = { winfixwidth = true, cursorline = true },
-  focus_on_open = true,
-  refresh_events = { 'BufWinEnter', 'BufWritePost' },
-  resize = function(state)
-    if state.win and vim.api.nvim_win_is_valid(state.win) then
-      vim.api.nvim_win_set_width(state.win, require('pkm').config.sidebar_width or 30)
-    end
-  end,
-  keymaps = {
+--- The provider table pkm.views registers and hosts on the one sidebar.
+M.sidebar_provider = {
+  name        = 'nav',
+  label       = 'Nav',
+  statusline  = '  PKM Nav  · CR jump  · / filter  · c clear  · r refresh  · q close',
+  build_lines = build_lines,
+  keymaps     = {
     ['<CR>'] = on_select,
     ['/']    = on_filter,
     ['c']    = on_clear,
     ['r']    = function(_, helpers) helpers.refresh() end,
   },
-})
+  --- Seed state + place the cursor on the first heading when nav becomes active.
+  init      = function() return { query = '' } end,
+  on_enter  = function(state)
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      local last = vim.api.nvim_buf_line_count(state.buf)
+      vim.api.nvim_win_set_cursor(state.win, { math.min(2, last), 0 })
+    end
+  end,
+}
 
---- Register the source-tracking autocmd (once). Called from pkm.init.setup so the
---- source is current from startup, before the panel is ever opened.
+--- Register source tracking and the sidebar provider. Called from pkm.init.setup
+--- so the source is current from startup and the provider is available before the
+--- sidebar is ever opened.
 ---@param _cfg table  resolved config (unused; kept for the module setup contract)
 function M.setup(_cfg)
+  require('pkm.views').register_sidebar_provider(M.sidebar_provider)
+
   local aug = vim.api.nvim_create_augroup('PKMNav', { clear = true })
   vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
     group    = aug,
     callback = function()
       capture(vim.api.nvim_get_current_win())
-      if _panel.is_open() then vim.schedule(_panel.refresh) end
+      -- Keep the headings current only while the sidebar is actually showing
+      -- nav; refreshing views on every focus change would be wasted work.
+      local views = require('pkm.views')
+      if views.sidebar_provider_is('nav') then
+        vim.schedule(views.refresh_sidebar_if_open)
+      end
     end,
   })
-end
-
---- Open/close the nav panel. Seeds the source from the current window first, since
---- focus_on_open moves focus to the panel before the first render.
-function M.toggle()
-  capture(vim.api.nvim_get_current_win())
-  _panel.toggle()
-end
-
---- Return true if the nav panel is open in the current tabpage.
----@return boolean
-function M.is_open() return _panel.is_open() end
-
---- Rebuild the panel if it is open.
-function M.refresh_if_open()
-  if _panel.is_open() then _panel.refresh() end
 end
 
 return M

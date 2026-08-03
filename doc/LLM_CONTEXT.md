@@ -7,7 +7,26 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.50.0** (code-complete on `dev`) — panel polish near-patch (focus toggle, winbars, vault, double-build fix)
+## Current version: **v1.51.0** (code-complete on `dev`) — one sidebar, pluggable providers (Area 3 Phase 3.3a)
+
+*v1.51.0 (Area 3 Phase 3.3a): the sidebar is now a container hosting content PROVIDERS,
+switched in place. Corrects Phase 3.1's mistake (`:PKMPanel nav` opened nav in its OWN 2nd
+split). nav is now a provider on the ONE sidebar. A provider = `{ name, label, statusline,
+build_lines, apply|keymaps, init?, on_enter? }`. The panel's build_lines DISPATCHES to
+`_sidebar_providers[state.provider].build_lines`; `state.provider` rides the per-tab table.
+SWITCHING swaps the buffer's keymaps in place (teardown by lhs → apply new) + re-dispatches
+build_lines — no close/reopen (so 3.3b autoswitch won't flicker). Common keys q/`<Esc>`
+(close) + `<C-n>` (cycle) survive every swap; views' full keymap set moved verbatim into
+`apply_views_keymaps`. nav.lua no longer owns a panel — exposes `sidebar_provider`, registers
+via `views.register_sidebar_provider` in nav.setup, source-tracking refreshes the sidebar only
+while showing nav. New views API: show_sidebar_provider/cycle_sidebar_provider/
+set_sidebar_provider/sidebar_provider/sidebar_provider_is/register_sidebar_provider.
+`:PKMPanel nav`→show_sidebar_provider('nav'); `:PKMPanel sidebar`→views. Container ownership
+stays in views.lua for now (a pkm.sidebar extraction is a later tidy). `test_v1510` proves the
+keymap swap via the buffer's keymap table; `test_v1480` integration rewritten to the provider
+model. Suite 81/0. NEXT = Phase 3.3b: autoswitch (sidebar→nav when the focused window holds a
+MARKDOWN file, →views when no file window; ON by default, `:PKMPanel autoswitch` toggles).*
+
 
 *v1.50.0 (near-patch, 4 author notes): (1) `<leader>s` → `views.focus_sidebar()` is now a TOGGLE — records the come-from window (panel `prev_win`) + jumps in; from inside jumps back; opens if closed. (2) Panel winbars show the suppressed note NUMBER: shared `utils.winbar_label(entry,path)` = `title · filename(with number)`; sidebar winbar uses it (number even in title mode); buffer panel GAINS a winbar (set on WinEnter/CursorMoved, cleared on WinLeave so the glanceable unfocused panel keeps full height); winbar is per-window so it never touches the active editing window. (3) `<C-g>` in sidebar+bufpanel echoes the full path. (4) nav panel header shows the vault (like sidebar/bufpanel). FIX: opening the sidebar no longer builds the overview TWICE (v1.49.0 ran panel.open's build + a switch re-entry just for the cursor → doubled count_many; now cursor placed inline; test asserts count_many runs once). The remaining cold-first-open cost is the synchronous index build (get_all builds on first access; prebuild is on PKMMode activate) — durable fix is the deferred persistent/mtime-cache index. `test_v1500_p1`. Suite 80/0.*
 

@@ -165,14 +165,20 @@ from `vim.fn.fnamemodify` — both measured *faster* than their libuv/Lua
 counterparts, so they stayed. Listing is unordered (nothing depends on it) and
 no longer honours `'wildignore'`.
 
-**views.lua** — named project views. Sidecar `views.json` + `config.projects`.
-Two-mode sidebar (overview + detail). Since **v1.49.0** the sidebar is a provider
-on `panel.create` (`_panel`, `name = 'sidebar'`): the panel owns the window /
-per-tab state / width / lifecycle, `views` owns the content. `get_tab()` is a thin
-alias over `_panel.get_state()`; the provider fields (`mode`, `name`, `paths`,
-`tree`, `header_count`, `type_filter`, `marked`, `history`) ride the panel's per-tab
-table. `sidebar_build(state)` is the single content dispatcher (overview vs. detail);
-the whole interactive surface lives in `sidebar_on_open`.
+**views.lua** — named project views, and (for now) the sidebar container host.
+Sidecar `views.json` + `config.projects`. Since **v1.49.0** the sidebar rides
+`panel.create` (`_panel`, `name = 'sidebar'`): the panel owns the window / per-tab
+state / width / lifecycle. Since **v1.51.0 (Phase 3.3a)** the sidebar hosts pluggable
+content **providers** — `views` (built in) and `nav` (registered from `nav.setup` via
+`register_sidebar_provider`). `state.provider` (per-tab) selects one; `sidebar_build`
+DISPATCHES to `_sidebar_providers[provider].build_lines`. Switching provider swaps the
+buffer's keymaps in place (teardown by lhs → apply the new set) so nav's colliding keys
+(`<CR>`/`/`/`r`) never fight views'; `q`/`<Esc>` (close) and `<C-n>` (cycle) are common
+and survive. The views provider's own state (`mode`/`name`/`paths`/`tree`/`header_count`/
+`type_filter`/`marked`/`history`) rides the same per-tab table; `get_tab()` is a thin
+alias over `_panel.get_state()`. Public: `show_sidebar_provider`/`cycle_sidebar_provider`/
+`set_sidebar_provider`/`sidebar_provider`/`sidebar_provider_is`. (Lifting the container out
+into a dedicated `pkm.sidebar` module is a later mechanical tidy.)
 `sidebar_build_lines(name, paths, total_count)` — builds detail lines; callers
 pre-filter by type and pass `#all_paths` as total for "N of M" display.
 `refresh_sidebar_if_open()` — iterates all tabpages, applies per-tab type filter.
@@ -190,7 +196,15 @@ are shared with the panels/pickers — so the views-provider is not a standalone
 module, and that is fine: those helpers are the model layer, and the sidebar UI is
 just one consumer of it. The public sidebar accessors (`get_last_view`,
 `is_sidebar_open`, `get_sidebar_win`, `refresh_sidebar_if_open`) now delegate to
-`_panel`. Phase 3.3 will let this one container also host the `nav` provider.
+`_panel`. As of Phase 3.3a the one container also hosts the `nav` provider.
+
+**nav.lua** — current-file navigation, a **sidebar content provider** (not its own
+container as of v1.51.0). Exposes `sidebar_provider` (a heading index of the last
+active markdown window via `markdown.scan_headings`: `build_lines` + `<CR>` jump / `/`
+filter / `c` clear keymaps + statusline + `on_enter` cursor placement) and registers it
+with `views.register_sidebar_provider` from `setup()`. Tracks the source window with a
+`WinEnter`/`BufWinEnter` autocmd (`_source`), refreshing the sidebar only while it is
+showing nav. `capture_current()` seeds the source before the sidebar switches to nav.
 
 **picker.lua** — note selection and confirmation front-ends. `select(paths, opts,
 on_confirm)` shows the Telescope picker or the float fallback — the only place that
@@ -279,8 +293,9 @@ get_win(), get_state() }`, each owning its own per-tab state. Every panel gets
 lifecycle) uniformly. Optional `spec.width` makes it a **managed-width side split** (fix
 width + `wincmd =` at open, re-assert on `WinResized`); optional `spec.on_open(state,
 helpers)` is the per-panel decoration seam (statusline/winbar/extra autocmds). Consumed by
-`ui` (buffer panel, tag panel), `trash` (restore panel), `nav` (current-file nav), and
-`views` (the sidebar since v1.49.0, plus the views/delete panels). Header/statusline hints,
+`ui` (buffer panel, tag panel), `trash` (restore panel), and `views` (the sidebar since
+v1.49.0, which since v1.51.0 hosts the `views` and `nav` content providers, plus the
+views/delete panels). Header/statusline hints,
 content formatting, and filtering are deliberately NOT unified — panels differ enough there
 that a shared format would fight real differences.
 

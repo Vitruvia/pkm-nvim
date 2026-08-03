@@ -551,11 +551,25 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   double-build on sidebar open removed. *The remaining cold first-open lag is the
   synchronous index build — the durable fix is the deferred persistent /
   mtime-cached index (see Area 1 / the index-persistence decision), not the panel.*
-- **Phase 3.3 — containers host multiple providers**: a cycle key to switch a
-  container's active provider, and the **sidebar defaults to `nav` when a PKM note
-  is focused** (else views) — the "go to sidebar browses headings" UX.
+- ✅ **v1.51.0 (Phase 3.3a) — one sidebar, pluggable providers**: the sidebar
+  hosts content providers (views + nav), switched IN PLACE by swapping the
+  buffer's keymaps (teardown by lhs → apply new) + re-dispatching build_lines —
+  no flicker. Corrects Phase 3.1 (nav had its own 2nd split); nav is now content.
+  `:PKMPanel nav` → the nav provider; `<C-n>` cycles; `:PKMPanel sidebar` → views.
+  nav.lua is a provider (registers via `views.register_sidebar_provider`).
+  Container ownership stays in views.lua for now (a `pkm.sidebar` extraction is a
+  later tidy). `test_v1510` (keymap swap). Suite 81/0.
+- **Phase 3.3b — autoswitch** (the model, per the author): default is at most one
+  sidebar + one bottom bar; the bar shows buffers. The **sidebar autoswitches to
+  `nav` when the last active window holds a MARKDOWN file, and back to `views`
+  when no window holds a file** (all file windows closed). Autoswitch is **ON by
+  default** and toggled by **`:PKMPanel autoswitch`** (so the sidebar can be
+  pinned to a chosen provider). Manual cycle (`<C-n>`) and `:PKMPanel nav|sidebar`
+  always override. Multiple simultaneous sidebars stay a future per-user-config
+  option, not the default.
 - **Phase 3.4 (deferred)** — journal/scratch navigation (wires the idle
-  `journal.lua` helpers); block-element indexing in the nav provider.
+  `journal.lua` helpers); block-element indexing in the nav provider; nav in a
+  pop-up panel (a separate surface, like the `/` search popup).
 - Active-window motions (list items, blocks); explorer UI customisation (Distant
   6); relevance ordering in panels (Distant 9). *These create commands/panels an
   agent reaches for → 🔺.*

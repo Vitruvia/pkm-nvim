@@ -1,8 +1,9 @@
 -- test/test_v1480_p1.lua
--- pkm.nav — current-file navigation (Phase 3.1). The heading index core
--- (_headings_of): level indentation, a title header, the display→source map,
--- fence/frontmatter skipping (via markdown.scan_headings), and text filtering.
--- Plus a light open/close integration through the panel factory.
+-- pkm.nav — current-file navigation. The heading index core (_headings_of):
+-- level indentation, a title header, the display→source map, fence/frontmatter
+-- skipping (via markdown.scan_headings), and text filtering. Plus integration:
+-- since Phase 3.3a nav is a CONTENT PROVIDER in the one sidebar (not its own
+-- container), reached via views.show_sidebar_provider('nav') and the cycle key.
 --
 -- Run from repo root:
 --   nvim --headless -u test/min_init.lua -c "luafile test/test_v1480_p1.lua" -c "qa!"
@@ -68,21 +69,41 @@ local fmlines, fmmap = nav._headings_of(fm, '')
 check("only the two body headings", #fmlines == 3, #fmlines)
 check("first body heading maps to line 5", fmmap[2] == 5, tostring(fmmap[2]))
 
-print("== integration: open/close the nav panel, it shows the note's headings ==")
+print("== integration: nav is CONTENT in the one sidebar (not its own container) ==")
 local notef = vim.fn.tempname() .. '/n.md'
 vim.fn.mkdir(vim.fn.fnamemodify(notef, ':h'), 'p')
 vim.fn.writefile({ '# Alpha', 'x', '## Beta', 'y' }, notef)
 vim.cmd('edit ' .. vim.fn.fnameescape(notef))
 vim.bo.filetype = 'markdown'
-nav.toggle()
-check("panel is open", nav.is_open())
-local pbuf = vim.api.nvim_get_current_buf()
-check("focus is in the nav panel", vim.bo[pbuf].filetype == 'pkm-nav', vim.bo[pbuf].filetype)
-local joined = table.concat(vim.api.nvim_buf_get_lines(pbuf, 0, -1, false), '\n')
-check("panel shows Alpha", joined:find('Alpha', 1, true) ~= nil, joined)
-check("panel shows Beta", joined:find('Beta', 1, true) ~= nil, joined)
-nav.toggle()
-check("panel is closed", not nav.is_open())
+
+local views = require('pkm.views')
+local shown = views.sidebar_provider()
+if shown then views.show_sidebar_provider(shown) end   -- toggle whatever is open closed
+check("sidebar starts closed", not views.is_sidebar_open())
+
+views.show_sidebar_provider('nav')
+check("the sidebar opened on the nav provider",
+  views.is_sidebar_open() and views.sidebar_provider() == 'nav',
+  tostring(views.sidebar_provider()))
+local sw = views.get_sidebar_win()
+check("nav renders inside the pkm-sidebar container (no separate pkm-nav window)",
+  vim.bo[vim.api.nvim_win_get_buf(sw)].filetype == 'pkm-sidebar',
+  vim.bo[vim.api.nvim_win_get_buf(sw)].filetype)
+local joined = table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(sw), 0, -1, false), '\n')
+check("the sidebar shows the note's headings (Alpha)", joined:find('Alpha', 1, true) ~= nil, joined)
+check("and Beta", joined:find('Beta', 1, true) ~= nil, joined)
+
+views.cycle_sidebar_provider()
+check("cycle switches the same container to views",
+  views.is_sidebar_open() and views.sidebar_provider() == 'views',
+  tostring(views.sidebar_provider()))
+check("still the one pkm-sidebar container",
+  vim.bo[vim.api.nvim_win_get_buf(views.get_sidebar_win())].filetype == 'pkm-sidebar')
+
+views.cycle_sidebar_provider()
+check("cycle back to nav", views.sidebar_provider() == 'nav')
+views.show_sidebar_provider('nav')   -- already on nav → toggles closed
+check("showing the active provider again closes the sidebar", not views.is_sidebar_open())
 
 print("")
 if failures == 0 then print("ALL PASS") else print(string.format("%d FAILURE(S)", failures)) end

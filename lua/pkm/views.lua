@@ -831,7 +831,7 @@ end
 ---@return string|nil
 function M.get_last_view()
   local t = get_tab()
-  if t and t.mode == 'detail' and t.name then
+  if t and (t.provider or 'views') == 'views' and t.mode == 'detail' and t.name then
     return t.name
   end
   return _last_view
@@ -2707,9 +2707,11 @@ end
 --- point — shared by open, refresh and refresh_all — so overview and detail
 --- render identically no matter which repopulate triggered them. Marks are
 --- keyed by path, so a rebuild preserves them even as a view's contents shift.
+--- This is the VIEWS provider's content; the panel's build_lines is the
+--- dispatcher `sidebar_build`, which routes to the active provider.
 ---@param t table  the panel's per-tab state
 ---@return string[] lines
-local function sidebar_build(t)
+local function views_provider_build(t)
   if t.mode == 'detail' and t.name then
     local all_paths     = M.match_all(t.name)
     local display_paths = all_paths
@@ -2790,6 +2792,7 @@ local function sidebar_show_help()
   vim.list_extend(lines, {
     '  /        search (opens in main window)',
     '  <C-g>    show full path (filename + number)',
+    '  <C-n>    cycle content (views ↔ nav)',
     '  r        refresh',
     '  q        close sidebar',
     '  ?        this help',
@@ -2797,35 +2800,16 @@ local function sidebar_show_help()
   show_keymap_help(' Sidebar Keymaps ', lines)
 end
 
--- The sidebar's per-panel decorations and its full interactive surface, run
--- once per open by pkm.panel after it has built the window/buffer and its
--- default q/<Esc> maps (which the q/<Esc> maps below deliberately override with
--- the quit-if-sole close). Every keymap body here is the sidebar's own,
--- reading live per-tab state through get_tab() (→ _panel.get_state()). Keeping
--- them here rather than in panel's declarative keymap table preserves the
--- count-aware and chorded maps ([count]<CR>, <C-y><C-v>) exactly as they were.
----@param pstate table  the panel's per-tab state; pstate.win / pstate.buf are live
-local function sidebar_on_open(pstate, _helpers)
-  local buf = pstate.buf
-
-  -- Statusline hint. panel deliberately does not unify statuslines, so the
-  -- provider owns this (WinEnter/BufWinEnter re-assert it after focus moves).
-  local function refresh_sidebar_sl()
-    vim.schedule(function()
-      if vim.api.nvim_win_is_valid(pstate.win) then
-        vim.api.nvim_set_option_value(
-          'statusline',
-          '  PKM Views  · CR open  · / search  · ? help  · q close',
-          { win = pstate.win })
-      end
-    end)
-  end
-  refresh_sidebar_sl()
-  vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
-    buffer   = buf,
-    callback = refresh_sidebar_sl,
-  })
-
+-- The VIEWS provider's full interactive surface. Every keymap body here is the
+-- sidebar's own, reading live per-tab state through get_tab() (→
+-- _panel.get_state()). It is applied when the sidebar is showing views, and torn
+-- down (by lhs) when the sidebar switches to another provider — so the count-
+-- aware and chorded maps ([count]<CR>, <C-y><C-v>) stay exactly as they were,
+-- and nav's colliding keys (<CR>, /, r) never fight them. q/<Esc> (close) and
+-- <C-n> (cycle) are COMMON keys owned by sidebar_on_open, not here.
+---@param buf integer
+---@return string[] lhs  the keymaps set, for teardown on a provider switch
+local function apply_views_keymaps(buf)
   local ko = { noremap = true, silent = true, buffer = buf }
 
   -- <CR>: mode-aware action
@@ -3162,59 +3146,227 @@ local function sidebar_on_open(pstate, _helpers)
     vim.notify(ct.paths[idx], vim.log.levels.INFO)
   end, ko)
 
-  -- q / <Esc>: close
+  local lhs = {
+    '<CR>', '<BS>', '<C-b>', 'b', '/', '<Tab>', '<S-Tab>', '<C-a>',
+    'N', '<C-y>', '<C-y><C-v>', '<C-y><C-x>', '<C-v>', '<C-s>', '<C-t>',
+    'T', '?', 'r', '<C-g>',
+  }
+  if _panel_keymap_lhs then lhs[#lhs + 1] = _panel_keymap_lhs end
+  return lhs
+end
+
+-- =============================================================================
+-- SECTION: Sidebar providers (views + nav) on the one container
+-- =============================================================================
+--
+-- The sidebar is a single container that shows one content PROVIDER at a time.
+-- `views` is built in; `nav` registers itself via register_sidebar_provider()
+-- from pkm.nav.setup(). A provider is a table:
+--   { name, label, statusline, build_lines(state)->lines,map,
+--     apply(buf)->lhs | keymaps = { lhs -> fn(state, helpers) },
+--     init()->table? , on_enter(state)? }
+-- Switching provider swaps the buffer-local keymaps (teardown by lhs, then
+-- apply) and re-dispatches build_lines — no close/reopen, so it never flickers.
+
+local _sidebar_providers        -- name -> provider; lazily seeded with `views`
+local _sidebar_order = { 'views', 'nav' }
+local _sidebar_helpers = { refresh = function() _panel.refresh() end }
+
+--- The provider registry, seeding the built-in `views` provider on first use.
+local function sidebar_providers()
+  if not _sidebar_providers then
+    _sidebar_providers = {
+      views = {
+        name        = 'views',
+        label       = 'Views',
+        statusline  = '  PKM Views  · CR open  · / search  · ? help  · q close',
+        build_lines = views_provider_build,
+        apply       = apply_views_keymaps,
+        on_enter    = function(t)
+          if not (t.win and vim.api.nvim_win_is_valid(t.win)) then return end
+          if t.mode == 'detail' and #(t.paths or {}) > 0 then
+            vim.api.nvim_win_set_cursor(t.win, { t.header_count + 1, 0 })
+          else
+            vim.api.nvim_win_set_cursor(
+              t.win, { math.min(4, vim.api.nvim_buf_line_count(t.buf)), 0 })
+          end
+        end,
+      },
+    }
+  end
+  return _sidebar_providers
+end
+
+--- Register a content provider (e.g. nav) the sidebar can host. Called at setup.
+---@param provider table
+function M.register_sidebar_provider(provider)
+  sidebar_providers()[provider.name] = provider
+end
+
+--- The panel's build_lines: dispatch to the active provider's builder.
+local function sidebar_build(state)
+  return sidebar_providers()[state.provider or 'views'].build_lines(state)
+end
+
+--- Apply a provider's keymaps to `buf`; return the lhs set (for later teardown).
+---@param buf integer
+---@param provider table
+---@return string[] lhs
+local function apply_provider_keymaps(buf, provider)
+  if provider.apply then return provider.apply(buf) end
+  local ko  = { noremap = true, silent = true, buffer = buf }
+  local lhs = {}
+  for k, fn in pairs(provider.keymaps or {}) do
+    vim.keymap.set('n', k, function() fn(get_tab(), _sidebar_helpers) end, ko)
+    lhs[#lhs + 1] = k
+  end
+  return lhs
+end
+
+--- Set the sidebar window's statusline from the active provider.
+---@param t table  panel state
+local function set_sidebar_statusline(t)
+  if not (t and t.win and vim.api.nvim_win_is_valid(t.win)) then return end
+  local provider = sidebar_providers()[t.provider or 'views']
+  vim.api.nvim_set_option_value('statusline', provider.statusline or '', { win = t.win })
+end
+
+--- Is the sidebar open here and showing provider `name`?
+---@param name string
+---@return boolean
+function M.sidebar_provider_is(name)
+  local t = _panel and _panel.get_state()
+  return t ~= nil and (t.provider or 'views') == name
+end
+
+--- The active sidebar provider name, or nil when the sidebar is closed.
+---@return string|nil
+function M.sidebar_provider()
+  local t = _panel and _panel.get_state()
+  return t and (t.provider or 'views') or nil
+end
+
+--- Switch the OPEN sidebar to provider `name` in place (swap keymaps + rebuild).
+--- No-op if closed or already on `name`.
+---@param name string
+function M.set_sidebar_provider(name)
+  local t = _panel.get_state()
+  if not t or (t.provider or 'views') == name then return end
+  local provider = sidebar_providers()[name]
+  if not provider then return end
+  if t._applied_lhs then
+    for _, k in ipairs(t._applied_lhs) do
+      pcall(vim.keymap.del, 'n', k, { buffer = t.buf })
+    end
+  end
+  t.provider = name
+  if provider.init then for k, v in pairs(provider.init()) do t[k] = v end end
+  if name == 'views' then
+    t.mode    = t.mode or 'overview'
+    t.marked  = t.marked or {}
+    t.history = t.history or {}
+  end
+  t._applied_lhs = apply_provider_keymaps(t.buf, provider)
+  set_sidebar_statusline(t)
+  _panel.refresh()
+  if provider.on_enter then provider.on_enter(t) end
+end
+
+--- Cycle the open sidebar to the next registered provider (views <-> nav).
+function M.cycle_sidebar_provider()
+  if not _panel.is_open() then return end
+  local cur = _panel.get_state().provider or 'views'
+  local i = 1
+  for idx, n in ipairs(_sidebar_order) do if n == cur then i = idx; break end end
+  M.set_sidebar_provider(_sidebar_order[(i % #_sidebar_order) + 1])
+end
+
+--- Show provider `name` in the sidebar: open it on that provider if closed,
+--- switch to it if open on another, toggle it closed if already on it.
+---@param name string
+function M.show_sidebar_provider(name)
+  local provider = sidebar_providers()[name]
+  if not provider then return end
+  if not _panel.is_open() then
+    if name == 'nav' then require('pkm.nav').capture_current() end
+    local init = { provider = name }
+    if provider.init then for k, v in pairs(provider.init()) do init[k] = v end end
+    if name == 'views' then
+      init.mode = 'overview'; init.marked = {}; init.history = {}; init.type_filter = nil
+    end
+    _panel.open(init)
+    local t = _panel.get_state()
+    if t then
+      set_sidebar_statusline(t)
+      if provider.on_enter then provider.on_enter(t) end
+    end
+    return
+  end
+  local t = _panel.get_state()
+  if (t.provider or 'views') == name then _panel.close(); return end
+  if name == 'nav' then require('pkm.nav').capture_current() end
+  M.set_sidebar_provider(name)
+end
+
+--- The sidebar's decorations + common keymaps, run once per open by pkm.panel.
+--- Provider-specific keymaps for the ACTIVE provider are applied here and swapped
+--- later by set_sidebar_provider. q/<Esc> close and <C-n> cycles providers —
+--- those are common to every provider and owned here so they survive a switch.
+---@param pstate table  the panel's per-tab state; pstate.win / pstate.buf live
+local function sidebar_on_open(pstate, _helpers)
+  local buf = pstate.buf
+
+  -- Statusline hint (provider-aware; re-asserted after focus moves).
+  local function refresh_sl()
+    vim.schedule(function() set_sidebar_statusline(get_tab() or pstate) end)
+  end
+  refresh_sl()
+  vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
+    buffer = buf, callback = refresh_sl,
+  })
+
+  local ko = { noremap = true, silent = true, buffer = buf }
+
+  -- q / <Esc>: close (common). Quit gracefully if the sidebar is the sole window.
   local function close_sidebar()
     local ct = get_tab()
-    if not (ct.win and vim.api.nvim_win_is_valid(ct.win)) then return end
-    -- Count non-float windows; if sidebar is the only one, quit gracefully.
+    if not (ct and ct.win and vim.api.nvim_win_is_valid(ct.win)) then return end
     local non_float = 0
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-      if vim.api.nvim_win_get_config(win).relative == '' then
-        non_float = non_float + 1
-      end
+      if vim.api.nvim_win_get_config(win).relative == '' then non_float = non_float + 1 end
     end
-    if non_float <= 1 then
-      vim.cmd('quit')
-    else
-      vim.api.nvim_win_close(ct.win, true)
-    end
+    if non_float <= 1 then vim.cmd('quit') else vim.api.nvim_win_close(ct.win, true) end
   end
   vim.keymap.set('n', 'q',     close_sidebar, ko)
   vim.keymap.set('n', '<Esc>', close_sidebar, ko)
 
-  -- Statusline infobar: show the full filename of the note under the cursor.
-  -- In overview mode the statusline is cleared. Fires on every cursor move
-  -- within the sidebar buffer; no extra window consumed.
+  -- <C-n>: cycle the sidebar's content provider (views <-> nav).
+  vim.keymap.set('n', '<C-n>', function() M.cycle_sidebar_provider() end, ko)
+
+  -- winbar infobar (VIEWS provider only): the note under the cursor as
+  -- title · filename-with-number. nav shows its file in its own header row.
   vim.api.nvim_create_autocmd('CursorMoved', {
-    buffer   = buf,
+    buffer = buf,
     callback = function()
       local ct = get_tab()
-      if not (ct.win and vim.api.nvim_win_is_valid(ct.win)) then return end
-
-      local winbar
-      if ct.mode == 'detail' then
+      if not (ct and ct.win and vim.api.nvim_win_is_valid(ct.win)) then return end
+      local winbar = ''
+      if (ct.provider or 'views') == 'views' and ct.mode == 'detail' then
         local row = vim.api.nvim_win_get_cursor(ct.win)[1]
         local idx = row - ct.header_count
         if idx >= 1 and idx <= #ct.paths then
-          -- Always title · filename-with-number, regardless of the T display
-          -- mode: the winbar is the one place the suppressed note number stays
-          -- readable while browsing.
-          local e = require('pkm.index').get(ct.paths[idx])
-          winbar = utils.winbar_label(e, ct.paths[idx])
+          winbar = utils.winbar_label(require('pkm.index').get(ct.paths[idx]), ct.paths[idx])
         else
           local filter_label = ct.type_filter and ('  [' .. ct.type_filter .. ']') or ''
           winbar = ' ≡ ' .. (ct.name or '') .. filter_label
         end
-      else
-        winbar = ''
       end
-
       vim.api.nvim_set_option_value('winbar', winbar, { win = ct.win })
     end,
   })
 
-  -- winbar CursorMoved is the last decoration; content + cursor are placed by
-  -- M.open_sidebar after the panel opens.
+  -- Apply the active provider's keymaps for this open.
+  pstate._applied_lhs = apply_provider_keymaps(buf, sidebar_providers()[pstate.provider or 'views'])
 end
 
 -- The sidebar container: a managed-width left split on pkm.panel. Provider
@@ -3241,6 +3393,13 @@ _panel = panel.create({
 function M.open_sidebar(name)
   if _panel.is_open() then
     local t = _panel.get_state()
+    -- Showing another provider (e.g. nav): this key means "give me views" —
+    -- switch to it (optionally onto a named view) rather than close.
+    if (t.provider or 'views') ~= 'views' then
+      M.set_sidebar_provider('views')
+      if name and name ~= '' then sidebar_switch_to_detail(name) end
+      return
+    end
     if not name or name == '' then
       _panel.close()
       return
@@ -3254,13 +3413,13 @@ function M.open_sidebar(name)
     return
   end
 
-  -- Fresh open: seed the provider state so the panel's first build renders the
-  -- right mode. panel.open already ran sidebar_build (populating t.paths /
-  -- t.header_count), so we place the cursor INLINE here — re-entering the switch
-  -- helpers would rebuild the whole overview/detail a second time (the wasteful
-  -- double-build that made a large views list feel laggy on open).
+  -- Fresh open on the views provider. panel.open already ran sidebar_build
+  -- (populating t.paths / t.header_count), so we place the cursor INLINE here —
+  -- re-entering the switch helpers would rebuild the whole overview/detail a
+  -- second time (the wasteful double-build removed in v1.50.0).
   local mode = (name and name ~= '') and 'detail' or 'overview'
   _panel.open({
+    provider    = 'views',
     mode        = mode,
     name        = (mode == 'detail') and name or nil,
     marked      = {},

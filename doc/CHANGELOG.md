@@ -61,6 +61,56 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.51.0] - 3/8/2026
+
+*Area 3, Phase 3.3a — the one sidebar becomes a container that hosts multiple
+content **providers**, switched in place. This corrects a Phase 3.1 mistake:
+`:PKMPanel nav` used to open nav in its **own** second left split. Navigation is
+content, not a container — so nav is now a provider on the single sidebar, and
+`:PKMPanel nav` switches the sidebar to it. (The default stays: at most one
+sidebar, at most one bottom bar.) Autoswitch — the sidebar following focus to
+nav on a markdown window and back to views — is the next step, 3.3b.*
+
+### Changed
+
+-   **The sidebar hosts pluggable content providers.** `views` is the built-in
+    provider; `nav` registers itself via `views.register_sidebar_provider` from
+    `nav.setup`. A provider is `{ name, label, statusline, build_lines,
+    apply|keymaps, init?, on_enter? }`. The panel's `build_lines` dispatches to
+    the active provider; the container's per-tab state carries `provider`.
+-   **Switching provider swaps the buffer's keymaps in place** — the container
+    tears down the previous provider's buffer-local maps (by lhs) and applies the
+    new provider's, then re-dispatches `build_lines`. No close/reopen, so it never
+    flickers (which is what lets 3.3b's focus-driven autoswitch be smooth). The
+    common keys `q`/`<Esc>` (close) and the new **`<C-n>`** (cycle providers)
+    survive every swap. `views`' full keymap set moved verbatim into a swappable
+    `apply_views_keymaps`; nav's `<CR>`/`/`/`c`/`r` collide with views' by design
+    and are simply the ones live while nav is showing.
+-   **`nav.lua` is a provider, not a container.** It no longer creates its own
+    `panel.create` instance; it exposes `sidebar_provider` (build + keymaps +
+    statusline + cursor placement) and keeps its source-tracking autocmd, which
+    now refreshes the sidebar only while it is actually showing nav.
+-   New public surface on `views`: `show_sidebar_provider(name)` (open-on / switch
+    / toggle-off), `cycle_sidebar_provider()`, `set_sidebar_provider(name)`,
+    `sidebar_provider()`, `sidebar_provider_is(name)`, `register_sidebar_provider`.
+    `:PKMPanel nav` → `show_sidebar_provider('nav')`; `:PKMPanel sidebar` still
+    opens views. `<leader>s`, `get_last_view`, and the winbar are provider-aware.
+
+### Notes
+
+-   Container ownership still lives in `views.lua` for now; lifting it into a
+    dedicated `pkm.sidebar` module is a later mechanical tidy that doesn't change
+    behavior. Nav-in-a-popup remains a separate future surface.
+-   `test_v1510_p1` proves the crux directly through the buffer's keymap table:
+    views-only keys (`T`/`N`/`b`) are torn down under nav, nav's `c` appears,
+    common `q` and shared `r` survive, the statusline swaps, and it all happens in
+    the same window/buffer. `test_v1480_p1`'s integration was rewritten to the
+    provider model (nav renders inside `pkm-sidebar`, cycle both ways, toggle
+    off). The views regression gate (`test_v180_p6` marking keymaps, `test_v1200_p1`
+    ui_state, `test_v190_p2` filetype) stayed green unchanged. Suite 81/0; luacheck
+    clean (the one views warning is a pre-existing long notify string). The
+    provider switch, cycle, and nav rendering ride the manual smoke.
+
 ## [1.50.0] - 3/8/2026
 
 *Near-patch from four author notes against the freshly-extracted panels: a

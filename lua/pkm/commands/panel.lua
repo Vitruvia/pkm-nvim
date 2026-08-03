@@ -17,9 +17,11 @@ local function act_buffers()
   require('pkm.ui').toggle_bufpanel()
 end
 
---- Toggle the current-file navigation panel (heading index of the focused note).
+--- Show the current-file navigation (heading index) in the ONE sidebar: switch
+--- the sidebar to the nav provider, opening it if closed, toggling it closed if
+--- already on nav. Nav is content in the sidebar, not its own container.
 local function act_nav()
-  require('pkm.nav').toggle()
+  require('pkm.views').show_sidebar_provider('nav')
 end
 
 --- Open or toggle the view sidebar (optionally a named view).
