@@ -208,6 +208,7 @@ local defaults = {
     header_prev        = false,
     renumber_list      = "<leader>Mr",
     convert_list = false,   -- :PKMList convert (range or paragraph at cursor)
+    toggle_syntax = false,  -- :PKMSyntax toggle (highlighting on/off, current buffer)
   },
 }
 

@@ -295,6 +295,11 @@ function M.register(config)
     vim.keymap.set('v', k.convert_list, ':PKMList convert<cr>',
       { desc = 'PKM: Convert list ordered/unordered (selection)', silent = true })
   end
+
+  if k.toggle_syntax then
+    vim.keymap.set('n', k.toggle_syntax, '<cmd>PKMSyntax toggle<cr>',
+      { desc = 'PKM: Toggle markdown highlighting (buffer)', silent = true })
+  end
 end
 
 return M

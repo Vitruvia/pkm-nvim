@@ -560,8 +560,13 @@ threads, in order:*
   land **in pkm-syntax**.
 - ✅ standalone `pkm-syntax.setup({ number = false })` — line-number suppression
   decoupled from the frontmatter fold (default keeps numbers; opt into the note look).
-- On/off toggles (Distant 8) — now a **pkm-syntax** concern. *Low API impact — an
-  agent formats unaided — so the agent side defers.*
+- ✅ **v1.47.0 on/off toggle** (Distant 8): `:PKMSyntax [on|off|toggle]` (bare=toggle),
+  optional `keymaps.toggle_syntax` — manual highlighting control on the current
+  buffer, independent of PKM mode / `highlight_all_markdown` (vault note → full look,
+  other markdown → highlight_only). Backed by `pkm-syntax.is_active(bufnr)`. Also
+  fixed the `pkm.syntax` facade to resolve pkm-syntax **lazily** (it cached a no-op
+  stub if pkm-syntax wasn't on the rtp at first require — the likely cause of
+  highlighting not appearing when pkm-syntax hangs off a lazily-loaded plugin).
 
 **5 · Markdown editing features — ✅ legal lists complete**
 - **Brazilian legal-text list hierarchy (Near 1.2) — DONE.** Author decision:

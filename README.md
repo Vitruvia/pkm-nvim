@@ -156,6 +156,7 @@ indent and reflows blockquotes with a repeated `>` prefix. See `doc/CONVENTIONS.
 | `:PKMPanel mode [on\|off]` | Toggle PKM mode (explorer + index + syntax) |
 | `:PKMTrash restore` | Browse and restore notes from the trash |
 | `:PKMTrash empty` | Permanently delete all trashed notes |
+| `:PKMSyntax [on\|off\|toggle]` | Toggle PKM markdown highlighting on the current buffer (bare = toggle) |
 | `:PKMCheck` | Audit the vault (frontmatter, citation graph, numbering, vault refs) |
 | `:PKMStats` | Show note statistics |
 | `:PKMToggleAutoSync` | Toggle automatic reference synchronization |

@@ -25,7 +25,7 @@ local M = {}
 -- of adding or moving a context small and readable.
 local CONTEXTS = {
   'note', 'tag', 'cite', 'browse', 'view', 'vault',
-  'trash', 'list', 'header', 'panel', 'export', 'agent', 'misc',
+  'trash', 'list', 'header', 'panel', 'export', 'agent', 'syntax', 'misc',
 }
 
 --- Register all :PKM* user commands. Called once by init.lua during setup.

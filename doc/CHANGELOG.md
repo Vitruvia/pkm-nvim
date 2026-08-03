@@ -61,6 +61,41 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.47.0] - 2/8/2026
+
+*Area 4 (syntax control). Two things: make the highlighter load-order-proof, and
+give the user a manual on/off toggle. The `highlight_all_markdown` mechanism is
+correct (verified headless: opening a non-PKM markdown buffer activates tree-sitter
++ the PKM matchadds), so the real-world non-firing is environmental — a facade that
+cached a no-op stub, and pkm-syntax declared as a lazily-loaded plugin's dependency.*
+
+### Added
+
+-   **`:PKMSyntax [on|off|toggle]`** (bare = toggle) — manual highlighting control
+    on the current buffer, independent of PKM mode and `highlight_all_markdown`. A
+    vault note enables with the full note look (fold + window options); any other
+    markdown gets the pure highlighting (`highlight_only`). Optional
+    `keymaps.toggle_syntax` (default `false`) maps `:PKMSyntax toggle`.
+-   **`pkm-syntax.is_active(bufnr)`** — new public API so a consumer can read the
+    on/off state without tracking its own (used by the toggle). Cross-repo: added
+    to the pkm-syntax contract in lockstep.
+
+### Fixed
+
+-   **`pkm.syntax` facade now resolves `pkm-syntax` lazily.** It ran
+    `pcall(require,'pkm-syntax')` once at module load and cached a no-op stub on
+    failure — so if the plugin manager had not yet put pkm-syntax on the runtimepath
+    at that first call, highlighting was disabled for the whole session. It now
+    retries per access and caches only success, degrading to a no-op (one warning)
+    only while pkm-syntax is genuinely absent.
+
+### Notes
+
+-   Author config: `Vitruvia/pkm-syntax` moved to be a dependency of **pkm-nvim**
+    (`lazy=false`, on the rtp at startup) instead of hanging off telescope (lazy).
+-   `test_v1470_p1`; the command-surface audit (`test_v1130_p8`) gained the new
+    context. Suite 75/0, no new luacheck warnings.
+
 ## [1.46.0] - 2/8/2026
 
 *Closes the last Area-2 wrap open question (author delegated the call: "best

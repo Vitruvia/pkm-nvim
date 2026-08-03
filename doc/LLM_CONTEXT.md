@@ -7,7 +7,18 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.46.0** (code-complete on `dev`) — whitespace-preserving code wrap
+## Current version: **v1.47.0** (code-complete on `dev`) — syntax control (:PKMSyntax + lazy facade)
+
+*v1.47.0 (Area 4 syntax control): `:PKMSyntax [on|off|toggle]` (bare=toggle) — manual
+highlighting control on the current buffer, independent of PKM mode /
+`highlight_all_markdown` (vault note → full look; other markdown → highlight_only).
+`pkm-syntax.is_active(bufnr)` added (lockstep). The `pkm.syntax` **facade now resolves
+lazily** — it cached a no-op stub once at load if pkm-syntax wasn't yet on the rtp
+(the likely cause of highlighting not appearing when pkm-syntax hangs off a lazy
+plugin); now retries per access, caches only success. Author config: pkm-syntax moved
+to be a dependency of pkm-nvim (lazy=false) not telescope. The highlight_all_markdown
+mechanism itself is correct (verified headless). `keymaps.toggle_syntax` (default off).
+test_v1470; audit test_v1130_p8 updated. Suite 75/0.*
 
 *v1.46.0 closes the last Area-2 wrap open question: fenced-code content now wraps
 **whitespace-preserving** — `markdown.wrap_range` keeps each code line's leading
