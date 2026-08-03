@@ -61,6 +61,35 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.55.0] - 3/8/2026
+
+*Area 3, Phase 3.5b (slice 1) — the nav/headings pop-up ("open nav in the
+pop-up").*
+
+### Added
+
+-   **`nav.search()` — a fuzzy pop-up of the focused note's headings** (Telescope
+    when available, `vim.ui.select` fallback); choosing one jumps the source
+    window there. It is the nav provider's `/` (content-consistent with the views
+    `/`), and is also reachable standalone from a markdown window via the optional
+    `keymaps.nav_search` (default `false`). Built on the v1.53.0 `pick_list`.
+
+### Changed
+
+-   **The nav provider's `/` is now the headings pop-up**, replacing the in-panel
+    heading filter (and its `c` clear). The pop-up subsumes it — fuzzy-search a
+    heading and jump — and matches how `/` behaves on the views provider. `<CR>`
+    (jump to the heading under the cursor) and `r` (refresh) are unchanged.
+
+### Notes
+
+-   Still to come in 3.5b: the **in-pop-up cycle** across file-browse / views /
+    nav, and **standalone pop-up entries** whose selection does not drive the
+    sidebar. `test_v1550_p1` (headings offered level-indented, carry the source
+    line, jump on select, empty-note guard). `test_v1510_p1` updated (nav's keys
+    are now all shared with views, so the keymap-swap is proven via the views-only
+    keys being torn down). Suite 85/0.
+
 ## [1.54.0] - 3/8/2026
 
 *Two buffer-panel additions the author asked for after the v1.53 smoke.*

@@ -64,6 +64,12 @@ function M.register(config)
   map(k.view_buffers, "<cmd>PKMPanel buffers<cr>", "Buffer Panel")
   map(k.nav_panel,    "<cmd>PKMPanel nav<cr>",     "File Navigation (headings)")
 
+  if k.nav_search then
+    vim.keymap.set('n', k.nav_search, function()
+      require('pkm.nav').search()
+    end, { desc = 'PKM: heading search pop-up', silent = true })
+  end
+
   if k.view_panel then
     require('pkm.views').set_panel_keymap(k.view_panel)
   end

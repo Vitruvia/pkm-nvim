@@ -131,35 +131,54 @@ local function on_select(state)
   vim.cmd('normal! zz')
 end
 
---- Prompt for a filter string and rebuild.
-local function on_filter(state, helpers)
-  vim.ui.input({ prompt = 'Filter headings: ', default = state.query or '' }, function(input)
-    if input == nil then return end   -- cancelled
-    state.query = input
-    helpers.refresh()
-  end)
-end
-
---- Clear the filter and rebuild.
-local function on_clear(state, helpers)
-  state.query = ''
-  helpers.refresh()
-end
-
 -- =============================================================================
 -- SECTION: Sidebar provider + setup
 -- =============================================================================
+
+--- Open a fuzzy pop-up of the source note's headings; choosing one jumps the
+--- source window there. The pop-up form of nav (content-consistent with the
+--- sidebar's `/`), reached from the sidebar while nav is showing, or standalone
+--- (keymaps.nav_search) from a markdown window. Telescope when available,
+--- vim.ui.select otherwise.
+function M.search()
+  M.capture_current()   -- standalone: adopt the focused markdown window as source
+  if not (_source and vim.api.nvim_buf_is_valid(_source.buf)) then
+    vim.notify('[pkm] no markdown buffer to navigate', vim.log.levels.INFO)
+    return
+  end
+  local md    = require('pkm.markdown')
+  local lines = vim.api.nvim_buf_get_lines(_source.buf, 0, -1, false)
+  local heads = md.scan_headings(lines)
+  if #heads == 0 then
+    vim.notify('[pkm] no headings in this note', vim.log.levels.INFO)
+    return
+  end
+  local items = {}
+  for _, h in ipairs(heads) do
+    items[#items + 1] = {
+      display = string.rep('  ', math.max(0, h.level - 1)) .. heading_text(lines[h.lnum] or ''),
+      value   = h.lnum,
+    }
+  end
+  local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
+  backend.pick_list('Headings', items, function(lnum)
+    if _source and vim.api.nvim_win_is_valid(_source.win) then
+      vim.api.nvim_set_current_win(_source.win)
+      pcall(vim.api.nvim_win_set_cursor, _source.win, { lnum, 0 })
+      vim.cmd('normal! zz')
+    end
+  end)
+end
 
 --- The provider table pkm.views registers and hosts on the one sidebar.
 M.sidebar_provider = {
   name        = 'nav',
   label       = 'Nav',
-  statusline  = '  PKM Nav  · CR jump  · / filter  · c clear  · r refresh  · q close',
+  statusline  = '  PKM Nav  · CR jump  · / search  · r refresh  · q close',
   build_lines = build_lines,
   keymaps     = {
     ['<CR>'] = on_select,
-    ['/']    = on_filter,
-    ['c']    = on_clear,
+    ['/']    = function() M.search() end,
     ['r']    = function(_, helpers) helpers.refresh() end,
   },
   --- Seed state + place the cursor on the first heading when nav becomes active.
