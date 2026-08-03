@@ -13,9 +13,7 @@
       "Bash(rm -rf:*)"
     ],
     "ask": [
-      "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(git tag:*)",
       "Bash(git merge:*)",
       "Bash(git rebase:*)",
       "Bash(git checkout:*)",
@@ -23,7 +21,9 @@
     ],
     "allow": [
       "Bash(luacheck:*)",
-      "Bash(nvim --headless:*)"
+      "Bash(nvim --headless:*)",
+      "Bash(git tag:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
