@@ -68,7 +68,8 @@ end
 ---@param entries table[]   Index entry array; each entry has path, filename, title, tags, body, note_type
 ---@param seed    string|nil  Optional expression to pre-populate the prompt
 ---@param presorted boolean|nil  When true, skip the internal type/title sort
-local function live_picker(title, entries, seed, presorted)
+---@param on_cycle  fun()|nil  <C-l> closes and calls this (pop-up-container cycle)
+local function live_picker(title, entries, seed, presorted, on_cycle)
   local t = require_telescope()
   if not t then return end
   local filter = require('pkm.filter')
@@ -99,7 +100,8 @@ local function live_picker(title, entries, seed, presorted)
     sorting_strategy = 'ascending',
     layout_config    = { prompt_position = 'top' },
   }, {
-    prompt_title = title .. '  ·  <Tab> mark  ·  <C-a> act on selection',
+    prompt_title = title .. '  ·  <Tab> mark  ·  <C-a> act'
+      .. (on_cycle and '  ·  <C-l> next panel' or ''),
     finder = t.finders.new_dynamic {
       fn = function(prompt)
         if not prompt or prompt == '' then return all_items end
@@ -165,6 +167,15 @@ local function live_picker(title, entries, seed, presorted)
       map('n', '<Tab>',   sel_next)
       map('i', '<S-Tab>', sel_prev)
       map('n', '<S-Tab>', sel_prev)
+
+      if on_cycle then
+        local function cyc()
+          t.actions.close(prompt_bufnr)
+          vim.schedule(on_cycle)
+        end
+        map('i', '<C-l>', cyc)
+        map('n', '<C-l>', cyc)
+      end
 
       return true
     end,
@@ -315,9 +326,9 @@ end
 --- any field (title, body, filename, tags); prefixed expressions apply
 --- structured filters. filter_expr, when provided, pre-seeds the prompt.
 ---@param filter_expr string|nil  Optional seed expression (e.g. from :PKMBrowse tag:x)
-function M.browse(filter_expr)
+function M.browse(filter_expr, opts)
   local index = require('pkm.index')
-  live_picker('PKMBrowse', index.get_all(), filter_expr)
+  live_picker('PKMBrowse', index.get_all(), filter_expr, nil, opts and opts.on_cycle)
 end
 
 --- Scoped live browser over a pre-computed path list.
@@ -325,7 +336,8 @@ end
 --- Called by the sidebar '/' keymap and the views-tree <C-f> keymap.
 ---@param title  string
 ---@param paths  string[]
-function M.browse_paths(title, paths)
+---@param opts   table|nil  { on_cycle = fun() }
+function M.browse_paths(title, paths, opts)
   local index = require('pkm.index')
   if #paths == 0 then
     vim.notify('[pkm] no notes to search', vim.log.levels.INFO)
@@ -340,7 +352,7 @@ function M.browse_paths(title, paths)
     vim.notify('[pkm] no indexed notes in selection', vim.log.levels.INFO)
     return
   end
-  live_picker(title, entries, nil)
+  live_picker(title, entries, nil, nil, opts and opts.on_cycle)
 end
 
 --- Show the n most recently modified notes, newest first.
@@ -368,11 +380,14 @@ end
 ---@param title     string
 ---@param items     table[]   { { display = string, value = any }, ... }
 ---@param on_select fun(value:any)
-function M.pick_list(title, items, on_select)
+---@param opts      table|nil  { on_cycle = fun() }  <C-l> closes and calls on_cycle
+---                             (the pop-up-container cycle; absent in the fallback)
+function M.pick_list(title, items, on_select, opts)
+  opts = opts or {}
   local t = require_telescope()
   if not t then return end
   t.pickers.new({}, {
-    prompt_title = title,
+    prompt_title = opts.on_cycle and (title .. '  ·  <C-l> next panel') or title,
     finder = t.finders.new_table({
       results     = items,
       entry_maker = function(it)
@@ -380,12 +395,20 @@ function M.pick_list(title, items, on_select)
       end,
     }),
     sorter = t.conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr, _map)
+    attach_mappings = function(prompt_bufnr, map)
       t.actions.select_default:replace(function()
         local entry = t.state.get_selected_entry()
         t.actions.close(prompt_bufnr)
         if entry then vim.schedule(function() on_select(entry.value) end) end
       end)
+      if opts.on_cycle then
+        local function cyc()
+          t.actions.close(prompt_bufnr)
+          vim.schedule(opts.on_cycle)
+        end
+        map('i', '<C-l>', cyc)
+        map('n', '<C-l>', cyc)
+      end
       return true
     end,
   }):find()

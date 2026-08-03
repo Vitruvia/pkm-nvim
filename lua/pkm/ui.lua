@@ -762,11 +762,14 @@ function M.browse_paths(title, paths)
 end
 
 --- vim.ui.select fallback for pkm.telescope.pick_list: a menu over a flat list
---- of `{ display, value }` items; `on_select(value)` runs on a choice.
+--- of `{ display, value }` items; `on_select(value)` runs on a choice. The
+--- `opts` (e.g. `on_cycle`) are accepted for signature parity but ignored — a
+--- blocking select menu cannot host the pop-up-container cycle.
 ---@param title     string
 ---@param items     table[]   { { display = string, value = any }, ... }
 ---@param on_select fun(value:any)
-function M.pick_list(title, items, on_select)
+---@param _opts     table|nil
+function M.pick_list(title, items, on_select, _opts)
   if #items == 0 then return end
   vim.ui.select(items, {
     prompt      = title,

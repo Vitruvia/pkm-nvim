@@ -66,8 +66,8 @@ function M.register(config)
 
   if k.nav_search then
     vim.keymap.set('n', k.nav_search, function()
-      require('pkm.nav').search()
-    end, { desc = 'PKM: heading search pop-up', silent = true })
+      require('pkm.popup').open('nav')   -- cyclable pop-up; <C-l> → views → browse
+    end, { desc = 'PKM: heading pop-up (cyclable panel)', silent = true })
   end
 
   if k.view_panel then

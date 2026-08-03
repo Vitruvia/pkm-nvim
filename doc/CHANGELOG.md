@@ -61,6 +61,43 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.56.0] - 3/8/2026
+
+*Area 3, Phase 3.5b (slice 2) — the cyclable pop-up container. Completes Phase
+3.5: the pop-up is now the sidebar's mirror.*
+
+### Added
+
+-   **`pkm.popup`** — one pop-up that hosts the three content providers
+    (`browse` all notes, `views` view names, `nav` headings) and **cycles between
+    them with `<C-l>`** (Telescope only; the `vim.ui.select` fallback simply
+    doesn't bind the key). `popup.open(provider)` opens on a provider; `<C-l>`
+    re-opens on the next in `browse → views → nav` order.
+-   **Standalone semantics + the origin rule, completed.** Selecting in the
+    cyclable pop-up does the provider-native action and **never drives the
+    sidebar**: `browse` opens the note, `views` **activates** the view
+    (`M.open` → new `views.popup_search`), `nav` jumps to the heading. This is the
+    other half of the origin rule — the sidebar's own `/` (which *does* drive the
+    sidebar) is a separate surface. `keymaps.nav_search` now opens this cyclable
+    pop-up starting on nav (`<C-l>` → views → browse).
+
+### Changed
+
+-   `pkm.telescope.pick_list`, `.browse`, `.browse_paths` and the internal
+    `live_picker` gained an optional `on_cycle`; when set, `<C-l>` closes the
+    picker and calls it. Additive — `:PKMBrowse` and the sidebar's own `/` pass
+    nothing and are unchanged. The `pkm.ui.pick_list` fallback accepts `opts` for
+    signature parity and ignores them.
+
+### Notes
+
+-   `test_v1560_p1` covers the cycle order and that `popup.open('nav')` /
+    `popup.open('views')` dispatch to the right pop-up (headings jump; view names
+    offered, standalone). The `<C-l>` cycling itself is Telescope-only and rides
+    the manual smoke. **This closes Phase 3.5 (3.5a `/` content-consistency →
+    3.5b nav pop-up → cycle + standalone).** Suite 86/0; luacheck clean (the one
+    views warning is a pre-existing long notify string).
+
 ## [1.55.0] - 3/8/2026
 
 *Area 3, Phase 3.5b (slice 1) — the nav/headings pop-up ("open nav in the

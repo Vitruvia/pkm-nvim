@@ -2810,6 +2810,19 @@ local function sidebar_show_help()
   show_keymap_help(' Sidebar Keymaps ', lines)
 end
 
+--- `{ display, value }` items of the view names (name + count), for the `/`
+--- pickers. Returns the items and the view count.
+---@return table[], integer
+local function views_pick_items()
+  local names  = M.list()
+  local counts = M.count_many(names)
+  local items  = {}
+  for _, n in ipairs(names) do
+    items[#items + 1] = { display = string.format('%s  (%d)', n, counts[n] or 0), value = n }
+  end
+  return items, #names
+end
+
 --- The views provider's `/` : search the SAME content the sidebar is showing,
 --- in a pop-up (content-consistent, Phase 3.5a). Detail → the notes of the shown
 --- view (Telescope/float), opening one in a real window. Overview → a picker of
@@ -2847,18 +2860,29 @@ local function sidebar_search()
   end
 
   -- Overview: search view names; choosing one switches the sidebar to that view.
-  local names = M.list()
-  if #names == 0 then
+  local items, n = views_pick_items()
+  if n == 0 then
     vim.notify('[pkm] no views defined — use :PKMView new', vim.log.levels.INFO)
     return
   end
-  local counts = M.count_many(names)
-  local items  = {}
-  for _, n in ipairs(names) do
-    items[#items + 1] = { display = string.format('%s  (%d)', n, counts[n] or 0), value = n }
-  end
   local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
   backend.pick_list('PKM Views', items, function(view) M.open_sidebar(view) end)
+end
+
+--- Standalone views pop-up (used by pkm.popup's cycle): a picker of view names;
+--- choosing one ACTIVATES the view (M.open) and does NOT drive the sidebar —
+--- that sidebar-driving is only for the sidebar's own `/` (sidebar_search). This
+--- is the "opened from a standalone entry, not the sidebar" half of the origin
+--- rule. `opts.on_cycle` binds the container cycle key.
+---@param opts table|nil
+function M.popup_search(opts)
+  local items, n = views_pick_items()
+  if n == 0 then
+    vim.notify('[pkm] no views defined — use :PKMView new', vim.log.levels.INFO)
+    return
+  end
+  local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
+  backend.pick_list('PKM Views', items, function(view) M.open(view) end, opts)
 end
 
 -- The VIEWS provider's full interactive surface. Every keymap body here is the

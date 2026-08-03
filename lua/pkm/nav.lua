@@ -139,8 +139,10 @@ end
 --- source window there. The pop-up form of nav (content-consistent with the
 --- sidebar's `/`), reached from the sidebar while nav is showing, or standalone
 --- (keymaps.nav_search) from a markdown window. Telescope when available,
---- vim.ui.select otherwise.
-function M.search()
+--- vim.ui.select otherwise. `opts.on_cycle` (from pkm.popup) binds the container
+--- cycle key.
+---@param opts table|nil  { on_cycle = fun() }
+function M.search(opts)
   M.capture_current()   -- standalone: adopt the focused markdown window as source
   if not (_source and vim.api.nvim_buf_is_valid(_source.buf)) then
     vim.notify('[pkm] no markdown buffer to navigate', vim.log.levels.INFO)
@@ -167,7 +169,7 @@ function M.search()
       pcall(vim.api.nvim_win_set_cursor, _source.win, { lnum, 0 })
       vim.cmd('normal! zz')
     end
-  end)
+  end, opts)
 end
 
 --- The provider table pkm.views registers and hosts on the one sidebar.
