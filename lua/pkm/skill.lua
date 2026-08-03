@@ -82,8 +82,9 @@ function M.install_command(dir)
 end
 
 --- Install (or update — the two are identical) the pkm-notes skill into `dest`.
---- Copies SKILL.md and the bundled AGENT_PROTOCOL.md / PKM_API.md, overwriting
---- any existing copies, so the installed skill is self-contained and current.
+--- Copies SKILL.md and the bundled AGENT_PROTOCOL.md / PKM_API.md / CONVENTIONS.md,
+--- overwriting any existing copies, so the installed skill is self-contained and
+--- current (SKILL.md points at all three).
 ---@param dest string|nil  destination dir; defaults to `default_dest()`
 ---@return table  { ok, dest, files, error? }
 function M.install(dest)
@@ -102,6 +103,7 @@ function M.install(dest)
     { p.skill_md,                                        'SKILL.md' },
     { utils.join(p.root, 'doc', 'AGENT_PROTOCOL.md'),    'AGENT_PROTOCOL.md' },
     { utils.join(p.root, 'doc', 'PKM_API.md'),           'PKM_API.md' },
+    { utils.join(p.root, 'doc', 'CONVENTIONS.md'),       'CONVENTIONS.md' },
   }
 
   local copied = {}

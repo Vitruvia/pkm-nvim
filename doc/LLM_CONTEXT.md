@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.56.0** (code-complete on `dev`) — cyclable pop-up container (closes Area 3 Phase 3.5)
+## Current version: **v1.57.0** (code-complete on `dev`) — consolidation Workstream B: Recursos read/write-on-request rule (§6.2) + light note conventions (granularity, bib) + skill bundle ships CONVENTIONS.md
 
 *v1.56.0 (3.5b slice 2): **`pkm.popup`** — ONE pop-up hosting the three providers (browse=all notes,
 views=view names, nav=headings), cycled with `<C-l>` (Telescope only; `vim.ui.select` fallback omits

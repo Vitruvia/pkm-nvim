@@ -646,6 +646,17 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   `CONVENTIONS.md` § Lists. Only *parágrafo único* is left unclassified (deferred —
   needs a per-article § count). Displays / tables (Distant 1); insertable folds
   (Potential).
+- **`markdown.lua` — extract-vs-keep decision (Workstream C, 3/8/2026): keep
+  in-tree now; a `pkm-markdown` split is a *scheduled follow-up*, not this batch.**
+  The editing-features module (wrap, renumber, `scan_headings`, header ops) is
+  already **extraction-clean** — zero `require('pkm.*')` — so it can move to its
+  own repo the way highlighting became `pkm-syntax`, consumed through a thin
+  facade. It is **not** split yet because there is no second consumer and no
+  pending feature that needs the boundary. New markdown features (header/content
+  **folds**, displays/tables) land **in `markdown.lua`** as they come and ride the
+  eventual extraction — building them does not wait on the split, and the split is
+  taken when a real need (a second consumer, or the module outgrowing the plugin)
+  makes it pay. *(No fold code shipped in this batch — folds remain Potential above.)*
 
 **6 · Other — ▹**
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —

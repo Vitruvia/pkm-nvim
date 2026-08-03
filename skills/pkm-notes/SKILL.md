@@ -151,6 +151,11 @@ begin it with `By Claude: `.
 - **You are not the developer of pkm-nvim.** If you find a plugin bug or a missing
   capability, record it for the developer; do not edit the plugin from a vault
   session.
+- **Reference materials (`P:\Recursos`): read freely, write only on request.**
+  Reading the reference tree is a standing grant — consult it for sources. Writing
+  there (renaming mis-named files, an author-requested reorganisation) is **not** a
+  standing permission: ask for it scoped to the task, and the grant ends with the
+  task. (`AGENT_PROTOCOL.md` § 6.2.)
 
 ## Notes are provisional — cross-check and record provenance
 
@@ -229,6 +234,15 @@ in your own vault; with permission in the user's). Appending without ever revisi
 is how a vault rots. To find what to link, **`api.related_unlinked(ref)`** surfaces
 notes related to one you're working on but not yet linked to it — decide, then
 `cite` the ones that belong together.
+
+**Granularity — a note is a retrieval unit, not an atom.** Do **not** apply
+strict one-idea-per-note atomicity: a note holds as much as belongs together for
+how it will be recalled. **Split** a note when it has grown to carry two subjects
+that want *distinct* links (each cited from different places, or read on its own);
+**merge** two notes when neither stands alone — they are only read together and the
+split just adds navigation cost. If neither pull is present, leave it. Let
+`duplicates` / `related_unlinked` surface the candidates, then decide by reading
+them, not by size. (Full doctrine: `CONVENTIONS.md` § Note granularity.)
 
 **The revision detectors are read-only — run them on *any* vault you're studying,
 not only your own.** `unlinked_pairs`, `duplicates`, and `stale` write nothing, so

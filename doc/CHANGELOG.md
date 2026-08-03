@@ -61,6 +61,50 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.57.0] - 3/8/2026
+
+*Post-Area-3 consolidation, Workstream B — reference-root permission and a few
+light note conventions (protocol/docs), plus the skill bundle made
+self-contained. No behavioural code beyond the skill copy list.*
+
+### Added
+
+-   **`AGENT_PROTOCOL.md` § 6.2 — Reference materials (`P:\Recursos`).** States
+    the rule plainly: **read is a standing grant** (the consult step of § 10),
+    **write is per-task only** — the assistant asks for permission scoped to a
+    task (e.g. Manager-mode renaming of mis-named reference files, or an
+    author-requested reorganisation) and the grant ends with the task. Records
+    the **deferred design** (per-agent organise rights vs. one general
+    housekeeping tool the agents call) as pending, not a licence to broaden.
+-   **`CONVENTIONS.md` § Note granularity.** A note is a **retrieval / working-
+    memory unit, not an atom**; PKM does not adopt strict Zettelkasten
+    one-idea-per-note atomicity. Soft split/merge heuristics (split when two
+    subjects want *distinct* links; merge when neither stands alone), decided by
+    reading the notes, not a size threshold.
+
+### Changed
+
+-   **`CONVENTIONS.md` § Bibliography Notes** — added **"never copy a whole text
+    into a bib note"**: the source lives in the reference tree (`P:\Recursos`),
+    the bib note carries the citation plus excerpts / commentary / cross-links.
+-   **`skills/pkm-notes/SKILL.md`** — the split/merge granularity heuristic
+    (firmer, agent-facing; points to `CONVENTIONS.md § Note granularity`) and the
+    Recursos read-freely / write-on-request rule (§ 6.2).
+-   **The skill bundle now ships `CONVENTIONS.md`.** `pkm.skill.install` copies it
+    alongside `SKILL.md` / `AGENT_PROTOCOL.md` / `PKM_API.md`, so both of
+    SKILL.md's references into CONVENTIONS.md (§ Lists, § Note granularity)
+    resolve in the installed bundle. **Re-run `:PKMAgentProtocol install`** to
+    pick up the new content.
+
+### Notes
+
+-   `test_v1160_skill` extended to assert `CONVENTIONS.md` lands in the bundle;
+    passes. luacheck clean on `skill.lua`. Docs-and-protocol change — no headless
+    behaviour to smoke beyond the install test. **Workstream C (extract vs. keep
+    `markdown.lua`) is resolved as a decision, not code:** keep it in-tree now, a
+    `pkm-markdown` extraction (mirroring `pkm-syntax`) is the scheduled follow-up
+    that future markdown features ride — see ROADMAP.
+
 ## [1.56.0] - 3/8/2026
 
 *Area 3, Phase 3.5b (slice 2) — the cyclable pop-up container. Completes Phase

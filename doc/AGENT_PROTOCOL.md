@@ -276,6 +276,29 @@ Every destructive Manager operation obeys the plugin-wide rule in
 The assistant reaches these through the confirming API/command path, never a raw
 delete.
 
+### 6.2 Reference materials (`P:\Recursos`)
+
+The reference tree under `P:\Recursos` (WSL `/mnt/p/Recursos`) holds source
+materials the vaults draw on — books, papers, and the like — not notes. It is
+outside every vault and is governed separately from them.
+
+1. **Read — a standing grant.** The assistant may read `P:\Recursos` freely as
+   reference (this is the consult step of § 10, *Consult, then record*). No
+   per-task permission is needed to open, search, or quote from it.
+2. **Write — by temporary, per-task request only.** Writing there is **not** a
+   standard need and carries **no standing permission**. When a task genuinely
+   calls for it — a Manager-mode pass renaming mis-named reference files, or an
+   author-requested reorganisation of the tree — the assistant **asks for
+   permission scoped to that task**, states what it will change, and treats the
+   grant as spent when the task ends. It never accumulates into a standing
+   right, and every removal still confirms (§ 6.1).
+3. **Deferred design (recorded, not settled).** Whether each reading agent
+   should carry its own organise-Recursos rights, or filesystem tidying should
+   route through **one general housekeeping tool/agent that the specific agents
+   call**, is left open. Until it is settled, the per-task request above is the
+   only path, and this note marks the decision as pending — it is not a licence
+   to broaden the grant.
+
 ---
 
 ## 7. Authorship, and writing into notes
@@ -464,9 +487,10 @@ prose `## References` block — it is a **bib note**, a first-class, citable nod
 the graph. This is the mechanism § 10 was pointing at; use it.
 
 - **Consult, then record.** Before leaning on a source, look for it: browse the
-  read-only reference materials under `P:\Recursos` (WSL `/mnt/p/Recursos`) and,
-  where the task warrants, the web. *(If your reference tree lives elsewhere, that
-  path is the only thing to adjust here.)*
+  reference materials under `P:\Recursos` (WSL `/mnt/p/Recursos`) — read access is
+  a standing grant, writing there is per-task only (§ 6.2) — and, where the task
+  warrants, the web. *(If your reference tree lives elsewhere, that path is the
+  only thing to adjust here.)*
 - **Find or create the bib note.** If a bib note for the source exists, cite it;
   if not, **create one** — its **standard citation at the top** (BibTeX preferred,
   other formats allowed), optionally followed by a source summary or notes on

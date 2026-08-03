@@ -69,6 +69,11 @@ of repeating the reference inline.
     assistant adds them, they carry the assistant authorship markers (a
     `By Claude:` header with model and time), because a summary is a *reading* of
     the source, not the source itself; the citation block is not so marked.
+-   **Never copy a whole text into a bib note.** The source itself lives in the
+    reference tree (`P:\Recursos`), not in the vault. A bib note carries the
+    citation, then *excerpts, commentary, and cross-links* — the passages worth
+    quoting and what they connect to — never the full work. Quote what a claim
+    rests on; point to the reference for the rest.
 -   A bib note is **the same source on both sides**, so it may be copied between
     vaults (the user's and an assistant's), adding the destination's authorship
     tags/markers on the copy. A user-authored bib note is not altered without the
@@ -85,6 +90,28 @@ and cites it in one call.
 -   `##` through `####` organize sections. Deeper nesting should be rare.
 -   Each section header should be self-explanatory without reading the
     preceding body.
+
+---
+
+## Note granularity
+
+A note is a **unit of retrieval and working memory**, not an atom. PKM
+deliberately does **not** adopt strict Zettelkasten one-idea-per-note atomicity:
+a note may hold as much as belongs together for the way it will be recalled and
+worked on, and no more.
+
+The guidance is a pair of soft heuristics, not a rule:
+
+-   **Split** when a note has grown to hold two subjects that want *distinct*
+    links — each would be cited from different places, or read on its own.
+    Splitting then makes the graph more precise.
+-   **Merge** when neither of two notes stands on its own — they are only ever
+    read together, and the separation adds navigation cost without buying a
+    distinct link. Folding them makes one note that is easier to find and keep.
+
+If neither pull is present, leave the note as it is. The plugin's
+`duplicates` / `related_unlinked` / `merge` tooling surfaces candidates; the
+decision stays a reading of the notes, not a size threshold.
 
 ---
 

@@ -47,7 +47,7 @@ local dest = (vim.fn.tempname() .. '/skill-dest'):gsub('\\', '/')
 local res = skill.install(dest)
 check("install returns ok", res.ok, vim.inspect(res))
 check("it reports the destination", res.dest == dest, tostring(res.dest))
-for _, name in ipairs({ 'SKILL.md', 'AGENT_PROTOCOL.md', 'PKM_API.md' }) do
+for _, name in ipairs({ 'SKILL.md', 'AGENT_PROTOCOL.md', 'PKM_API.md', 'CONVENTIONS.md' }) do
   check(name .. ' landed', readable(dest .. '/' .. name), dest .. '/' .. name)
 end
 check("SKILL.md carries the frontmatter name", contains(dest .. '/SKILL.md', 'name: pkm-notes'))
