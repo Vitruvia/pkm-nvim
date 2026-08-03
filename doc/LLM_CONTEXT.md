@@ -7,7 +7,22 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.52.0** (code-complete on `dev`) — sidebar autoswitch (Area 3 Phase 3.3b)
+## Current version: **v1.53.0** (code-complete on `dev`) — content-consistent sidebar `/` (Area 3 Phase 3.5a)
+
+*v1.53.0 (Area 3 Phase 3.5a, opens the pop-up-as-container work): `/` in the views sidebar
+OVERVIEW now searches VIEWS (a picker of view names), not the all-notes browse — and, launched
+from the sidebar, choosing a view switches THIS sidebar to it (the origin rule; a standalone
+views pop-up in 3.5b will NOT drive the sidebar). Detail `/` unchanged (already searches the
+shown view's notes). New reusable primitive `pkm.telescope.pick_list(title, items{display,value},
+on_select)` + `pkm.ui.pick_list` fallback — the content-agnostic pop-up behind the views `/` and
+the coming nav/headings picker. `sidebar_search()` in views.lua backs the `/` keymap. The
+intricate `open_views_panel` notes browser was left untouched. `test_v1530`. Suite 83/0. NEXT =
+3.5b: nav/headings picker (`/` on nav; open nav in the pop-up); in-pop-up cycle
+file-browse/views/nav; standalone pop-up entries whose select does NOT drive the sidebar. Also
+shipped: v1.52.1 fix — autoswitch → views on focusing ANY non-markdown window (not only when the
+last markdown window closes). KEY MODEL: pop-up & sidebar are SEPARATE containers; the pop-up
+drives the sidebar only when opened from it.*
+
 
 *v1.52.0 (Area 3 Phase 3.3b): the sidebar AUTOSWITCHES between its providers by focus. On by
 default (`config.sidebar_autoswitch`, `:PKMPanel autoswitch [on|off|toggle]`, `views.set_autoswitch`).

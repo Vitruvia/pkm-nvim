@@ -565,13 +565,23 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   cycle or explicit `:PKMPanel nav|sidebar` sticks until the context changes. ON
   by default (`config.sidebar_autoswitch`); `:PKMPanel autoswitch [on|off|toggle]`
   pins it. `<leader>s` opens context-appropriately. Fixed the nav header glyph
-  (`▚`→`≡`). `test_v1520`. Suite 82/0. **This closes the Area 3 container/content
-  arc (3.1→3.3b).** Multiple simultaneous sidebars stay a future per-user-config
-  option; a `pkm.sidebar` extraction of the host out of `views.lua` is a later
-  mechanical tidy.
+  (`▚`→`≡`). `test_v1520` (+ `v1.52.1` fix: focusing any non-markdown window →
+  views, not only when the last markdown window closes). Suite 82/0. Multiple
+  simultaneous sidebars stay a future per-user-config option; a `pkm.sidebar`
+  extraction of the host out of `views.lua` is a later mechanical tidy.
+- ✅ **v1.53.0 (Phase 3.5a) — content-consistent sidebar `/`**: `/` in the views
+  sidebar overview searches VIEWS (a `pick_list` of view names), and — launched
+  from the sidebar — choosing one switches this sidebar to that view (the origin
+  rule). New `pkm.telescope.pick_list` / `pkm.ui.pick_list` primitive. Detail `/`
+  unchanged. `test_v1530`. Suite 83/0.
+- **Phase 3.5b — the pop-up as a provider container (rest)**: a **nav/headings
+  picker** (`/` on the nav provider; "open nav in the pop-up") via `pick_list`; an
+  **in-pop-up cycle** across file-browse / views / nav; and **standalone pop-up
+  entries** whose selection does NOT drive the sidebar (the other half of the
+  origin rule — pop-up and sidebar are separate). `open_views_panel` (the intricate
+  notes browser) stays untouched where possible.
 - **Phase 3.4 (deferred)** — journal/scratch navigation (wires the idle
-  `journal.lua` helpers); block-element indexing in the nav provider; nav in a
-  pop-up panel (a separate surface, like the `/` search popup).
+  `journal.lua` helpers); block-element indexing in the nav provider.
 - Active-window motions (list items, blocks); explorer UI customisation (Distant
   6); relevance ordering in panels (Distant 9). *These create commands/panels an
   agent reaches for → 🔺.*
