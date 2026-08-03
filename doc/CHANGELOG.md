@@ -61,6 +61,39 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.53.0] - 3/8/2026
+
+*Area 3, Phase 3.5a — content-consistent `/` from the sidebar (first slice of the
+pop-up-as-provider-container work). Smoke note #2: `/` on the views sidebar opened
+the all-notes file browser; it should search the content the sidebar is showing.*
+
+### Added
+
+-   **`/` in the views sidebar overview now searches VIEWS**, not all notes. It
+    opens a picker of view names (Telescope when available, `vim.ui.select`
+    fallback) and — because it was launched from the sidebar — choosing a view
+    **switches this sidebar to that view** (the pop-up and sidebar are otherwise
+    separate; a standalone views pop-up, planned for 3.5b, will not drive the
+    sidebar). Detail-mode `/` is unchanged — it already searches the notes of the
+    view being shown.
+-   **`pkm.telescope.pick_list(title, items, on_select)`** and its
+    `pkm.ui.pick_list` fallback — a content-agnostic fuzzy list-picker over
+    `{ display, value }` items. The reusable pop-up primitive behind the views
+    `/`, and the nav/headings picker to come in 3.5b.
+
+### Notes
+
+-   This is the first slice of **Phase 3.5** (the pop-up becomes a provider
+    container mirroring the sidebar). Still to come (3.5b): a nav/headings picker
+    (`/` on the nav provider, and "open nav in the pop-up"), an in-pop-up cycle
+    across file-browse / views / nav, and standalone pop-up entries whose
+    selection does NOT drive the sidebar (the other half of the origin rule). The
+    intricate `open_views_panel` note-browser was deliberately left untouched.
+-   `test_v1530_p1` covers `pick_list` and the overview-`/` round-trip (it offers
+    view names, and choosing one switches the sidebar) via the real keymap with
+    `vim.ui.select` stubbed. Suite 83/0; luacheck clean (the one views warning is
+    a pre-existing long notify string). The Telescope rendering rides the smoke.
+
 ## [1.52.1] - 3/8/2026
 
 *Follow-up to the v1.52.0 smoke: autoswitch flipped to nav on focusing a markdown

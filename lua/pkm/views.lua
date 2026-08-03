@@ -2811,6 +2811,57 @@ local function sidebar_show_help()
   show_keymap_help(' Sidebar Keymaps ', lines)
 end
 
+--- The views provider's `/` : search the SAME content the sidebar is showing,
+--- in a pop-up (content-consistent, Phase 3.5a). Detail → the notes of the shown
+--- view (Telescope/float), opening one in a real window. Overview → a picker of
+--- view NAMES; launched from the sidebar, so choosing a view switches THIS
+--- sidebar to it (the pop-up and sidebar are otherwise separate surfaces — a
+--- standalone views pop-up, 3.5b, will not drive the sidebar).
+local function sidebar_search()
+  local ct = get_tab()
+  if not ct then return end
+
+  if ct.mode == 'detail' then
+    -- Focus a real editing window first, so opening a note lands there.
+    local target
+    local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
+    if alt_id ~= 0 and alt_id ~= ct.win
+    and vim.api.nvim_win_is_valid(alt_id)
+    and vim.api.nvim_win_get_config(alt_id).relative == '' then
+      target = alt_id
+    end
+    if not target then
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if win ~= ct.win and vim.api.nvim_win_get_config(win).relative == '' then
+          target = win; break
+        end
+      end
+    end
+    if target then vim.api.nvim_set_current_win(target) end
+    local title = string.format('Search: %s', ct.name)
+    if pcall(require, 'telescope') then
+      require('pkm.telescope').browse_paths(title, ct.paths)
+    else
+      require('pkm.ui').browse_paths(title, ct.paths)
+    end
+    return
+  end
+
+  -- Overview: search view names; choosing one switches the sidebar to that view.
+  local names = M.list()
+  if #names == 0 then
+    vim.notify('[pkm] no views defined — use :PKMView new', vim.log.levels.INFO)
+    return
+  end
+  local counts = M.count_many(names)
+  local items  = {}
+  for _, n in ipairs(names) do
+    items[#items + 1] = { display = string.format('%s  (%d)', n, counts[n] or 0), value = n }
+  end
+  local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
+  backend.pick_list('PKM Views', items, function(view) M.open_sidebar(view) end)
+end
+
 -- The VIEWS provider's full interactive surface. Every keymap body here is the
 -- sidebar's own, reading live per-tab state through get_tab() (→
 -- _panel.get_state()). It is applied when the sidebar is showing views, and torn
@@ -2961,37 +3012,7 @@ local function apply_views_keymaps(buf)
   end, ko)
 
   -- /: scoped search — focus main window first so picker opens files there
-  vim.keymap.set('n', '/', function()
-    local ct = get_tab()
-    local target
-    local alt_id = vim.fn.win_getid(vim.fn.winnr('#'))
-    if alt_id ~= 0 and alt_id ~= ct.win
-    and vim.api.nvim_win_is_valid(alt_id)
-    and vim.api.nvim_win_get_config(alt_id).relative == '' then
-      target = alt_id
-    end
-    if not target then
-      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if win ~= ct.win
-        and vim.api.nvim_win_get_config(win).relative == '' then
-          target = win; break
-        end
-      end
-    end
-    if target then vim.api.nvim_set_current_win(target) end
-    local has_tele = pcall(require, 'telescope')
-    if ct.mode == 'detail' then
-      local title = string.format('Search: %s', ct.name)
-      if has_tele then
-        require('pkm.telescope').browse_paths(title, ct.paths)
-      else
-        require('pkm.ui').browse_paths(title, ct.paths)
-      end
-    else
-      if has_tele then require('pkm.telescope').browse()
-      else             require('pkm.ui').browse() end
-    end
-  end, ko)
+  vim.keymap.set('n', '/', function() sidebar_search() end, ko)
 
   -- <Tab>/<S-Tab>: mark the note under the cursor and step on. Detail mode
   -- only — the overview lists views, not notes, so there is nothing to mark.

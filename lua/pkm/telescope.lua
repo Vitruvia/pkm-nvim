@@ -360,6 +360,37 @@ function M.browse_recent(n)
   live_picker(string.format('Recent (%d)', #entries), entries, nil, true)
 end
 
+--- A simple fuzzy picker over a flat list of items, each `{ display, value }`.
+--- `on_select(value)` runs (scheduled, after the picker closes) when an entry is
+--- chosen. The content-agnostic pop-up primitive behind content-consistent `/`
+--- (e.g. searching view names, or note headings, from the sidebar). Telescope
+--- only; `pkm.ui.pick_list` is the vim.ui.select fallback.
+---@param title     string
+---@param items     table[]   { { display = string, value = any }, ... }
+---@param on_select fun(value:any)
+function M.pick_list(title, items, on_select)
+  local t = require_telescope()
+  if not t then return end
+  t.pickers.new({}, {
+    prompt_title = title,
+    finder = t.finders.new_table({
+      results     = items,
+      entry_maker = function(it)
+        return { value = it.value, display = it.display, ordinal = it.display }
+      end,
+    }),
+    sorter = t.conf.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr, _map)
+      t.actions.select_default:replace(function()
+        local entry = t.state.get_selected_entry()
+        t.actions.close(prompt_bufnr)
+        if entry then vim.schedule(function() on_select(entry.value) end) end
+      end)
+      return true
+    end,
+  }):find()
+end
+
 --- Open telescope find_files over the PKM root. Searches by filename only.
 function M.find_notes()
   local t = require_telescope()

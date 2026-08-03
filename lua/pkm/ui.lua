@@ -670,6 +670,21 @@ function M.browse_paths(title, paths)
   end)
 end
 
+--- vim.ui.select fallback for pkm.telescope.pick_list: a menu over a flat list
+--- of `{ display, value }` items; `on_select(value)` runs on a choice.
+---@param title     string
+---@param items     table[]   { { display = string, value = any }, ... }
+---@param on_select fun(value:any)
+function M.pick_list(title, items, on_select)
+  if #items == 0 then return end
+  vim.ui.select(items, {
+    prompt      = title,
+    format_item = function(it) return it.display end,
+  }, function(choice)
+    if choice then on_select(choice.value) end
+  end)
+end
+
 --- Show the n most recently modified notes (Telescope fallback).
 ---@param n integer|nil  Max results; defaults to 20
 function M.browse_recent(n)
