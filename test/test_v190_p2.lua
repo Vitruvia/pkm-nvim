@@ -31,6 +31,11 @@ local index = require('pkm.index')
 local views = require('pkm.views')
 local tags  = require('pkm.tags')
 
+-- This suite predates the sidebar autoswitch (v1.52.0) and asserts the VIEWS
+-- provider's keymaps directly; open the sidebar deterministically by pinning it
+-- (autoswitch off), so a markdown buffer being focused does not open nav instead.
+views.set_autoswitch('off')
+
 local notes_dir = utils.join(pkm.config.root_path, pkm.config.folders.consolidated)
 vim.fn.mkdir(notes_dir, 'p')
 index.rebuild()

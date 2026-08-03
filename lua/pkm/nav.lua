@@ -76,10 +76,16 @@ local function headings_of(buf, query)
   local heads = md.scan_headings(lines)
   local q     = (query or ''):lower()
 
-  local name      = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ':t')
+  local name   = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ':t')
+  local header = '≡ ' .. (name ~= '' and name or '[No Name]')
+  -- Append the vault only when it fits the sidebar width; a long note name would
+  -- otherwise push it off-screen (the author's "only if there's space").
   local vault_ind = require('pkm.vault').indicator()
-  local header    = '≡ ' .. (name ~= '' and name or '[No Name]')
-  if vault_ind ~= '' then header = header .. '  · ' .. vault_ind end
+  if vault_ind ~= '' then
+    local width  = require('pkm').config.sidebar_width or 30
+    local with_v = header .. '  · ' .. vault_ind
+    if vim.fn.strdisplaywidth(with_v) <= width then header = with_v end
+  end
   local out  = { header }   -- header; not jumpable
   local map  = {}
 

@@ -86,20 +86,15 @@ check("non-md focus → views though a markdown window is still open",
   views.sidebar_provider() == 'views', tostring(views.sidebar_provider()))
 vim.api.nvim_win_close(w2, true)
 
-print("\n== a manual cycle sticks until the context changes ==")
+print("\n== a manual cycle is a transient peek; refocusing reverts it (live) ==")
 focus_markdown()
 views.autoswitch_tick()
 check("markdown again → nav", views.sidebar_provider() == 'nav')
-views.cycle_sidebar_provider()          -- manual: nav -> views
+views.cycle_sidebar_provider()          -- a manual peek: nav -> views
 check("manual cycle to views", views.sidebar_provider() == 'views')
-focus_markdown()                        -- re-focus the markdown window
+focus_markdown()                        -- re-focus the markdown editing window
 views.autoswitch_tick()
-check("the manual choice sticks — still views on the markdown window",
-  views.sidebar_provider() == 'views', tostring(views.sidebar_provider()))
--- A real context change (close md, reopen) resumes autoswitch.
-focus_text();     views.autoswitch_tick()
-focus_markdown(); views.autoswitch_tick()
-check("after a context change autoswitch resumes (md → nav again)",
+check("re-focusing the markdown window reverts to nav (autoswitch keeps working)",
   views.sidebar_provider() == 'nav', tostring(views.sidebar_provider()))
 
 print("\n== toggle off pins the sidebar ==")

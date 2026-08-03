@@ -61,6 +61,37 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.53.1] - 3/8/2026
+
+*Three fixes from the v1.53.0 smoke, two of them one root cause: the autoswitch
+"manual choice sticks until context changes" seeding was too clever.*
+
+### Fixed
+
+-   **Autoswitch is now LIVE instead of transition-gated.** Reopening the sidebar
+    while a markdown note stayed focused left it on views until you opened a
+    *different* note; and cycling to views on a markdown note stopped autoswitch
+    from ever coming back (while the non-markdown direction behaved differently —
+    an asymmetry). Both were the seeding. Autoswitch now simply shows the provider
+    the focused editing window asks for (`nav` for markdown, `views` otherwise);
+    a manual `<C-n>` cycle is a **transient peek** that holds while you stay in the
+    sidebar and reverts the moment you refocus an editing window. To pin the
+    sidebar, `:PKMPanel autoswitch off`. `_autoswitch_last`/`seed_autoswitch_context`
+    are gone.
+-   **Opening the sidebar is now context-driven** (no-name open): from a focused
+    markdown window it opens on nav directly, instead of opening views and only
+    flipping on the next focus change — so a reopen shows the right content at once.
+-   **The vault indicator no longer gets pushed off-screen in the nav header.** A
+    long note name would shove it past the sidebar width; it is now appended only
+    when the whole header fits (the author's "only if there's space").
+
+### Notes
+
+-   `test_v1520_p1` updated to the live model (a cycle reverts on refocus).
+    `test_v190_p2` (which predates autoswitch and asserts the views keymaps) pins
+    the sidebar with `set_autoswitch('off')` so a focused markdown buffer doesn't
+    open nav under it. Suite 83/0.
+
 ## [1.53.0] - 3/8/2026
 
 *Area 3, Phase 3.5a — content-consistent `/` from the sidebar (first slice of the
