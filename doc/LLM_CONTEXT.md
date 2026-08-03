@@ -7,7 +7,14 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.47.0** (code-complete on `dev`) — syntax control (:PKMSyntax + lazy facade)
+## Current version: **v1.47.1** (code-complete on `dev`) — syntax control (:PKMSyntax + lazy facade)
+
+*v1.47.1 (author smoke follow-up): `highlight_all_markdown` now also enables markdown
+buffers ALREADY OPEN when setup ran (FileType doesn't re-fire for them — a reload, or a
+file whose FileType fired before pkm-nvim loaded); `mode.setup` loops loaded markdown
+bufs and enables them (highlight-only, skipping PKM notes), mirroring pkm-syntax.setup().
+This was the real cause of "highlighting off by default" for the author. test_v1471. 76/0.*
+
 
 *v1.47.0 (Area 4 syntax control): `:PKMSyntax [on|off|toggle]` (bare=toggle) — manual
 highlighting control on the current buffer, independent of PKM mode /

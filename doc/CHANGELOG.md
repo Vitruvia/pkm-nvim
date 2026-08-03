@@ -61,6 +61,24 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.47.1] - 2/8/2026
+
+*Follow-up to the v1.47.0 author smoke: `highlight_all_markdown` highlighted only
+markdown opened **after** setup, never buffers already open when setup ran. The
+diagnostic was conclusive — facade resolved to the real backend, the `FileType`
+autocmd was registered, yet tree-sitter was inactive on the current buffer while
+`:PKMSyntax on` worked.*
+
+### Fixed
+
+-   **`highlight_all_markdown` now also enables already-open markdown buffers.**
+    `FileType` does not re-fire for a buffer that was already loaded when the
+    autocmd registered (a config reload/`:source`, or a file whose `FileType`
+    fired before pkm-nvim finished loading), so it was never highlighted until
+    re-edited. `mode.setup` now loops the loaded markdown buffers and enables them
+    (highlight-only, skipping PKM notes) — mirroring `pkm-syntax.setup()`'s own
+    existing-buffer loop. `test_v1471_p1`; suite 76/0.
+
 ## [1.47.0] - 2/8/2026
 
 *Area 4 (syntax control). Two things: make the highlighter load-order-proof, and

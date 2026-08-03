@@ -143,15 +143,27 @@ function M.setup(cfg)
   -- PKM mode being active. This is the standalone-plugin path — the highlighter
   -- runs with no dependency on note state.
   if _config.syntax.enabled and _config.syntax.highlight_all_markdown then
+    local function enable_plain_markdown(bufnr)
+      local path = vim.api.nvim_buf_get_name(bufnr)
+      if path ~= '' and is_pkm_file(path) then return end   -- PKM note → full path
+      require('pkm.syntax').enable(bufnr, true)
+    end
+
     vim.api.nvim_create_autocmd('FileType', {
       group    = augroup,
       pattern  = 'markdown',
-      callback = function(ev)
-        local path = vim.api.nvim_buf_get_name(ev.buf)
-        if path ~= '' and is_pkm_file(path) then return end   -- PKM note → full path
-        require('pkm.syntax').enable(ev.buf, true)
-      end,
+      callback = function(ev) enable_plain_markdown(ev.buf) end,
     })
+
+    -- FileType does not re-fire for markdown buffers already open when setup ran
+    -- (a config reload/`:source`, or a file whose FileType fired before this
+    -- autocmd registered), so they would never get highlighted until re-edited.
+    -- Enable them now — mirrors pkm-syntax.setup()'s own existing-buffer loop.
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_loaded(b) and vim.bo[b].filetype == 'markdown' then
+        enable_plain_markdown(b)
+      end
+    end
   end
 
   -- Startup check: activate immediately if Neovim was opened from PKM root.
