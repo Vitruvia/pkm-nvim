@@ -75,6 +75,17 @@ views.autoswitch_tick()
 check("no markdown left → back to views", views.sidebar_provider() == 'views',
   tostring(views.sidebar_provider()))
 
+print("\n== focusing a non-md file switches to views even if a markdown window remains ==")
+focus_markdown(); views.autoswitch_tick()          -- nav (main is markdown)
+vim.cmd('vsplit')                                   -- a second window, still markdown
+local w2 = vim.api.nvim_get_current_win()
+vim.api.nvim_win_set_buf(main, txtbuf)              -- main now non-markdown; w2 stays markdown
+vim.api.nvim_set_current_win(main)
+views.autoswitch_tick()
+check("non-md focus → views though a markdown window is still open",
+  views.sidebar_provider() == 'views', tostring(views.sidebar_provider()))
+vim.api.nvim_win_close(w2, true)
+
 print("\n== a manual cycle sticks until the context changes ==")
 focus_markdown()
 views.autoswitch_tick()

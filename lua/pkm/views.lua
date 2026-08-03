@@ -3351,16 +3351,21 @@ function tab_has_markdown()
   return false
 end
 
---- The provider the current focus asks for, or nil for "leave as is" (a
---- non-markdown window is focused but markdown windows still exist, or the
---- sidebar itself is focused).
+--- The provider the current focus asks for, or nil for "leave as is" (the
+--- sidebar itself, another PKM panel, netrw, or a floating window is focused —
+--- none of those is the note you are working in).
+--- A markdown editing window asks for nav; any other real editing window
+--- (a non-markdown file, a scratch buffer, ...) asks for views.
 ---@return 'nav'|'views'|nil
 function autoswitch_desired()
   local cur = vim.api.nvim_get_current_win()
-  if _panel.get_win() == cur then return nil end
-  if win_is_markdown(cur) then return 'nav' end
-  if not tab_has_markdown() then return 'views' end
-  return nil
+  if not vim.api.nvim_win_is_valid(cur) then return nil end
+  if vim.api.nvim_win_get_config(cur).relative ~= '' then return nil end   -- a float
+  if _panel.get_win() == cur then return nil end                           -- the sidebar
+  local ft = vim.bo[vim.api.nvim_win_get_buf(cur)].filetype
+  if ft == 'pkm-sidebar' or ft == 'pkm-bufpanel' or ft == 'netrw' then return nil end
+  if ft == 'markdown' then return 'nav' end
+  return 'views'
 end
 
 --- Mark the current focus context as already handled (called by explicit opens

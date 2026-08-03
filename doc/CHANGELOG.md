@@ -61,6 +61,23 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.52.1] - 3/8/2026
+
+*Follow-up to the v1.52.0 smoke: autoswitch flipped to nav on focusing a markdown
+window and back to views once no markdown window remained — but focusing a
+**non-markdown** file while a markdown window stayed open elsewhere did nothing.*
+
+### Fixed
+
+-   **Autoswitch now falls back to views whenever you focus a real non-markdown
+    editing window**, not only when the last markdown window closes.
+    `autoswitch_desired` returned `views` solely on `not tab_has_markdown()`; it
+    now returns `nav` for a focused markdown window and `views` for any other real
+    editing window (a non-markdown file, a scratch buffer), while still ignoring
+    the sidebar, other PKM panels, netrw, and floats. `test_v1520_p1` gained the
+    two-window case (non-md focus → views with a markdown window still open).
+    Suite 82/0.
+
 ## [1.52.0] - 3/8/2026
 
 *Area 3, Phase 3.3b — the sidebar autoswitches between its providers by focus.
