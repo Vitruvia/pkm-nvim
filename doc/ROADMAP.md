@@ -583,12 +583,17 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
 - ✅ **v1.54.0 — buffer panel `[count]<CR>` + `/` search**: open the buffer in the
   Nth editing window (like the sidebar), and a fuzzy pop-up over the open buffers
   (`pick_list`). `test_v1540`. Suite 84/0.
-- **Phase 3.5b — the pop-up as a provider container (rest)**: a **nav/headings
-  picker** (`/` on the nav provider; "open nav in the pop-up") via `pick_list`; an
-  **in-pop-up cycle** across file-browse / views / nav; and **standalone pop-up
-  entries** whose selection does NOT drive the sidebar (the other half of the
-  origin rule — pop-up and sidebar are separate). `open_views_panel` (the intricate
-  notes browser) stays untouched where possible.
+- ✅ **v1.55.0 (Phase 3.5b slice 1) — nav/headings pop-up**: `nav.search()` (the
+  nav provider's `/`, and standalone `keymaps.nav_search`) opens a `pick_list` of
+  the focused note's headings; choosing one jumps. Replaced the in-panel filter.
+  `test_v1550`.
+- ✅ **v1.56.0 (Phase 3.5b slice 2) — cyclable pop-up container**: `pkm.popup`
+  hosts browse / views / nav in one pop-up, cycled with `<C-l>` (Telescope only).
+  Standalone semantics complete the origin rule — selecting never drives the
+  sidebar (browse opens the note, views **activates** via `views.popup_search`,
+  nav jumps); the sidebar's own `/` stays the separate sidebar-driving surface.
+  `pick_list`/`browse`/`browse_paths`/`live_picker` gained an additive `on_cycle`.
+  `test_v1560`. **This closes Phase 3.5 — the pop-up is now the sidebar's mirror.**
 - **Phase 3.4 (deferred)** — journal/scratch navigation (wires the idle
   `journal.lua` helpers); block-element indexing in the nav provider.
 - Active-window motions (list items, blocks); explorer UI customisation (Distant

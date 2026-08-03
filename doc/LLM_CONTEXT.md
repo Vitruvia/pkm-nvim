@@ -7,27 +7,36 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.54.0** (code-complete on `dev`) — buffer panel [count]<CR> + `/` search; live autoswitch
+## Current version: **v1.56.0** (code-complete on `dev`) — cyclable pop-up container (closes Area 3 Phase 3.5)
 
-*v1.54.0: buffer panel gains **`[count]<CR>`** (open the buffer in the Nth editing window, like the
-view sidebar — reuses `_sort_wins_by_col`/`_resolve_window_slot`) and **`/`** (a fuzzy pop-up over
-open buffers via `pick_list`; choosing one opens it). New ui.lua helpers collect_listed_bufs/
-open_buffer/open_buffer_in_slot/bufpanel_search. `test_v1540`.*
+*v1.56.0 (3.5b slice 2): **`pkm.popup`** — ONE pop-up hosting the three providers (browse=all notes,
+views=view names, nav=headings), cycled with `<C-l>` (Telescope only; `vim.ui.select` fallback omits
+it). `popup.open(provider)`; `<C-l>` re-opens on the next in browse→views→nav. STANDALONE semantics
+complete the origin rule: selecting does the provider-native action and NEVER drives the sidebar —
+browse opens the note, views ACTIVATES (M.open, via new `views.popup_search`), nav jumps. The
+sidebar's own `/` (which DOES drive the sidebar) stays separate. `keymaps.nav_search` opens this
+cyclable pop-up on nav. `pick_list`/`browse`/`browse_paths`/`live_picker` gained optional `on_cycle`
+(additive; `:PKMBrowse` + sidebar `/` unchanged). `test_v1560`. CLOSES Phase 3.5.*
+
+*v1.55.0 (3.5b slice 1): `nav.search()` = fuzzy headings pop-up (pick_list; jump on select). It is
+the nav provider's `/` (replaced the in-panel filter + `c` clear) and reachable standalone via
+`keymaps.nav_search`. test_v1550; test_v1510 updated (nav keys now all shared with views).*
+
+*v1.54.0: buffer panel gains `[count]<CR>` (open in the Nth editing window; reuses
+`_sort_wins_by_col`/`_resolve_window_slot`) and `/` (fuzzy pop-up over open buffers via pick_list).
+New ui.lua helpers collect_listed_bufs/open_buffer/open_buffer_in_slot/bufpanel_search. test_v1540.*
 
 *v1.53.1 (smoke fixes): AUTOSWITCH IS NOW LIVE (removed the transition-seeding — `_autoswitch_last`/
 `seed_autoswitch_context`/`tab_has_markdown` gone). It shows the provider the focused editing window
 asks for (nav for markdown, views otherwise); a manual `<C-n>` cycle is a TRANSIENT PEEK that holds
 while you stay in the sidebar and reverts on refocusing an editing window; pin via `:PKMPanel
-autoswitch off`. **Opening the sidebar (no-name) is context-driven** (focused markdown → opens nav
-directly). Nav header shows the vault only if it FITS the sidebar width (a long note name no longer
-pushes it off-screen). test_v1520 updated (peek reverts); test_v190_p2 pins autoswitch off.*
+autoswitch off`. Opening the sidebar (no-name) is context-driven. Nav header shows the vault only if
+it FITS the sidebar width. test_v1520 updated; test_v190_p2 pins autoswitch off.*
 
 *v1.53.0 (Area 3 Phase 3.5a): content-consistent `/` — views overview `/` searches VIEWS (a
 `pick_list` of view names); launched from the sidebar so choosing one switches THIS sidebar to it.
-New `pkm.telescope.pick_list` / `pkm.ui.pick_list` primitive. `sidebar_search()` backs the `/`.
-NEXT = 3.5b: nav/headings picker (`/` on nav; open nav in the pop-up); in-pop-up cycle
-file-browse/views/nav; standalone pop-up entries whose select does NOT drive the sidebar. KEY MODEL:
-pop-up & sidebar are SEPARATE; the pop-up drives the sidebar only when opened from it.*
+New `pkm.telescope.pick_list` / `pkm.ui.pick_list` primitive. `sidebar_search()` backs the `/`. KEY
+MODEL: pop-up & sidebar are SEPARATE; the pop-up drives the sidebar only when opened from it.*
 
 
 *v1.52.0 (Area 3 Phase 3.3b): the sidebar AUTOSWITCHES between its providers by focus. On by

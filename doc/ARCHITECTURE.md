@@ -201,10 +201,21 @@ just one consumer of it. The public sidebar accessors (`get_last_view`,
 **nav.lua** — current-file navigation, a **sidebar content provider** (not its own
 container as of v1.51.0). Exposes `sidebar_provider` (a heading index of the last
 active markdown window via `markdown.scan_headings`: `build_lines` + `<CR>` jump / `/`
-filter / `c` clear keymaps + statusline + `on_enter` cursor placement) and registers it
-with `views.register_sidebar_provider` from `setup()`. Tracks the source window with a
-`WinEnter`/`BufWinEnter` autocmd (`_source`), refreshing the sidebar only while it is
-showing nav. `capture_current()` seeds the source before the sidebar switches to nav.
+= `search()` keymaps + statusline + `on_enter` cursor placement) and registers it with
+`views.register_sidebar_provider` from `setup()`. `search()` (v1.55.0) is the fuzzy
+headings pop-up (`pick_list`; jump on select) — the nav provider's `/` and the
+standalone `keymaps.nav_search`. Tracks the source window with a `WinEnter`/`BufWinEnter`
+autocmd (`_source`), refreshing the sidebar only while it is showing nav.
+`capture_current()` seeds the source before the sidebar switches to nav.
+
+**popup.lua** (v1.56.0) — the pop-up mirror of the sidebar: one pop-up hosting the three
+content providers (`browse` all notes, `views` view names, `nav` headings) with
+`open(provider)`, cycled by `<C-l>` in order `browse → views → nav` (Telescope only —
+the pickers take an additive `on_cycle`; the `vim.ui.select` fallback omits the key).
+**Standalone** semantics: selecting does the provider-native action and never drives the
+sidebar (that is the sidebar's own `/`). The origin rule's two halves: sidebar `/` →
+`views.sidebar_search` (drives the sidebar); pop-up → `views.popup_search` (`M.open`,
+activate).
 
 **picker.lua** — note selection and confirmation front-ends. `select(paths, opts,
 on_confirm)` shows the Telescope picker or the float fallback — the only place that
