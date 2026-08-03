@@ -39,7 +39,7 @@
 --
 -- Public API:
 --   create(spec) → panel object: { open(init?), close(), toggle(init?),
---                  refresh(), is_open(), get_win() }
+--                  refresh(), refresh_all(), is_open(), get_win(), get_state() }
 -- =============================================================================
 
 local M = {}
@@ -66,6 +66,18 @@ local M = {}
 ---   resize         : function(state, lines)|nil  called after every
 ---                    populate; caller performs its own window resize
 ---                    (nvim_win_set_height/width) or does nothing
+---   width          : number|function()->number|nil  when set, marks this
+---                    panel a managed-width side split: the width is applied
+---                    at open (followed by `wincmd =` so siblings re-equalise
+---                    around the fixed panel), and re-asserted across every
+---                    open instance on WinResized so the panel never drifts
+---                    as windows open/close. Pair with win_opts.winfixwidth.
+---   on_open        : function(state, helpers)|nil  called once, after the
+---                    window/buffer/keymaps are set up and before focus is
+---                    handled. The seam for per-panel decorations the factory
+---                    deliberately does not unify (statusline, winbar, extra
+---                    buffer-local autocmds/keymaps). state.win/state.buf are
+---                    live when it runs.
 ---   focus_on_open  : boolean|nil  default false. false = bufpanel-style:
 ---                    focus returns to the pre-open window immediately
 ---                    (glanceable, not modal). true = tagpanel-style: focus
@@ -83,6 +95,13 @@ function M.create(spec)
   local keymaps          = spec.keymaps or {}
   local refresh_events   = spec.refresh_events or {}
   local extra_win_opts   = spec.win_opts or {}
+
+  --- Resolve spec.width (number or thunk) to a concrete column count, or nil.
+  local function resolve_width()
+    local w = spec.width
+    if type(w) == 'function' then return w() end
+    return w
+  end
 
   -- Per-tab state, scoped to this panel instance only.
   local _tabs = {}
@@ -129,6 +148,25 @@ function M.create(spec)
     if spec.resize then spec.resize(t, lines) end
   end
 
+  --- Repopulate this panel in EVERY tabpage where it is open, from each tab's
+  --- own state. Tab-independent (never switches tabpages): build_lines(state)
+  --- reads the passed state, not the current tab. Prunes states whose window
+  --- has since been destroyed. No-op for tabs where the panel is closed.
+  function panel.refresh_all()
+    for id, t in pairs(_tabs) do
+      if t.win and not vim.api.nvim_win_is_valid(t.win) then
+        _tabs[id] = nil
+      elseif t.buf and vim.api.nvim_buf_is_valid(t.buf) then
+        local lines, row_map = spec.build_lines(t)
+        t.map = row_map or {}
+        vim.api.nvim_set_option_value('modifiable', true,  { buf = t.buf })
+        vim.api.nvim_buf_set_lines(t.buf, 0, -1, false, lines)
+        vim.api.nvim_set_option_value('modifiable', false, { buf = t.buf })
+        if spec.resize then spec.resize(t, lines) end
+      end
+    end
+  end
+
   --- Close this panel's window in the current tabpage, if open.
   function panel.close()
     local t = get_tab()
@@ -163,6 +201,18 @@ function M.create(spec)
   function panel.get_win()
     local t = get_tab()
     if t.win and vim.api.nvim_win_is_valid(t.win) then return t.win end
+    return nil
+  end
+
+  --- Return this panel's live per-tab state in the current tabpage, or nil
+  --- when the panel is closed here. Unlike get_tab() this never creates an
+  --- entry — callers reading provider fields (mode, name, ...) off the state
+  --- get the real table while open and a clean nil while closed.
+  ---@return table|nil
+  function panel.get_state()
+    local id = vim.api.nvim_get_current_tabpage()
+    local t  = _tabs[id]
+    if t and t.win and vim.api.nvim_win_is_valid(t.win) then return t end
     return nil
   end
 
@@ -209,6 +259,13 @@ function M.create(spec)
     for k, v in pairs(extra_win_opts) do win_opts[k] = v end
     for opt, val in pairs(win_opts) do
       vim.api.nvim_set_option_value(opt, val, { win = t.win })
+    end
+
+    -- Managed-width side split: fix this panel's width, then equalise the
+    -- siblings around it so the panel never squeezes an editing window.
+    if spec.width then
+      vim.api.nvim_win_set_width(t.win, resolve_width())
+      vim.cmd('wincmd =')
     end
 
     for opt, val in pairs({
@@ -266,6 +323,10 @@ function M.create(spec)
       vim.keymap.set('n', '<Esc>', function() panel.close() end, ko)
     end
 
+    -- Per-panel decoration/keymap seam: statusline, winbar, extra autocmds.
+    -- Runs with the window/buffer fully set up, before focus is handled.
+    if spec.on_open then spec.on_open(t, helpers) end
+
     if not spec.focus_on_open then
       vim.api.nvim_set_current_win(prev_win)
     end
@@ -295,6 +356,27 @@ function M.create(spec)
       end
     end,
   })
+
+  -- Managed-width panels re-assert their width after any layout change:
+  -- winfixwidth alone does not defend against a sibling closing (nothing
+  -- left to reassert against) or a new window appearing and inheriting stale
+  -- proportions. WinResized covers both, so the panel only ever resizes via
+  -- config, never as a side effect of windows opening or closing.
+  if spec.width then
+    vim.api.nvim_create_autocmd('WinResized', {
+      group    = tabs_augroup,
+      callback = function()
+        vim.schedule(function()
+          local w = resolve_width()
+          for _, t in pairs(_tabs) do
+            if t.win and vim.api.nvim_win_is_valid(t.win) then
+              pcall(vim.api.nvim_win_set_width, t.win, w)
+            end
+          end
+        end)
+      end,
+    })
+  end
 
   return panel
 end

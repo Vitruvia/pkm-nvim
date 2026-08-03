@@ -7,7 +7,26 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.48.0** (code-complete on `dev`) — current-file nav panel (Area 3 Phase 3.1)
+## Current version: **v1.49.0** (code-complete on `dev`) — sidebar extracted onto `panel.create` (Area 3 Phase 3.2)
+
+*v1.49.0 (Area 3 Phase 3.2): the views sidebar was extracted onto the generic `pkm.panel`
+container, behavior-preserving. `panel.create` grew four seams: `spec.width` (number/thunk —
+fixes width at open, `wincmd =` to re-equalise siblings, re-asserts on `WinResized`),
+`spec.on_open(state, helpers)` (per-panel decoration seam: statusline/winbar/extra
+autocmds), `panel.refresh_all()` (repopulate the panel in every tabpage from each tab's own
+state), `panel.get_state()` (live per-tab state while open, nil while closed) — all additive,
+buffer/tag/nav panels untouched. The sidebar is now `panel.create({name='sidebar', width=…,
+focus_on_open=true})`; content is one `sidebar_build(state)` dispatcher; its whole keymap +
+statusline + winbar surface moved VERBATIM into `on_open`. `views` no longer has its own
+`_tabs`/`get_tab` (now `get_tab` → `_panel.get_state()`) nor the `TabClosed`/`WinResized`
+autocmds (panel owns them). Public API unchanged (`open_sidebar`/`is_sidebar_open`/
+`get_sidebar_win`/`get_last_view`/`refresh_sidebar_if_open`/`set_panel_keymap`). Two
+intentional consistency micro-changes: `<Esc>` now closes (like `q`); panel `WinClosed` net
+keeps a main window alive. `test_v1490`; existing sidebar tests (`test_v180_p6` marks,
+`test_v1200_p1` ui_state, `test_v190_p2` filetype) are the regression gate, all green.
+Suite 79/0. NEXT: 3.3 provider cycling + sidebar-default-nav (one container switches between
+views and nav providers). Interactive-only bits ride the manual smoke.*
+
 
 *v1.48.0 opens Area 3 (containers + nav). `lua/pkm/nav.lua` + `:PKMPanel nav`: a side
 panel of the focused note's ATX headings (via `markdown.scan_headings`, fence/frontmatter

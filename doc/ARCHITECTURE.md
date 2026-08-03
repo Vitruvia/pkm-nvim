@@ -166,7 +166,13 @@ counterparts, so they stayed. Listing is unordered (nothing depends on it) and
 no longer honours `'wildignore'`.
 
 **views.lua** — named project views. Sidecar `views.json` + `config.projects`.
-Two-mode sidebar (overview + detail); per-tabpage `_tabs` state including `type_filter`.
+Two-mode sidebar (overview + detail). Since **v1.49.0** the sidebar is a provider
+on `panel.create` (`_panel`, `name = 'sidebar'`): the panel owns the window /
+per-tab state / width / lifecycle, `views` owns the content. `get_tab()` is a thin
+alias over `_panel.get_state()`; the provider fields (`mode`, `name`, `paths`,
+`tree`, `header_count`, `type_filter`, `marked`, `history`) ride the panel's per-tab
+table. `sidebar_build(state)` is the single content dispatcher (overview vs. detail);
+the whole interactive surface lives in `sidebar_on_open`.
 `sidebar_build_lines(name, paths, total_count)` — builds detail lines; callers
 pre-filter by type and pass `#all_paths` as total for "N of M" display.
 `refresh_sidebar_if_open()` — iterates all tabpages, applies per-tab type filter.
@@ -177,13 +183,14 @@ reading the index once per batch and skipping the path array and the sort. Every
 "(N)" shown by an overview, panel or picker comes from the counting pair — never
 from `#match_all` — which is what keeps overview cost linear in views, not in
 views × sorts (see CHANGELOG, v1.6.1 Ph3, for the measured effect).
-Note: the sidebar's per-tabpage `_tabs` state and the view-tree helpers
-(`build_tree_entries`, `get_view_parent`/`get_view_children`) are shared with the
-panels/pickers and with the public sidebar accessors (`get_last_view`,
-`is_sidebar_open`, `get_sidebar_win`), so the sidebar is **not** cleanly separable
-into its own module — extraction would require a bidirectional dependency and a
-wider public surface. A cleaner split, if ever pursued, is to extract the *model*
-layer (sidecar + tree helpers + `match_all`), not the sidebar UI.
+Note: the sidebar's *container* (window/lifecycle/width) was extracted onto
+`panel.create` in v1.49.0. Its *content* still leans on the view-tree helpers
+(`build_tree_entries`, `get_view_parent`/`get_view_children`, `match_all`), which
+are shared with the panels/pickers — so the views-provider is not a standalone
+module, and that is fine: those helpers are the model layer, and the sidebar UI is
+just one consumer of it. The public sidebar accessors (`get_last_view`,
+`is_sidebar_open`, `get_sidebar_win`, `refresh_sidebar_if_open`) now delegate to
+`_panel`. Phase 3.3 will let this one container also host the `nav` provider.
 
 **picker.lua** — note selection and confirmation front-ends. `select(paths, opts,
 on_confirm)` shows the Telescope picker or the float fallback — the only place that
@@ -266,12 +273,16 @@ Consumed by `actions.lua`, `citations.merge_tags`, `notes.create_relative_note`
 and `:PKMTags`.
 
 **panel.lua** — generic per-tabpage panel factory. `create(spec)` returns an independent
-panel object `{ open(init?), close(), toggle(init?), refresh(), is_open(), get_win() }`,
-each owning its own per-tab state. Every panel gets `winfixbuf = true` and a scoped
-augroup (debounced refresh, WinClosed/BufWipeout/TabClosed lifecycle) uniformly. Consumed
-by `ui` (buffer panel, tag panel), `trash` (restore panel), and `views` (views/delete
-panels). Header/statusline hints, content formatting, and filtering are deliberately NOT
-unified — panels differ enough there that a shared format would fight real differences.
+panel object `{ open(init?), close(), toggle(init?), refresh(), refresh_all(), is_open(),
+get_win(), get_state() }`, each owning its own per-tab state. Every panel gets
+`winfixbuf = true` and a scoped augroup (debounced refresh, WinClosed/BufWipeout/TabClosed
+lifecycle) uniformly. Optional `spec.width` makes it a **managed-width side split** (fix
+width + `wincmd =` at open, re-assert on `WinResized`); optional `spec.on_open(state,
+helpers)` is the per-panel decoration seam (statusline/winbar/extra autocmds). Consumed by
+`ui` (buffer panel, tag panel), `trash` (restore panel), `nav` (current-file nav), and
+`views` (the sidebar since v1.49.0, plus the views/delete panels). Header/statusline hints,
+content formatting, and filtering are deliberately NOT unified — panels differ enough there
+that a shared format would fight real differences.
 
 **mode.lua** — `M.activate()`, `M.deactivate()`, `M.toggle()`, `M.set(arg)`,
 `M.is_active()`. Manages PKMMode session state: triggers index prebuild, opens

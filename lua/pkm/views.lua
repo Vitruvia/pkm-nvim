@@ -75,30 +75,21 @@ local _panel_keymap_lhs = nil   -- sidebar-buffer-local key to open the views
                                  -- panel; nil until set_panel_keymap() is
                                  -- called from keymaps.lua (opt-in, see config)
 
--- Per-tabpage sidebar state. Keyed by nvim_get_current_tabpage().
--- Each tab carries its own win, buf, mode, name, paths, tree,
--- header_count, view_lines, and history, eliminating cross-tab conflicts.
-local _tabs = {}
+-- The sidebar is a managed-width side panel built on pkm.panel. `_panel` is
+-- created down in the Sidebar section; it is forward-declared here so the
+-- read/write API and the history helpers can reference it. Its per-tab state
+-- table carries the provider fields — mode, name, paths, tree, header_count,
+-- view_lines, history, type_filter, marked — alongside the panel's own
+-- win/buf/augroup, so there is one per-tabpage state and no cross-tab conflict.
+local _panel
 
---- Return the current tabpage's sidebar state table, creating it if absent.
+--- The sidebar's live per-tab state while it is open here, or nil when closed.
+--- A thin alias over the panel so the in-panel keymaps (ported verbatim into
+--- sidebar_on_open) keep reading `get_tab()`. Unlike the old auto-creating
+--- version this returns nil when the sidebar is closed, so the few callers
+--- that can run while closed guard the result.
 local function get_tab()
-  local id = vim.api.nvim_get_current_tabpage()
-  if not _tabs[id] then
-    _tabs[id] = {
-      win          = nil,
-      buf          = nil,
-      name         = nil,
-      paths        = {},
-      tree         = {},
-      header_count = 0,
-      mode         = nil,
-      view_lines   = {},
-      history      = {},
-      type_filter  = nil,   -- string|nil; filters displayed notes by note_type
-      marked       = {},    -- path → true; survives refresh, cleared on switch
-    }
-  end
-  return _tabs[id]
+  return _panel.get_state()
 end
 
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5,
@@ -413,7 +404,7 @@ end
 --- Capped at 50 entries; oldest entry dropped when full.
 local function sidebar_push_history()
   local t = get_tab()
-  if not t.mode then return end
+  if not t or not t.mode then return end
   if #t.history >= 50 then table.remove(t.history, 1) end
   t.history[#t.history + 1] = { mode = t.mode, name = t.name }
 end
@@ -422,7 +413,7 @@ end
 ---@return table|nil  {mode=string, name=string|nil} or nil if empty
 local function sidebar_pop_history()
   local t = get_tab()
-  if #t.history == 0 then return nil end
+  if not t or #t.history == 0 then return nil end
   local state = t.history[#t.history]
   t.history[#t.history] = nil
   return state
@@ -594,38 +585,10 @@ function M.setup()
     end,
   })
 
-  vim.api.nvim_create_autocmd('TabClosed', {
-    group    = augroup,
-    callback = function()
-      local live = {}
-      for _, tp in ipairs(vim.api.nvim_list_tabpages()) do live[tp] = true end
-      for id in pairs(_tabs) do
-        if not live[id] then _tabs[id] = nil end
-      end
-    end,
-  })
-
-  -- winfixwidth only stops the sidebar being squeezed when a sibling
-  -- window grows — it does nothing when a sibling closes (nothing left
-  -- to reassert against) or when a *new* window appears afterward and
-  -- inherits whatever proportions existed at that moment. WinResized
-  -- fires after any layout change in the tabpage, covering both cases,
-  -- so the sidebar only ever changes size via config or an explicit
-  -- keymap, never as a side effect of windows opening or closing.
-  vim.api.nvim_create_autocmd('WinResized', {
-    group    = augroup,
-    callback = function()
-      vim.schedule(function()
-        local width = (require('pkm').config.sidebar_width or 40)
-        for _, id in ipairs(vim.api.nvim_list_tabpages()) do
-          local t = _tabs[id]
-          if t and t.win and vim.api.nvim_win_is_valid(t.win) then
-            pcall(vim.api.nvim_win_set_width, t.win, width)
-          end
-        end
-      end)
-    end,
-  })
+  -- The sidebar's per-tab pruning (TabClosed) and managed-width re-assertion
+  -- (WinResized) now live inside pkm.panel, which owns the container: see
+  -- panel.create's per-instance autocmds. They were removed from here when the
+  -- sidebar became a panel provider (v1.49.0).
 end
 
 -- =============================================================================
@@ -868,8 +831,7 @@ end
 ---@return string|nil
 function M.get_last_view()
   local t = get_tab()
-  if t.win and vim.api.nvim_win_is_valid(t.win)
-  and t.mode == 'detail' and t.name then
+  if t and t.mode == 'detail' and t.name then
     return t.name
   end
   return _last_view
@@ -878,16 +840,13 @@ end
 --- Return true if the sidebar is currently open in the current tabpage.
 ---@return boolean
 function M.is_sidebar_open()
-  local t = get_tab()
-  return t.win ~= nil and vim.api.nvim_win_is_valid(t.win)
+  return _panel ~= nil and _panel.is_open()
 end
 
 --- Return the sidebar window handle for the current tabpage, or nil if closed.
 ---@return integer|nil
 function M.get_sidebar_win()
-  local t = get_tab()
-  if t.win and vim.api.nvim_win_is_valid(t.win) then return t.win end
-  return nil
+  return _panel and _panel.get_win() or nil
 end
 
 --- Set the sidebar-buffer-local key that opens the views panel. Called
@@ -2443,7 +2402,7 @@ function M.rename(old_name, new_name)
   -- Keep session state consistent.
   if _last_view == old_name then _last_view = new_name end
   local ct = get_tab()
-  if ct.name == old_name then ct.name = new_name end
+  if ct and ct.name == old_name then ct.name = new_name end
 
   -- config.lua subprojects cannot be safely rewritten by the plugin; warn
   -- (never block — the sidecar rename above already succeeded).
@@ -2742,27 +2701,53 @@ local function sidebar_build_lines(name, paths, total_count, marked)
   return lines, tree_entries, header_count, sorted
 end
 
---- Write lines to the sidebar buffer.
-local function sidebar_set_content(lines)
-  local t = get_tab()
-  vim.api.nvim_set_option_value('modifiable', true,  { buf = t.buf })
-  vim.api.nvim_buf_set_lines(t.buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value('modifiable', false, { buf = t.buf })
+--- Build the sidebar's display lines for its current mode, stashing the
+--- per-mode row metadata (view_lines / tree / header_count / paths) back onto
+--- `t` for the keymaps to read. This is the panel's single content entry
+--- point — shared by open, refresh and refresh_all — so overview and detail
+--- render identically no matter which repopulate triggered them. Marks are
+--- keyed by path, so a rebuild preserves them even as a view's contents shift.
+---@param t table  the panel's per-tab state
+---@return string[] lines
+local function sidebar_build(t)
+  if t.mode == 'detail' and t.name then
+    local all_paths     = M.match_all(t.name)
+    local display_paths = all_paths
+    if t.type_filter then
+      local idx_m    = require('pkm.index')
+      local filtered = {}
+      for _, p in ipairs(all_paths) do
+        local e = idx_m.get(p)
+        if e and e.note_type == t.type_filter then filtered[#filtered + 1] = p end
+      end
+      display_paths = filtered
+    end
+    local lines, tree_entries, header_count, sorted =
+      sidebar_build_lines(t.name, display_paths, #all_paths, t.marked)
+    t.view_lines   = {}
+    t.tree         = tree_entries
+    t.header_count = header_count
+    t.paths        = sorted
+    return lines
+  else
+    local lines, view_lines = sidebar_build_overview()
+    t.view_lines   = view_lines
+    t.tree         = {}
+    t.header_count = 0
+    t.paths        = {}
+    return lines
+  end
 end
 
 --- Switch the open sidebar to overview mode.
 local function sidebar_switch_to_overview()
-  local t = get_tab()
+  local t = _panel.get_state()
+  if not t then return end
   t.type_filter = nil
-  local lines, view_lines = sidebar_build_overview()
-  t.mode         = 'overview'
-  t.name         = nil
-  t.paths        = {}
-  t.tree         = {}
-  t.header_count = 0
-  t.view_lines   = view_lines
-  t.marked       = {}   -- a different list of notes; old marks mean nothing here
-  sidebar_set_content(lines)
+  t.mode        = 'overview'
+  t.name        = nil
+  t.marked      = {}   -- a different list of notes; old marks mean nothing here
+  _panel.refresh()
   if vim.api.nvim_win_is_valid(t.win) then
     vim.api.nvim_win_set_cursor(
       t.win, { math.min(4, vim.api.nvim_buf_line_count(t.buf)), 0 })
@@ -2772,32 +2757,14 @@ end
 --- Switch the open sidebar to detail mode for a named view.
 ---@param name string
 local function sidebar_switch_to_detail(name)
-  local t = get_tab()
-  local all_paths = M.match_all(name)
-
-  local display_paths = all_paths
-  if t.type_filter then
-    local idx_m = require('pkm.index')
-    local filtered = {}
-    for _, p in ipairs(all_paths) do
-      local e = idx_m.get(p)
-      if e and e.note_type == t.type_filter then filtered[#filtered + 1] = p end
-    end
-    display_paths = filtered
-  end
-
-  t.marked       = {}   -- entering another view: its notes were never marked
-  local lines, tree_entries, header_count, sorted =
-    sidebar_build_lines(name, display_paths, #all_paths, t.marked)
-  t.mode         = 'detail'
-  t.name         = name
-  t.paths        = sorted
-  t.tree         = tree_entries
-  t.header_count = header_count
-  t.view_lines   = {}
-  sidebar_set_content(lines)
-  if vim.api.nvim_win_is_valid(t.win) and #sorted > 0 then
-    vim.api.nvim_win_set_cursor(t.win, { header_count + 1, 0 })
+  local t = _panel.get_state()
+  if not t then return end
+  t.marked = {}   -- entering another view: its notes were never marked
+  t.mode   = 'detail'
+  t.name   = name
+  _panel.refresh()
+  if vim.api.nvim_win_is_valid(t.win) and #t.paths > 0 then
+    vim.api.nvim_win_set_cursor(t.win, { t.header_count + 1, 0 })
   end
 end
 
@@ -2829,77 +2796,26 @@ local function sidebar_show_help()
   show_keymap_help(' Sidebar Keymaps ', lines)
 end
 
---- Open or toggle the persistent view sidebar.
---- No name → close if open; open in overview mode if closed.
---- Named view → open detail; same name again while in detail → close.
---- Overview keymaps: <CR> enter view  <BS>/<C-b> notify  r refresh  q/<Esc> close
---- Detail keymaps:   <CR> open note or navigate  <BS> pop history or overview
----                   <C-b> jump to overview  / scoped search  r refresh  q/<Esc> close
----@param name string|nil
----@return nil
-function M.open_sidebar(name)
-  local t = get_tab()
-  local my_tab_id = vim.api.nvim_get_current_tabpage()
+-- The sidebar's per-panel decorations and its full interactive surface, run
+-- once per open by pkm.panel after it has built the window/buffer and its
+-- default q/<Esc> maps (which the q/<Esc> maps below deliberately override with
+-- the quit-if-sole close). Every keymap body here is the sidebar's own,
+-- reading live per-tab state through get_tab() (→ _panel.get_state()). Keeping
+-- them here rather than in panel's declarative keymap table preserves the
+-- count-aware and chorded maps ([count]<CR>, <C-y><C-v>) exactly as they were.
+---@param pstate table  the panel's per-tab state; pstate.win / pstate.buf are live
+local function sidebar_on_open(pstate, _helpers)
+  local buf = pstate.buf
 
-  -- Clear stale state if the window was destroyed externally.
-  if t.win and not vim.api.nvim_win_is_valid(t.win) then
-    _tabs[my_tab_id] = nil
-    t = get_tab()
-  end
-
-  if not name or name == '' then
-    if t.win then
-      vim.api.nvim_win_close(t.win, true)
-      return
-    end
-  else
-    if t.win then
-      if t.mode == 'detail' and t.name == name then
-        vim.api.nvim_win_close(t.win, true)
-        return
-      end
-      sidebar_push_history()
-      sidebar_switch_to_detail(name)
-      return
-    end
-  end
-
-  -- Open new sidebar window.
-  local width    = (require('pkm').config.sidebar_width or 40)
-
-  vim.cmd('noautocmd topleft vsplit')
-  t.win = vim.api.nvim_get_current_win()
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  t.buf = buf
-  vim.api.nvim_win_set_buf(t.win, buf)
-  vim.api.nvim_win_set_width(t.win, width)
-
-  for opt, val in pairs({
-    winfixbuf = true, winfixwidth = true, wrap = false,
-    number = false, cursorline = true, signcolumn = 'no',
-  }) do
-    vim.api.nvim_set_option_value(opt, val, { win = t.win })
-  end
-  -- winfixwidth is now set; equalize other windows so the sidebar does not
-  -- squeeze the leftmost editing window below a usable width.
-  vim.cmd('wincmd =')
-
-  for opt, val in pairs({
-    bufhidden = 'wipe', buftype = 'nofile', swapfile = false,
-  }) do
-    vim.api.nvim_set_option_value(opt, val, { buf = buf })
-  end
-
-  vim.api.nvim_set_option_value('filetype', 'pkm-sidebar', { buf = buf })
-
+  -- Statusline hint. panel deliberately does not unify statuslines, so the
+  -- provider owns this (WinEnter/BufWinEnter re-assert it after focus moves).
   local function refresh_sidebar_sl()
     vim.schedule(function()
-      if vim.api.nvim_win_is_valid(t.win) then
+      if vim.api.nvim_win_is_valid(pstate.win) then
         vim.api.nvim_set_option_value(
           'statusline',
           '  PKM Views  · CR open  · / search  · ? help  · q close',
-          { win = t.win })
+          { win = pstate.win })
       end
     end)
   end
@@ -2907,12 +2823,6 @@ function M.open_sidebar(name)
   vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
     buffer   = buf,
     callback = refresh_sidebar_sl,
-  })
-
-  vim.api.nvim_create_autocmd('BufWipeout', {
-    buffer   = buf,
-    once     = true,
-    callback = function() _tabs[my_tab_id] = nil end,
   })
 
   local ko = { noremap = true, silent = true, buffer = buf }
@@ -3258,6 +3168,7 @@ function M.open_sidebar(name)
     end
   end
   vim.keymap.set('n', 'q',     close_sidebar, ko)
+  vim.keymap.set('n', '<Esc>', close_sidebar, ko)
 
   -- Statusline infobar: show the full filename of the note under the cursor.
   -- In overview mode the statusline is cleared. Fires on every cursor move
@@ -3293,56 +3204,71 @@ function M.open_sidebar(name)
     end,
   })
 
-  -- Populate initial content
-  if name and name ~= '' then
+  -- winbar CursorMoved is the last decoration; content + cursor are placed by
+  -- M.open_sidebar after the panel opens.
+end
+
+-- The sidebar container: a managed-width left split on pkm.panel. Provider
+-- state (mode/name/paths/marked/history/type_filter) rides the panel's per-tab
+-- table; the content builder is sidebar_build(); the interactive surface is
+-- sidebar_on_open(). focus_on_open keeps the sidebar focused after opening,
+-- matching the pre-panel behaviour.
+_panel = panel.create({
+  name          = 'sidebar',
+  split_cmd     = 'noautocmd topleft vsplit',
+  width         = function() return require('pkm').config.sidebar_width or 40 end,
+  win_opts      = { winfixwidth = true },
+  build_lines   = sidebar_build,
+  on_open       = sidebar_on_open,
+  focus_on_open = true,
+})
+
+--- Open or toggle the persistent view sidebar.
+--- No name → close if open; open in overview mode if closed.
+--- Named view → open detail; same name again while in detail → close;
+--- a different name while open → push history and switch to that view.
+---@param name string|nil
+---@return nil
+function M.open_sidebar(name)
+  if _panel.is_open() then
+    local t = _panel.get_state()
+    if not name or name == '' then
+      _panel.close()
+      return
+    end
+    if t and t.mode == 'detail' and t.name == name then
+      _panel.close()
+      return
+    end
+    sidebar_push_history()
+    sidebar_switch_to_detail(name)
+    return
+  end
+
+  -- Fresh open: seed the provider state so the panel's first build renders the
+  -- right mode, then re-enter that mode to place the cursor (the switch helpers
+  -- are the single source of cursor-placement truth).
+  local mode = (name and name ~= '') and 'detail' or 'overview'
+  _panel.open({
+    mode        = mode,
+    name        = (mode == 'detail') and name or nil,
+    marked      = {},
+    history     = {},
+    type_filter = nil,
+  })
+  if mode == 'detail' then
     sidebar_switch_to_detail(name)
   else
     sidebar_switch_to_overview()
   end
 end
 
---- Refresh the sidebar content if it is currently open. No-op otherwise.
---- Call after any operation that modifies the note list (deletion, rename, etc.).
+--- Refresh the sidebar content in every tabpage where it is open. No-op
+--- otherwise. Call after any operation that modifies the note list (deletion,
+--- rename, etc.). Marks (keyed by path) survive the rebuild.
 ---@return nil
 function M.refresh_sidebar_if_open()
-  for _, id in ipairs(vim.api.nvim_list_tabpages()) do
-    local t = _tabs[id]
-    if t and t.win then
-      if not vim.api.nvim_win_is_valid(t.win) then
-        _tabs[id] = nil
-      else
-        local lines, view_lines, tree_entries, header_count, sorted
-        if t.mode == 'overview' then
-          lines, view_lines = sidebar_build_overview()
-          t.view_lines = view_lines
-      else
-          local all_paths = M.match_all(t.name)
-          local display_paths = all_paths
-          if t.type_filter then
-            local idx_m = require('pkm.index')
-            local filtered = {}
-            for _, p in ipairs(all_paths) do
-              local e = idx_m.get(p)
-              if e and e.note_type == t.type_filter then
-                filtered[#filtered + 1] = p
-              end
-            end
-            display_paths = filtered
-          end
-          -- Marks are keyed by path, so a refresh preserves them even when the
-          -- view's contents shifted underneath.
-          lines, tree_entries, header_count, sorted =
-            sidebar_build_lines(t.name, display_paths, #all_paths, t.marked)
-          t.paths        = sorted
-          t.tree         = tree_entries
-          t.header_count = header_count
-        end
-        vim.api.nvim_set_option_value('modifiable', true,  { buf = t.buf })
-        vim.api.nvim_buf_set_lines(t.buf, 0, -1, false, lines)
-        vim.api.nvim_set_option_value('modifiable', false, { buf = t.buf })
-      end
-    end
-  end
+  _panel.refresh_all()
 end
 
 -- Exposed for test/test_v160_p3.lua only; not part of the module's public API.

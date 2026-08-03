@@ -61,6 +61,59 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.49.0] - 3/8/2026
+
+*Area 3, Phase 3.2 — the views sidebar was extracted onto the generic
+`pkm.panel` container factory, behavior-preserving. The sidebar had its own
+bespoke window lifecycle (raw `nvim_open_win`, per-tab `_tabs`, `winfixwidth`
+management, statusline/winbar, quit-if-sole close) tangled together with the
+views content. `panel.create` grew the few seams a managed-width side panel
+needs, and the sidebar became a **provider** on it — the same container the
+buffer panel, tag panel, and nav panel already ride. This is the substrate
+Phase 3.3 needs to let one container cycle between the views and nav providers.*
+
+### Changed
+
+-   **`pkm.panel` generalized into a managed-width side-panel container.** New
+    `spec.width` (number or thunk) fixes the panel's width at open, runs
+    `wincmd =` so siblings re-equalise around it, and re-asserts the width across
+    every open instance on `WinResized` (the discipline the sidebar used to own).
+    New `spec.on_open(state, helpers)` is the per-panel decoration seam
+    (statusline, winbar, extra buffer-local autocmds/keymaps) the factory
+    deliberately does not unify. New `panel.refresh_all()` repopulates the panel
+    in every tabpage from each tab's own state; new `panel.get_state()` returns
+    the live per-tab state while open, nil while closed. All additive — the
+    buffer/tag/nav panels are untouched.
+-   **The views sidebar now rides `panel.create`** (`name = 'sidebar'`,
+    `split_cmd = 'noautocmd topleft vsplit'`, `width` from `config.sidebar_width`,
+    `focus_on_open`). Its content is a single `sidebar_build(state)` dispatcher
+    (overview vs. detail); its full interactive surface — every keymap (`<CR>`
+    with `[count]`, `<Tab>`/`<S-Tab>` marks, `<C-a>`, `N`/`<C-y>` chords, `<C-v>`,
+    `<C-t>` type filter, `T`, `b`/`<BS>`/`<C-b>` history, `/`, `r`, `?`), the
+    statusline and the winbar — moved verbatim into `spec.on_open`. Public API is
+    unchanged: `open_sidebar`, `is_sidebar_open`, `get_sidebar_win`,
+    `get_last_view`, `refresh_sidebar_if_open`, `set_panel_keymap`. The sidebar's
+    old `TabClosed`/`WinResized` autocmds were removed from `views.setup` — the
+    container owns them now.
+
+### Notes
+
+-   Two intentional micro-changes from the pre-panel sidebar, both toward
+    consistency with the other panels: **`<Esc>` now closes the sidebar** (via the
+    same quit-if-sole close as `q`; previously inert), and the panel's `WinClosed`
+    safety net ensures a main editing window exists rather than letting the
+    sidebar become the sole window. Everything else is behavior-preserving.
+-   `test_v1490_p1` covers the new container API in isolation (width/on_open/
+    refresh_all/get_state) and the sidebar on it (container props, history
+    push/pop, type-filter cycle, close, no-arg toggle). The existing headless
+    sidebar tests are the real regression gate and stayed green unchanged —
+    `test_v180_p6` drives the marking keymaps for real; `test_v1200_p1` reads the
+    sidebar through `api.ui_state`; `test_v190_p2` asserts the `pkm-sidebar`
+    filetype. Suite 79/0; luacheck clean (the one views warning is a pre-existing
+    long notify string). Interactive behaviors the headless suite cannot see
+    (winbar/statusline rendering, `wincmd =` layout, focus, split placement) ride
+    the manual smoke.
+
 ## [1.48.0] - 2/8/2026
 
 *Area 3, Phase 3.1 — current-file navigation. The first new content provider on

@@ -535,12 +535,15 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   the active note. Built on `panel.create` — the first new content provider on the
   generic container factory, **no `views.lua` touched**. `keymaps.nav_panel`
   (default off). *Block-element indexing (quotes/code/tables) deferred (Phase 3.4).*
-- **Phase 3.2 — extract the container from `views.lua`** (behavior-preserving,
-  smoke-gated): generalize `panel.create` for a persistent side split with managed
-  width + focus-on-open; the sidebar's window/lifecycle (per-tab state,
-  `winfixwidth`, split-relative-open) moves out and `views` becomes a *provider*
-  keeping `get_last_view`/`refresh_sidebar_if_open` as its content API. This is the
-  interwoven, interactive, suite-blind piece — isolated on purpose. Major.
+- ✅ **v1.49.0 (Phase 3.2) — sidebar extracted onto `panel.create`**
+  (behavior-preserving): `panel.create` grew `spec.width` (managed-width side
+  split + `wincmd =` + `WinResized` re-assert), `spec.on_open` (decoration seam),
+  `refresh_all()` and `get_state()`; the sidebar became a provider on it — content
+  is `sidebar_build(state)`, its full keymap/statusline/winbar surface moved
+  verbatim into `on_open`. Public API unchanged. Two intentional consistency
+  micro-changes: `<Esc>` now closes (like `q`), and the panel's `WinClosed` net
+  keeps a main window alive. `test_v1490_p1`; existing sidebar tests are the
+  regression gate (all green). Manual smoke covers the interactive-only bits.
 - **Phase 3.3 — containers host multiple providers**: a cycle key to switch a
   container's active provider, and the **sidebar defaults to `nav` when a PKM note
   is focused** (else views) — the "go to sidebar browses headings" UX.
