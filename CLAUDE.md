@@ -40,7 +40,13 @@ conflict, say so explicitly rather than silently choosing one.
 
 ## Fixed facts (never reconstruct from memory)
 
-- Repo root — WSL: `/mnt/p/Active/pkm-nvim`  ·  Windows: `P:\Active\pkm-nvim`
+- Repo root — WSL: `/mnt/p/Active/pkm-suite/pkm-nvim`  ·  Windows:
+  `P:\Active\pkm-suite\pkm-nvim`. The repo now lives inside the **pkm-suite**
+  container as a sibling of `pkm-syntax` (WSL `/mnt/p/Active/pkm-suite/pkm-syntax`
+  · Windows `P:\Active\pkm-suite\pkm-syntax`). `test/min_init.lua` resolves the
+  sibling relatively (`fnamemodify(repo_root, ':h') .. '/pkm-syntax'`), so the
+  move needed no test change. GitHub repos stay **separate** under `Vitruvia/pkm-*`;
+  the suite is a working-tree grouping, not a monorepo.
 - Git remote name: `pkm-nvim` (**not** `origin`). **All development happens on
   `dev`**, including releases: a version is closed and tagged on `dev`. `main`
   is **not** a release line — it holds periodic stable backups of `dev`, merged

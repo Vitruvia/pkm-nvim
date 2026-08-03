@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.57.0** (code-complete on `dev`) — consolidation Workstream B: Recursos read/write-on-request rule (§6.2) + light note conventions (granularity, bib) + skill bundle ships CONVENTIONS.md
+## Current version: **v1.58.0** (code-complete on `dev`) — consolidation Workstream A: repo moved into the `pkm-suite\` container as a sibling of `pkm-syntax` (separate `Vitruvia/pkm-*` repos); path refs reconciled + thin suite-level `CLAUDE.md` added; no plugin code changed. (v1.57.0 was Workstream B: Recursos read/write-on-request §6.2 + light note conventions + skill bundle ships CONVENTIONS.md.)
 
 *v1.56.0 (3.5b slice 2): **`pkm.popup`** — ONE pop-up hosting the three providers (browse=all notes,
 views=view names, nav=headings), cycled with `<C-l>` (Telescope only; `vim.ui.select` fallback omits
@@ -146,7 +146,7 @@ suppression decoupled from the fold; default keeps numbers) — pkm-nvim's
 enable()-driven note look is unchanged. Suite 73/0.*
 
 *v1.44.0 completes the extraction: the markdown highlighting is now the standalone
-**`pkm-syntax`** plugin (sibling repo `P:/Active/pkm-syntax`, remote Vitruvia/pkm-syntax,
+**`pkm-syntax`** plugin (sibling repo `P:/Active/pkm-suite/pkm-syntax`, remote Vitruvia/pkm-syntax,
 renamed from pkm-highlight). `lua/pkm/syntax.lua` is a thin facade re-exporting
 `require('pkm-syntax')` (graceful no-op stub + warning if the plugin is absent), so all
 callers are unchanged. The highlighting code and `queries/markdown/*.scm` MOVED to
@@ -722,7 +722,7 @@ different vault — which is how a restore from `NotesTeste` came to target
 | OS | Windows 10 + WSL (Ubuntu) |
 | Editor | Neovim 0.11.3 |
 | Plugin manager | Lazy.nvim |
-| Plugin path | `P:/Active/pkm-nvim/` (Windows) · `/mnt/p/Active/pkm-nvim/` (WSL) |
+| Plugin path | `P:/Active/pkm-suite/pkm-nvim/` (Windows) · `/mnt/p/Active/pkm-suite/pkm-nvim/` (WSL) — sibling `pkm-syntax` alongside under `pkm-suite/`; GitHub repos stay separate under `Vitruvia/pkm-*` |
 | Vaults | `P:/Note-Vault/` — `01 - Vitruvia` (primary, never touched in development) · `00 - NotesTeste` (test vault; smoke notes and every experiment go here) |
 | Vault paths contain spaces | `P:/Note-Vault/00 - NotesTeste`. Quote the whole flag in a shell: `-- "--root=P:/Note-Vault/00 - NotesTeste"`, or argv splits it. Verified unaffected: `vim.fn.glob`, `vim.fn.expand`, libuv scandir, and every `find(root, 1, true)` — the plugin's root comparisons all pass the plain flag |
 | Config path | `~/AppData/Local/nvim/` (Windows) · `~/.config/nvim/` (WSL) |

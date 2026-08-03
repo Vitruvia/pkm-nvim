@@ -61,6 +61,42 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.58.0] - 3/8/2026
+
+*Post-Area-3 consolidation, Workstream A — the repo moved into the **pkm-suite**
+working-tree container as a sibling of `pkm-syntax`. Path references reconciled and
+a thin suite-level `CLAUDE.md` added. Infrastructure/docs only — no plugin code
+changed; the headless suite is unaffected because the sibling is resolved
+relatively.*
+
+### Changed
+
+-   **Repo root is now `P:\Active\pkm-suite\pkm-nvim`** (WSL
+    `/mnt/p/Active/pkm-suite/pkm-nvim`), a sibling of `pkm-syntax` under the
+    `pkm-suite\` container. The GitHub repos stay **separate** under `Vitruvia/pkm-*`
+    — the suite is a working-tree grouping, not a monorepo.
+-   **`CLAUDE.md`** Fixed facts — repo-root path updated, plus a note on the sibling
+    layout, the relative sibling resolution, and the separate-repos policy.
+-   **`doc/LLM_CONTEXT.md`** — the `pkm-syntax` sibling path (now
+    `P:/Active/pkm-suite/pkm-syntax`) and the Environment-table plugin path. The
+    dated v1.43.0 narration (old `pkm-highlight` name) is left as history.
+
+### Added
+
+-   **`P:\Active\pkm-suite\CLAUDE.md`** — a thin suite-level guide holding *only* the
+    cross-repo contract: the sibling layout, the separate `Vitruvia/pkm-*` GitHub
+    repos, the `pkm-nvim → pkm-syntax` dependency + API-lockstep contract
+    (pkm-syntax stays `Dependencies: none`), and the suite-wide Google-Drive /
+    no-`git gc` rule. Each repo keeps its own authoritative `CLAUDE.md`.
+
+### Notes
+
+-   **No code changed.** `test/min_init.lua` resolves the sibling via
+    `fnamemodify(repo_root, ':h') .. '/pkm-syntax'`, so the move needed no test edit;
+    `test_v1160_skill` runs ALL PASS post-move. **Remaining consolidation item:
+    Workstream E** — the `doc/pkm.txt` body + ROADMAP "Working features" list, stale
+    since v1.14.0 (see ROADMAP § Documentation debt).
+
 ## [1.57.0] - 3/8/2026
 
 *Post-Area-3 consolidation, Workstream B — reference-root permission and a few
