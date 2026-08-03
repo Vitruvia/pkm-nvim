@@ -7,7 +7,18 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.47.1** (code-complete on `dev`) — syntax control (:PKMSyntax + lazy facade)
+## Current version: **v1.48.0** (code-complete on `dev`) — current-file nav panel (Area 3 Phase 3.1)
+
+*v1.48.0 opens Area 3 (containers + nav). `lua/pkm/nav.lua` + `:PKMPanel nav`: a side
+panel of the focused note's ATX headings (via `markdown.scan_headings`, fence/frontmatter
+aware), level-indented + title header; `<CR>` jumps the source window, `/` filters (`c`
+clear, `r` refresh). Follows the active note (WinEnter/BufWinEnter tracker from
+`nav.setup`, wired in init.lua). Built ENTIRELY on `panel.create` — the first new content
+provider on the generic container factory, no views.lua touched (Phase 3.1). Optional
+`keymaps.nav_panel` (default false). NEXT: 3.2 extract the sidebar container from views.lua
+(behavior-preserving, smoke-gated), then 3.3 provider cycling + sidebar-default-nav.
+`test_v1480`; audit test_v1130_p8 gained the `nav` verb. Suite 77/0.*
+
 
 *v1.47.1 (author smoke follow-up): `highlight_all_markdown` now also enables markdown
 buffers ALREADY OPEN when setup ran (FileType doesn't re-fire for them — a reload, or a

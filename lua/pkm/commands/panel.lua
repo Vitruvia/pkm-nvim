@@ -17,6 +17,11 @@ local function act_buffers()
   require('pkm.ui').toggle_bufpanel()
 end
 
+--- Toggle the current-file navigation panel (heading index of the focused note).
+local function act_nav()
+  require('pkm.nav').toggle()
+end
+
 --- Open or toggle the view sidebar (optionally a named view).
 local function act_sidebar(name)
   require('pkm.views').open_sidebar(name)
@@ -50,12 +55,14 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- :PKMPanel — the context form: explorer (default) | buffers | sidebar | mode
   -- ---------------------------------------------------------------------------
-  local PANEL_VERBS = { 'explorer', 'buffers', 'sidebar', 'mode' }
+  local PANEL_VERBS = { 'explorer', 'buffers', 'nav', 'sidebar', 'mode' }
 
   vim.api.nvim_create_user_command('PKMPanel', function(opts)
     local p = require('pkm.args').parse(opts, { verbs = PANEL_VERBS, default = 'explorer' })
     if p.verb == 'buffers' then
       act_buffers()
+    elseif p.verb == 'nav' then
+      act_nav()
     elseif p.verb == 'sidebar' then
       act_sidebar(p.positional[1])
     elseif p.verb == 'mode' then
@@ -77,7 +84,7 @@ function M.register()
       local lead = (arg_lead or ''):lower()
       return vim.tbl_filter(function(t) return t:lower():find(lead, 1, true) == 1 end, out)
     end,
-    desc = 'Panels: :PKMPanel [explorer] | buffers | sidebar [view] | mode [on|off]',
+    desc = 'Panels: :PKMPanel [explorer] | buffers | nav | sidebar [view] | mode [on|off]',
   })
 
 end

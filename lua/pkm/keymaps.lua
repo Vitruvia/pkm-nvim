@@ -62,6 +62,7 @@ function M.register(config)
   map(k.view_sidebar, "<cmd>PKMView sidebar<cr>", "View Sidebar")
   map(k.view_list, "<cmd>PKMView list<cr>", "List Views")
   map(k.view_buffers, "<cmd>PKMPanel buffers<cr>", "Buffer Panel")
+  map(k.nav_panel,    "<cmd>PKMPanel nav<cr>",     "File Navigation (headings)")
 
   if k.view_panel then
     require('pkm.views').set_panel_keymap(k.view_panel)

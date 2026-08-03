@@ -67,8 +67,9 @@ function M.setup(user_config)
   require('pkm.index').setup(M.config)
   require('pkm.mode').setup(M.config)
   require('pkm.views').setup()
+  require('pkm.nav').setup(M.config)
 
-end 
+end
 
 -- =============================================================================
 -- SECTION: Sync autocmds

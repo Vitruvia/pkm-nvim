@@ -61,6 +61,33 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.48.0] - 2/8/2026
+
+*Area 3, Phase 3.1 — current-file navigation. The first new content provider on
+the generic `pkm.panel` container factory (the same one the buffer and tag panels
+use), proving the container/content direction with zero refactor risk (no
+`views.lua` change). The heading index is the standout content type the author
+asked for; here it ships as a standalone panel, ahead of the sidebar extraction.*
+
+### Added
+
+-   **`lua/pkm/nav.lua` + `:PKMPanel nav`** — a persistent side panel listing the
+    ATX headings of the markdown buffer you are working in, indented by level,
+    with a title header. `<CR>` jumps the source window to the heading; `/` filters
+    by text (`c` clears, `r` refreshes, `q`/`<Esc>` close). The panel **follows the
+    active note** as you switch buffers (a `WinEnter`/`BufWinEnter` source tracker
+    registered by `nav.setup`, wired in `init.lua`). Optional `keymaps.nav_panel`
+    (default `false`). Reuses `markdown.scan_headings` (fence- and
+    frontmatter-aware), so `#` inside code or frontmatter is never listed.
+
+### Notes
+
+-   Built entirely on `panel.create` — one content provider among others; the
+    container/content generalization and the sidebar extraction are later phases.
+-   `test_v1480_p1` (heading index core + open/close integration); the command
+    audit (`test_v1130_p8`) gained the `nav` verb. Suite 77/0, no new luacheck
+    warnings.
+
 ## [1.47.1] - 2/8/2026
 
 *Follow-up to the v1.47.0 author smoke: `highlight_all_markdown` highlighted only

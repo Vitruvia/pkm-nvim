@@ -526,18 +526,26 @@ threads, in order:*
   question. **Area 2 (wrapping) is now COMPLETE; no open questions.** *Changes the
   note text agents read/write — the reflow is idempotent and marker-preserving.*
 
-**3 · Navigation + panels/sidebar — 🔺 (command-creating parts first)**
-- **Note-wide bookmark bar**: a navigable index of the current note's headers, in
-  a panel (Near 2.2–2.3).
-- **Container / content refactor**: three containers — **left vertical bar**
-  (today's sidebar slot), **low horizontal bar** (today's buffer slot), and the
-  **telescope panel** (with its vim fallback) — each able to hold any content
-  (netrw, search, views, buffers), adjusted per container. Likely **extract the
-  sidebar from `views`**: a sidebar can show non-view content, whereas `views` is
-  the note-organising filter that a container *displays* and that other commands
-  (e.g. export) interface with. Major; probably its own refactor.
-- **Journal / scratch navigation**: a dedicated browse/preview, built with the
-  panel work (wires the idle `journal.lua` helpers).
+**3 · Navigation + panels/sidebar — 🔺 (command-creating parts first)** — *in
+progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
+(low risk), then extract the sidebar container; headings-only to start.*
+- ✅ **v1.48.0 (Phase 3.1) — current-file navigation** (`lua/pkm/nav.lua`,
+  `:PKMPanel nav`): a side panel of the focused note's ATX headings (via
+  `markdown.scan_headings`), level-indented, `<CR>` jumps + `/` filters, follows
+  the active note. Built on `panel.create` — the first new content provider on the
+  generic container factory, **no `views.lua` touched**. `keymaps.nav_panel`
+  (default off). *Block-element indexing (quotes/code/tables) deferred (Phase 3.4).*
+- **Phase 3.2 — extract the container from `views.lua`** (behavior-preserving,
+  smoke-gated): generalize `panel.create` for a persistent side split with managed
+  width + focus-on-open; the sidebar's window/lifecycle (per-tab state,
+  `winfixwidth`, split-relative-open) moves out and `views` becomes a *provider*
+  keeping `get_last_view`/`refresh_sidebar_if_open` as its content API. This is the
+  interwoven, interactive, suite-blind piece — isolated on purpose. Major.
+- **Phase 3.3 — containers host multiple providers**: a cycle key to switch a
+  container's active provider, and the **sidebar defaults to `nav` when a PKM note
+  is focused** (else views) — the "go to sidebar browses headings" UX.
+- **Phase 3.4 (deferred)** — journal/scratch navigation (wires the idle
+  `journal.lua` helpers); block-element indexing in the nav provider.
 - Active-window motions (list items, blocks); explorer UI customisation (Distant
   6); relevance ordering in panels (Distant 9). *These create commands/panels an
   agent reaches for → 🔺.*

@@ -152,6 +152,7 @@ indent and reflows blockquotes with a repeated `>` prefix. See `doc/CONVENTIONS.
 |---|---|
 | `:PKMPanel [explorer]` | Toggle the explorer (sidebar + buffer panel) |
 | `:PKMPanel buffers` | Toggle a persistent bottom panel listing open buffers |
+| `:PKMPanel nav` | Toggle the current-file navigation panel (heading index; `<CR>` jumps, `/` filters) |
 | `:PKMPanel sidebar [name]` | Toggle the view sidebar |
 | `:PKMPanel mode [on\|off]` | Toggle PKM mode (explorer + index + syntax) |
 | `:PKMTrash restore` | Browse and restore notes from the trash |
