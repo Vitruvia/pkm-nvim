@@ -83,6 +83,14 @@ local _panel_keymap_lhs = nil   -- sidebar-buffer-local key to open the views
 -- win/buf/augroup, so there is one per-tabpage state and no cross-tab conflict.
 local _panel
 
+-- Sidebar autoswitch (Phase 3.3b): follow focus between the views and nav
+-- providers. Default on; set from config.sidebar_autoswitch in M.setup, toggled
+-- by :PKMPanel autoswitch. The helpers are forward-declared here because the
+-- provider/open functions above the autoswitch section reference them.
+local _autoswitch_enabled = true
+local _autoswitch_last = {}   -- tabid -> 'nav' | 'views' (last context applied)
+local win_is_markdown, tab_has_markdown, autoswitch_desired, seed_autoswitch_context
+
 --- The sidebar's live per-tab state while it is open here, or nil when closed.
 --- A thin alias over the panel so the in-panel keymaps (ported verbatim into
 --- sidebar_on_open) keep reading `get_tab()`. Unlike the old auto-creating
@@ -549,6 +557,9 @@ end
 --- is saved from inside Neovim. Must be called from pkm.init.setup().
 function M.setup()
   local augroup = vim.api.nvim_create_augroup('PKMViews', { clear = true })
+
+  -- Sidebar autoswitch defaults on; opt out with config.sidebar_autoswitch = false.
+  _autoswitch_enabled = get_config().sidebar_autoswitch ~= false
 
   -- Subprojects (parent-bearing entries) are only ever valid in views.json.
   -- config.lua is Lua source, not a data file the plugin can safely rewrite,
@@ -3279,6 +3290,7 @@ function M.cycle_sidebar_provider()
   local i = 1
   for idx, n in ipairs(_sidebar_order) do if n == cur then i = idx; break end end
   M.set_sidebar_provider(_sidebar_order[(i % #_sidebar_order) + 1])
+  seed_autoswitch_context()   -- a manual cycle sticks until the context changes
 end
 
 --- Show provider `name` in the sidebar: open it on that provider if closed,
@@ -3300,12 +3312,106 @@ function M.show_sidebar_provider(name)
       set_sidebar_statusline(t)
       if provider.on_enter then provider.on_enter(t) end
     end
+    seed_autoswitch_context()
     return
   end
   local t = _panel.get_state()
   if (t.provider or 'views') == name then _panel.close(); return end
   if name == 'nav' then require('pkm.nav').capture_current() end
   M.set_sidebar_provider(name)
+  seed_autoswitch_context()
+end
+
+-- =============================================================================
+-- SECTION: Sidebar autoswitch (Phase 3.3b)
+-- =============================================================================
+--
+-- With autoswitch on, the open sidebar follows focus: it shows `nav` when the
+-- focused window holds a markdown file, and falls back to `views` once no window
+-- holds a markdown file. It acts only on a CONTEXT TRANSITION (nav-worthy ↔
+-- no-file), so a manual cycle (<C-n>) or an explicit :PKMPanel nav|sidebar stays
+-- put until the context actually changes — to pin the sidebar, turn autoswitch
+-- off. Explicit opens seed the context as "handled" so they, too, stick.
+
+--- A normal (non-float) window showing a markdown buffer.
+---@param win integer
+---@return boolean
+function win_is_markdown(win)
+  if not vim.api.nvim_win_is_valid(win) then return false end
+  if vim.api.nvim_win_get_config(win).relative ~= '' then return false end
+  return vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'markdown'
+end
+
+--- Does any window in the current tabpage hold a markdown buffer?
+---@return boolean
+function tab_has_markdown()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win_is_markdown(win) then return true end
+  end
+  return false
+end
+
+--- The provider the current focus asks for, or nil for "leave as is" (a
+--- non-markdown window is focused but markdown windows still exist, or the
+--- sidebar itself is focused).
+---@return 'nav'|'views'|nil
+function autoswitch_desired()
+  local cur = vim.api.nvim_get_current_win()
+  if _panel.get_win() == cur then return nil end
+  if win_is_markdown(cur) then return 'nav' end
+  if not tab_has_markdown() then return 'views' end
+  return nil
+end
+
+--- Mark the current focus context as already handled (called by explicit opens
+--- and manual switches), so autoswitch does not immediately override the choice.
+function seed_autoswitch_context()
+  _autoswitch_last[vim.api.nvim_get_current_tabpage()] =
+    tab_has_markdown() and 'nav' or 'views'
+end
+
+--- React to a focus/layout change: flip the open sidebar's provider on a context
+--- transition. No-op when autoswitch is off, the sidebar is closed, or the
+--- context has not changed since it was last applied. Called (scheduled) from
+--- nav's window tracker.
+function M.autoswitch_tick()
+  if not _autoswitch_enabled or not _panel.is_open() then return end
+  local desired = autoswitch_desired()
+  if not desired then return end
+  local tabid = vim.api.nvim_get_current_tabpage()
+  if _autoswitch_last[tabid] == desired then return end
+  _autoswitch_last[tabid] = desired
+  if desired == 'nav' then
+    require('pkm.nav').capture_current()
+    M.set_sidebar_provider('nav')
+  else
+    M.set_sidebar_provider('views')
+  end
+end
+
+--- Turn sidebar autoswitch on / off / toggle (default toggle). Applying it on
+--- re-checks the current context immediately.
+---@param arg string|nil  'on' | 'off' | 'toggle'
+---@return boolean enabled
+function M.set_autoswitch(arg)
+  arg = (arg == '' and 'toggle') or arg or 'toggle'
+  if arg == 'on' then
+    _autoswitch_enabled = true
+  elseif arg == 'off' then
+    _autoswitch_enabled = false
+  else
+    _autoswitch_enabled = not _autoswitch_enabled
+  end
+  vim.notify('[pkm] sidebar autoswitch: ' .. (_autoswitch_enabled and 'on' or 'off'),
+    vim.log.levels.INFO)
+  if _autoswitch_enabled then M.autoswitch_tick() end
+  return _autoswitch_enabled
+end
+
+--- Is sidebar autoswitch currently enabled?
+---@return boolean
+function M.autoswitch_enabled()
+  return _autoswitch_enabled
 end
 
 --- The sidebar's decorations + common keymaps, run once per open by pkm.panel.
@@ -3398,6 +3504,7 @@ function M.open_sidebar(name)
     if (t.provider or 'views') ~= 'views' then
       M.set_sidebar_provider('views')
       if name and name ~= '' then sidebar_switch_to_detail(name) end
+      seed_autoswitch_context()
       return
     end
     if not name or name == '' then
@@ -3437,6 +3544,7 @@ function M.open_sidebar(name)
         t.win, { math.min(4, vim.api.nvim_buf_line_count(t.buf)), 0 })
     end
   end
+  seed_autoswitch_context()   -- an explicit views open sticks until context changes
 end
 
 --- Toggle sidebar focus. From any other window: record it as the return target
@@ -3448,7 +3556,13 @@ end
 ---@return nil
 function M.focus_sidebar()
   if not _panel.is_open() then
-    M.open_sidebar()
+    -- Context-driven open: with autoswitch on, "go to sidebar" from a markdown
+    -- file opens on its nav; otherwise (or autoswitch off) it opens views.
+    if _autoswitch_enabled and win_is_markdown(vim.api.nvim_get_current_win()) then
+      M.show_sidebar_provider('nav')
+    else
+      M.open_sidebar()
+    end
     return
   end
   local t   = _panel.get_state()

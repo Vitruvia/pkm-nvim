@@ -559,14 +559,16 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   nav.lua is a provider (registers via `views.register_sidebar_provider`).
   Container ownership stays in views.lua for now (a `pkm.sidebar` extraction is a
   later tidy). `test_v1510` (keymap swap). Suite 81/0.
-- **Phase 3.3b — autoswitch** (the model, per the author): default is at most one
-  sidebar + one bottom bar; the bar shows buffers. The **sidebar autoswitches to
-  `nav` when the last active window holds a MARKDOWN file, and back to `views`
-  when no window holds a file** (all file windows closed). Autoswitch is **ON by
-  default** and toggled by **`:PKMPanel autoswitch`** (so the sidebar can be
-  pinned to a chosen provider). Manual cycle (`<C-n>`) and `:PKMPanel nav|sidebar`
-  always override. Multiple simultaneous sidebars stay a future per-user-config
-  option, not the default.
+- ✅ **v1.52.0 (Phase 3.3b) — autoswitch**: the open sidebar follows focus —
+  `nav` when a **markdown** window is focused, `views` when no window holds a
+  markdown file — acting only on a **context transition** so a manual `<C-n>`
+  cycle or explicit `:PKMPanel nav|sidebar` sticks until the context changes. ON
+  by default (`config.sidebar_autoswitch`); `:PKMPanel autoswitch [on|off|toggle]`
+  pins it. `<leader>s` opens context-appropriately. Fixed the nav header glyph
+  (`▚`→`≡`). `test_v1520`. Suite 82/0. **This closes the Area 3 container/content
+  arc (3.1→3.3b).** Multiple simultaneous sidebars stay a future per-user-config
+  option; a `pkm.sidebar` extraction of the host out of `views.lua` is a later
+  mechanical tidy.
 - **Phase 3.4 (deferred)** — journal/scratch navigation (wires the idle
   `journal.lua` helpers); block-element indexing in the nav provider; nav in a
   pop-up panel (a separate surface, like the `/` search popup).

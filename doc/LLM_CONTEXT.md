@@ -7,7 +7,23 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.51.0** (code-complete on `dev`) — one sidebar, pluggable providers (Area 3 Phase 3.3a)
+## Current version: **v1.52.0** (code-complete on `dev`) — sidebar autoswitch (Area 3 Phase 3.3b)
+
+*v1.52.0 (Area 3 Phase 3.3b): the sidebar AUTOSWITCHES between its providers by focus. On by
+default (`config.sidebar_autoswitch`, `:PKMPanel autoswitch [on|off|toggle]`, `views.set_autoswitch`).
+Shows `nav` when the focused window holds a MARKDOWN file, `views` when no window holds a
+markdown file. Acts only on a CONTEXT TRANSITION (nav-worthy ↔ no-file) tracked per-tab in
+`_autoswitch_last`, so a manual `<C-n>` cycle or explicit `:PKMPanel nav|sidebar` STICKS until
+the context changes (explicit opens/cycles call `seed_autoswitch_context` to mark the context
+handled). Driven by `views.autoswitch_tick()`, scheduled from nav's WinEnter/BufWinEnter
+tracker. `<leader>s` (focus_sidebar) opens context-appropriately (nav from a markdown window,
+else views). Helpers `win_is_markdown`/`tab_has_markdown`/`autoswitch_desired` are forward-
+declared in views' State section (the provider/open fns above the autoswitch section reference
+them). FIX: nav header glyph `▚`(U+259A, obscure)→`≡`(U+2261, the winbar's outline glyph).
+`test_v1520`. Suite 82/0. Area 3 container/content arc (3.1→3.3b) COMPLETE; 3.4 deferred
+(journal/scratch nav, block-element indexing, nav-in-popup). A `pkm.sidebar` extraction of the
+container host out of views.lua remains a later mechanical tidy.*
+
 
 *v1.51.0 (Area 3 Phase 3.3a): the sidebar is now a container hosting content PROVIDERS,
 switched in place. Corrects Phase 3.1's mistake (`:PKMPanel nav` opened nav in its OWN 2nd

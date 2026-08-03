@@ -29,6 +29,11 @@ local function act_sidebar(name)
   require('pkm.views').open_sidebar(name)
 end
 
+--- Turn the sidebar's focus-following autoswitch on/off/toggle (default toggle).
+local function act_autoswitch(arg)
+  require('pkm.views').set_autoswitch((arg or ''):match('^%s*(.-)%s*$'))
+end
+
 --- Activate, deactivate, or toggle PKM session context.
 local function act_mode(arg)
   require('pkm.mode').set((arg or ''):match('^%s*(.-)%s*$'))
@@ -57,7 +62,7 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- :PKMPanel — the context form: explorer (default) | buffers | sidebar | mode
   -- ---------------------------------------------------------------------------
-  local PANEL_VERBS = { 'explorer', 'buffers', 'nav', 'sidebar', 'mode' }
+  local PANEL_VERBS = { 'explorer', 'buffers', 'nav', 'sidebar', 'autoswitch', 'mode' }
 
   vim.api.nvim_create_user_command('PKMPanel', function(opts)
     local p = require('pkm.args').parse(opts, { verbs = PANEL_VERBS, default = 'explorer' })
@@ -67,6 +72,8 @@ function M.register()
       act_nav()
     elseif p.verb == 'sidebar' then
       act_sidebar(p.positional[1])
+    elseif p.verb == 'autoswitch' then
+      act_autoswitch(p.positional[1])
     elseif p.verb == 'mode' then
       act_mode(p.positional[1])
     else
@@ -78,6 +85,8 @@ function M.register()
       local out
       if line:match('^%s*PKMPanel%s+[Mm][Oo][Dd][Ee]%s') then
         out = { 'on', 'off' }
+      elseif line:match('^%s*PKMPanel%s+[Aa][Uu][Tt][Oo][Ss][Ww][Ii][Tt][Cc][Hh]%s') then
+        out = { 'on', 'off', 'toggle' }
       elseif line:match('^%s*PKMPanel%s+[Ss][Ii][Dd][Ee][Bb][Aa][Rr]%s') then
         out = require('pkm.views').list()
       else
@@ -86,7 +95,7 @@ function M.register()
       local lead = (arg_lead or ''):lower()
       return vim.tbl_filter(function(t) return t:lower():find(lead, 1, true) == 1 end, out)
     end,
-    desc = 'Panels: :PKMPanel [explorer] | buffers | nav | sidebar [view] | mode [on|off]',
+    desc = 'Panels: :PKMPanel [explorer] | buffers | nav | sidebar [view] | autoswitch [on|off] | mode [on|off]',
   })
 
 end

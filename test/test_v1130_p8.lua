@@ -85,7 +85,7 @@ local VERB_AUDIT = {
   { 'PKMView ',   { 'add', 'new', 'delete', 'sidebar', 'rename' } },
   { 'PKMVault ',  { 'new', 'rename', 'renumber', 'adopt' } },
   { 'PKMBrowse ', { 'recent', 'orphans', 'tags' } },
-  { 'PKMPanel ',  { 'buffers', 'nav', 'sidebar', 'mode' } },
+  { 'PKMPanel ',  { 'buffers', 'nav', 'sidebar', 'autoswitch', 'mode' } },
   { 'PKMHeader ', { 'append', 'next', 'levelup' } },
   { 'PKMList ',   { 'convert', 'renumber' } },
   { 'PKMTrash ',  { 'restore', 'empty' } },

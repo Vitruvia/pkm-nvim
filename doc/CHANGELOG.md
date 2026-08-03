@@ -61,6 +61,45 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.52.0] - 3/8/2026
+
+*Area 3, Phase 3.3b — the sidebar autoswitches between its providers by focus.
+Completes the container/content model: the sidebar shows `nav` when you focus a
+markdown file and falls back to `views` when no window holds a markdown file. On
+by default; `:PKMPanel autoswitch` pins it. Also fixes the nav header glyph the
+author flagged (`▚` → `≡`).*
+
+### Added
+
+-   **Sidebar autoswitch.** With it on (default), the open sidebar follows focus:
+    `nav` when the focused window holds a **markdown** file, `views` when no
+    window holds one. It acts only on a **context transition** (nav-worthy ↔
+    no-file), so a manual cycle (`<C-n>`) or an explicit `:PKMPanel nav|sidebar`
+    **sticks until the context actually changes** — the way to pin the sidebar is
+    to turn autoswitch off. Driven from nav's existing window tracker
+    (`views.autoswitch_tick`). New `config.sidebar_autoswitch` (default `true`),
+    `:PKMPanel autoswitch [on|off|toggle]`, and `views.set_autoswitch` /
+    `autoswitch_enabled`.
+-   **`<leader>s` (focus sidebar) is now context-driven on open**: from a markdown
+    window it opens the sidebar on nav; otherwise on views (when autoswitch is on).
+
+### Fixed
+
+-   The nav header glyph rendered as an obscure quadrant block (`▚`, U+259A). It
+    is now `≡` (U+2261), the outline glyph already used in the sidebar winbar —
+    renders in any monospace font.
+
+### Notes
+
+-   `test_v1520_p1` covers the flip to nav on focusing a markdown window, the
+    fallback to views when no markdown window remains, the manual-choice-sticks-
+    until-context-change rule, the on/off toggle pinning the sidebar, and
+    `focus_sidebar`'s context-driven open. The command audit (`test_v1130_p8`)
+    gained the `autoswitch` verb; `test_v1500_p1`'s nav-header assertion tracks the
+    new glyph. Suite 82/0; luacheck clean (the one views warning is a pre-existing
+    long notify string). Autoswitch is scheduled off nav's tracker, so it never
+    perturbs the synchronous headless assertions; the live feel rides the smoke.
+
 ## [1.51.0] - 3/8/2026
 
 *Area 3, Phase 3.3a — the one sidebar becomes a container that hosts multiple

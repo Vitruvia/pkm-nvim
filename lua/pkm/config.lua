@@ -109,6 +109,11 @@ local defaults = {
 
   sidebar_width = 30,
 
+  -- The one sidebar follows focus: nav when a markdown file is focused, views
+  -- when no window holds a file. Set false to pin it to whatever you last chose
+  -- (also toggleable at runtime with :PKMPanel autoswitch).
+  sidebar_autoswitch = true,
+
   user = {
     name  = "",
     email = "",

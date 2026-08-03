@@ -78,7 +78,7 @@ local function headings_of(buf, query)
 
   local name      = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ':t')
   local vault_ind = require('pkm.vault').indicator()
-  local header    = '▚ ' .. (name ~= '' and name or '[No Name]')
+  local header    = '≡ ' .. (name ~= '' and name or '[No Name]')
   if vault_ind ~= '' then header = header .. '  · ' .. vault_ind end
   local out  = { header }   -- header; not jumpable
   local map  = {}
@@ -178,12 +178,14 @@ function M.setup(_cfg)
     group    = aug,
     callback = function()
       capture(vim.api.nvim_get_current_win())
-      -- Keep the headings current only while the sidebar is actually showing
-      -- nav; refreshing views on every focus change would be wasted work.
-      local views = require('pkm.views')
-      if views.sidebar_provider_is('nav') then
-        vim.schedule(views.refresh_sidebar_if_open)
-      end
+      vim.schedule(function()
+        local views = require('pkm.views')
+        -- Autoswitch (Phase 3.3b): the sidebar follows focus between views and
+        -- nav. Then, while it is showing nav, keep the headings current as the
+        -- source note changes (refreshing views on every move would be waste).
+        views.autoswitch_tick()
+        if views.sidebar_provider_is('nav') then views.refresh_sidebar_if_open() end
+      end)
     end,
   })
 end

@@ -130,7 +130,7 @@ check("nav header still shows the filename", nlines[1]:find('navnote.md', 1, tru
 vault.indicator = function() return '' end
 local nlines2 = nav._headings_of(nb, '')
 check("no vault indicator → header is just the filename (no dangling separator)",
-  nlines2[1] == '▚ navnote.md', nlines2[1])
+  nlines2[1] == '≡ navnote.md', nlines2[1])
 vault.indicator = orig_indicator
 
 print("")
