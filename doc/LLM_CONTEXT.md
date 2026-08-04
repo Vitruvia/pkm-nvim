@@ -7,7 +7,7 @@ are non-negotiable constraints on all architectural decisions.
 
 ---
 
-## Current version: **v1.58.0** (code-complete on `dev`) — consolidation Workstream A: repo moved into the `pkm-suite\` container as a sibling of `pkm-syntax` (separate `Vitruvia/pkm-*` repos); path refs reconciled + thin suite-level `CLAUDE.md` added; no plugin code changed. (v1.57.0 was Workstream B: Recursos read/write-on-request §6.2 + light note conventions + skill bundle ships CONVENTIONS.md.)
+## Current version: **v1.59.0** (code-complete on `dev`) — consolidation Workstream E: the doc revision. `doc/pkm.txt` WORKFLOW+COMMANDS rewritten by-context to the ~15-command verb surface (stale since v1.14.0), new Vaults/Utilities/pkm.api sections + real help tags; ROADMAP Working-features list + LLM_PROJECT_INSTRUCTIONS suite/pkm.api note updated; documentation debt cleared. Docs only. **This closes the post-Area-3 consolidation batch (A–E).** (v1.58.0 = Workstream A, suite move; v1.57.0 = Workstream B, Recursos + note conventions.)
 
 *v1.56.0 (3.5b slice 2): **`pkm.popup`** — ONE pop-up hosting the three providers (browse=all notes,
 views=view names, nav=headings), cycled with `<C-l>` (Telescope only; `vim.ui.select` fallback omits

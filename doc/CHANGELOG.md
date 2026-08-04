@@ -61,6 +61,39 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.59.0] - 3/8/2026
+
+*Post-Area-3 consolidation, Workstream E — the documentation revision. `doc/pkm.txt`
+(the `:help`) was stale since v1.14.0: its WORKFLOW and COMMANDS sections named the
+~46 command aliases deleted then. Rewritten by-context to the current ~15-command
+verb surface, with new sections for the pieces added since. Docs only — no code.*
+
+### Changed
+
+-   **`doc/pkm.txt` — §5 WORKFLOW and §6 COMMANDS rewritten by-context** to the verb
+    surface: `:PKMNote`, `:PKMCite`, `:PKMBrowse`, `:PKMTag`/`:PKMTags`, `:PKMView`,
+    `:PKMPanel`, `:PKMHeader`, `:PKMList`, `:PKMTrash`, `:PKMVault`, `:PKMExport`.
+    New reference blocks: **Vaults**, **Utilities** (`:PKMCheck`, `:PKMStats`,
+    `:PKMToggleAutoSync`, `:PKMSyntax`), and **For assistants — pkm.api**
+    (`:PKMAgentProtocol` + PKM_API / AGENT_PROTOCOL / CONVENTIONS). Real `*:PKMNote*`-
+    style help tags added for each context; `helptags` generates clean.
+-   **`doc/pkm.txt` sweep** — the sidebar intro, §7 PKM Mode, §8 Trash, §9 Citations,
+    §10 Export, the §11 Configuration comments, the §12 Keymaps table and §13
+    Frontmatter now name the current commands. No stale command token remains.
+-   **`doc/ROADMAP.md`** — the Current-State "Working features" list updated to the
+    current surface; the Documentation-debt tracker marked cleared. Historical
+    narration (the command-clearup plan, old benchmarks) keeps its period names.
+-   **`doc/LLM_PROJECT_INSTRUCTIONS.md`** — "What This Project Is" now states the
+    pkm-suite / pkm-syntax sibling structure ("edit highlighting in pkm-syntax, not
+    here") and the `pkm.api` / agent-protocol layer.
+
+### Notes
+
+-   Docs-only; the headless suite and luacheck are unaffected. Verified: no stale
+    command tokens in `pkm.txt`, and `nvim --headless -c "helptags doc"` exits
+    clean. **This clears the documentation debt tracked since v1.14.0 and closes
+    the post-Area-3 consolidation batch (Workstreams A–E).**
+
 ## [1.58.0] - 3/8/2026
 
 *Post-Area-3 consolidation, Workstream A — the repo moved into the **pkm-suite**

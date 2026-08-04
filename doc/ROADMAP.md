@@ -48,7 +48,7 @@ not an independently maintained release line. Upcoming work is organised under
 - ✅ YAML frontmatter management with templates per note type
 - ✅ Bidirectional citation system — inserting a citation in A automatically adds a backlink in B
 - ✅ Flexible timestamp system (`full`, `date_time`, `date_only`)
-- ✅ Free-form `title` field — decoupled from filename; file renamed only via `:PKMRenameNote`
+- ✅ Free-form `title` field — decoupled from filename; file renamed only via `:PKMNote rename`
 - ✅ Note promotion: scratchpad → consolidated or journal
 - ✅ Note conversion between types and folders (transpose)
 - ✅ Import existing files into PKM structure
@@ -59,59 +59,59 @@ not an independently maintained release line. Upcoming work is organised under
 - ✅ Statistics window (`:PKMStats`)
 - ✅ Cross-platform: Windows, WSL, Linux, macOS
 - ✅ Context-aware citation picker — scores by active view (+2) and shared tags (+1)
-- ✅ `:PKMRenameNote` extended to journal and scratchpad
+- ✅ `:PKMNote rename` extended to journal and scratchpad
 
 == Editing and Viewing ==
 - ✅ Markdown utilities: header counter, level shift, symbol abbreviations
 - ✅ Sequence renumbering: nested lists, blockquote-prefixed lists, emphasis-wrapped
      ordinals (`*N*`, `**N**`), `**N. body**` bold-line items, header families
-- ✅ `:PKMConvertList` — ordered ↔ unordered list conversion with depth prompting
+- ✅ `:PKMList convert` — ordered ↔ unordered list conversion with depth prompting
 - ✅ Legal-text list hierarchy (LC 95/1998): `:PKMList renumber` renumbers artigo /
      parágrafo / inciso / alínea / subalínea (one-pass nested `renumber_legal`);
      `pkm-syntax` highlights every legal marker
 - ✅ Structure-aware autowrap `:PKMList wrap` (also `gq`/`gqq`/motions via formatexpr):
      Option-A list indent, blockquote reflow, whitespace-preserving fenced code
-- ✅ `:PKMMode [on|off]` — session context toggle; activates explorer UI, pre-builds
-     index, enables tree-sitter syntax highlighting on PKM notes
-- ✅ `:PKMExplorer` — toggle sidebar + buffer panel as a unit
+- ✅ `:PKMPanel mode [on|off]` — session context toggle; activates explorer UI,
+     pre-builds index, enables tree-sitter syntax highlighting on PKM notes
+- ✅ `:PKMPanel [explorer]` — toggle sidebar + buffer panel as a unit
 - ✅ Markdown highlighting — now the standalone **pkm-syntax** plugin (a dependency):
      legal + native list markers, citations (`PKMCitation`), `((meta-comments))`
      (`PKMMetaComment`), YAML frontmatter injection, frontmatter folding/foldtext
-- ✅ Metadata commands (buffer-only, no disk write): `:PKMSetTitle`, `:PKMAddTag`,
-     `:PKMRemoveTag`
+- ✅ Metadata commands (buffer-only, no disk write): `:PKMNote settitle`,
+     `:PKMTag add`, `:PKMTag remove`
 
 == Search ==
 - ✅ Boolean filter DSL over `tag`/`title`/`text`/`filename`/`type`/`any` fields
      (AND, OR, NOT, parentheses, quoted values)
 - ✅ In-memory note index with incremental invalidation (~290× faster than raw scan)
 - ✅ `:PKMBrowse [expr]` — live filter-as-you-type; bare text triggers `any` predicate
-- ✅ `:PKMBrowseRecent [n]` — n most recently modified notes (default 20)
+- ✅ `:PKMBrowse recent [n]` — n most recently modified notes (default 20)
 - ✅ `:PKMTags` — tag picker; on selection opens browse(`tag:<x>`)
-- ✅ `:PKMOrphans` — notes with no tags, no citations, and no matching view
+- ✅ `:PKMBrowse orphans` — notes with no tags, no citations, and no matching view
 - ✅ Filter autocomplete for `:PKMBrowse`: field prefixes, operators, `tag:<value>`,
      `type:<value>` completions
 
 == Views ==
 - ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD
 - ✅ Subproject hierarchy — `{parent, filter}` entries composing AND chains
-- ✅ `:PKMViewNew` — unified creation (simple view or subproject)
-- ✅ `:PKMViewUpdate` — action picker: edit filter / rename / reparent
-- ✅ `:PKMViewLast` — reopen last activated view (session-scoped)
-- ✅ `:PKMViewSidebar` — two-mode persistent sidebar (overview + detail) with
+- ✅ `:PKMView new` — unified creation (simple view or subproject)
+- ✅ `:PKMView update` — action picker: edit filter / rename / reparent
+- ✅ `:PKMView last` — reopen last activated view (session-scoped)
+- ✅ `:PKMView sidebar` — two-mode persistent sidebar (overview + detail) with
      50-entry navigation history, `<C-t>` type filter, `<C-s>` no-op,
      `<C-v>` vertical split, `/` scoped search, `?` help float
-- ✅ `:PKMViews` — tree-structured picker over all views (parent-child hierarchy)
+- ✅ `:PKMView list` — tree-structured picker over all views (parent-child hierarchy)
 - ✅ Scoped note search within sidebar (`/`) and views tree (`<C-f>`)
 - ✅ `views.get_last_view()` — active view context for consumers
-- ✅ `:PKMExportView [name]` — export named view's notes, skips filter form
-- ✅ `:PKMBuffers` — persistent bottom buffer-list panel with auto-refresh
+- ✅ `:PKMView export [name]` — export named view's notes, skips filter form
+- ✅ `:PKMPanel buffers` — persistent bottom buffer-list panel with auto-refresh
 - ✅ Per-tabpage state for both sidebar (`views.lua`) and buffer panel (`ui.lua`)
 
 == Trash ==
-- ✅ `:PKMDeleteNote` — soft-delete to `.pkm-trash/` (when `trash.enabled = true`);
+- ✅ `:PKMNote delete` — soft-delete to `.pkm-trash/` (when `trash.enabled = true`);
      backlinks preserved for clean restoration
-- ✅ `:PKMRestoreNote` — picker over trash manifest; moves note back, re-indexes
-- ✅ `:PKMEmptyTrash` — permanently deletes all trash and strips backlinks
+- ✅ `:PKMTrash restore` — picker over trash manifest; moves note back, re-indexes
+- ✅ `:PKMTrash empty` — permanently deletes all trash and strips backlinks
 - ✅ Auto-purge via `trash.max_age_days` (default 60; 0 = disable)
 - ✅ Trash manifest records `filename`, `original_path`, `title`, `deleted_at`,
      `deleted_timestamp`
@@ -659,6 +659,26 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   makes it pay. *(No fold code shipped in this batch — folds remain Potential above.)*
 
 **6 · Other — ▹**
+- **Queued for evaluation (UX review, author-raised 3/8/2026) — not yet scoped:**
+  - **`:PKMView update` view selection.** It lists views in the plain `vim.ui.select`
+    UI; with a growing number of views a dedicated panel/picker (Telescope-backed,
+    like the other view surfaces) would read better. Evaluate a panel for the
+    view-picking step.
+  - **Keymap review — the whole scheme is inconsistent and hard to remember.** Many
+    bindings use `<leader>v` for "view" on the *old* reading of "views" as "panels"
+    (never the true meaning). Evaluate a general, mnemonic pattern before touching
+    code. Author's starting ideas (to weigh, not adopt wholesale):
+    - `<leader>{type}{verb}` for navigation panes — e.g. `<leader>p…` panels,
+      `<leader>s…` sidebar, keep `<leader>b…` for the buffer panel; second key a
+      verb like open/close, show/hide, or plain **toggle** (one key covers on+off).
+    - `<C-…>` for window-level actions: open panes, move focus between open
+      sidebars/buffers, cycle panels.
+    - Check against Neovim conventions and existing global maps for **conflicts**;
+      read the author's config at `C:\Users\thale\AppData\Local\nvim\init.lua`
+      (author wrote `…\Local\AppData\nvim\init.lua`; verify the real path) to see
+      what is already bound. Deliverable is a proposed scheme + conflict analysis,
+      then a phased migration (config keys stay; defaults change), **not** an
+      in-place rebinding. See [[pkm-keymap-review-queue]].
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —
   considered for interop and deferred; the decision, gates, and cache design live
   in Area 1's retrieval thread**; review queue (Distant 5); improved / smart search
@@ -673,17 +693,25 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   - ✅ **`doc/ARCHITECTURE.md`** — syntax.lua = facade + the pkm-syntax split note.
   - ✅ **`doc/pkm.txt`** Requirements/Installation (real repo name + pkm-syntax dep);
     ✅ **SKILL + AGENT_PROTOCOL** point at `CONVENTIONS.md § Lists`.
-  - **Still stale (its own focused session):** the **`doc/pkm.txt` body** — WORKFLOW
-    (~98–255) + COMMANDS (~257–500) still cite the ~46 commands deleted in v1.14.0
-    (~100 occurrences, e.g. `:PKMNewScratchpad`) and cover none of pkm.api / agent
-    protocol / skill / lifecycle writes. A large, error-prone by-context rewrite.
-  - **Also stale (this doc):** the **Current State** "Working features" list above
-    uses pre-v1.14.0 command names (`:PKMConvertList`, `:PKMMode`, `:PKMViewNew`, …).
-    CHANGELOG is canonical for behaviour; fold this into the pkm.txt-body pass.
-  - **Check** whether `CLAUDE.md` / `doc/LLM_PROJECT_INSTRUCTIONS.md` should note the
-    agent/pkm.api layer and the **two-repo structure** (edit highlighting in
-    pkm-syntax). The per-version docs (PKM_API, AGENT_PROTOCOL, CONVENTIONS,
-    CHANGELOG, ROADMAP, LLM_CONTEXT, SKILL) stay current on cadence.
+  - ✅ **`doc/pkm.txt` body** (v1.59.0, Workstream E) — WORKFLOW + COMMANDS
+    rewritten by-context to the ~15-command verb surface (`:PKMNote`, `:PKMCite`,
+    `:PKMBrowse`, `:PKMTag`/`:PKMTags`, `:PKMView`, `:PKMPanel`, `:PKMHeader`,
+    `:PKMList`, `:PKMTrash`, `:PKMVault`), with new sections for Vaults, Utilities
+    (`:PKMCheck`/`:PKMStats`/`:PKMToggleAutoSync`/`:PKMSyntax`) and a "For
+    assistants — pkm.api" block (`:PKMAgentProtocol` + the three docs). The §7/§8/
+    §9/§10 references, the Keymaps table and the Configuration comments were swept
+    too; `helptags` clean, no stale command tokens remain.
+  - ✅ **`doc/ROADMAP.md` "Working features" list** (v1.59.0) — command names
+    updated to the current surface. CHANGELOG stays canonical for behaviour.
+    (Historical narration below — the command-clearup plan, old benchmarks — keeps
+    its period names as history.)
+  - ✅ **Two-repo / suite structure** — `CLAUDE.md` Fixed facts + a thin suite-level
+    `P:\Active\pkm-suite\CLAUDE.md` note it (v1.58.0); the pkm.api/agent layer is
+    documented in README + `doc/pkm.txt` and the per-version docs (PKM_API,
+    AGENT_PROTOCOL, CONVENTIONS, SKILL). ✅ `doc/LLM_PROJECT_INSTRUCTIONS.md`
+    "What This Project Is" now states the suite/sibling structure ("edit
+    highlighting in pkm-syntax, not here") and the pkm.api/agent layer. The
+    per-version docs stay current on cadence. **Documentation debt cleared.**
 
 **Also in the plan, folded above:** **merge / split vaults** (§ below) rises into
 area 1 because it is command-creating and renumbers notes; the **forced-save
@@ -1544,7 +1572,7 @@ don't need to re-derive this from scratch.
 - 0.12 tightened URI-scheme detection on buffer names (RFC3986). PKM does not
   call `vim.uri_*` or otherwise parse buffer names as URIs, so Windows
   drive-letter paths (`P:/Active/...`, `P:/Notes/...`) should be unaffected.
-  Not verified empirically. After upgrading, sanity-check `:PKMNewNote`,
+  Not verified empirically. After upgrading, sanity-check `:PKMNote`,
   `follow_link` (`gf`), and sidebar note-opening (`edit` + `fnameescape`)
   against a `P:/Notes` path before trusting this is a non-issue.
 

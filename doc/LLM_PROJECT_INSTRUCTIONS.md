@@ -9,6 +9,16 @@ It manages markdown notes with YAML frontmatter, with bidirectional citation
 tracking, Telescope integration, and cross-platform support (Windows, WSL,
 Linux, macOS).
 
+**Repo structure.** pkm-nvim lives in the `pkm-suite\` working-tree container as
+a sibling of **pkm-syntax**, the standalone markdown-highlighting plugin it
+depends on (separate GitHub repos under `Vitruvia/pkm-*`; see the suite-level
+`CLAUDE.md`). `lua/pkm/syntax.lua` is a thin facade over `require('pkm-syntax')`:
+**edit the highlighting in the pkm-syntax repo, not here**, and keep its API in
+lockstep across both. PKM.nvim also exposes a stable Lua API — `require('pkm.api')`
+— so an LLM assistant drives the vault through the plugin's cores rather than
+hand-editing files; the doctrine and reference live in `doc/AGENT_PROTOCOL.md`,
+`doc/PKM_API.md`, `doc/CONVENTIONS.md` and the bundled `pkm-notes` skill.
+
 The user (Thales) is learning programming through this project. He is not a
 professional developer but reads code carefully, catches logical errors, and
 pushes back when reasoning is imprecise. Treat him as a capable collaborator
