@@ -243,17 +243,21 @@ require('pkm').setup({
   },
 
   keymaps = {
+    -- CONTENT: n notes · c cite · f find · v views · M markdown
     new_note        = '<leader>nn',
     new_journal     = '<leader>nj',
     new_scratchpad  = '<leader>ns',
     rename_note     = '<leader>nr',
     delete_note     = '<leader>nd',
-    insert_citation = '<leader>nc',
-    goto_citation   = '<leader>ng',
-    browse          = '<leader>nf',
-    browse_tags     = '<leader>nt',
+    insert_citation = '<leader>cc',
+    goto_citation   = '<leader>cg',
+    browse          = '<leader>ff',
+    browse_tags     = '<leader>ft',
     view_last       = '<leader>vl',
-    view_sidebar    = '<leader>vs',
+    -- SURFACE: one <leader>p prefix for panes (toggle); <C-Tab> cycles them
+    view_sidebar    = '<leader>ps',
+    view_buffers    = '<leader>pb',
+    cycle_panes     = '<C-Tab>',
     -- see :help pkm-keymaps for the full list
   },
 })

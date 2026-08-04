@@ -659,26 +659,21 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   makes it pay. *(No fold code shipped in this batch — folds remain Potential above.)*
 
 **6 · Other — ▹**
-- **Queued for evaluation (UX review, author-raised 3/8/2026) — not yet scoped:**
-  - **`:PKMView update` view selection.** It lists views in the plain `vim.ui.select`
-    UI; with a growing number of views a dedicated panel/picker (Telescope-backed,
-    like the other view surfaces) would read better. Evaluate a panel for the
-    view-picking step.
-  - **Keymap review — the whole scheme is inconsistent and hard to remember.** Many
-    bindings use `<leader>v` for "view" on the *old* reading of "views" as "panels"
-    (never the true meaning). Evaluate a general, mnemonic pattern before touching
-    code. Author's starting ideas (to weigh, not adopt wholesale):
-    - `<leader>{type}{verb}` for navigation panes — e.g. `<leader>p…` panels,
-      `<leader>s…` sidebar, keep `<leader>b…` for the buffer panel; second key a
-      verb like open/close, show/hide, or plain **toggle** (one key covers on+off).
-    - `<C-…>` for window-level actions: open panes, move focus between open
-      sidebars/buffers, cycle panels.
-    - Check against Neovim conventions and existing global maps for **conflicts**;
-      read the author's config at `C:\Users\thale\AppData\Local\nvim\init.lua`
-      (author wrote `…\Local\AppData\nvim\init.lua`; verify the real path) to see
-      what is already bound. Deliverable is a proposed scheme + conflict analysis,
-      then a phased migration (config keys stay; defaults change), **not** an
-      in-place rebinding. See [[pkm-keymap-review-queue]].
+- ✅ **Queued UX evals (author-raised 3/8/2026) — DONE in v1.60.0:**
+  - ✅ **`:PKMView update` view selection** now opens a picker-panel (reuses the
+    view-deletion tree via `view_pick_build_lines`), replacing the flat
+    `vim.ui.select`.
+  - ✅ **Keymap redesign** — organized on a **persistent-vs-transient** line:
+    CONTENT verbs (`<leader>n` notes · `<leader>c` cite · `<leader>f` find ·
+    `<leader>v` views-only · `<leader>M` markdown); `<leader>p` = the PERSISTENT
+    panels only (sidebar/buffers), a bare key toggles; transient pickers live
+    under their verb, so the cyclable pop-up is `<leader>fp` (find), not a pane;
+    WINDOW left to the user, `<C-Tab>`/`<C-S-Tab>` cycle the persistent panes.
+    Conflict analysis
+    grounded in the author's hand-rolled `init.lua` (not LazyVim; `<C-hjkl>/<C-s>/
+    <C-x>` and `<leader>b`/`m` are theirs). BREAKING for default keymaps; config
+    keys unchanged. Discoverability via native `:help pkm-keymaps` + `:nmap` — no
+    new command (surface stays ~15). See [[pkm-keymap-review-queue]].
 - Browser preview (`preview.lua`, Distant 2); **persistent index (Distant 3) —
   considered for interop and deferred; the decision, gates, and cache design live
   in Area 1's retrieval thread**; review queue (Distant 5); improved / smart search

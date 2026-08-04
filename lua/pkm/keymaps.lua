@@ -63,6 +63,21 @@ function M.register(config)
   map(k.view_list, "<cmd>PKMView list<cr>", "List Views")
   map(k.view_buffers, "<cmd>PKMPanel buffers<cr>", "Buffer Panel")
   map(k.nav_panel,    "<cmd>PKMPanel nav<cr>",     "File Navigation (headings)")
+  map(k.explorer,     "<cmd>PKMPanel explorer<cr>", "Explorer (sidebar + buffers)")
+
+  -- Cycle focus among open panes (+ a home editing window). <C-Tab> forward,
+  -- <C-S-Tab> back; leaves the user's own <C-hjkl>/<C-s>/<C-x> window scheme
+  -- untouched. See pkm.panel.cycle_focus.
+  if k.cycle_panes then
+    vim.keymap.set('n', k.cycle_panes, function()
+      require('pkm.panel').cycle_focus(1)
+    end, { desc = 'PKM: cycle panes (forward)', silent = true })
+  end
+  if k.cycle_panes_back then
+    vim.keymap.set('n', k.cycle_panes_back, function()
+      require('pkm.panel').cycle_focus(-1)
+    end, { desc = 'PKM: cycle panes (backward)', silent = true })
+  end
 
   if k.nav_search then
     vim.keymap.set('n', k.nav_search, function()

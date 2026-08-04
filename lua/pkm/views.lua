@@ -2163,16 +2163,14 @@ function M.open_views_panel(mode)
   end
 end
 
-local _delete_panel = panel.create({
-  name          = 'viewdeletepanel',
-  split_cmd     = 'noautocmd botright split',
-  focus_on_open = true,
-  resize = function(state, lines)
-    if state.win and vim.api.nvim_win_is_valid(state.win) then
-      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 16))
-    end
-  end,
-  build_lines = function(state)
+-- Shared tree build_lines for the view-selection panels (delete / update): the
+-- same filterable view tree, differing only in the header label and the hint
+-- for what <CR> does. Keeps the two panels visually identical and in one place.
+---@param header string  First-line label (e.g. 'Delete View').
+---@param select_hint string  What <CR> does (e.g. 'select (confirms)').
+---@return function build_lines
+local function view_pick_build_lines(header, select_hint)
+  return function(state)
     local tree = build_tree_entries()
     local filtered = tree
     if state.filter and state.filter ~= '' then
@@ -2187,8 +2185,8 @@ local _delete_panel = panel.create({
     local filter_label = (state.filter and state.filter ~= '')
       and ('  [filter: ' .. state.filter .. ']') or ''
     local lines = {
-      string.format('  Delete View  (%d)%s  <CR> select (confirms)  / search  q close',
-        #filtered, filter_label),
+      string.format('  %s  (%d)%s  <CR> %s  / search  q close',
+        header, #filtered, filter_label, select_hint),
     }
     local map    = {}
     local counts = M.count_many(entry_names(filtered))
@@ -2204,7 +2202,19 @@ local _delete_panel = panel.create({
         and '  (no views match)' or '  (no views defined)'
     end
     return lines, map
+  end
+end
+
+local _delete_panel = panel.create({
+  name          = 'viewdeletepanel',
+  split_cmd     = 'noautocmd botright split',
+  focus_on_open = true,
+  resize = function(state, lines)
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 16))
+    end
   end,
+  build_lines = view_pick_build_lines('Delete View', 'select (confirms)'),
   keymaps = {
     ['<CR>'] = function(state, helpers)
       local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
@@ -2245,6 +2255,43 @@ local _delete_panel = panel.create({
 ---@return nil
 function M.open_view_deletion_panel()
   _delete_panel.open({ filter = '' })
+end
+
+-- The view-update selection panel: same filterable tree as the deletion panel,
+-- but <CR> closes it and opens the chosen view's edit UI (via M.edit_view, which
+-- routes a named view to its action picker). Replaces the flat vim.ui.select
+-- that :PKMView update used to pick a view — the tree reads better as views grow.
+local _update_panel = panel.create({
+  name          = 'viewupdatepanel',
+  split_cmd     = 'noautocmd botright split',
+  focus_on_open = true,
+  resize = function(state, lines)
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 16))
+    end
+  end,
+  build_lines = view_pick_build_lines('Update View', 'edit'),
+  keymaps = {
+    ['<CR>'] = function(state, helpers)
+      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      if not name then return end
+      helpers.close()
+      M.edit_view(name)
+    end,
+    ['/'] = function(state, helpers)
+      vim.fn.inputsave()
+      local query = vim.fn.input('Filter: ', state.filter or '')
+      vim.fn.inputrestore()
+      state.filter = (query and query ~= '') and query or nil
+      helpers.refresh()
+    end,
+  },
+})
+
+--- Open the view-update panel: browse → select → open that view's edit UI.
+---@return nil
+function M.open_view_update_panel()
+  _update_panel.open({ filter = '' })
 end
 
 -- =============================================================================
@@ -2547,17 +2594,11 @@ end
 ---@param name string|nil
 function M.edit_view(name)
   if not name or name == '' then
-    local names = M.list()
-    if #names == 0 then
+    if #M.list() == 0 then
       vim.notify('[pkm] no views defined', vim.log.levels.WARN)
       return
     end
-    vim.ui.select(names, {
-      prompt      = 'Edit view:',
-      format_item = function(n) return n end,
-    }, function(sel)
-      if sel then M.edit_view(sel) end
-    end)
+    M.open_view_update_panel()
     return
   end
 

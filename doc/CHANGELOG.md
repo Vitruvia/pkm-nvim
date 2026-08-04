@@ -61,6 +61,65 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.60.0] - 3/8/2026
+
+*The queued UX evaluations: a mnemonic redesign of the default keymaps, and a
+picker-panel for `:PKMView update`. Config keys are unchanged (the stable
+contract) — only default lhs strings move — but anyone relying on the defaults
+must relearn them, so this is **BREAKING for default keymaps.***
+
+### Changed — BREAKING: default keymaps reorganized
+
+The organizing line is **persistent vs transient**. CONTENT verbs say *what* you
+do (`<leader>n` notes · `<leader>c` citations/links · `<leader>f` find ·
+`<leader>v` views · `<leader>M` markdown) — a find/view action may flash a
+transient picker. `<leader>p` is the **persistent panels** you toggle and live
+with (sidebar, buffer bar). WINDOW keys stay the user's; `<C-Tab>`/`<C-S-Tab>`
+cycle the persistent panes. `<leader>v` is now views-only (sidebar/buffers moved
+to `<leader>p`), and the cyclable pop-up — being transient — lives under find as
+`<leader>fp`, not with the panes.
+
+| Action | Old | New |
+|---|---|---|
+| Insert citation | `<leader>nc` | `<leader>cc` |
+| Goto citation | `<leader>ng` | `<leader>cg` |
+| Link note | `<leader>nl` | `<leader>cl` |
+| Backlinks | `<leader>nb` | `<leader>cb` |
+| Browse | `<leader>nf` | `<leader>ff` |
+| Browse tags | `<leader>nt` | `<leader>ft` |
+| Sidebar | `<leader>vs` | `<leader>ps` |
+| Buffer panel | `<leader>vb` | `<leader>pb` |
+| Cyclable pop-up | `<leader>nS` | `<leader>fp` |
+| Focus sidebar | `<leader>s` | `<leader>P` |
+| Cycle panes | — | `<C-Tab>` / `<C-S-Tab>` |
+
+Note lifecycle (`<leader>n*`), views last/list (`<leader>vl`/`va`), and markdown
+(`<leader>M*`, `]h`/`[h`, `gf`) keep their keys. `:help pkm-keymaps` is the
+reference; `:nmap <leader>` / which-key show the live binds (every bind carries a
+`PKM: …` description). Config keys are the stable API — set any to `false` to
+disable, or remap freely.
+
+### Added
+
+-   **`<C-Tab>` / `<C-S-Tab>` cycle focus among open panes** — `pkm.panel.cycle_focus`
+    scans the tabpage for `pkm-*` panes plus a home editing window and moves focus
+    around the ring; leaves the user's own `<C-hjkl>`/`<C-s>`/`<C-x>` window scheme
+    untouched. New config keys: `cycle_panes`, `cycle_panes_back`, and `explorer`
+    (a `<leader>p*` key for `:PKMPanel explorer`, off by default).
+-   **`:PKMView update` (no argument) now opens a picker-panel**, not a flat
+    `vim.ui.select`. It reuses the view-deletion panel's tree (shared
+    `view_pick_build_lines`); `<CR>` opens the chosen view's edit UI. Reads better
+    as the view count grows.
+
+### Notes
+
+-   Discoverability was intentionally **not** a new command — native `:help
+    pkm-keymaps` + `:nmap`/which-key already cover it, and the command surface stays
+    at ~15 (see the v1.13/1.14 clearup). luacheck clean; a headless check asserts
+    the new defaults resolve collision-free, `keymaps.register()` binds them, and
+    `cycle_focus`/`open_view_update_panel` are wired; `test_v160_p3` (view panels)
+    and the popup/api/skill suites still pass.
+
 ## [1.59.0] - 3/8/2026
 
 *Post-Area-3 consolidation, Workstream E — the documentation revision. `doc/pkm.txt`

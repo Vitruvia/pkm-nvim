@@ -381,4 +381,46 @@ function M.create(spec)
   return panel
 end
 
+-- =============================================================================
+-- SECTION: Pane focus cycling
+-- =============================================================================
+--- Cycle focus among the open PKM panes in the current tabpage, plus one "home"
+--- editing window so the ring lets you step back out. Panes are identified by
+--- their `pkm-*` filetype (every panel.create window carries one). Floating
+--- windows (pop-ups) are never part of the ring. No-op with no pane open.
+---@param dir integer 1 forward (default), -1 backward
+---@return nil
+function M.cycle_focus(dir)
+  dir = (dir == -1) and -1 or 1
+
+  local panes, mains = {}, {}
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_get_config(w).relative == '' then   -- skip floats
+      local ft = vim.bo[vim.api.nvim_win_get_buf(w)].filetype
+      if ft:match('^pkm%-') then panes[#panes + 1] = w else mains[#mains + 1] = w end
+    end
+  end
+
+  if #panes == 0 then
+    vim.notify('[pkm] no panes open to cycle', vim.log.levels.INFO)
+    return
+  end
+
+  -- Ring: a home editing window (so you can step back out), then the panes in
+  -- window order. With no main window (panes only), cycle among panes alone.
+  local ring = {}
+  if mains[1] then ring[#ring + 1] = mains[1] end
+  for _, w in ipairs(panes) do ring[#ring + 1] = w end
+  if #ring < 2 then ring = panes end
+
+  local cur = vim.api.nvim_get_current_win()
+  local idx = 1                          -- a non-home main steps into the first pane
+  for i, w in ipairs(ring) do if w == cur then idx = i break end end
+
+  local nxt = ring[((idx - 1 + dir) % #ring) + 1]
+  if nxt and vim.api.nvim_win_is_valid(nxt) then
+    vim.api.nvim_set_current_win(nxt)
+  end
+end
+
 return M

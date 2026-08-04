@@ -92,9 +92,9 @@ Full example with PKM Mode and trash: >
     },
     keymaps = {
       new_note        = "<leader>nn",
-      browse          = "<leader>nf",
-      insert_citation = "<leader>nc",
-      view_sidebar    = "<leader>nS",
+      browse          = "<leader>ff",
+      insert_citation = "<leader>cc",
+      view_sidebar    = "<leader>ps",
     },
   })
 <
@@ -894,48 +894,55 @@ destination prompt appears.
     },
 
     keymaps = {
-      -- Note operations
+      -- Notes — the note lifecycle (<leader>n)
       new_note         = "<leader>nn",
+      new_relative     = false,          -- e.g. <leader>nN
       new_journal      = "<leader>nj",
       new_scratchpad   = "<leader>ns",
       rename_note      = "<leader>nr",
-      insert_citation  = "<leader>nc",
-      goto_citation    = "<leader>ng",
       delete_note      = "<leader>nd",
-      link_note        = "<leader>nl",
-      follow_link      = "gf",
-      backlinks        = "<leader>nb",
       import_note      = "<leader>ni",
       convert_note     = "<leader>nx",
       promote_note     = "<leader>np",
       transpose_note   = "<leader>nT",
       change_note_type = "<leader>nC",
-      set_title        = false,
-      add_tag          = false,
+      set_title        = false,          -- buffer-only title, e.g. <leader>nt
+      -- Citations and links (<leader>c)
+      insert_citation  = "<leader>cc",
+      goto_citation    = "<leader>cg",
+      link_note        = "<leader>cl",
+      backlinks        = "<leader>cb",
+      follow_link      = "gf",           -- non-leader; overrides goto-file
+      add_tag          = false,          -- buffer-only tag ops (opt-in)
       remove_tag       = false,
-      -- Navigation
+      -- Find / search — transient pickers (<leader>f)
+      browse          = "<leader>ff",
+      browse_tags     = "<leader>ft",
+      nav_search      = "<leader>fp",    -- cyclable pop-up (<C-l> cycles providers)
+      -- Views — saved filters only (<leader>v)
       view_last    = "<leader>vl",
-      view_list    = "<leader>va", -- va = view all
-      view_sidebar = "<leader>vs",
-      view_buffers = "<leader>vb",
-      toggle_file_explorer = "<leader>ts",   -- ts = toggle sidebar
-      focus_sidebar = false,   -- jump focus directly to sidebar window
-      -- PKM Mode
-      toggle_mode   = false,   -- :PKMPanel mode toggle
-      -- Search and browsing
-      browse          = "<leader>nf",
-      browse_tags     = "<leader>nt",
-      -- Markdown editing
-      ---- Headers ----
+      view_list    = "<leader>va",       -- va = view all
+      -- Panes — PERSISTENT surfaces you toggle and live with (<leader>p)
+      view_sidebar = "<leader>ps",
+      view_buffers = "<leader>pb",
+      nav_panel    = false,              -- sidebar → nav provider, e.g. <leader>pn
+      explorer     = false,              -- sidebar + buffers, e.g. <leader>pe
+      toggle_mode  = false,              -- :PKMPanel mode, e.g. <leader>pm
+      focus_sidebar = "<leader>P",       -- jump focus into/out of the sidebar
+      cycle_panes      = "<C-Tab>",      -- cycle focus among open panes
+      cycle_panes_back = "<C-S-Tab>",
+      toggle_file_explorer = false,      -- toggle netrw / views sidebar
+      -- Markdown editing (<leader>M)
       next_header        = "<leader>Mh",   -- :PKMHeader append
       header_level_up    = "<leader>M^",
       header_level_down  = "<leader>M_",
+      renumber_list      = "<leader>Mr",
+      convert_list       = false,          -- :PKMList convert (range/paragraph)
+      toggle_syntax      = false,          -- :PKMSyntax toggle
       header_next_same   = "]h",   -- next header of the current level
       header_prev_same   = "[h",   -- previous header of the current level
       header_next        = false,  -- any level: this is ]] , left to Neovim
       header_prev        = false,  -- any level: this is [[ , left to Neovim
-      renumber_list      = "<leader>Mr",
-      convert_list = false,   -- :PKMList convert (range or paragraph at cursor)
     },
   }
 <
@@ -943,29 +950,56 @@ destination prompt appears.
 ==============================================================================
 12. KEYMAPS                                                      *pkm-keymaps*
 
-Default keymaps (all overridable; set to false to disable):
+Default keymaps (all overridable; set to false to disable). The organizing line
+is PERSISTENT vs TRANSIENT. CONTENT verbs say *what* you do — `<leader>n` notes,
+`<leader>c` citations/links, `<leader>f` find, `<leader>v` views, `<leader>M`
+markdown — and a find/view action may flash a transient picker. `<leader>p` is
+the PERSISTENT panels you toggle and live with (sidebar, buffer bar); a bare key
+toggles. WINDOW keys stay yours — pkm adds only `<C-Tab>`/`<C-S-Tab>` to cycle
+the persistent panes. So the cyclable pop-up, a transient picker, lives under
+find (`<leader>fp`), not under `p`. This section is the reference; `:nmap
+<leader>` or which-key shows what is actually mapped now (every bind carries a
+`PKM: …` description).
 
+NOTES — the note lifecycle (<leader>n)~
   <leader>nn   :PKMNote            (create a consolidated note)
   <leader>nj   :PKMNote journal
   <leader>ns   :PKMNote scratch
+  <leader>nr   :PKMNote rename
+  <leader>nd   :PKMNote delete
+  <leader>ni   :PKMNote import
   <leader>nx   :PKMNote convert
   <leader>np   :PKMNote promote
   <leader>nT   :PKMNote transpose
   <leader>nC   :PKMNote changetype
-  <leader>ni   :PKMNote import
-  <leader>nd   :PKMNote delete
-  <leader>nc   :PKMCite insert
-  <leader>ng   :PKMCite goto
-  <leader>nl   :PKMCite link
-  gf           :PKMCite follow
-  <leader>nb   :PKMCite backlinks
-  <leader>nf   :PKMBrowse
-  <leader>nt   :PKMBrowse tags
-  <leader>nr   :PKMNote rename
+
+CITATIONS AND LINKS (<leader>c)~
+  <leader>cc   :PKMCite insert
+  <leader>cg   :PKMCite goto
+  <leader>cl   :PKMCite link
+  <leader>cb   :PKMCite backlinks
+  gf           :PKMCite follow      (non-leader; overrides goto-file)
+
+FIND AND SEARCH (<leader>f)~
+  <leader>ff   :PKMBrowse
+  <leader>ft   :PKMBrowse tags
+  <leader>fp   cyclable pop-up   (nav; <C-l> cycles browse/views/nav inside it)
+
+VIEWS — saved filters (<leader>v)~
   <leader>vl   :PKMView last
   <leader>va   :PKMView list
-  <leader>vs   :PKMView sidebar
-  <leader>vb   :PKMPanel buffers
+
+PANES — the PERSISTENT surfaces you toggle and live with (<leader>p)~
+  <leader>ps   sidebar             (:PKMView sidebar)
+  <leader>pb   buffer panel        (:PKMPanel buffers)
+  <leader>P    focus into/out of the sidebar
+  <C-Tab>      cycle focus among open panes (forward)
+  <C-S-Tab>    cycle focus among open panes (backward)
+  Note: the cyclable pop-up is transient — it is <leader>fp under find, not a
+  pane. <leader>pn (below) makes the sidebar *show* nav; that is a pane, and is
+  not the same surface as the pop-up.
+
+MARKDOWN EDITING (<leader>M, and ]h / [h)~
   <leader>Mh   :PKMHeader append
   <leader>M^   :PKMHeader levelup    (normal and visual)
   <leader>M_   :PKMHeader leveldown  (normal and visual)
@@ -975,16 +1009,19 @@ Default keymaps (all overridable; set to false to disable):
                (markdown buffers only, normal and visual, count-aware;
                any-level jumps are Neovim's own ]] and [[ )
 
-Additional keymaps (default false — assign to enable):
-
-  focus_sidebar    jump focus directly to sidebar window
-  toggle_file_explorer     toggle netrw / PKM views sidebar
-  toggle_mode      :PKMPanel mode toggle
+Off by default — assign a key to enable~
   new_relative     :PKMNote relative
   set_title        :PKMNote settitle
   add_tag          :PKMTag add
   remove_tag       :PKMTag remove
-  convert_list     :PKMList convert  (normal and visual)
+  nav_panel        :PKMPanel nav        (sidebar → heading index)  e.g. <leader>pn
+  explorer         :PKMPanel explorer   (sidebar + buffer panel)   e.g. <leader>pe
+  toggle_mode      :PKMPanel mode                                  e.g. <leader>pm
+  convert_list     :PKMList convert     (normal and visual)
+  toggle_syntax    :PKMSyntax toggle
+  header_next      any-level header motion (this is ]] )
+  header_prev      any-level header motion (this is [[ )
+  toggle_file_explorer   toggle netrw / PKM views sidebar
 
 ==============================================================================
 13. FRONTMATTER                                               *pkm-frontmatter*

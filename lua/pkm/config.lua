@@ -160,42 +160,58 @@ local defaults = {
     max_age_days = 60,     -- auto-purge entries older than N days; 0 to disable
   },
 
+  -- The default keymaps follow three mnemonic axes (v1.60.0 reorg). CONTENT
+  -- prefixes say *what* — `<leader>n` notes, `<leader>c` citations/links,
+  -- `<leader>f` find/search, `<leader>v` views, `<leader>M` markdown structure.
+  -- SURFACE is `<leader>p` — the PERSISTENT panels you toggle and live with
+  -- (sidebar, buffer bar; one key is both on and off). Transient pickers (browse,
+  -- tags, the cyclable pop-up) are content and live under their verb (`<leader>f`),
+  -- not here. WINDOW keys stay the user's own `<C-*>` scheme; pkm adds only
+  -- `<C-Tab>` to cycle among open panes. Every entry is a config
+  -- key (the stable contract) mapped to its lhs; set any to `false` to disable.
+  -- `:help pkm-keymaps` is the reference; `:nmap <leader>` (every bind carries a
+  -- `PKM: …` description) or which-key shows what is actually mapped now.
   keymaps = {
-    -- Note operations
+    -- Notes — the note lifecycle (`<leader>n`)
     new_note         = "<leader>nn",
-    new_relative     = false,   -- new note inheriting the current note's tags
+    new_relative     = false,          -- note inheriting current tags (e.g. <leader>nN)
     new_journal      = "<leader>nj",
     new_scratchpad   = "<leader>ns",
     rename_note      = "<leader>nr",
-    insert_citation  = "<leader>nc",
-    goto_citation    = "<leader>ng",
     delete_note      = "<leader>nd",
-    link_note        = "<leader>nl",
-    follow_link      = "gf",
-    backlinks        = "<leader>nb",
     import_note      = "<leader>ni",
     convert_note     = "<leader>nx",
     promote_note     = "<leader>np",
     transpose_note   = "<leader>nT",
     change_note_type = "<leader>nC",
-    set_title        = false,
+    set_title        = false,          -- buffer-only title (e.g. <leader>nt)
+    -- Citations and links (`<leader>c`)
+    insert_citation  = "<leader>cc",
+    goto_citation    = "<leader>cg",
+    link_note        = "<leader>cl",
+    backlinks        = "<leader>cb",
+    follow_link      = "gf",           -- natural, non-leader; overrides goto-file
+    -- Tags on the current note (buffer-only; opt-in, e.g. <leader>ca / <leader>cd)
     add_tag          = false,
     remove_tag       = false,
-    -- Navigation
+    -- Find / search — transient pickers (`<leader>f`)
+    browse          = "<leader>ff",
+    browse_tags     = "<leader>ft",
+    nav_search      = "<leader>fp",    -- cyclable pop-up (nav; <C-l> → views → browse)
+    -- Views — saved filters only, no panes (`<leader>v`)
     view_last    = "<leader>vl",
-    view_list    = "<leader>va", -- va = view all
-    view_sidebar = "<leader>vs",
-    view_panel   = false,   -- sidebar-buffer-local key to pop out into the views panel
-    view_buffers = "<leader>vb",
-    nav_panel    = false,   -- :PKMPanel nav — heading index of the focused note
-    nav_search   = "<leader>nS",   -- cyclable pop-up (nav headings; <C-l> → views → browse)
-    toggle_file_explorer = false,   -- superseded by view_sidebar + T (filename/title toggle)
-    focus_sidebar = "<leader>s",   -- toggle focus into/out of the sidebar (opens it if closed)
-    -- PKM mode
-    toggle_mode   = false,   -- :PKMPanel mode toggle
-    -- Search and browsing
-    browse          = "<leader>nf",
-    browse_tags     = "<leader>nt",
+    view_list    = "<leader>va",       -- va = view all
+    -- Panes — the PERSISTENT surfaces you toggle and live with (`<leader>p`)
+    view_sidebar = "<leader>ps",       -- sidebar (views), also :PKMView sidebar
+    view_buffers = "<leader>pb",       -- bottom buffer-list panel
+    nav_panel    = false,              -- sidebar switched to the nav provider (e.g. <leader>pn)
+    explorer     = false,              -- sidebar + buffer panel as a unit (e.g. <leader>pe)
+    toggle_mode  = false,              -- :PKMPanel mode (e.g. <leader>pm)
+    focus_sidebar = "<leader>P",       -- jump focus into/out of the sidebar
+    view_panel   = false,              -- sidebar-buffer-local key to pop out into the views panel
+    cycle_panes      = "<C-Tab>",      -- cycle focus among open panes (+ main window)
+    cycle_panes_back = "<C-S-Tab>",    -- cycle focus backwards
+    toggle_file_explorer = false,      -- superseded by view_sidebar + T (filename/title toggle)
     -- Markdown editing
     ---- Headers ----
     next_header        = "<leader>Mh",   -- :PKMHeader append (writes; not a motion)
