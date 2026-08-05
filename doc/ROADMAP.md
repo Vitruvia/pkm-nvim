@@ -548,9 +548,15 @@ progress; plan in `jolly-sparking-petal.md`. Author decisions: nav panel first
   toggle (records the come-from window + jumps back); panel winbars show the
   suppressed note number (`utils.winbar_label`; buffer panel gains a focus-only
   winbar); `<C-g>` full-path echo; vault shown in the nav header; and the v1.49.0
-  double-build on sidebar open removed. *The remaining cold first-open lag is the
-  synchronous index build — the durable fix is the deferred persistent /
-  mtime-cached index (see Area 1 / the index-persistence decision), not the panel.*
+  double-build on sidebar open removed. *The cold first-open lag was the
+  synchronous index build. **Mitigated in v1.61.0** by a background (chunked)
+  warm-up (`index.start_background_build`, idle `vim.defer_fn` slices after setup,
+  gated by `pkm_mode.index.prebuild`): the first panel open is warm, and if it
+  opens mid-build the remainder completes synchronously. Benchmarks
+  (`bench.index_profile`) confirmed the build is I/O-bound and its primitives
+  already optimal (scandir/io.open; reads 49% + mtime 39%), so warming is the
+  right lever. The **durable** fix for repeat sessions is still the deferred
+  persistent / mtime-cached index (Area 1 / Distant 3), not the panel.*
 - ✅ **v1.51.0 (Phase 3.3a) — one sidebar, pluggable providers**: the sidebar
   hosts content providers (views + nav), switched IN PLACE by swapping the
   buffer's keymaps (teardown by lhs → apply new) + re-dispatching build_lines —
@@ -1450,9 +1456,11 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
 -   **Image and visualization support:** embedded images, Mermaid diagram
     support in preview, inline rendering (kitty/iTerm2 protocols).
 
--   **`:PKMViewStats`** — table of all views with note counts and subproject
-    depth. Implementation: iterate `views.list()`, call `match_all()` for each,
-    format as notification or float.
+-   **`:PKMViewStats`** — **DEFERRED (author, 3/8/2026); Potential, not scheduled.**
+    Table of all views with note counts and subproject depth. Implementation when
+    taken: iterate `views.list()` and format `views.count_many(list)` (the linear
+    counting pair — **not** `match_all()` per view, which re-sorts for nothing) as a
+    float or notification. Would be a `:PKMView stats` verb, not a new command.
 
 -   **Metadata system review (in-file vs. sidecar).** Recorded for future
     reconsideration only. Decision gate: revisit ONLY IF, after (1) the

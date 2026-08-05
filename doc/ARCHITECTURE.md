@@ -181,7 +181,12 @@ The build lists directories with `uv.fs_scandir` and reads files with
 (v1.6.2 Ph1). `mtime` still comes from `vim.fn.getftime` and the filename stem
 from `vim.fn.fnamemodify` — both measured *faster* than their libuv/Lua
 counterparts, so they stayed. Listing is unordered (nothing depends on it) and
-no longer honours `'wildignore'`.
+no longer honours `'wildignore'`. **Background warm-up (v1.61):**
+`start_background_build()` gathers the file list up front and reads the corpus in
+idle `vim.defer_fn` slices after `setup()` (gated by `pkm_mode.index.prebuild`), so
+the first sidebar/pop-up/browse open isn't the cold synchronous scan;
+`ensure_built()` finishes an in-flight warm-up synchronously if a caller needs a
+complete index before it drains, so callers never see a partial index.
 
 **check.lua** — the read-only vault audit behind `:PKMCheck`. `run()` returns a
 list of findings (each `{severity, message, path?}`) over frontmatter completeness,

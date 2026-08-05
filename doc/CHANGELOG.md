@@ -61,6 +61,33 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.61.0] - 3/8/2026
+
+*Performance: the first sidebar / pop-up / browse open no longer pays the cold
+index build synchronously. Benchmark-driven — the build is ~0.15 ms/note and
+dominates the cold open, so a ~10k-note vault (or slower synced-drive I/O) is the
+1–2s the author saw.*
+
+### Added
+
+-   **Background (chunked) index warm-up.** `index.start_background_build()` gathers
+    the note list up front (cheap `uv.fs_scandir`) and reads files in idle slices
+    (`vim.defer_fn`, 400/slice), so the index is warm when a panel is first opened
+    instead of freezing for the cold scan. Kicked ~200 ms after `setup()`, gated by
+    `pkm_mode.index.prebuild` (default on). If a panel opens mid-build the index
+    completes the remainder **synchronously** (`ensure_built`), so callers never see a
+    partial index; `rebuild()` cancels an in-flight warm-up.
+
+### Notes
+
+-   Benchmark attribution (`:lua require('pkm.bench').index_profile()`): the build
+    already uses the fast primitives (`scandir` over `glob`, `io.open` over
+    `readfile`); of what remains, file reads are ~49% (inherent — must read to parse)
+    and per-file mtime ~39% (`fs_stat` is *slower*, so no swap). No free algorithmic
+    win — the fix is *when* the cost is paid, not the build itself. `test_v161_p1`
+    (synchronous completion mid-build), `test_v161_p2` (chunked self-completion);
+    luacheck clean; existing index-backed suites green.
+
 ## [1.60.1] - 3/8/2026
 
 *Documentation cleanup — no code behaviour change (one config comment only).*

@@ -24,13 +24,19 @@
 --
 -- Thread-safety: Neovim Lua is single-threaded; no locking needed.
 --
+-- The build is lazy (first get_all/get) unless start_background_build() has
+-- warmed it in chunks after startup (gated by pkm_mode.index.prebuild), which
+-- keeps the first sidebar/pop-up open off the cold scan.
+--
 -- Public API:
---   setup(config)          → store config reference; register BufWritePost autocmd
---   get_all()              → index_entry[]  (builds index on first call)
---   get(path)              → index_entry | nil
---   invalidate(path)       → re-read one file; remove entry if file gone
---   rebuild()              → full rescan; call after bulk external changes
---   is_built()             → boolean
+--   setup(config)             → store config; register BufWritePost autocmd;
+--                               schedule the background warm-up build
+--   get_all()                 → index_entry[]  (builds on first call if cold)
+--   get(path)                 → index_entry | nil
+--   start_background_build()  → warm the index in idle chunks; no-op if built
+--   invalidate(path)          → re-read one file; remove entry if file gone
+--   rebuild()                 → full rescan; call after bulk external changes
+--   is_built()                → boolean (true only when fully built)
 -- =============================================================================
 
 local M = {}
@@ -49,6 +55,17 @@ end
 local _index  = {}      -- path → entry table
 local _built  = false   -- true after first full scan
 local _config = nil     -- set by setup()
+
+-- Background (chunked) build state. When a background build is running, the
+-- full file list lives in _bg_queue and _bg_pos is the next index to read; the
+-- index is populated a slice at a time on the event loop so it never freezes.
+-- Any caller that needs a complete index before it finishes drains the rest
+-- synchronously (ensure_built → bg_finish_sync). See start_background_build().
+local _bg_queue  = nil    -- string[] of all note paths during a bg build, else nil
+local _bg_pos    = 1      -- 1-based cursor into _bg_queue
+local _bg_active = false  -- true while a chunked background build is in progress
+local BG_CHUNK   = 400    -- files read per idle slice
+local BG_DELAY   = 8      -- ms yielded to the UI between slices
 
 -- =============================================================================
 -- SECTION: Setup
@@ -80,6 +97,15 @@ function M.setup(user_config)
       M.invalidate(filepath)
     end,
   })
+
+  -- Warm the index in the background shortly after startup so the first
+  -- sidebar / pop-up / browse open is not the cold synchronous scan. Chunked,
+  -- so it never freezes; a panel opened before it finishes completes the
+  -- remainder synchronously (ensure_built). Gated by pkm_mode.index.prebuild.
+  local pm = user_config.pkm_mode
+  if pm and pm.index and pm.index.prebuild then
+    vim.defer_fn(function() M.start_background_build() end, 200)
+  end
 end
 
 -- =============================================================================
@@ -210,33 +236,97 @@ end
 -- SECTION: Build
 -- =============================================================================
 
---- Perform a full scan of all note folders and populate _index.
---- Called automatically by get_all() on the first invocation.
-local function build()
-  if not _config then
-    vim.notify('PKMIndex: setup() not called before build()', vim.log.levels.ERROR)
-    return
-  end
-
-  _index = {}
-
+--- List every note path under the configured folders — the cheap part of a
+--- build (one libuv scandir per folder, no file reads).
+---@return string[]  absolute paths
+local function collect_files()
+  local files = {}
   local folders = {
     _config.folders.consolidated,
     _config.folders.journal,
     _config.folders.scratchpad,
   }
-
   for _, folder in ipairs(folders) do
-    local dir = utils.join(_config.root_path, folder)
-    for _, path in ipairs(glob_md(dir)) do
-      local entry = read_entry(path)
-      if entry then
-        _index[norm(path)] = entry
-      end
+    for _, path in ipairs(glob_md(utils.join(_config.root_path, folder))) do
+      files[#files + 1] = path
     end
   end
+  return files
+end
 
+--- Perform a full synchronous scan of all note folders and populate _index.
+local function build()
+  if not _config then
+    vim.notify('PKMIndex: setup() not called before build()', vim.log.levels.ERROR)
+    return
+  end
+  _index = {}
+  for _, path in ipairs(collect_files()) do
+    local entry = read_entry(path)
+    if entry then _index[norm(path)] = entry end
+  end
   _built = true
+end
+
+-- Drain the remainder of an in-progress background build synchronously, then
+-- finalize. Called when a caller needs a complete index before the chunked
+-- build has finished — it pays only for the files not yet read, never the whole
+-- corpus. A still-pending bg_step() then sees _bg_active=false and no-ops.
+local function bg_finish_sync()
+  if _bg_queue then
+    for i = _bg_pos, #_bg_queue do
+      local entry = read_entry(_bg_queue[i])
+      if entry then _index[norm(_bg_queue[i])] = entry end
+    end
+  end
+  _bg_queue, _bg_pos, _bg_active = nil, 1, false
+  _built = true
+end
+
+-- Read one slice of the background queue, then reschedule until it is drained.
+-- Runs on the main loop (vim.defer_fn), so read_entry's vim.fn.* calls are
+-- legal. Guards against a superseding finish_sync/rebuild.
+local function bg_step()
+  if not _bg_active or not _bg_queue then return end
+  local q    = _bg_queue
+  local stop = math.min(_bg_pos + BG_CHUNK - 1, #q)
+  for i = _bg_pos, stop do
+    local entry = read_entry(q[i])
+    if entry then _index[norm(q[i])] = entry end
+  end
+  _bg_pos = stop + 1
+  if _bg_pos > #q then
+    _bg_queue, _bg_pos, _bg_active = nil, 1, false
+    _built = true
+  else
+    vim.defer_fn(bg_step, BG_DELAY)
+  end
+end
+
+--- Kick off a chunked background build so the first interactive index access
+--- (sidebar / pop-up / browse) is warm instead of paying the cold scan. No-op
+--- if the index is already built or a background build is already running.
+--- The file list is gathered up front (cheap); files are read a slice at a time
+--- on the event loop. If get_all()/get() is called before it finishes, the rest
+--- is read synchronously then, so callers never see a partial index. Idempotent.
+function M.start_background_build()
+  if _built or _bg_active or not _config then return end
+  _index    = {}
+  _bg_queue = collect_files()
+  _bg_pos   = 1
+  if #_bg_queue == 0 then
+    _bg_queue, _built = nil, true
+    return
+  end
+  _bg_active = true
+  vim.defer_fn(bg_step, BG_DELAY)
+end
+
+-- Ensure a complete index exists: return if built, finish an in-progress
+-- background build synchronously, else do a full synchronous build.
+local function ensure_built()
+  if _built then return end
+  if _bg_active then bg_finish_sync() else build() end
 end
 
 -- =============================================================================
@@ -247,7 +337,7 @@ end
 --- Builds the index on the first call; subsequent calls are O(n) table iteration.
 ---@return table[]  Array of index entry tables
 function M.get_all()
-  if not _built then build() end
+  ensure_built()
 
   local out = {}
   for _, entry in pairs(_index) do
@@ -261,7 +351,7 @@ end
 ---@param path string  Absolute path
 ---@return table|nil entry
 function M.get(path)
-  if not _built then build() end
+  ensure_built()
   return _index[norm(path)]
 end
 
@@ -312,6 +402,8 @@ end
 --- Discard the current index and rebuild from scratch.
 --- Use after bulk external changes (e.g. a git pull that touches many files).
 function M.rebuild()
+  -- Cancel any in-progress background build (a pending bg_step no-ops).
+  _bg_queue, _bg_pos, _bg_active = nil, 1, false
   _built = false
   build()
   vim.notify(
