@@ -1157,13 +1157,13 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
 
 3.  **Functionality (near):**
     1.  Expand our custom syntax highlighting and commands to all
-       files outside PKM. Many commands, like `:PKMRenameNote` already
-       work outside our system, all we need to do is create a default list
-       of commands that we want to always work and make sure they do. Customization
-       can be left for a distant future (together with other user customization
-       options). We also need to make syntax highlighting work for all markdown
-       files (customization and toggling options are deferred to the user
-       customization step, to be implemented sometime in the future).
+       files outside PKM. **Status (3/8/2026): the highlighting half is DONE** —
+       `highlight_all_markdown` highlights every markdown buffer (list markers,
+       citations, meta-comments, YAML), toggled per buffer by `:PKMSyntax`. **The
+       commands-outside-vault half is DEFERRED** (author): many commands (e.g.
+       `:PKMNote rename`) already work outside the vault; settling and guaranteeing
+       the *default set* of `:PKM*` that always work on any markdown file waits.
+       Customization stays distant.
     2.  A custom autowrap that will correctly work with the elements of a PKM
         note, like YAML frontmatter, code blocks, headers (no autowrapping
         headers with text that imediately precedes or follows them), tables, lists
