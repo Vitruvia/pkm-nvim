@@ -57,13 +57,17 @@ print("\n== a real keymap driven by feedkeys moves the state (the round-trip) ==
 views.open_sidebar()
 check("sidebar closed again before the keystroke test", api.ui_state().sidebar.open == false)
 
--- Resolve <leader>vs to actual keys and feed them, exercising the real mapping
--- (`<leader>vs` → <cmd>PKMView sidebar<cr>), not a direct function call.
+-- Resolve the sidebar keymap from the LIVE config (its lhs moved from <leader>vs
+-- to <leader>ps in the v1.60 keymap redesign; read it rather than hardcode) and
+-- feed it, exercising the real mapping (→ <cmd>PKMView sidebar<cr>), not a
+-- direct function call.
 local leader = vim.g.mapleader
 if leader == nil or leader == '' then leader = '\\' end
-vim.api.nvim_feedkeys(leader .. 'vs', 'x', false)
+local sidebar_lhs = require('pkm').config.keymaps.view_sidebar or '<leader>ps'
+local sidebar_keys = leader .. (sidebar_lhs:gsub('^<[Ll]eader>', ''))
+vim.api.nvim_feedkeys(sidebar_keys, 'x', false)
 local s2 = api.ui_state()
-check("feeding <leader>vs opened the sidebar via the real mapping",
+check("feeding the sidebar keymap (" .. sidebar_lhs .. ") opened it via the real mapping",
   s2.sidebar.open == true, vim.inspect(s2.sidebar))
 
 print("\n== ui_state resolves the current note (title/type from the index) ==")
