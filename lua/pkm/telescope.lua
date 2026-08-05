@@ -21,6 +21,24 @@ local M = {}
 local utils = require('pkm.utils')
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 
+-- The note-type filter cycle for the browse picker's <C-t> (false = all types).
+-- Mirrors the sidebar's <C-t> cycle (views.lua TYPE_CYCLE) so filtering to
+-- journal / scratchpad works the same way from the pop-up-less browse pickers.
+local TYPE_CYCLE = { false, 'note', 'agg', 'bib', 'journal', 'scratch' }
+
+--- Does a note of `note_type` pass the type filter at TYPE_CYCLE index `type_idx`?
+--- Index 1 (false) is "all types" and passes everything.
+---@param note_type string|nil
+---@param type_idx integer|nil
+---@return boolean
+local function passes_type(note_type, type_idx)
+  local want = TYPE_CYCLE[type_idx or 1]
+  return (not want) or note_type == want
+end
+
+M._type_cycle  = TYPE_CYCLE    -- exposed for tests
+M._passes_type = passes_type   -- exposed for tests
+
 -- =============================================================================
 -- SECTION: Helpers
 -- =============================================================================
@@ -69,10 +87,13 @@ end
 ---@param seed    string|nil  Optional expression to pre-populate the prompt
 ---@param presorted boolean|nil  When true, skip the internal type/title sort
 ---@param on_cycle  fun()|nil  <C-l> closes and calls this (pop-up-container cycle)
-local function live_picker(title, entries, seed, presorted, on_cycle)
+---@param type_idx  integer|nil  TYPE_CYCLE index; <C-t> cycles it (default 1 = all)
+local function live_picker(title, entries, seed, presorted, on_cycle, type_idx)
   local t = require_telescope()
   if not t then return end
   local filter = require('pkm.filter')
+  type_idx = type_idx or 1
+  local active_type = TYPE_CYCLE[type_idx]
 
   local sorted = {}
   for _, e in ipairs(entries) do sorted[#sorted + 1] = e end
@@ -100,20 +121,26 @@ local function live_picker(title, entries, seed, presorted, on_cycle)
     sorting_strategy = 'ascending',
     layout_config    = { prompt_position = 'top' },
   }, {
-    prompt_title = title .. '  ·  <Tab> mark  ·  <C-a> act'
+    prompt_title = title
+      .. (active_type and ('  ·  [' .. active_type .. ']') or '')
+      .. '  ·  <Tab> mark  ·  <C-a> act  ·  <C-t> type'
       .. (on_cycle and '  ·  <C-l> next panel' or ''),
     finder = t.finders.new_dynamic {
       fn = function(prompt)
-        if not prompt or prompt == '' then return all_items end
-        -- Parse the prompt; fall back to a bare any-predicate when incomplete
-        -- (e.g. mid-typing "AND" without a right operand).
-        local tree, _ = filter.parse(prompt)
-        if not tree then
-          tree = { type = 'PRED', field = 'any', value = prompt }
+        -- The <C-t> note-type filter (active_type) is applied on TOP of the
+        -- prompt, always — including when the prompt is empty.
+        local tree = nil
+        if prompt and prompt ~= '' then
+          -- Parse the prompt; fall back to a bare any-predicate when incomplete
+          -- (e.g. mid-typing "AND" without a right operand).
+          tree = filter.parse(prompt) or { type = 'PRED', field = 'any', value = prompt }
         end
         local out = {}
         for _, item in ipairs(all_items) do
-          if filter.eval(tree, item.entry) then out[#out + 1] = item end
+          if passes_type(item.entry.note_type, type_idx)
+          and (not tree or filter.eval(tree, item.entry)) then
+            out[#out + 1] = item
+          end
         end
         return out
       end,
@@ -151,7 +178,8 @@ local function live_picker(title, entries, seed, presorted, on_cycle)
             -- Back reopens *this* browser, with what was typed still in it, so
             -- the selection can be redone rather than merely narrowed.
             on_back = function()
-              live_picker(title, entries, prompt ~= '' and prompt or seed, presorted)
+              live_picker(title, entries, prompt ~= '' and prompt or seed,
+                presorted, on_cycle, type_idx)
             end,
           })
         end)
@@ -168,13 +196,38 @@ local function live_picker(title, entries, seed, presorted, on_cycle)
       map('i', '<S-Tab>', sel_prev)
       map('n', '<S-Tab>', sel_prev)
 
+      -- <C-t>: cycle the note-type filter (all → note → agg → bib → journal →
+      -- scratch), the browse equivalent of the sidebar's <C-t> — and the way to
+      -- reach journal / scratchpad notes here. Closes and reopens with the next
+      -- type, preserving the typed prompt. Also overrides Telescope's default
+      -- <C-t> (open-in-tab) in these pickers.
+      local function type_cyc()
+        local prompt = t.state.get_current_line()
+        t.actions.close(prompt_bufnr)
+        local next_idx = (type_idx % #TYPE_CYCLE) + 1
+        vim.schedule(function()
+          live_picker(title, entries, prompt ~= '' and prompt or nil,
+            presorted, on_cycle, next_idx)
+        end)
+      end
+      map('i', '<C-t>', type_cyc)
+      map('n', '<C-t>', type_cyc)
+
       if on_cycle then
+        -- <C-l>: cycle the pop-up container's content provider.
         local function cyc()
           t.actions.close(prompt_bufnr)
           vim.schedule(on_cycle)
         end
         map('i', '<C-l>', cyc)
         map('n', '<C-l>', cyc)
+      else
+        -- Outside the pop-up there is no provider to cycle. Telescope's default
+        -- <C-l> is complete_tag, which errors in this picker (no tag
+        -- pre-filtering set), so neutralise it — it does nothing instead.
+        local function noop() end
+        map('i', '<C-l>', noop)
+        map('n', '<C-l>', noop)
       end
 
       return true

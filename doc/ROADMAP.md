@@ -42,7 +42,7 @@ highlighting in pkm-syntax, not here. See `CLAUDE.md` and the suite-level
 ## Current State
 
 **Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical;
-**v1.61.3** as of this writing). All work happens directly on `dev`; `main` holds
+**v1.62.0** as of this writing). All work happens directly on `dev`; `main` holds
 periodic stable backups of `dev`, not an independently maintained release line.
 
 **Working features:**
@@ -92,7 +92,8 @@ periodic stable backups of `dev`, not an independently maintained release line.
      (AND, OR, NOT, parentheses, quoted values)
 - ✅ In-memory note index with incremental invalidation (~290× faster than raw scan),
      plus background chunked warm-up so the first panel/pop-up open is warm
-- ✅ `:PKMBrowse [expr]` — live filter-as-you-type; bare text triggers `any` predicate
+- ✅ `:PKMBrowse [expr]` — live filter-as-you-type; bare text triggers `any` predicate;
+     `<C-t>` cycles a note-type filter (all/note/agg/bib/journal/scratch) over the results
 - ✅ `:PKMBrowse recent [n]` — n most recently modified notes (default 20)
 - ✅ `:PKMTags` — tag picker; on selection opens browse(`tag:<x>`)
 - ✅ `:PKMBrowse orphans` — notes with no tags, no citations, and no matching view
@@ -181,7 +182,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.61.3)
+## Shipped so far (v1.5.7 → v1.62.0)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -220,7 +221,7 @@ shipped work that still constrain **pending** work are kept in
   the nav provider; the sidebar lifted onto `panel.create` hosting **pluggable
   providers** (views + nav) with **autoswitch**; buffer-panel `[count]<CR>` + `/`;
   the nav/headings pop-up; and the **cyclable pop-up** container (closing Phase 3.5).
-- **v1.57.0 – v1.61.3 — conventions, suite move, surface + doc cleanup, perf.**
+- **v1.57.0 – v1.62.0 — conventions, suite move, surface + doc cleanup, perf.**
   Recursos read/write conventions + light note conventions (v1.57); relocation
   into pkm-suite (v1.58); the `doc/pkm.txt` verb-surface rewrite (v1.59); the
   **keymap redesign** on a persistent-vs-transient axis + `:PKMView update`
@@ -235,7 +236,10 @@ shipped work that still constrain **pending** work are kept in
   buffer writes the backlink *through* the buffer, killing the phantom W12 `:w`
   prompt at its source); and the **`pkm.sidebar` extraction** (v1.61.3 — the
   sidebar container host moved onto `lua/pkm/sidebar.lua`, `views.lua` is now a
-  provider + re-export shim, behavior-preserving).
+  provider + re-export shim, behavior-preserving); and the **browse-picker
+  note-type cycle** (v1.62.0 — `<C-t>` in `:PKMBrowse`/the view note lists/the
+  pop-up cycles all/note/agg/bib/journal/scratch, the non-sidebar way to reach
+  journal & scratchpad notes; also silenced the stray `<C-l>` complete_tag error).
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.
@@ -258,7 +262,7 @@ noted caveat (but do both when it is easy). The detailed specs live under
 § Near goals / § Distant goals / § Potential goals below; this is the priority
 view over them.*
 
-**Pending-features status (as of v1.61.3).** There are **no non-deferred,
+**Pending-features status (as of v1.62.0).** There are **no non-deferred,
 near-term pending features left** — the two that were open both shipped: the
 **forced-save prompt** (Near 5.1) in **v1.61.2** (a citation into an open,
 unmodified buffer now writes the backlink *through* the buffer, so a later `:w`

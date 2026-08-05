@@ -74,6 +74,43 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.62.0] - 5/8/2026
+
+*The browse picker gained a `<C-t>` note-type filter — the non-sidebar way to
+reach journal / scratchpad notes — and its stray `<C-l>` error is silenced.*
+
+### Added
+
+-   **`<C-t>` note-type cycle in the browse picker.** `:PKMBrowse` / `<leader>ff`,
+    the view note lists, and the pop-up's browse (every surface backed by
+    `telescope.live_picker`) now cycle a note-type filter on `<C-t>` — **all → note
+    → agg → bib → journal → scratch** — applied on top of whatever is typed, so it
+    reaches journal and scratchpad notes without the sidebar. It mirrors the
+    sidebar's `<C-t>` and is **global** (over every note, not one view's contents);
+    the active type shows as `[scratch]` in the prompt title. Cycling closes and
+    reopens the picker with the next type, preserving the typed prompt. This also
+    **replaces Telescope's default `<C-t>`** (open-in-tab) in these pickers.
+
+### Fixed
+
+-   **`<C-l>` no longer errors in the browse / view pickers.** Telescope's default
+    `<C-l>` is `complete_tag`, which raised *"No tag pre-filtering set for this
+    picker"* in the plain browse. It is now neutralised (a no-op) wherever there is
+    no pop-up provider-cycle to run. Inside the `<leader>fp` pop-up, `<C-l>` still
+    cycles browse → views → nav (a Telescope prompt captures insert-mode keys, so a
+    global `<C-l>` mapping — e.g. window-switch — cannot fire there regardless).
+
+### Notes
+
+-   Mechanism: `telescope.live_picker` gained a `type_idx` parameter and applies a
+    `passes_type` predicate in its finder (on top of the prompt filter); `<C-t>`
+    reopens with the next index. Built into the picker, so it is available to every
+    caller with no per-caller wiring. `test_v1614_p1` asserts the cycle and the
+    per-type predicate (each type reachable exactly once, isolating that type). The
+    `<C-t>`/`<C-l>` key behaviour is Telescope-interactive (smoke). Full suite green,
+    luacheck clean. (Scratch/journal were always indexed and browsable via
+    `:PKMBrowse type:scratch`; this is the discoverable, dedicated path.)
+
 ## [1.61.3] - 5/8/2026
 
 *The persistent sidebar CONTAINER extracted out of `views.lua` onto its own
