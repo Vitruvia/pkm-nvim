@@ -43,7 +43,8 @@ pkm.nvim/
 │   ├── bufsync.lua     # Open buffers vs. bulk disk writes (reload / ask / save)
 │   ├── index.lua       # In-memory note index with incremental invalidation
 │   ├── check.lua       # :PKMCheck vault audit (frontmatter, citation graph, numbering, vault refs)
-│   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
+│   ├── views.lua       # Named views: sidecar, CRUD; the `views` sidebar provider + re-export shim
+│   ├── sidebar.lua     # The persistent sidebar CONTAINER host (providers, autoswitch) on panel.lua
 │   ├── nav.lua         # Current-file heading navigation — a sidebar content provider
 │   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle, cycle_focus)
 │   ├── popup.lua       # Cyclable pop-up hosting browse/views/nav providers (<C-l>)
@@ -194,20 +195,19 @@ list of findings (each `{severity, message, path?}`) over frontmatter completene
 the citation graph, note numbering, and vault references; it modifies nothing. The
 command renders the findings in a scratch buffer, errors first.
 
-**views.lua** — named project views, and (for now) the sidebar container host.
-Sidecar `views.json` + `config.projects`. Since **v1.49.0** the sidebar rides
-`panel.create` (`_panel`, `name = 'sidebar'`): the panel owns the window / per-tab
-state / width / lifecycle. Since **v1.51.0 (Phase 3.3a)** the sidebar hosts pluggable
-content **providers** — `views` (built in) and `nav` (registered from `nav.setup` via
-`register_sidebar_provider`). `state.provider` (per-tab) selects one; `sidebar_build`
-DISPATCHES to `_sidebar_providers[provider].build_lines`. Switching provider swaps the
-buffer's keymaps in place (teardown by lhs → apply the new set) so nav's colliding keys
-(`<CR>`/`/`/`r`) never fight views'; `q`/`<Esc>` (close) and `<C-n>` (cycle) are common
-and survive. The views provider's own state (`mode`/`name`/`paths`/`tree`/`header_count`/
-`type_filter`/`marked`/`history`) rides the same per-tab table; `get_tab()` is a thin
-alias over `_panel.get_state()`. Public: `show_sidebar_provider`/`cycle_sidebar_provider`/
-`set_sidebar_provider`/`sidebar_provider`/`sidebar_provider_is`. (Lifting the container out
-into a dedicated `pkm.sidebar` module is a later mechanical tidy.)
+**views.lua** — named project views, and the `views` sidebar **provider**. Sidecar
+`views.json` + `config.projects`. Since **v1.61.3** the sidebar *container* host lives
+in **`sidebar.lua`** (see below); `views.lua` keeps the `views` provider content, the
+view-management panels, and the views-specific entry points `open_sidebar`/`focus_sidebar`.
+It registers the `views` provider with the container (`sidebar.register_sidebar_provider`,
+at load — like `nav` does at setup) and **re-exports the container API** (`is_sidebar_open`,
+`get_sidebar_win`, `refresh_sidebar_if_open`, `set_sidebar_provider`, `cycle_sidebar_provider`,
+`show_sidebar_provider`, `sidebar_provider`, `sidebar_provider_is`, `autoswitch_tick`,
+`set_autoswitch`, `autoswitch_enabled`), so every historical `views.<fn>` call site
+(`commands/panel`, `keymaps`, `mode`, `api`, `trash`, `nav`) is unchanged. `get_tab()` is a
+one-line delegator over `sidebar.get_state()`, so the many in-provider call sites are intact.
+The views provider's own state (`mode`/`name`/`paths`/`tree`/`header_count`/`type_filter`/
+`marked`/`history`) rides the container's per-tab table.
 `sidebar_build_lines(name, paths, total_count)` — builds detail lines; callers
 pre-filter by type and pass `#all_paths` as total for "N of M" display.
 `refresh_sidebar_if_open()` — iterates all tabpages, applies per-tab type filter.
@@ -218,14 +218,28 @@ reading the index once per batch and skipping the path array and the sort. Every
 "(N)" shown by an overview, panel or picker comes from the counting pair — never
 from `#match_all` — which is what keeps overview cost linear in views, not in
 views × sorts (see CHANGELOG, v1.6.1 Ph3, for the measured effect).
-Note: the sidebar's *container* (window/lifecycle/width) was extracted onto
-`panel.create` in v1.49.0. Its *content* still leans on the view-tree helpers
+Note: the views provider's *content* still leans on the view-tree helpers
 (`build_tree_entries`, `get_view_parent`/`get_view_children`, `match_all`), which
 are shared with the panels/pickers — so the views-provider is not a standalone
 module, and that is fine: those helpers are the model layer, and the sidebar UI is
-just one consumer of it. The public sidebar accessors (`get_last_view`,
-`is_sidebar_open`, `get_sidebar_win`, `refresh_sidebar_if_open`) now delegate to
-`_panel`. As of Phase 3.3a the one container also hosts the `nav` provider.
+just one consumer of it.
+
+**sidebar.lua** (v1.61.3) — the persistent sidebar **container** host, extracted
+from `views.lua`. Owns the `pkm.panel` instance (`name = 'sidebar'`, a managed-width
+left split — the panel owns window / per-tab state / width / lifecycle since v1.49.0),
+the pluggable-**provider** registry, and autoswitch. Providers register themselves
+(`register_sidebar_provider`) — `views` (from `views.lua` at load) and `nav` (from
+`nav.setup`) — so the dependency runs one way, provider → container; `sidebar.lua`
+never requires a provider's internals. `state.provider` (per-tab) selects one;
+`sidebar_build` DISPATCHES to `providers[provider].build_lines`. Switching provider
+swaps the buffer's keymaps in place (teardown by lhs → apply the new set) so nav's
+colliding keys (`<CR>`/`/`/`r`) never fight views'; `q`/`<Esc>` (close) and `<C-n>`
+(cycle) are common and survive. **Autoswitch** (Phase 3.3b): the open sidebar follows
+focus — `nav` for a markdown window, `views` otherwise — via `autoswitch_tick` (called
+from nav's window tracker), pinnable with `set_autoswitch`. Public: `get_state` /
+`is_sidebar_open` / `get_sidebar_win` / `open` / `close` / `refresh` /
+`refresh_sidebar_if_open` / the provider setters / `win_is_markdown` / the autoswitch
+trio / `setup` (reads `config.sidebar_autoswitch`). `views.lua` re-exports this surface.
 
 **nav.lua** — current-file navigation, a **sidebar content provider** (not its own
 container as of v1.51.0). Exposes `sidebar_provider` (a heading index of the last

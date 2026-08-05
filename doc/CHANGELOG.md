@@ -74,6 +74,42 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.61.3] - 5/8/2026
+
+*The persistent sidebar CONTAINER extracted out of `views.lua` onto its own
+module (ROADMAP Area 3). Behavior-preserving refactor — no user-facing change.*
+
+### Changed
+
+-   **`lua/pkm/sidebar.lua` (new) owns the sidebar container host.** The container
+    that was woven through `views.lua` — the `pkm.panel` instance, the per-tab
+    state, the provider registry (`register/build/set/cycle/show`, statusline,
+    keymap application), autoswitch (`win_is_markdown`, `autoswitch_desired`,
+    `autoswitch_tick`, `set_autoswitch`), the `sidebar_on_open` decorations, and
+    the open/close/refresh/query API — now lives in one module. Neither `views`
+    nor `nav` is built in: each registers itself as a provider, so the dependency
+    runs one way (provider → container).
+-   **`views.lua` is now a provider that re-exports the container API.** It keeps
+    the `views` content (build/keymaps/switch/search/help, the view-management
+    panels, `open_sidebar`/`focus_sidebar` — the views-specific entry points) and
+    registers the `views` provider with the container (like `nav` does). Every
+    historical `views.<sidebar-fn>` call site — `commands/panel`, `keymaps`,
+    `mode`, `api`, `trash`, and `nav` — keeps working unchanged through thin
+    re-exports (`is_sidebar_open`, `set_sidebar_provider`, `autoswitch_tick`, …).
+    A one-line `get_tab` delegator keeps the many in-provider call sites intact.
+
+### Notes
+
+-   Behavior-preserving: **no file outside `views.lua`/`sidebar.lua` changed**
+    (nav.lua included). The full sidebar battery (`v1490`/`v1510`/`v1520`/`v1530`/
+    `v1540`/`v160`) and the whole suite (90/90) stayed green; `test_v1613_p1` locks
+    the extraction boundary (container API on `pkm.sidebar`, `views` re-export
+    identities, the `views` provider registered and drivable via `open_sidebar`).
+    luacheck clean on both files (one pre-existing long-line warning in views.lua).
+    The interactive surface (autoswitch on real focus, Telescope resume, splits,
+    per-surface keymaps) is a smoke confirmation. A `pkm.sidebar` split had been
+    deferred repeatedly as a mechanical tidy; this is it.
+
 ## [1.61.2] - 5/8/2026
 
 *Forced-save prompt removed at its source (ROADMAP Near 5.1) — a citation into a

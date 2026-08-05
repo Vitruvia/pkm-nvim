@@ -42,7 +42,7 @@ highlighting in pkm-syntax, not here. See `CLAUDE.md` and the suite-level
 ## Current State
 
 **Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical;
-**v1.61.2** as of this writing). All work happens directly on `dev`; `main` holds
+**v1.61.3** as of this writing). All work happens directly on `dev`; `main` holds
 periodic stable backups of `dev`, not an independently maintained release line.
 
 **Working features:**
@@ -181,7 +181,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.61.2)
+## Shipped so far (v1.5.7 → v1.61.3)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -220,7 +220,7 @@ shipped work that still constrain **pending** work are kept in
   the nav provider; the sidebar lifted onto `panel.create` hosting **pluggable
   providers** (views + nav) with **autoswitch**; buffer-panel `[count]<CR>` + `/`;
   the nav/headings pop-up; and the **cyclable pop-up** container (closing Phase 3.5).
-- **v1.57.0 – v1.61.2 — conventions, suite move, surface + doc cleanup, perf.**
+- **v1.57.0 – v1.61.3 — conventions, suite move, surface + doc cleanup, perf.**
   Recursos read/write conventions + light note conventions (v1.57); relocation
   into pkm-suite (v1.58); the `doc/pkm.txt` verb-surface rewrite (v1.59); the
   **keymap redesign** on a persistent-vs-transient axis + `:PKMView update`
@@ -230,10 +230,12 @@ shipped work that still constrain **pending** work are kept in
   are already optimal, so warming is the right lever); and the **documentation
   review + this roadmap's reorganization** (v1.61.1, docs-only — a conservative
   whole-tree code review found nothing to change; the `body_lower` index-shape
-  drift was fixed; this document was compacted to its charter); and the
+  drift was fixed; this document was compacted to its charter); the
   **forced-save fix** (v1.61.2 — Near 5.1: a citation into an open unmodified
   buffer writes the backlink *through* the buffer, killing the phantom W12 `:w`
-  prompt at its source).
+  prompt at its source); and the **`pkm.sidebar` extraction** (v1.61.3 — the
+  sidebar container host moved onto `lua/pkm/sidebar.lua`, `views.lua` is now a
+  provider + re-export shim, behavior-preserving).
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.
@@ -256,12 +258,14 @@ noted caveat (but do both when it is easy). The detailed specs live under
 § Near goals / § Distant goals / § Potential goals below; this is the priority
 view over them.*
 
-**Pending-features status (as of v1.61.2).** The only **non-deferred, near-term**
-pending feature is one: the **`pkm.sidebar` extraction** (Area 3 — `lua/pkm/sidebar.lua`
-does not yet exist; the host is still in `views.lua`). The **forced-save prompt**
-(Near goals 5.1) shipped in **v1.61.2** — a citation into an open, unmodified buffer
-now writes the backlink *through* the buffer, so a later `:w` no longer hits the
-phantom W12 prompt. Everything else pending is either **deferred** — vault lifecycle create/merge/split
+**Pending-features status (as of v1.61.3).** There are **no non-deferred,
+near-term pending features left** — the two that were open both shipped: the
+**forced-save prompt** (Near 5.1) in **v1.61.2** (a citation into an open,
+unmodified buffer now writes the backlink *through* the buffer, so a later `:w`
+no longer hits the phantom W12 prompt), and the **`pkm.sidebar` extraction**
+(Area 3) in **v1.61.3** (the container host now lives in `lua/pkm/sidebar.lua`;
+`views.lua` is a provider that re-exports the container API). Everything still
+pending is either **deferred** — vault lifecycle create/merge/split
 and the in-place `convert` normaliser (Area 1); the persistent / mtime-cached index
 (Distant 3); Phase 3.4 journal/scratch nav + block-element indexing (Area 3);
 *parágrafo único* (Area 5); `:PKMView stats` (Potential); commands-outside-vault
@@ -314,10 +318,14 @@ Core shipped (v1.48–v1.56; see above). **Pending:**
 - **Phase 3.4 (deferred)** — journal/scratch navigation (wires the idle
   `journal.lua` helpers); **block-element indexing** in the nav provider
   (headers inside code/quote blocks must **not** be extracted into the index).
-- **`pkm.sidebar` extraction (mechanical tidy)** — lift the sidebar host out of
-  `views.lua` onto its own `lua/pkm/sidebar.lua` (mirrors nav/buffers on
-  `panel.create`); behavior-preserving, existing sidebar tests gate it. Multiple
-  simultaneous sidebars stay a future per-user-config option.
+- ✅ **`pkm.sidebar` extraction — done in v1.61.3.** The sidebar container host
+  moved out of `views.lua` onto `lua/pkm/sidebar.lua` (the host for the views +
+  nav providers, on `panel.create`). `views.lua` is now a provider that registers
+  `views` with the container (like `nav`) and re-exports the container's public
+  API, so every historical `views.<fn>` call site (commands/keymaps/mode/api/trash/
+  nav) is unchanged. Behavior-preserving — the whole sidebar battery + full suite
+  stayed green (`test_v1613_p1` locks the boundary); interactive smoke confirms.
+  Multiple simultaneous sidebars stay a future per-user-config option.
 - Active-window motions (list items, blocks — Near goals 2.1); explorer UI
   customisation (Distant goals 6); relevance ordering in panels (Distant goals 9).
   *These create commands/panels an agent reaches for → 🔺.*
