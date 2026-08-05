@@ -256,8 +256,11 @@ The note is not a list of instructions with a fixture underneath. It is a
 -   **Simulate the route before handing it over.** Execute the real keys and
     commands over the real file and check that every landing is the intended
     one. The note is a claim about behaviour; claims get verified, not asserted.
--   **The note is disposable and says so.** It carries the smoke tag/view, so a
-    later phase reaches its predecessors in one place.
+-   **The note is disposable and says so.** It lives in the test vault
+    (`P:\Note-Vault\00 - NotesTeste`, `03-Consolidated/`), numbered after the last
+    file in that folder, in the current frontmatter format (no `status:` field). Add
+    it to the **Smoke Tests** view with `:PKMView add "Smoke Tests"` rather than
+    editing the tag by hand, so a later phase reaches its predecessors in one place.
 
 For a feature whose operation does not move the cursor, the landing is whatever
 the operation leaves visible — the panel row, the renamed file, the reloaded

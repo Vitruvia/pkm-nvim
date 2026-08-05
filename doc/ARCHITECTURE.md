@@ -24,6 +24,7 @@ pkm.nvim/
 │   │   ├── shared.lua   #   helpers used by more than one context (focus_main_win)
 │   │   └── …            #   note, tag, cite, browse, view, vault, trash, list, header, panel, export, misc
 │   ├── keymaps.lua     # All keymap wiring (receives resolved config)
+│   ├── args.lua        # Shared verb/positional/named arg parser; drives :PKM* completion
 │   ├── yaml.lua        # YAML frontmatter parsing and generation — handle carefully
 │   ├── timestamp.lua   # Timestamp creation, parsing, formatting
 │   ├── citations.lua   # Bidirectional citation engine, tag indexing, add/remove tag
@@ -37,12 +38,17 @@ pkm.nvim/
 │   ├── tags.lua        # Tag rules (pure), preview (read-only), batch apply (writes)
 │   ├── picker.lua      # Shared note picker + confirmation float (Telescope or fallback)
 │   ├── actions.lua     # Bulk-action registry over a set of notes (panel <C-a>)
+│   ├── api.lua         # pkm.api — data-only, headless surface for agents/scripts (wraps cores)
 │   ├── rename.lua      # Name substitution (pure), bulk title write + propagation
 │   ├── bufsync.lua     # Open buffers vs. bulk disk writes (reload / ask / save)
 │   ├── index.lua       # In-memory note index with incremental invalidation
+│   ├── check.lua       # :PKMCheck vault audit (frontmatter, citation graph, numbering, vault refs)
 │   ├── views.lua       # Named views: sidecar, CRUD, two-mode sidebar, type filter
-│   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle)
+│   ├── nav.lua         # Current-file heading navigation — a sidebar content provider
+│   ├── panel.lua       # Generic per-tabpage panel factory (winfixbuf, lifecycle, cycle_focus)
+│   ├── popup.lua       # Cyclable pop-up hosting browse/views/nav providers (<C-l>)
 │   ├── mode.lua        # PKMMode: session context toggle, syntax enable/disable
+│   ├── skill.lua       # Installs the pkm-notes skill + /pkm-learning; :PKMAgentProtocol
 │   ├── syntax.lua      # FACADE re-exporting the pkm-syntax plugin (highlighting
 │   │                   #   moved out; graceful no-op stub if the plugin is absent)
 │   ├── trash.lua       # Soft-delete: manifest, trash/restore/empty/purge_old
@@ -54,11 +60,14 @@ pkm.nvim/
 ├── doc/
 │   ├── pkm.txt                    # Vim :help documentation (end-user, in-editor)
 │   ├── ARCHITECTURE.md            # This file: layout, modules, config shape
-│   ├── ROADMAP.md                 # Forward plan + how-to-execute (release/verify protocol)
+│   ├── ROADMAP.md                 # Forward plan (release/verify protocol lives in PRINCIPLES)
+│   ├── PRINCIPLES.md              # Standing rules: phase execution, design, verification protocol
 │   ├── LLM_CONTEXT.md             # Fast-read session brief for LLMs
 │   ├── LLM_PROJECT_INSTRUCTIONS.md# Coding standards, review protocol, doc cadence
 │   ├── PHILOSOPHY.md              # Design principles (non-negotiable constraints)
 │   ├── CONVENTIONS.md             # Note-content formatting conventions (in-text)
+│   ├── PKM_API.md                 # pkm.api reference (functions, args, return shapes) — for agents
+│   ├── AGENT_PROTOCOL.md          # Doctrine for an assistant operating in a vault
 │   └── CHANGELOG.md               # Version history, known bugs, dead code
 ├── test/               # Headless test files (test_v<ver>_p<phase>.lua) + min_init.lua
 └── README.md           # End-user onboarding
@@ -97,7 +106,16 @@ command clearup turns into verb-contexts, one file at a time.
 
 **keymaps.lua** — `register(config)`. Receives resolved config; keymap strings
 needed at registration time. Registers both normal and visual mode bindings for
-range commands (`renumber_list`, `convert_list`, header level shift).
+range commands (`renumber_list`, `convert_list`, header level shift). Defaults
+(v1.60) are organized on a **persistent-vs-transient** axis: CONTENT verbs
+(`<leader>n` notes, `c` cite, `f` find, `v` views, `M` markdown) vs `<leader>p`
+the persistent panels; `<C-Tab>`/`<C-S-Tab>` cycle panes. The config keys are the
+stable contract — only their lhs strings are the defaults.
+
+**args.lua** — the shared command-argument parser. Turns `fargs` into
+`{verb, positional, named, bang}` against a context's declared verb list, and the
+same table drives the `:PKM*` completion tree — so every verb-context parses and
+completes consistently instead of hand-rolling its own dialect.
 
 **yaml.lua** — YAML frontmatter parse and generation. **Do not modify without
 strong justification.** Contains the non-trivial nested-empty-structure parser.
@@ -164,6 +182,11 @@ The build lists directories with `uv.fs_scandir` and reads files with
 from `vim.fn.fnamemodify` — both measured *faster* than their libuv/Lua
 counterparts, so they stayed. Listing is unordered (nothing depends on it) and
 no longer honours `'wildignore'`.
+
+**check.lua** — the read-only vault audit behind `:PKMCheck`. `run()` returns a
+list of findings (each `{severity, message, path?}`) over frontmatter completeness,
+the citation graph, note numbering, and vault references; it modifies nothing. The
+command renders the findings in a scratch buffer, errors first.
 
 **views.lua** — named project views, and (for now) the sidebar container host.
 Sidecar `views.json` + `config.projects`. Since **v1.49.0** the sidebar rides
@@ -274,6 +297,16 @@ rather than wired into panels again — and because the registry is data, it is 
 first piece shaped for the planned `pkm.api`. Consumed by `telescope.lua`
 (`live_picker` `<C-a>`) and `views.lua` (views panel `<C-a>`).
 
+**api.lua** — `require('pkm.api')`, the **data-only, headless** surface for LLM
+assistants and scripts (v1.16.0). Returns data, never opens UI, so every function
+is callable from `nvim --headless -c "lua ..."` and testable without a screen. It
+**wraps the existing cores** (notes / tags / citations / views / index / filter /
+export / actions / vault / check) under stable names rather than reimplementing
+them; writes report what they changed and keep `index.invalidate` discipline;
+confirmation belongs to the interactive twin, so the API never acquires a prompt.
+`ui_state()` (v1.20.0) is the inspect surface for agent-driven smoke. See
+`doc/PKM_API.md` and `doc/AGENT_PROTOCOL.md`.
+
 **tags.lua** — tag computation and batch application, in four layers:
 `plan(tags, ops)` pure (every rule lives here — rename→remove→add, case-insensitive
 matching, no duplicates, surviving tags keep their stored spelling, remove beats
@@ -308,13 +341,21 @@ helpers)` is the per-panel decoration seam (statusline/winbar/extra autocmds). C
 v1.49.0, which since v1.51.0 hosts the `views` and `nav` content providers, plus the
 views/delete panels). Header/statusline hints,
 content formatting, and filtering are deliberately NOT unified — panels differ enough there
-that a shared format would fight real differences.
+that a shared format would fight real differences. Module-level `cycle_focus(dir)` (v1.60)
+moves focus around the ring of open panes (windows whose buffer filetype matches `pkm-*`)
+plus a home editing window, skipping floats — bound to `<C-Tab>`/`<C-S-Tab>`.
 
 **mode.lua** — `M.activate()`, `M.deactivate()`, `M.toggle()`, `M.set(arg)`,
 `M.is_active()`. Manages PKMMode session state: triggers index prebuild, opens
 sidebar + bufpanel, enables syntax on all PKM buffers. `setup(config)` registers
 BufReadPost (open_note trigger) and DirChanged (enter_dir trigger) autocmds.
 Idempotent in both directions.
+
+**skill.lua** — installs the agent tooling into an assistant's config: the
+`pkm-notes` skill bundle (self-contained — SKILL.md + AGENT_PROTOCOL.md +
+PKM_API.md + CONVENTIONS.md) and the `/pkm-learning` slash command, behind
+`:PKMAgentProtocol install|update|path`. The canonical copies are versioned in the
+repo (`skills/`); installing is the user's action, the command only distributes them.
 
 **syntax.lua** — a **thin facade** over the standalone `pkm-syntax` plugin (see
 "Highlighting: the pkm-syntax split" below). It `pcall(require, 'pkm-syntax')`

@@ -1231,7 +1231,17 @@ Only decision 4 is open; decisions 1–3 are resolved and summarised below.
         need for a forced save, even if nothing else has been changed (check if
         this is mentioned already in some existing version/phase).
     
-    -   Fix now: bugfix - syntax highlighting recognizes numbers that start any line as
+    -   **Reconciled 3/8/2026 (was "Fix now").** Highlighting moved to the
+        **pkm-syntax** repo (v1.44), so any code fix is a pkm-syntax change, not
+        pkm-nvim — which is why CHANGELOG § Known Bugs shows no open pkm-nvim bug.
+        The **produced** case is mitigated: structure-aware autowrap (v1.41)
+        guarantees a continuation line never begins with `N. `. The **residual**
+        case — a *manually* hard-wrapped line whose continuation starts with `N. ` —
+        is inherently ambiguous (a line beginning `N. ` *is* a list item by every
+        markdown rule; the scanner cannot know it is wrapped citation text). Any real
+        fix is a context-aware scan in pkm-syntax, or the user's own workaround
+        (avoid hard-wrapping mid-sentence). Original report: syntax highlighting
+        recognizes numbers that start any line as
         a list prefix, as long as it is in the correct indentation level and
         order (e.g. `2.` will only be recognized if there is a previous item
         with number `1.`). The issue is that it does not differentiate lines

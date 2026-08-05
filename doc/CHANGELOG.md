@@ -61,6 +61,28 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.60.1] - 3/8/2026
+
+*Documentation cleanup — no code behaviour change (one config comment only).*
+
+### Changed
+
+-   **`doc/ARCHITECTURE.md` refreshed** to current: the File-Structure tree gained
+    the modules that post-dated it — `args.lua`, `api.lua`, `check.lua`, `nav.lua`,
+    `popup.lua`, `skill.lua` — plus `PRINCIPLES.md` / `PKM_API.md` / `AGENT_PROTOCOL.md`
+    in the doc list; new Module-Responsibilities entries for `api.lua`, `check.lua`,
+    `args.lua`, `skill.lua`; `keymaps.lua` notes the v1.60 persistent-vs-transient
+    axes and `panel.lua` its `cycle_focus`.
+-   **`doc/PRINCIPLES.md` § The smoke note** — records the concrete note placement
+    (test vault `00 - NotesTeste` `03-Consolidated/`, numbered after the last file,
+    current frontmatter, added to the **Smoke Tests** view via `:PKMView add`).
+-   **`doc/ROADMAP.md`** — reconciled the old "Fix now" wrapped-`N.` highlight item:
+    highlighting is in the **pkm-syntax** repo now (so any fix belongs there), the
+    produced case is mitigated by autowrap (v1.41), and the residual manual-hard-wrap
+    case is inherently ambiguous — consistent with § Known Bugs showing none open.
+-   **`lua/pkm/config.lua`** — neutralized the `add_tag`/`remove_tag` off-by-default
+    comment (it suggested `<leader>c*`, which reads as the cite prefix for tag ops).
+
 ## [1.60.0] - 3/8/2026
 
 *The queued UX evaluations: a mnemonic redesign of the default keymaps, and a
