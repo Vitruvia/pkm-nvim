@@ -7,6 +7,19 @@
 *The sections below are living project state, not release notes: they are
 carried forward from version to version and consulted before any fix.*
 
+### Status checkpoint (post-v1.61.1, 5/8/2026)
+
+- **Full headless suite green: 89/89** `test_*.lua` files report their pass
+  marker (`test_phase1_old` passes by self-skipping its populated-root assertions
+  on the empty temp root — legacy, not a regression). Run after the v1.61.1
+  docs-only batch; `git show --stat HEAD` confirmed that commit touches no `lua/`.
+- **Pending-features audit** (verified against live code, not just docs): the only
+  **non-deferred, near-term** pending features are two — the **forced-save prompt**
+  (Near 5.1; `bufsync.lua` still prompts via `vim.fn.confirm`) and the
+  **`pkm.sidebar` extraction** (no `lua/pkm/sidebar.lua`; host still in
+  `views.lua`). Everything else pending is deferred or long-horizon — see
+  ROADMAP § Forward plan by area, "Pending-features status".
+
 ### Known Bugs (queued)
 
 *(Six entries were closed in v1.10.1: the `ex:` modeline in Ph1, the two test

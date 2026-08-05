@@ -42,7 +42,7 @@ highlighting in pkm-syntax, not here. See `CLAUDE.md` and the suite-level
 ## Current State
 
 **Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical;
-**v1.61.0** as of this writing). All work happens directly on `dev`; `main` holds
+**v1.61.1** as of this writing). All work happens directly on `dev`; `main` holds
 periodic stable backups of `dev`, not an independently maintained release line.
 
 **Working features:**
@@ -181,7 +181,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.61.0)
+## Shipped so far (v1.5.7 → v1.61.1)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -220,14 +220,17 @@ shipped work that still constrain **pending** work are kept in
   the nav provider; the sidebar lifted onto `panel.create` hosting **pluggable
   providers** (views + nav) with **autoswitch**; buffer-panel `[count]<CR>` + `/`;
   the nav/headings pop-up; and the **cyclable pop-up** container (closing Phase 3.5).
-- **v1.57.0 – v1.61.0 — conventions, suite move, surface + doc cleanup, perf.**
+- **v1.57.0 – v1.61.1 — conventions, suite move, surface + doc cleanup, perf.**
   Recursos read/write conventions + light note conventions (v1.57); relocation
   into pkm-suite (v1.58); the `doc/pkm.txt` verb-surface rewrite (v1.59); the
   **keymap redesign** on a persistent-vs-transient axis + `:PKMView update`
   picker-panel (v1.60, BREAKING for default keymaps); doc cleanup + memory prune
   (v1.60.1); and the **background chunked index warm-up** so the first panel/pop-up
   open is warm (v1.61 — benchmark-driven; the build is I/O-bound and its primitives
-  are already optimal, so warming is the right lever).
+  are already optimal, so warming is the right lever); and the **documentation
+  review + this roadmap's reorganization** (v1.61.1, docs-only — a conservative
+  whole-tree code review found nothing to change; the `body_lower` index-shape
+  drift was fixed; this document was compacted to its charter).
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.
@@ -249,6 +252,19 @@ now, alongside the human side; **▹** low API impact, agent side may defer with
 noted caveat (but do both when it is easy). The detailed specs live under
 § Near goals / § Distant goals / § Potential goals below; this is the priority
 view over them.*
+
+**Pending-features status (as of v1.61.1).** The only **non-deferred, near-term**
+pending features are two: the **forced-save prompt** (Near goals 5.1 — verified
+still open at `bufsync.lua`) and the **`pkm.sidebar` extraction** (Area 3 — verified
+`lua/pkm/sidebar.lua` does not yet exist; the host is still in `views.lua`).
+Everything else pending is either **deferred** — vault lifecycle create/merge/split
+and the in-place `convert` normaliser (Area 1); the persistent / mtime-cached index
+(Distant 3); Phase 3.4 journal/scratch nav + block-element indexing (Area 3);
+*parágrafo único* (Area 5); `:PKMView stats` (Potential); commands-outside-vault
+(Functionality 3.1) — or **long-horizon** (the rest of Distant / Potential, which
+carry "do not design toward"). A handful of open threads are **eval-driven and
+open-ended** rather than scheduled features: growing agent-assisted smoke testing
+and the retrieval/revision follow-ups (Area 1).
 
 ### 1 · pkm.api & agents — 🔺 highest priority
 
