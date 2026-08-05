@@ -61,6 +61,41 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.61.1] - 5/8/2026
+
+*Documentation review + roadmap reorganization — no code behaviour change.*
+
+### Changed
+
+-   **`doc/ROADMAP.md` reorganized to its own charter** (1607 → 787 lines). Per the
+    document's stated purpose — "the forward plan and nothing else; completed work
+    summarised in a line pointing at CHANGELOG" — the ~880 lines of per-version
+    shipped narration, the resolved command-clearup essay, and the v1.12 phase
+    detail were compacted into a single **Shipped so far (v1.5.7 → v1.61.0)**
+    thematic summary. The forward plan is now organized around a **Forward plan by
+    area** spine (the six priority-tagged areas, pending items foregrounded), with
+    the Near/Distant/Potential/Nongoal specs preserved and a new **Design
+    constraints carried forward** section retaining the hard-won decisions that
+    still bind pending work (storytelling dropped, imperative core kept). Every
+    pending item and forward spec was preserved verbatim in intent; only shipped
+    narration was compacted.
+
+### Fixed (docs)
+
+-   **`body_lower` restored to the documented index entry shape** in
+    `doc/LLM_CONTEXT.md` and `doc/ARCHITECTURE.md`. The field is live
+    (`index.lua:191`, `body:lower()` cached so `filter.eval()` never re-lowercases
+    the body per query) and documented in `index.lua`'s own header, but the two
+    dedicated docs omitted it — the one genuine drift the documentation review
+    found. Both now list it with the caching rationale.
+
+### Notes
+
+-   Docs-only batch (ARCHITECTURE.md, LLM_CONTEXT.md, ROADMAP.md — no code files).
+    A conservative whole-tree code review (luacheck: 0 errors) found nothing
+    warranting a change. Verified: `helptags doc` clean; every pending roadmap item
+    confirmed present after the reorg.
+
 ## [1.61.0] - 3/8/2026
 
 *Performance: the first sidebar / pop-up / browse open no longer pays the cold

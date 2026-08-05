@@ -170,9 +170,10 @@ computation rather than a guess. `NOT` binds to an atom, so `NOT NOT x` is a
 parse error and `NOT (NOT x)` is the double negative.
 
 **index.lua** — in-memory note index. Entry shape:
-`{path, filename, note_type, title, tags, body, mtime, has_citations}`.
+`{path, filename, note_type, title, tags, body, body_lower, mtime, has_citations}`.
 `note_type`: `note|agg|bib|journal|scratch|other`. `has_citations`: true when
-any cites/cited_by group is non-empty.
+any cites/cited_by group is non-empty. `body_lower` is `body:lower()` cached at
+index time so `filter.eval()` never re-lowercases the body per query.
 Lazy build on first `get_all()`. Incremental invalidation via BufWritePost autocmd
 and explicit `invalidate(path)` after every programmatic write or delete.
 **Must NOT be called from buffer-only metadata commands** — no disk write occurred.

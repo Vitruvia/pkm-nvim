@@ -658,6 +658,7 @@ yaml_m.save_frontmatter(frontmatter, content_start)   -- Case A: buffer only
   title         : string    -- fm.title if set; else filename with _ → space
   tags          : string[]  -- lowercased frontmatter tags, or {}
   body          : string    -- note body joined with "\n"
+  body_lower    : string    -- body:lower(), cached so filter.eval() need not re-lower per query
   mtime         : number    -- vim.fn.getftime() at index time
   has_citations : boolean   -- true when any cites/cited_by group is non-empty
 }
