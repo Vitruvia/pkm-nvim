@@ -346,7 +346,10 @@ end
 --- Adds or removes a backlink from a target file.
 --- If the target is open in a modified buffer, applies the change in-buffer
 --- only (no disk write) to avoid discarding the user's unsaved edits.
---- If the target is unmodified or not open, writes disk and refreshes.
+--- If the target is open but unmodified, applies it in-buffer and writes THROUGH
+--- the buffer, so Neovim's on-disk timestamp stays in step and a later user :w
+--- does not treat the plugin's write as an external change (the W12 prompt).
+--- If the target is not open anywhere, writes straight to disk.
 local function manage_backlink(citing_path, target_path, action)
   local citing_type, citing_id = M.get_note_type_and_id(citing_path)
   if not citing_type or not citing_id then return end
@@ -422,46 +425,45 @@ local function manage_backlink(citing_path, target_path, action)
     if fm.cited_by[g] then table.sort(fm.cited_by[g], sort_fn) end
   end
 
-  if target_bufnr and buf_modified then
-    -- Target is open with unsaved edits.
-    -- Apply the cited_by change directly into the buffer; never write disk,
-    -- never reload, never set modified=false — all three would discard edits.
-    -- The user's next :w persists both their edits and this change.
-    -- index.invalidate is intentionally skipped: no disk write occurred;
-    -- BufWritePost re-indexes on the user's save.
+  if target_bufnr then
+    -- Target is open in a buffer. Compose the updated content once and apply it
+    -- in-buffer with `undojoin`, so the change merges into that buffer's own
+    -- history rather than becoming a stray undo step in a window the user may
+    -- not have focused — this is the system reacting to a citation elsewhere,
+    -- not user input. (For an unmodified buffer `content` came from disk and
+    -- for a modified one from the buffer, so it is the right base either way.)
     local fm_lines    = yaml.generate_yaml(fm)
     local new_content = { "---" }
     for _, line in ipairs(fm_lines)       do new_content[#new_content + 1] = line end
     new_content[#new_content + 1] = "---"
     for i = content_start, #content       do new_content[#new_content + 1] = content[i] end
+
     vim.api.nvim_buf_call(target_bufnr, function()
-      -- Merge into target_bufnr's own undo history rather than creating a
-      -- separate step in a buffer the user may not have focused — this is
-      -- the system reacting to a citation change elsewhere, not user input.
       pcall(vim.cmd, 'undojoin')
       pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_content)
+      if not buf_modified then
+        -- Unmodified buffer: persist the backlink now, and persist it by writing
+        -- THROUGH the buffer. A disk-side write (writefile) would sync the text
+        -- but leave Neovim's stored on-disk timestamp for THIS buffer at load
+        -- time, so a later user :w would see the plugin's write as an external
+        -- change (W12) and force a w!/y-n prompt with nothing actually in
+        -- conflict — the residual forced-save friction. Writing the buffer
+        -- re-stamps that timestamp and clears 'modified'; 'noautocmd' keeps
+        -- BufWritePost (re-index / re-cite) from firing on a change the user did
+        -- not make, and 'keepjumps' leaves the jumplist untouched.
+        pcall(vim.cmd, 'silent keepjumps noautocmd write')
+      end
     end)
+
+    -- A modified buffer wrote nothing to disk (the user's next :w persists both
+    -- their edits and this backlink), so it must NOT invalidate the index —
+    -- BufWritePost will on that save. The unmodified buffer just wrote disk.
+    if not buf_modified then require('pkm.index').invalidate(target_path) end
     require('pkm.syntax').refresh_fold(target_bufnr)
   else
-    -- Target not open, or open but unmodified: write to disk.
+    -- Not open in any buffer: write straight to disk.
     yaml.save_frontmatter(fm, content_start, target_path)
     require('pkm.index').invalidate(target_path)
-
-    -- Reload the buffer in-place if it is loaded and unmodified, to
-    -- prevent "file changed on disk" prompts.
-    if target_bufnr then
-      local ok2, new_lines = pcall(vim.fn.readfile, target_path)
-      if ok2 then
-        vim.api.nvim_buf_call(target_bufnr, function()
-          -- Same reasoning as the modified-buffer branch above: this silent
-          -- disk-sync reload must not become its own undo step either.
-          pcall(vim.cmd, 'undojoin')
-          pcall(vim.api.nvim_buf_set_lines, target_bufnr, 0, -1, false, new_lines)
-        end)
-        pcall(vim.api.nvim_set_option_value, 'modified', false, { buf = target_bufnr })
-        require('pkm.syntax').refresh_fold(target_bufnr)
-      end
-    end
   end
 end
 

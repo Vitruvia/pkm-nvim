@@ -74,6 +74,40 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.61.2] - 5/8/2026
+
+*Forced-save prompt removed at its source (ROADMAP Near 5.1) — a citation into a
+note open in an unmodified buffer no longer causes a later `:w` to prompt.*
+
+### Fixed
+
+-   **The phantom forced-save prompt on citation.** When note A cites note B and B
+    is open in an **unmodified** buffer, `manage_backlink` (`citations.lua`) writes
+    B's `cited_by` backlink. It previously wrote the file with `writefile` and then
+    synced the buffer's text with `nvim_buf_set_lines`, which left Neovim's stored
+    on-disk timestamp for that buffer at load time. A later user `:w` on B then saw
+    the plugin's write as an external change (W12) and forced a `w!` / `y`-`n`
+    prompt with nothing actually in conflict. The unmodified-buffer branch now
+    composes the updated content in-buffer (`undojoin`, preserving the user's
+    cursor and undo) and writes it **through the buffer** (`silent keepjumps
+    noautocmd write`), which re-stamps the timestamp and clears `modified` — so the
+    later `:w` is clean. `noautocmd` keeps `BufWritePost` (re-index / re-cite) from
+    firing on a change the user did not make; the index is invalidated explicitly.
+    **Removed without risk** (the ROADMAP caveat): no genuine external-change prompt
+    is auto-accepted — only the plugin's own bookkeeping artefact is eliminated.
+
+### Notes
+
+-   The **modified-buffer** branch is unchanged: it still applies the backlink
+    in-buffer only and writes nothing to disk, so the user's unsaved edits are
+    never touched and their next `:w` persists both. The two in-buffer branches now
+    share one composition path. `test_v1612_p1` proves both branches (unmodified:
+    synced to buffer + disk, left clean, `checktime` finds no phantom change, a
+    later `:w` is clean; modified: in-buffer only, edit preserved, no disk write).
+    Full suite green (90/90); luacheck adds no new warnings (the citations.lua
+    whitespace warnings are pre-existing). The no-prompt outcome at a real `:w` is
+    an interactive smoke confirmation.
+
 ## [1.61.1] - 5/8/2026
 
 *Documentation review + roadmap reorganization — no code behaviour change.*

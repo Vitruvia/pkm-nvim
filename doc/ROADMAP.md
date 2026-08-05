@@ -42,7 +42,7 @@ highlighting in pkm-syntax, not here. See `CLAUDE.md` and the suite-level
 ## Current State
 
 **Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical;
-**v1.61.1** as of this writing). All work happens directly on `dev`; `main` holds
+**v1.61.2** as of this writing). All work happens directly on `dev`; `main` holds
 periodic stable backups of `dev`, not an independently maintained release line.
 
 **Working features:**
@@ -181,7 +181,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.61.1)
+## Shipped so far (v1.5.7 → v1.61.2)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -220,7 +220,7 @@ shipped work that still constrain **pending** work are kept in
   the nav provider; the sidebar lifted onto `panel.create` hosting **pluggable
   providers** (views + nav) with **autoswitch**; buffer-panel `[count]<CR>` + `/`;
   the nav/headings pop-up; and the **cyclable pop-up** container (closing Phase 3.5).
-- **v1.57.0 – v1.61.1 — conventions, suite move, surface + doc cleanup, perf.**
+- **v1.57.0 – v1.61.2 — conventions, suite move, surface + doc cleanup, perf.**
   Recursos read/write conventions + light note conventions (v1.57); relocation
   into pkm-suite (v1.58); the `doc/pkm.txt` verb-surface rewrite (v1.59); the
   **keymap redesign** on a persistent-vs-transient axis + `:PKMView update`
@@ -230,7 +230,10 @@ shipped work that still constrain **pending** work are kept in
   are already optimal, so warming is the right lever); and the **documentation
   review + this roadmap's reorganization** (v1.61.1, docs-only — a conservative
   whole-tree code review found nothing to change; the `body_lower` index-shape
-  drift was fixed; this document was compacted to its charter).
+  drift was fixed; this document was compacted to its charter); and the
+  **forced-save fix** (v1.61.2 — Near 5.1: a citation into an open unmodified
+  buffer writes the backlink *through* the buffer, killing the phantom W12 `:w`
+  prompt at its source).
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.
@@ -253,11 +256,12 @@ noted caveat (but do both when it is easy). The detailed specs live under
 § Near goals / § Distant goals / § Potential goals below; this is the priority
 view over them.*
 
-**Pending-features status (as of v1.61.1).** The only **non-deferred, near-term**
-pending features are two: the **forced-save prompt** (Near goals 5.1 — verified
-still open at `bufsync.lua`) and the **`pkm.sidebar` extraction** (Area 3 — verified
-`lua/pkm/sidebar.lua` does not yet exist; the host is still in `views.lua`).
-Everything else pending is either **deferred** — vault lifecycle create/merge/split
+**Pending-features status (as of v1.61.2).** The only **non-deferred, near-term**
+pending feature is one: the **`pkm.sidebar` extraction** (Area 3 — `lua/pkm/sidebar.lua`
+does not yet exist; the host is still in `views.lua`). The **forced-save prompt**
+(Near goals 5.1) shipped in **v1.61.2** — a citation into an open, unmodified buffer
+now writes the backlink *through* the buffer, so a later `:w` no longer hits the
+phantom W12 prompt. Everything else pending is either **deferred** — vault lifecycle create/merge/split
 and the in-place `convert` normaliser (Area 1); the persistent / mtime-cached index
 (Distant 3); Phase 3.4 journal/scratch nav + block-element indexing (Area 3);
 *parágrafo único* (Area 5); `:PKMView stats` (Potential); commands-outside-vault
@@ -350,10 +354,13 @@ v1.35/1.36/1.40 + structure-aware wrap + CONVENTIONS § Lists). **Pending:**
 
 ### 6 · Other — ▹
 
-- **Forced-save prompt** (Near goals 5.1) — auto-accept the `y/n` save when a
-  backlink write dirties an otherwise-unmodified buffer, *if* it can be removed
-  without risk. Highest daily friction; touches the `bufsync`/`citations` write
-  path — its own version with a headless test + smoke.
+- ✅ **Forced-save prompt** (Near goals 5.1) — **done in v1.61.2.** A citation
+  into a note open in an **unmodified** buffer now writes the backlink *through*
+  the buffer (`manage_backlink`, `citations.lua`), which re-stamps Neovim's stored
+  on-disk timestamp; a later user `:w` no longer sees the plugin's write as an
+  external change (the phantom W12 prompt), and no genuine external-change prompt
+  is auto-accepted. The modified-buffer branch is unchanged (in-buffer only, no
+  disk write). `test_v1612_p1`; the no-prompt outcome is a smoke confirmation.
 - **`:PKMView stats`** — per-view counts (`views.count_many`, **not** `match_all`
   per view). A verb on `:PKMView`, not a new command. **DEFERRED (author, 3/8/2026);
   Potential, not scheduled.**
@@ -475,10 +482,13 @@ first, see § Forward plan by area above. Shipped sub-items are compacted to a l
     growth and the agent-protocol docs.
 
 5.  **Misc** (the LLM assistant decides timing):
-    1.  **Forced-save prompt (partly fixed).** Today a backlink write into an
-        open, otherwise-unmodified buffer prompts for a forced save (`y`/`n`
-        instead of `w!`). Acceptable, but **remove the prompt (auto-accept) only if
-        it can be done without risk.** Touches the `bufsync`/`citations` write path.
+    1.  ✅ **Forced-save prompt — done (v1.61.2).** The residual `y`/`n` prompt is
+        gone, removed *without risk* per the caveat: a citation into a note open in
+        an **unmodified** buffer now writes the backlink *through* that buffer
+        (`manage_backlink`), so Neovim's stored on-disk timestamp stays in step and
+        a later `:w` no longer treats the plugin's own write as an external change
+        (W12). No genuine external-change prompt is auto-accepted; the
+        modified-buffer branch is untouched. `test_v1612_p1`.
     2.  **Wrapped-number highlighting (reconciled 3/8/2026; was "Fix now").**
         Highlighting moved to **pkm-syntax** (v1.44), so any code fix is a
         pkm-syntax change — which is why CHANGELOG § Known Bugs shows no open
