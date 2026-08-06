@@ -66,11 +66,11 @@ vim.cmd('PKMView rename reading perusal')
 check("the view was renamed", has_view('perusal') and not has_view('reading'),
   table.concat(views.list(), ', '))
 
-print("\n== :PKMView sidebar opens the sidebar (verb → open_sidebar) ==")
+print("\n== :PKMPanel sidebar opens the sidebar (v1.63.0: moved off :PKMView) ==")
 
 check("the sidebar starts closed", views.is_sidebar_open() == false)
-vim.cmd('PKMView sidebar perusal')
-check("`:PKMView sidebar` opened it", views.is_sidebar_open() == true)
+vim.cmd('PKMPanel sidebar perusal')
+check("`:PKMPanel sidebar` opened it", views.is_sidebar_open() == true)
 
 print("")
 if failures == 0 then

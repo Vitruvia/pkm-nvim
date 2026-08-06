@@ -4,9 +4,10 @@
 -- Dependencies : pkm.args, pkm.ui, pkm.views, pkm.mode (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- The panels and mode toggles. `:PKMPanel <verb>` — `explorer` (the default:
--- sidebar + buffer panel as a unit), `buffers`, `sidebar`, `mode`. `sidebar`
--- opens the view sidebar (also reachable as `:PKMView sidebar`).
+-- The persistent panels and mode toggles. `:PKMPanel <verb>` — `explorer` (the
+-- default: sidebar + buffer panel as a unit), `buffers`, `nav`, `sidebar [view]`,
+-- `autoswitch`, `mode`. `sidebar` opens/toggles the persistent view sidebar (the
+-- sole door to it; transient view pop-ups live on `:PKMBrowse views`).
 --
 -- Public API:
 --   register() → register this context's :PKM* commands

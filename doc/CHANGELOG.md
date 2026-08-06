@@ -74,6 +74,46 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.63.0] - 5/8/2026
+
+*Command surface sorted onto the persistent-vs-transient axis (**BREAKING**):
+the transient view pop-ups moved to `:PKMBrowse views`, the persistent sidebar
+has a single door `:PKMPanel sidebar`, and `:PKMView` is view-data-only.*
+
+### Changed — BREAKING: command surface reorganized
+
+-   **Transient view pop-ups → `:PKMBrowse views [name]`.** What was `:PKMView
+    list` (the view-tree picker), a bare `:PKMView <name>` (open a view's notes),
+    and `:PKMView last` (reopen the last) are now `:PKMBrowse views`,
+    `:PKMBrowse views <name>`, and `:PKMBrowse views last` — alongside the other
+    transient pickers (`recent`/`orphans`/`tags`). Tab-completes view names + `last`.
+-   **The persistent view sidebar has ONE door: `:PKMPanel sidebar [view]`.** The
+    duplicate `:PKMView sidebar` is removed (it was a byte-for-byte alias — the
+    `<leader>ps` keymap even routed through it while claiming to be a `p`-panel key).
+-   **`:PKMView` is now view *data* operations only:** `new`, `update`, `edit`,
+    `delete`, `rename`, `export`, `add`, `remove`. It no longer *displays* views.
+    A bare `:PKMView <name>` (the old "open") now prints a one-line pointer to
+    `:PKMBrowse views` / `:PKMPanel sidebar` instead of opening anything.
+
+### Config changes
+
+-   **Default keymaps re-pointed (same keys):** `<leader>ps` → `:PKMPanel sidebar`
+    (was `:PKMView sidebar`), `<leader>va` → `:PKMBrowse views` (was `:PKMView
+    list`), `<leader>vl` → `:PKMBrowse views last` (was `:PKMView last`). Config
+    keys unchanged; the daily keymap path is unchanged in feel.
+
+### Notes
+
+-   Finishes the persistent-vs-transient split the v1.60.0 keymaps started (and
+    PRINCIPLES mandates): transient pickers on `:PKMBrowse`, persistent panels on
+    `:PKMPanel`, view *definitions* on `:PKMView`. A view is still reachable three
+    ways — by *mode*, not by owner: transient (`:PKMBrowse views`), pop-up
+    (`pkm.popup`), persistent (`:PKMPanel sidebar`) — the same pattern notes have.
+    `test_v1630_p1` (the sidebar dedup, the removed verbs, retained management,
+    completion); full suite green (93/93); luacheck + helptags clean. Docs swept
+    (`doc/pkm.txt`, ROADMAP, ARCHITECTURE, LLM_CONTEXT). Interactive pickers
+    (Telescope) are a smoke confirmation.
+
 ## [1.62.0] - 5/8/2026
 
 *The browse picker gained a `<C-t>` note-type filter — the non-sidebar way to

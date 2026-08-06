@@ -59,8 +59,8 @@ check("sidebar closed again before the keystroke test", api.ui_state().sidebar.o
 
 -- Resolve the sidebar keymap from the LIVE config (its lhs moved from <leader>vs
 -- to <leader>ps in the v1.60 keymap redesign; read it rather than hardcode) and
--- feed it, exercising the real mapping (→ <cmd>PKMView sidebar<cr>), not a
--- direct function call.
+-- feed it, exercising the real mapping (→ <cmd>PKMPanel sidebar<cr> since
+-- v1.63.0), not a direct function call.
 local leader = vim.g.mapleader
 if leader == nil or leader == '' then leader = '\\' end
 local sidebar_lhs = require('pkm').config.keymaps.view_sidebar or '<leader>ps'

@@ -58,9 +58,9 @@ function M.register(config)
   -- --------------------------------------------------------------------------
   -- KEYMAPS: views
   -- --------------------------------------------------------------------------
-  map(k.view_last,    "<cmd>PKMView last<cr>",    "Last View")
-  map(k.view_sidebar, "<cmd>PKMView sidebar<cr>", "View Sidebar")
-  map(k.view_list, "<cmd>PKMView list<cr>", "List Views")
+  map(k.view_last,    "<cmd>PKMBrowse views last<cr>", "Last View")
+  map(k.view_sidebar, "<cmd>PKMPanel sidebar<cr>",     "View Sidebar")
+  map(k.view_list,    "<cmd>PKMBrowse views<cr>",      "List Views")
   map(k.view_buffers, "<cmd>PKMPanel buffers<cr>", "Buffer Panel")
   map(k.nav_panel,    "<cmd>PKMPanel nav<cr>",     "File Navigation (headings)")
   map(k.explorer,     "<cmd>PKMPanel explorer<cr>", "Explorer (sidebar + buffers)")

@@ -613,11 +613,13 @@ end
 --- named "add" therefore keeps working, and a name containing spaces needs no
 --- quoting, because the whole argument list is joined before it is compared.
 ---
----   :PKMView                  → open, no name (the picker)
----   :PKMView leituras         → open 'leituras'
 ---   :PKMView add leituras     → add the current note to 'leituras'
 ---   :PKMView remove leituras  → take it out of 'leituras'
 ---   :PKMView add              → add the current note, view chosen from a menu
+---
+--- The 'open' mode still returns here for a bare name / no args, but the command
+--- layer no longer *displays* a view (that moved to `:PKMBrowse views` and
+--- `:PKMPanel sidebar`); it points the user there instead.
 ---
 ---@param fargs string[]  Words as Neovim split them (`opts.fargs`)
 ---@param names string[]  Existing view names (`M.list()`)

@@ -5,12 +5,16 @@
 --                pkm.tags, pkm.utils, pkm.commands.shared (lazy)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- Opening notes. `:PKMBrowse <verb>` — a bare filter expression (the default),
--- plus `recent`, `orphans`, and `tags` (browse by tag). Each falls back from
--- Telescope to the built-in ui when Telescope is absent.
+-- The transient find/pick surface. `:PKMBrowse <verb>` — a bare filter
+-- expression (the default), plus `recent`, `orphans`, `tags` (browse by tag),
+-- and `views [<name>|last]` (the view pop-ups: no name = the view-tree picker,
+-- a name = that view's notes, `last` = reopen the last view). Each falls back
+-- from Telescope to the built-in ui when Telescope is absent.
 --
 -- `tags` is the browse-by-tag path; the vault-wide bulk tag operations live on
--- `:PKMTags`, and the per-note ones on `:PKMTag`.
+-- `:PKMTags`, and the per-note ones on `:PKMTag`. The persistent counterparts of
+-- these pop-ups are panels on `:PKMPanel` (sidebar, buffers); view *management*
+-- (new/update/delete/rename/export/add/remove) is on `:PKMView`.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands
@@ -129,6 +133,23 @@ local function act_browse_tags()
   require('pkm.tags').browse_by_tag()
 end
 
+--- Browse views (transient pop-ups). No name → the view-tree picker; `last` →
+--- reopen the last activated view; a name → open that view's notes as a picker.
+--- The persistent counterpart is `:PKMPanel sidebar [view]`; view *management*
+--- (new/update/delete/rename/export/add/remove) lives on `:PKMView`.
+---@param name string|nil
+local function act_browse_views(name)
+  focus_main_win()
+  local views = require('pkm.views')
+  if not name or name == '' then
+    views.open_views_panel()
+  elseif name:lower() == 'last' then
+    views.open_last()
+  else
+    views.open(name)
+  end
+end
+
 local M = {}
 
 function M.register()
@@ -136,7 +157,7 @@ function M.register()
   -- ---------------------------------------------------------------------------
   -- :PKMBrowse — the context form: [filter] | recent | orphans | tags
   -- ---------------------------------------------------------------------------
-  local BROWSE_VERBS = { 'recent', 'orphans', 'tags' }
+  local BROWSE_VERBS = { 'recent', 'orphans', 'tags', 'views' }
 
   vim.api.nvim_create_user_command('PKMBrowse', function(opts)
     local p = require('pkm.args').parse(opts, { verbs = BROWSE_VERBS })
@@ -146,6 +167,10 @@ function M.register()
       act_orphans()
     elseif p.verb == 'tags' then
       act_browse_tags()
+    elseif p.verb == 'views' then
+      -- A view name may be multiple words; join what follows the verb.
+      local name = table.concat(p.positional, ' ')
+      act_browse_views(name ~= '' and name or nil)
     else
       -- Default: the whole argument line is a filter expression (or nil for all).
       local expr = opts.args ~= '' and opts.args or nil
@@ -154,6 +179,13 @@ function M.register()
   end, {
     nargs    = '*',
     complete = function(arg_lead, line, pos)
+      -- After `views`, the arguments are `last` or a view name.
+      if line:match('^%s*PKMBrowse%s+[Vv][Ii][Ee][Ww][Ss]%s') then
+        local out = { 'last' }
+        vim.list_extend(out, require('pkm.views').list())
+        local lead = (arg_lead or ''):lower()
+        return vim.tbl_filter(function(t) return t:lower():find(lead, 1, true) == 1 end, out)
+      end
       local out = browse_complete(arg_lead, line, pos) or {}
       -- On the first argument word, the verbs are also candidates.
       local words = vim.split(vim.trim(line), '%s+')
@@ -166,7 +198,7 @@ function M.register()
       end
       return out
     end,
-    desc = 'Browse notes: :PKMBrowse [<filter>] | recent [n] | orphans | tags',
+    desc = 'Browse: :PKMBrowse [<filter>] | recent [n] | orphans | tags | views [<name>|last]',
   })
 
 end

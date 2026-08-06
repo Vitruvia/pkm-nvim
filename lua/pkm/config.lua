@@ -95,7 +95,8 @@ local defaults = {
   },
 
   -- Named project views. Each key is a view name; each value is a filter
-  -- expression string. Activated with :PKMView <name>.
+  -- expression string. Opened with :PKMBrowse views <name> (or pinned in the
+  -- sidebar with :PKMPanel sidebar <name>); managed with :PKMView.
   -- Example:
   --   projects = {
   --     "rpg":    "tag:rpg AND (title:ringforge OR text:ringforge)",
@@ -202,7 +203,7 @@ local defaults = {
     view_last    = "<leader>vl",
     view_list    = "<leader>va",       -- va = view all
     -- Panes — the PERSISTENT surfaces you toggle and live with (`<leader>p`)
-    view_sidebar = "<leader>ps",       -- sidebar (views), also :PKMView sidebar
+    view_sidebar = "<leader>ps",       -- persistent views sidebar (:PKMPanel sidebar)
     view_buffers = "<leader>pb",       -- bottom buffer-list panel
     nav_panel    = false,              -- sidebar switched to the nav provider (e.g. <leader>pn)
     explorer     = false,              -- sidebar + buffer panel as a unit (e.g. <leader>pe)

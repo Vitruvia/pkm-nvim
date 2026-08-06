@@ -42,7 +42,7 @@ highlighting in pkm-syntax, not here. See `CLAUDE.md` and the suite-level
 ## Current State
 
 **Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical;
-**v1.62.0** as of this writing). All work happens directly on `dev`; `main` holds
+**v1.63.0** as of this writing). All work happens directly on `dev`; `main` holds
 periodic stable backups of `dev`, not an independently maintained release line.
 
 **Working features:**
@@ -103,15 +103,16 @@ periodic stable backups of `dev`, not an independently maintained release line.
 == Views ==
 - ✅ Project view system — named saved filters, sidecar `views.json`, full CRUD
 - ✅ Subproject hierarchy — `{parent, filter}` entries composing AND chains
-- ✅ `:PKMView new` — unified creation (simple view or subproject)
-- ✅ `:PKMView update` — action picker-panel (edit filter / rename / reparent)
-- ✅ `:PKMView last` — reopen last activated view (session-scoped)
-- ✅ `:PKMView sidebar` — two-mode persistent sidebar (overview + detail) with
-     50-entry navigation history, `<C-t>` type filter, `<C-v>` vertical split,
-     `/` scoped search, `?` help float; hosts pluggable providers (views + nav)
-     with autoswitch
-- ✅ `:PKMView list` — tree-structured picker over all views (parent-child hierarchy)
-- ✅ `:PKMView export [name]` — export named view's notes, skips filter form
+- ✅ `:PKMView` — view **management** only (v1.63.0): `new` · `update` (action
+     picker-panel: edit filter / rename / reparent) · `edit` · `delete` · `rename`
+     · `export [name]` · `add`/`remove` (note membership)
+- ✅ `:PKMBrowse views [name]` — the view **pop-ups** (v1.63.0): bare = the
+     tree-structured view picker (parent-child hierarchy); `<name>` = that view's
+     notes; `last` = reopen the last activated view
+- ✅ `:PKMPanel sidebar [view]` — the **persistent** two-mode sidebar (overview +
+     detail), the sole door to it (v1.63.0): 50-entry navigation history, `<C-t>`
+     type filter, `<C-v>` vertical split, `/` scoped search, `?` help float; hosts
+     pluggable providers (views + nav) with autoswitch
 - ✅ `:PKMPanel buffers` — persistent bottom buffer-list panel with auto-refresh
 - ✅ Cyclable pop-up (`pkm.popup`) hosting browse / views / nav, cycled with `<C-l>`
 - ✅ Per-tabpage state for both sidebar and buffer panel
@@ -182,7 +183,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.62.0)
+## Shipped so far (v1.5.7 → v1.63.0)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -221,7 +222,7 @@ shipped work that still constrain **pending** work are kept in
   the nav provider; the sidebar lifted onto `panel.create` hosting **pluggable
   providers** (views + nav) with **autoswitch**; buffer-panel `[count]<CR>` + `/`;
   the nav/headings pop-up; and the **cyclable pop-up** container (closing Phase 3.5).
-- **v1.57.0 – v1.62.0 — conventions, suite move, surface + doc cleanup, perf.**
+- **v1.57.0 – v1.63.0 — conventions, suite move, surface + doc cleanup, perf.**
   Recursos read/write conventions + light note conventions (v1.57); relocation
   into pkm-suite (v1.58); the `doc/pkm.txt` verb-surface rewrite (v1.59); the
   **keymap redesign** on a persistent-vs-transient axis + `:PKMView update`
@@ -236,10 +237,14 @@ shipped work that still constrain **pending** work are kept in
   buffer writes the backlink *through* the buffer, killing the phantom W12 `:w`
   prompt at its source); and the **`pkm.sidebar` extraction** (v1.61.3 — the
   sidebar container host moved onto `lua/pkm/sidebar.lua`, `views.lua` is now a
-  provider + re-export shim, behavior-preserving); and the **browse-picker
+  provider + re-export shim, behavior-preserving); the **browse-picker
   note-type cycle** (v1.62.0 — `<C-t>` in `:PKMBrowse`/the view note lists/the
   pop-up cycles all/note/agg/bib/journal/scratch, the non-sidebar way to reach
-  journal & scratchpad notes; also silenced the stray `<C-l>` complete_tag error).
+  journal & scratchpad notes; also silenced the stray `<C-l>` complete_tag error);
+  and the **command-surface consolidation** (v1.63.0, BREAKING — the transient
+  view pop-ups moved to `:PKMBrowse views`, the persistent sidebar has one door
+  `:PKMPanel sidebar`, and `:PKMView` is view *data* ops only, per the
+  persistent-vs-transient axis).
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.
@@ -262,7 +267,7 @@ noted caveat (but do both when it is easy). The detailed specs live under
 § Near goals / § Distant goals / § Potential goals below; this is the priority
 view over them.*
 
-**Pending-features status (as of v1.62.0).** There are **no non-deferred,
+**Pending-features status (as of v1.63.0).** There are **no non-deferred,
 near-term pending features left** — the two that were open both shipped: the
 **forced-save prompt** (Near 5.1) in **v1.61.2** (a citation into an open,
 unmodified buffer now writes the backlink *through* the buffer, so a later `:w`
@@ -706,8 +711,14 @@ work; that is the only reason they survive here (the per-version storytelling is
 **Command surface & shape**
 - **Verbs, not flags**, and **no new top-level `:PKM*` names** — a new capability
   is a verb in an existing context (or a panel action), completing from the same
-  table that declares it. Daily-typed shortcuts (`:PKMBrowse`, `:PKMView <name>`,
+  table that declares it. Daily-typed shortcuts (`:PKMBrowse`, `:PKMBrowse views`,
   `:PKMNote new`) keep permanent names, documented as shortcuts.
+- **Sorted by the persistent-vs-transient axis (v1.63.0).** Transient pop-ups live
+  on `:PKMBrowse` (notes, recent, orphans, tags, `views`); persistent panels on
+  `:PKMPanel` (sidebar, buffers, nav, explorer, mode); `:PKMView` is view **data**
+  only (new/update/edit/delete/rename/export/add/remove). A command opens a view
+  three ways by *mode*, not by owner: transient (`:PKMBrowse views`), pop-up
+  (`pkm.popup`), persistent (`:PKMPanel sidebar`) — the same pattern notes have.
 - **Interactive and programmatic are the same command** — bare = friendly path,
   arguments = deterministic/script-callable; destructive ops confirm in both forms.
 - **Every capability lands in three thin layers:** a pure/read-only core (no UI); a

@@ -5,21 +5,18 @@
 --                pkm.utils, pkm.commands.shared (lazy, inside handlers)
 -- Consumed by  : pkm.commands (init) → registered during setup
 --
--- The whole view surface. `:PKMView <verb>`: a bare view name opens it (the
--- default), and the verbs are add, remove, rename, new, update, edit, delete,
--- last, export, sidebar, list. Membership (add/remove) still goes through
--- views.parse_command_args, so a view named like a verb still opens.
+-- The view-MANAGEMENT surface: data operations on view definitions. The verbs
+-- are add, remove, rename, new, update, edit, delete, export. Membership
+-- (add/remove) goes through views.parse_command_args. The TRANSIENT view
+-- pop-ups (listing views, opening a view's notes, reopening the last) live on
+-- `:PKMBrowse views`; the PERSISTENT view sidebar is `:PKMPanel sidebar`. Neither
+-- is here — this context only edits what views ARE, not how they are displayed.
 --
 -- Public API:
 --   register() → register this context's :PKM* commands
 -- =============================================================================
 
 local focus_main_win = require('pkm.commands.shared').focus_main_win
-
---- Open the panel listing all defined views.
-local function act_views_panel()
-  require('pkm.views').open_views_panel()
-end
 
 --- Create a new view (simple or subproject), prompting through the choice.
 local function act_view_new()
@@ -117,12 +114,6 @@ local function act_view_delete(name)
   end
 end
 
---- Reopen the last activated view (session-scoped).
-local function act_view_last()
-  focus_main_win()
-  require('pkm.views').open_last()
-end
-
 --- Export all notes in a named view (a picker when unnamed).
 local function act_view_export(name)
   local views = require('pkm.views')
@@ -135,11 +126,6 @@ local function act_view_export(name)
     return
   end
   require('pkm.export').export_direct(name, views.match_all(name))
-end
-
---- Open or toggle the persistent view sidebar (optionally a named view).
-local function act_view_sidebar(name)
-  require('pkm.views').open_sidebar(name)
 end
 
 --- Rename a view, resolving a spaced old name as the longest known view among
@@ -175,13 +161,15 @@ local M = {}
 
 function M.register()
 
-  -- The lifecycle verbs (new/update/edit/delete/last/export/sidebar/list) and
-  -- rename are intercepted ahead of the open/add/remove parser; add/remove stay
-  -- with views.parse_command_args, so a view named "add" still opens.
+  -- The management verbs (new/update/edit/delete/export) and rename are
+  -- intercepted ahead of the add/remove parser; add/remove stay with
+  -- views.parse_command_args, so a view named "add" is still unambiguous.
 
-  -- :PKMView [add|remove|<lifecycle verb>] [name] — open a view, move the current
-  -- note in or out of one, or run a lifecycle verb. A bare name still means
-  -- "open", so nothing that worked before reads differently now.
+  -- :PKMView [add|remove|<management verb>] [name] — edit view definitions or
+  -- move the current note in/out of a view. DISPLAYING a view is not here:
+  -- `:PKMBrowse views [name]` opens a view's notes, `:PKMPanel sidebar [view]`
+  -- pins it in the sidebar. A bare `:PKMView <name>` (the old "open") now points
+  -- the user there rather than opening anything.
   vim.api.nvim_create_user_command('PKMView', function(opts)
     local views = require('pkm.views')
 
@@ -204,14 +192,8 @@ function M.register()
       act_view_edit(); return
     elseif v1 == 'delete' then
       act_view_delete(rest); return
-    elseif v1 == 'last' then
-      act_view_last(); return
     elseif v1 == 'export' then
       act_view_export(rest); return
-    elseif v1 == 'sidebar' then
-      act_view_sidebar(rest); return
-    elseif v1 == 'list' then
-      act_views_panel(); return
     end
 
     local mode, name, err = views.parse_command_args(p.positional, views.list())
@@ -221,9 +203,15 @@ function M.register()
       return
     end
 
+    -- "open" (a bare view name, or bare :PKMView) is no longer a view command —
+    -- displaying a view moved to the transient/persistent surfaces. Point there.
     if mode == 'open' then
-      focus_main_win()
-      views.open(name)
+      vim.notify(
+        (name and ("[pkm] open a view with  :PKMBrowse views %s   (or pin it: "
+          .. ":PKMPanel sidebar %s)"):format(name, name))
+        or '[pkm] browse views with  :PKMBrowse views   ·  manage them with '
+          .. ':PKMView new|update|delete|rename|export|add|remove',
+        vim.log.levels.WARN)
       return
     end
 
@@ -268,17 +256,16 @@ function M.register()
       or line:match('^%s*PKMView%s+[Uu][Pp][Dd][Aa][Tt][Ee]%s')
       or line:match('^%s*PKMView%s+[Dd][Ee][Ll][Ee][Tt][Ee]%s')
       or line:match('^%s*PKMView%s+[Ee][Xx][Pp][Oo][Rr][Tt]%s')
-      or line:match('^%s*PKMView%s+[Ss][Ii][Dd][Ee][Bb][Aa][Rr]%s')
       or line:match('^%s*PKMView%s+[Rr][Ee][Nn][Aa][Mm][Ee]%s') then
         return views.list()
       end
       local out = { 'add', 'remove', 'rename', 'new', 'update', 'edit',
-                    'delete', 'last', 'export', 'sidebar', 'list' }
+                    'delete', 'export' }
       vim.list_extend(out, views.list())
       local lead = (arg_lead or ''):lower()
       return vim.tbl_filter(function(t) return t:lower():find(lead, 1, true) == 1 end, out)
     end,
-    desc     = 'Views: :PKMView [<name>] | add|remove|new|update|edit|delete|last|export|sidebar|list|rename',
+    desc     = 'Views (manage): new|update|edit|delete|rename|export|add|remove  ·  open/list via :PKMBrowse views',
   })
 
 end

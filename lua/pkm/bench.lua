@@ -50,7 +50,7 @@
 --   find_all_bench(opts?)          → cold cross-vault scan_root cost (synthetic)
 --   run_suite(bench_dir?, opts?)   → four-phase suite; cleans up afterward
 --   views_suite(opts?)             → view × note scaling bench (overview scenario)
---   views_open(opts?)              → :PKMView list open-path bench on the live
+--   views_open(opts?)              → :PKMBrowse views open-path bench on the live
 --                                    corpus and views (read-only), or on a
 --                                    synthetic corpus with opts.synthetic
 -- =============================================================================
@@ -721,7 +721,7 @@ local function views_open_synthetic(opts)
   end
 end
 
---- Measure the `:PKMView list` / sidebar-overview open path against the corpus and
+--- Measure the `:PKMBrowse views` / sidebar-overview open path against the corpus and
 --- the view definitions this session is configured with. Read-only: it calls
 --- the live index and live views but never writes a file or changes any state.
 ---

@@ -138,8 +138,8 @@ BULK ACTIONS~
 Bulk operations start from the notes you have in front of you. Mark notes with
 <Tab> and press <C-a>; with nothing marked, <C-a> acts on everything listed.
 That works in every note picker (|:PKMBrowse|, `:PKMBrowse recent`, the sidebar's
-"/" and the views tree's <C-f>), in the view sidebar (`:PKMView sidebar`, inside
-a view; <S-Tab> marks and steps up), and in the browse mode of `:PKMView list`.
+"/" and the views tree's <C-f>), in the view sidebar (`:PKMPanel sidebar`, inside
+a view; <S-Tab> marks and steps up), and in the browse mode of `:PKMBrowse views`.
 Over a *view* — in the sidebar's overview or the views list — <C-a> acts on
 every note that view matches; there is nothing to mark there.
 
@@ -254,7 +254,7 @@ just to lower-case a tag.
 
 VIEWS~
 Use `:PKMView new` to save filter expressions as named project views.
-Use `:PKMView sidebar` for a persistent sidebar listing a view's notes.
+Use `:PKMPanel sidebar` for a persistent sidebar listing a view's notes.
 Use `:PKMPanel mode` to activate the full explorer interface.
 
 DELETE / RESTORE~
@@ -367,7 +367,10 @@ SEARCH AND BROWSE~                                                  *:PKMBrowse*
                         Optional [expr] pre-seeds the prompt.
                         Telescope: live. Fallback: prompt once, then select.
                         Tab-completion: field prefixes, operators, tag values,
-                        type values.
+                        type values. In the picker, <C-t> cycles a note-TYPE
+                        filter (all -> note -> agg -> bib -> journal -> scratch)
+                        applied on top of the prompt — the quick way to isolate
+                        journal or scratchpad notes without the sidebar.
 
 :PKMBrowse recent [n]   Show the n most recently modified notes (default 20),
                         sorted by modification time descending.
@@ -379,6 +382,13 @@ SEARCH AND BROWSE~                                                  *:PKMBrowse*
 
 :PKMBrowse tags         Browse notes by tag: pick a tag, then browse the notes
                         carrying it. (Editing tags is the :PKMTag surface below.)
+
+:PKMBrowse views [name] The view pop-ups. Bare, a tree-structured picker of all
+                        defined views (parent-child hierarchy, note counts);
+                        a `<name>` opens that view's notes; `last` reopens the
+                        last view activated this session. Tab-completes view
+                        names and `last`. The persistent counterpart is
+                        `:PKMPanel sidebar`; managing views is |:PKMView|.
 
 TAGS~  `:PKMTag` one note · `:PKMTags` all notes         *:PKMTag* *:PKMTags*
 
@@ -416,13 +426,11 @@ EXPORT~                                                             *:PKMExport*
 
 VIEWS~                                                              *:PKMView*
 
-:PKMView [name]         Open a named project view (Telescope or float picker
-                        of notes matching the view's filter). Tab-completes
-                        view names. Without a name, presents a view picker.
-
-:PKMView list           Open a tree-structured picker of all defined views,
-                        showing the parent-child hierarchy with note counts.
-                        Select a view to open it.
+`:PKMView` MANAGES view definitions (the verbs below). DISPLAYING a view is
+elsewhere, by design (the persistent-vs-transient split): `:PKMBrowse views
+[name]` opens a view's notes — or the view picker — as a transient pop-up, and
+`:PKMPanel sidebar [name]` pins it in the persistent sidebar. See |:PKMBrowse|
+and |:PKMPanel|.
 
 :PKMView new            Prompt for a name and type (simple view or subproject),
                         then for a filter expression (and parent view if
@@ -450,12 +458,6 @@ VIEWS~                                                              *:PKMView*
 :PKMView delete [name]  Remove a named view from views.json.
                         Tab-completes view names.
 
-:PKMView last           Reopen the last view activated in this session.
-                        Session-scoped; does not persist across restarts.
-
-:PKMView sidebar [name] Open or toggle the persistent view sidebar.
-                        See |pkm-sidebar| below for the full keymap list.
-
 PANELS~   `:PKMPanel <verb>`                                        *:PKMPanel*
 
 :PKMPanel [explorer]    Toggle the explorer (sidebar + buffer panel) as a unit,
@@ -481,8 +483,9 @@ PANELS~   `:PKMPanel <verb>`                                        *:PKMPanel*
                         jumps to the heading and `/` filters the list.
 
 :PKMPanel sidebar [name]
-                        Toggle the view sidebar (same surface as
-                        `:PKMView sidebar`). See |pkm-sidebar|.
+                        Toggle the persistent view sidebar (the only command
+                        that opens it). A name opens it on that view. See
+                        |pkm-sidebar|.
 
 :PKMPanel mode [on|off] Activate, deactivate, or toggle PKM Mode — the
                         session-level context that opens the explorer, pre-
@@ -612,7 +615,7 @@ body writing, rename/changetype/transpose, tag and membership writes, annotate.
                                                               *pkm-sidebar*
 SIDEBAR KEYMAPS~
 
-The sidebar (`:PKMView sidebar`, or `:PKMPanel sidebar`) has two modes: overview
+The sidebar (`:PKMPanel sidebar`) has two modes: overview
 (all views) and detail (notes in one view). Keymaps are the same in both modes.
 
   <CR>     In overview: enter the view under the cursor.
@@ -743,7 +746,7 @@ INSERTING A CITATION~
 
 Use `:PKMCite insert` (or bare |:PKMCite|, or the keymap). A context-aware
 picker shows all notes, pre-scored by:
-  +2  if the note is in the active view (`:PKMView sidebar` or last `:PKMView`)
+  +2  if the note is in the active view (`:PKMPanel sidebar` or last `:PKMBrowse views`)
   +1  per tag shared with the current note
 
 Relevant items are prefixed `~ ` and sorted to the top.
@@ -859,7 +862,7 @@ destination prompt appears.
       clinic = 'tag:medicine AND tag:protocol AND NOT tag:draft',
     },
 
-    sidebar_width = 40,   -- width of the `:PKMView sidebar` window
+    sidebar_width = 40,   -- width of the `:PKMPanel sidebar` window
 
     -- Default note label in all panels and sidebar.
     display_mode = 'filename',   -- 'filename' | 'title'
@@ -986,11 +989,11 @@ FIND AND SEARCH (<leader>f)~
   <leader>fp   cyclable pop-up   (nav; <C-l> cycles browse/views/nav inside it)
 
 VIEWS — saved filters (<leader>v)~
-  <leader>vl   :PKMView last
-  <leader>va   :PKMView list
+  <leader>vl   :PKMBrowse views last
+  <leader>va   :PKMBrowse views       (pick/open a view)
 
 PANES — the PERSISTENT surfaces you toggle and live with (<leader>p)~
-  <leader>ps   sidebar             (:PKMView sidebar)
+  <leader>ps   sidebar             (:PKMPanel sidebar)
   <leader>pb   buffer panel        (:PKMPanel buffers)
   <leader>P    focus into/out of the sidebar
   <C-Tab>      cycle focus among open panes (forward)
