@@ -42,7 +42,7 @@ highlighting in pkm-syntax, not here. See `CLAUDE.md` and the suite-level
 ## Current State
 
 **Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical;
-**v1.63.0** as of this writing). All work happens directly on `dev`; `main` holds
+**v1.63.1** as of this writing). All work happens directly on `dev`; `main` holds
 periodic stable backups of `dev`, not an independently maintained release line.
 
 **Working features:**
@@ -183,7 +183,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.63.0)
+## Shipped so far (v1.5.7 → v1.63.1)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -222,8 +222,8 @@ shipped work that still constrain **pending** work are kept in
   the nav provider; the sidebar lifted onto `panel.create` hosting **pluggable
   providers** (views + nav) with **autoswitch**; buffer-panel `[count]<CR>` + `/`;
   the nav/headings pop-up; and the **cyclable pop-up** container (closing Phase 3.5).
-- **v1.57.0 – v1.63.0 — conventions, suite move, surface + doc cleanup, perf.**
-  Recursos read/write conventions + light note conventions (v1.57); relocation
+- **v1.57.0 – v1.63.1 — conventions, suite move, surface + doc cleanup, perf.**
+  Resources read/write conventions + light note conventions (v1.57); relocation
   into pkm-suite (v1.58); the `doc/pkm.txt` verb-surface rewrite (v1.59); the
   **keymap redesign** on a persistent-vs-transient axis + `:PKMView update`
   picker-panel (v1.60, BREAKING for default keymaps); doc cleanup + memory prune
@@ -241,10 +241,12 @@ shipped work that still constrain **pending** work are kept in
   note-type cycle** (v1.62.0 — `<C-t>` in `:PKMBrowse`/the view note lists/the
   pop-up cycles all/note/agg/bib/journal/scratch, the non-sidebar way to reach
   journal & scratchpad notes; also silenced the stray `<C-l>` complete_tag error);
-  and the **command-surface consolidation** (v1.63.0, BREAKING — the transient
+  the **command-surface consolidation** (v1.63.0, BREAKING — the transient
   view pop-ups moved to `:PKMBrowse views`, the persistent sidebar has one door
   `:PKMPanel sidebar`, and `:PKMView` is view *data* ops only, per the
-  persistent-vs-transient axis).
+  persistent-vs-transient axis); and a **path fix** (v1.63.1 — the reference tree
+  is `P:\Resources`, not `P:\Recursos`; corrected across the skill, AGENT_PROTOCOL,
+  CONVENTIONS, CLAUDE.md, LLM_CONTEXT).
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.
@@ -267,7 +269,7 @@ noted caveat (but do both when it is easy). The detailed specs live under
 § Near goals / § Distant goals / § Potential goals below; this is the priority
 view over them.*
 
-**Pending-features status (as of v1.63.0).** There are **no non-deferred,
+**Pending-features status (as of v1.63.1).** There are **no non-deferred,
 near-term pending features left** — the two that were open both shipped: the
 **forced-save prompt** (Near 5.1) in **v1.61.2** (a citation into an open,
 unmodified buffer now writes the backlink *through* the buffer, so a later `:w`

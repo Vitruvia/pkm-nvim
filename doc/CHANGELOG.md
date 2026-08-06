@@ -74,6 +74,31 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.63.1] - 6/8/2026
+
+*Doc fix: the reference-materials tree is `P:\Resources`, not `P:\Recursos`.*
+
+### Fixed (docs)
+
+-   **Wrong reference-tree path corrected: `P:\Recursos` → `P:\Resources`** (WSL
+    `/mnt/p/Recursos` → `/mnt/p/Resources`). The folder on disk is `Resources`; the
+    docs had used the Portuguese "Recursos" throughout, so an agent following the
+    bib doctrine (browse the reference tree, create a bib note) would look in a
+    folder that does not exist. Corrected across the `pkm-notes` skill, `doc/
+    AGENT_PROTOCOL.md` (§ 6.2, § 10), `doc/CONVENTIONS.md`, both `CLAUDE.md` files,
+    `doc/LLM_CONTEXT.md`, and this changelog's historical entries. No code
+    referenced the path. The **installed** `~/.claude/skills/pkm-notes` copy and
+    the session memory were corrected in place; re-run `:PKMAgentProtocol install`
+    to keep the distributed bundle in sync with the repo source.
+
+### Notes
+
+-   Known, not code-fixable here: `:help pkm-keymaps` not jumping to the KEYMAPS
+    section is a **stale local helptags** issue, not a doc bug — the `*pkm-keymaps*`
+    tag is correct and resolves to the section when helptags are current.
+    Regenerate with `:Lazy sync pkm-nvim` (or `:helptags <pkm-nvim>/doc`). A
+    generated `doc/tags` is deliberately not committed (it churns on every regen).
+
 ## [1.63.0] - 5/8/2026
 
 *Command surface sorted onto the persistent-vs-transient axis (**BREAKING**):
@@ -441,7 +466,7 @@ self-contained. No behavioural code beyond the skill copy list.*
 
 ### Added
 
--   **`AGENT_PROTOCOL.md` § 6.2 — Reference materials (`P:\Recursos`).** States
+-   **`AGENT_PROTOCOL.md` § 6.2 — Reference materials (`P:\Resources`).** States
     the rule plainly: **read is a standing grant** (the consult step of § 10),
     **write is per-task only** — the assistant asks for permission scoped to a
     task (e.g. Manager-mode renaming of mis-named reference files, or an
@@ -457,11 +482,11 @@ self-contained. No behavioural code beyond the skill copy list.*
 ### Changed
 
 -   **`CONVENTIONS.md` § Bibliography Notes** — added **"never copy a whole text
-    into a bib note"**: the source lives in the reference tree (`P:\Recursos`),
+    into a bib note"**: the source lives in the reference tree (`P:\Resources`),
     the bib note carries the citation plus excerpts / commentary / cross-links.
 -   **`skills/pkm-notes/SKILL.md`** — the split/merge granularity heuristic
     (firmer, agent-facing; points to `CONVENTIONS.md § Note granularity`) and the
-    Recursos read-freely / write-on-request rule (§ 6.2).
+    Resources read-freely / write-on-request rule (§ 6.2).
 -   **The skill bundle now ships `CONVENTIONS.md`.** `pkm.skill.install` copies it
     alongside `SKILL.md` / `AGENT_PROTOCOL.md` / `PKM_API.md`, so both of
     SKILL.md's references into CONVENTIONS.md (§ Lists, § Note granularity)
@@ -1705,7 +1730,7 @@ a source is now a citable **bib note**, not a freetext `## References` line.*
 ### Changed
 
 -   **The bib doctrine — `doc/AGENT_PROTOCOL.md` § 10.** A reference is recorded as a
-    **bib note**, not a prose line: consult `P:\Recursos` (WSL `/mnt/p/Recursos`) and,
+    **bib note**, not a prose line: consult `P:\Resources` (WSL `/mnt/p/Resources`) and,
     where warranted, the web; find-or-create the source's bib note (standard citation
     at the top) via `cite_source`. A **precise bib note is the one encouraged
     exception to "don't write the user's vault"** — the citation must be exact, any

@@ -70,7 +70,7 @@ of repeating the reference inline.
     `By Claude:` header with model and time), because a summary is a *reading* of
     the source, not the source itself; the citation block is not so marked.
 -   **Never copy a whole text into a bib note.** The source itself lives in the
-    reference tree (`P:\Recursos`), not in the vault. A bib note carries the
+    reference tree (`P:\Resources`), not in the vault. A bib note carries the
     citation, then *excerpts, commentary, and cross-links* — the passages worth
     quoting and what they connect to — never the full work. Quote what a claim
     rests on; point to the reference for the rest.

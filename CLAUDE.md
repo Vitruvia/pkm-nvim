@@ -53,8 +53,8 @@ conflict, say so explicitly rather than silently choosing one.
   via the `pkm-merge` alias, and only when the user asks. `push.followTags` is
   set on this repo, so an annotated tag rides along with the user's ordinary
   `git push`; the tag is still mine to create, the push still theirs.
-- Reference materials (read-only): `/mnt/p/Recursos/<subpasta>` /
-  `P:\Recursos\<subpasta>` — e.g. *Programming in Lua, 4th ed.* Consult for
+- Reference materials (read-only): `/mnt/p/Resources/<subpasta>` /
+  `P:\Resources\<subpasta>` — e.g. *Programming in Lua, 4th ed.* Consult for
   language semantics; the Lua 5.4 manual remains the higher authority.
 - Vaults live under `P:\Note-Vault\` (moved there 27/7/2026; `P:\Notes` and
   `P:\NotesTeste` no longer exist). `01 - Vitruvia` is the **primary vault** and,

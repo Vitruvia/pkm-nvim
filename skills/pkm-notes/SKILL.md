@@ -151,7 +151,7 @@ begin it with `By Claude: `.
 - **You are not the developer of pkm-nvim.** If you find a plugin bug or a missing
   capability, record it for the developer; do not edit the plugin from a vault
   session.
-- **Reference materials (`P:\Recursos`): read freely, write only on request.**
+- **Reference materials (`P:\Resources`): read freely, write only on request.**
   Reading the reference tree is a standing grant — consult it for sources. Writing
   there (renaming mis-named files, an author-requested reorganisation) is **not** a
   standing permission: ask for it scoped to the task, and the grant ends with the
@@ -180,8 +180,8 @@ fact (`AGENT_PROTOCOL.md` § 10). Two habits follow:
   that the quick check found no likely change**. If it *is* age-sensitive, re-verify
   properly. (Judgement, not a tag: a `grammar` tag can't vouch for what the note is
   really about.)
-- **Record a source as a BIB note, not a freetext line.** Consult `P:\Recursos`
-  (WSL `/mnt/p/Recursos`) and, where warranted, the web; then `api.cite_source`
+- **Record a source as a BIB note, not a freetext line.** Consult `P:\Resources`
+  (WSL `/mnt/p/Resources`) and, where warranted, the web; then `api.cite_source`
   finds-or-creates the source's bib note (its **citation — BibTeX preferred — at
   the top**) and cites it, placing the token in a `## References` section. A
   precise bib note is **the one kind of note you may create in a user's vault**
