@@ -43,6 +43,8 @@
 --
 -- Public API:
 --   parse(expr)        → tree, nil  |  nil, error_string
+--   parse_prompt(expr) → tree | nil  — lenient parse for a live (as-you-type)
+--                        prompt; never errors mid-keystroke
 --   eval(tree, note)   → boolean
 --   tag_sets(tree)     → the tag sets satisfying the expression, with the
 --                        conditions no tag can reach — pure
@@ -277,6 +279,24 @@ function M.parse(expr)
   end
 
   return tree, nil
+end
+
+--- Parse a *live* (as-you-type) filter prompt into a tree, forgivingly.
+---
+--- The single rule every live picker shares, so it lives in one place:
+---   empty / whitespace  → nil    (the caller reads nil as "match everything")
+---   parseable expression → the AST from M.parse()
+---   unparseable / partial (mid-typing "AND", an unclosed paren) → a bare
+---                          any-predicate over the raw text
+---
+--- The last case is what keeps a prompt from being rejected between keystrokes:
+--- a half-typed boolean still narrows the list as a plain substring instead of
+--- clearing it. Never returns an error — unlike M.parse(), which reports one.
+---@param prompt string|nil
+---@return table|nil tree
+function M.parse_prompt(prompt)
+  if type(prompt) ~= 'string' or prompt:match('^%s*$') then return nil end
+  return M.parse(prompt) or { type = 'PRED', field = 'any', value = prompt }
 end
 
 -- =============================================================================

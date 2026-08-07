@@ -74,6 +74,36 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.64.0] - 7/8/2026
+
+*Descriptor search (`tag:` / `text:` / …) now works in the view note-lists and
+"Browse All Notes", not just `:PKMBrowse`.*
+
+### Added
+
+-   **The filter-descriptor language now drives every note-listing picker.** The
+    prompt in a view's note list (Telescope `telescope_view_picker` and its
+    no-Telescope float `float_view_picker`) and in the `<C-f>` **Browse All
+    Notes** picker is now a live `filter.lua` expression —
+    `tag:`/`text:`/`title:`/`filename:`/`type:` with `AND`/`OR`/`NOT` and quoted
+    values, a bare word matching any field — exactly as `:PKMBrowse` /
+    `<leader>ff` already behaved. Previously these three filtered the *visible
+    display string* only (type prefix + title, title falling back to the
+    filename stem), so `tag:x` / `text:x` were literal text and matched nothing —
+    which read as "search only works by filename". Subview rows in a view's list
+    are views, not notes, so they still narrow by name substring. The pop-up's
+    `views` provider (searches view *names*) and `nav` provider (searches
+    *headings*) are note-less by design and unchanged.
+
+### Changed (internal)
+
+-   **`filter.parse_prompt(prompt)`** extracts the lenient as-you-type parse rule
+    (empty → nil "match all"; parseable → AST; partial/unparseable → bare
+    `any:` predicate, so a half-typed expression never clears the list). One
+    source of truth now shared by `telescope.live_picker` (de-duplicated to call
+    it) and the three view finders. Pure; covered by `test_filter.lua`
+    (147/147, +12 `parse_prompt` assertions).
+
 ## [1.63.1] - 6/8/2026
 
 *Doc fix: the reference-materials tree is `P:\Resources`, not `P:\Recursos`.*

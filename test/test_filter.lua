@@ -407,6 +407,38 @@ leg = filter.from_legacy({ tags_any = {'math'} })
 ok("from_legacy tag: still exact (not any)", filter.eval(leg, note('', {'mathematics'})) == false)
 
 -- =============================================================================
+-- 8. parse_prompt — lenient live-prompt parse (used by every live picker)
+-- =============================================================================
+section("parse_prompt — lenient live-prompt parse")
+
+ok("nil for nil prompt",          filter.parse_prompt(nil) == nil)
+ok("nil for empty string",        filter.parse_prompt('') == nil)
+ok("nil for whitespace only",     filter.parse_prompt('   ') == nil)
+
+t = filter.parse_prompt('tag:rpg')
+ok("tag:rpg → PRED",              t ~= nil and t.type == 'PRED')
+ok("tag:rpg → field 'tag'",       t ~= nil and t.field == 'tag')
+ok("tag:rpg → value 'rpg'",       t ~= nil and t.value == 'rpg')
+
+t = filter.parse_prompt('tag:rpg AND text:forge')
+ok("valid boolean → AND tree",    t ~= nil and t.type == 'AND')
+
+-- Incomplete / unparseable prompts must NOT be rejected mid-keystroke: they
+-- degrade to a bare any-predicate over the raw text so the list still narrows.
+t = filter.parse_prompt('AND')
+ok("dangling 'AND' → any-pred",   t ~= nil and t.field == 'any' and t.value == 'AND')
+
+t = filter.parse_prompt('(tag:rpg')
+ok("unclosed paren → any-pred",   t ~= nil and t.field == 'any' and t.value == '(tag:rpg')
+
+-- The any-predicate a partial prompt yields still matches across fields, so a
+-- half-typed expression behaves like a plain substring search.
+t = filter.parse_prompt('forge')
+ok("bare word matches body",      filter.eval(t, note('', {}, 'the ring forge')) == true)
+ok("bare word matches tag",       filter.eval(t, note('', {'forge'})) == true)
+ok("bare word no false match",    filter.eval(t, note('anvil', {'smith'}, 'hammer')) == false)
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 local total = pass + fail

@@ -1069,7 +1069,10 @@ local function telescope_help(prompt_bufnr, title, lines)
   end)
 end
 
---- Telescope picker over pre-matched note paths. Exact substring prompt.
+--- Telescope picker over pre-matched note paths. The prompt is a live
+--- filter.lua expression (tag:/text:/title:/filename:/type: + AND/OR/NOT), the
+--- same language :PKMBrowse uses; a bare word matches any field. Subview rows
+--- are views, not notes, so they narrow by name substring instead.
 local function telescope_view_picker(name, paths, invocation_win, invocation_was_sidebar)
   local pickers      = require('telescope.pickers')
   local finders      = require('telescope.finders')
@@ -1118,13 +1121,23 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
 
     finder = finders.new_dynamic({
     fn = function(prompt)
-        if not prompt or prompt == '' then return entries end
-        local needle = prompt:lower()
+        local filter = require('pkm.filter')
+        local tree   = filter.parse_prompt(prompt)   -- nil = match everything
+        if not tree then return entries end
+        -- Subview rows are views, not notes: they cannot satisfy a note filter,
+        -- so they narrow by the raw prompt as a name substring (today's UX) and
+        -- simply drop out of a structured predicate like tag:x.
+        local raw      = prompt:lower()
         local filtered = {}
         for _, e in ipairs(entries) do
-          if e.display:lower():find(needle, 1, true) then
-            filtered[#filtered + 1] = e
+          local keep
+          if e.is_subview then
+            keep = e.display:lower():find(raw, 1, true) ~= nil
+          else
+            local note = index.get(e.value)
+            keep = note ~= nil and filter.eval(tree, note)
           end
+          if keep then filtered[#filtered + 1] = e end
         end
         return filtered
       end,
@@ -1237,6 +1250,8 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
 
       local function do_help()
         telescope_help(prompt_bufnr, ' PKMView Keymaps ', {
+          '  type in the prompt to filter — tag:/text:/title:/filename:',
+          '           a bare word matches any field; AND/OR/NOT supported',
           '  <CR>     open note / enter subview',
           '  <Tab>    mark note',
           '  <C-a>    bulk actions on marked notes (or all listed)',
@@ -1289,7 +1304,9 @@ end
 
 --- Scrollable float picker. <CR> opens note/subview at cursor; / filters
 --- in place (refreshes the same buffer, does not open a new window —
---- matches the tag-panel/trash-panel convention); q/<Esc> closes.
+--- matches the tag-panel/trash-panel convention); q/<Esc> closes. The `/`
+--- query is a filter.lua expression (tag:/text:/title:/filename: + AND/OR/NOT)
+--- over the notes; subview rows narrow by name substring.
 local function float_view_picker(name, paths, invocation_win, invocation_was_sidebar)
   local index       = require('pkm.index')
   local children    = get_view_children(name)
@@ -1304,15 +1321,20 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
   local function render()
     local sorted, filtered_children = all_sorted, children
     if filter_query and filter_query ~= '' then
+      local filter = require('pkm.filter')
+      local tree   = filter.parse_prompt(filter_query)   -- non-nil here
       local needle = filter_query:lower()
       local fc, fp = {}, {}
+      -- Subview rows are views, not notes: narrow them by name substring, as
+      -- before; the notes go through the full filter.lua expression.
       for _, c in ipairs(children) do
         if c:lower():find(needle, 1, true) then fc[#fc + 1] = c end
       end
+      -- A whitespace-only query parses to nil (match everything); guard so
+      -- filter.eval is never handed a nil tree.
       for _, p in ipairs(all_sorted) do
-        local e     = index.get(p)
-        local title = (e and e.title or vim.fn.fnamemodify(p, ':t:r')):lower()
-        if title:find(needle, 1, true) then fp[#fp + 1] = p end
+        local e = index.get(p)
+        if e and (not tree or filter.eval(tree, e)) then fp[#fp + 1] = p end
       end
       filtered_children, sorted = fc, fp
     end
@@ -1321,7 +1343,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     local filter_label   = (filter_query and filter_query ~= '')
       and ('  [filter: ' .. filter_query .. ']') or ''
     local header = string.format(
-      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / search  ·  ? help  ·  q close',
+      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / filter  ·  ? help  ·  q close',
       name, total, total == 1 and '' or 's', filter_label)
     local lines = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
     line_paths, line_subs = {}, {}
@@ -1522,7 +1544,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       '  <C-f>    browse all notes',
       '  <C-v>    open note: split right',
       '  <C-x>    open note: split left',
-      '  /        search',
+      '  /        filter — tag:/text:/title:/filename:, AND/OR/NOT',
       '  q        close',
       '  ?        this help',
     })
@@ -1652,11 +1674,13 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
       prompt_title = string.format('Browse All Notes  (%d)  ?  help', #items),
       finder = finders.new_dynamic({
         fn = function(prompt)
-          if not prompt or prompt == '' then return items end
-          local needle = prompt:lower()
+          local filter = require('pkm.filter')
+          local tree   = filter.parse_prompt(prompt)   -- nil = match everything
+          if not tree then return items end
           local out = {}
           for _, item in ipairs(items) do
-            if item.display:lower():find(needle, 1, true) then out[#out + 1] = item end
+            local note = index.get(item.value)
+            if note ~= nil and filter.eval(tree, note) then out[#out + 1] = item end
           end
           return out
         end,
@@ -1708,6 +1732,8 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
         end
         local function do_help()
           telescope_help(prompt_bufnr, ' Browse All Notes Keymaps ', {
+            '  type in the prompt to filter — tag:/text:/title:/filename:',
+            '           a bare word matches any field; AND/OR/NOT supported',
             '  <CR>     open note',
             '  <Tab>    mark note',
             '  <C-a>    bulk actions on marked notes (or all listed)',

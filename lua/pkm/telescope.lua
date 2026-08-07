@@ -128,13 +128,9 @@ local function live_picker(title, entries, seed, presorted, on_cycle, type_idx)
     finder = t.finders.new_dynamic {
       fn = function(prompt)
         -- The <C-t> note-type filter (active_type) is applied on TOP of the
-        -- prompt, always — including when the prompt is empty.
-        local tree = nil
-        if prompt and prompt ~= '' then
-          -- Parse the prompt; fall back to a bare any-predicate when incomplete
-          -- (e.g. mid-typing "AND" without a right operand).
-          tree = filter.parse(prompt) or { type = 'PRED', field = 'any', value = prompt }
-        end
+        -- prompt, always — including when the prompt is empty. parse_prompt
+        -- returns nil for an empty prompt and never errors mid-keystroke.
+        local tree = filter.parse_prompt(prompt)
         local out = {}
         for _, item in ipairs(all_items) do
           if passes_type(item.entry.note_type, type_idx)
