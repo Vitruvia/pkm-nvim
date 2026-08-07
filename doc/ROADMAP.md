@@ -824,6 +824,48 @@ don't need to re-derive this from scratch.
   empirically. After upgrading, sanity-check `:PKMNote`, `follow_link` (`gf`),
   and sidebar note-opening (`edit` + `fnameescape`) against a `P:/` path first.
 
+---
+
+## Requests from the Gestor de Recursos (sibling consumer) — pending dev triage
+
+Raised 2026-08-07 by the Gestor de Recursos (a pkm.api consumer, `P:\Active\gestor-recursos`)
+during a real citation task. Recorded here per the "record it for the developer,
+don't edit the plugin from a consumer session" rule; **triage and reword into the
+proper areas above** — this block is an inbox, not a finished plan.
+
+**Bugs**
+
+1. **`rename` drops the `By<Author>` filename marker.** `notes.rename_note_at`
+   rebuilds the stem as `NNNN_type_<sanitize(new_name)>`, replacing *everything*
+   after the type prefix — so `0009_bib_ByClaude_Foo` renamed to `Bar` becomes
+   `0009_bib_Bar`, losing `ByClaude`. This contradicts the documented contract at
+   `notes.lua:226-228` ("the marker … survives … a manual rename that keeps the
+   prefix") and silently breaks `authored_by()` (returns nil → treated as a human
+   note) and the `delete` guard (would then refuse to trash the agent's own note).
+   Fix: `rename` should preserve/re-attach the author marker automatically, the
+   way it preserves the number+type prefix. (Workaround in use: include the marker
+   in `new_name`, e.g. `rename(ref, 'ByClaude Foo')` — ugly, easy to forget.)
+
+2. **No post-hoc setter for note metadata** (`title`, `source_author`,
+   `source_type`). They are **create-only** opts; correcting them after creation
+   currently forces uncite → delete → recreate (destructive to numbering + graph).
+   Add e.g. `set_title(ref, s)` / `set_source_meta(ref, { author?, type?, ... })`.
+
+**Convention / standard requests (from the gestor's owner)**
+
+3. **Bib-note naming standard.** A `bib` note should take the **same filename as
+   its source file** (with the pkm `NNNN_type_By<Author>_` prefixes) and the
+   **same title as the source document's real internal title** — the title on the
+   cover / rosto / metadata, not an author+edition string. Differentiators
+   (institution, edition/version) belong in the *filename* and the BibTeX, not the
+   title field. Please fold this into the assistant conventions
+   (`CONVENTIONS.md` / `AGENT_PROTOCOL.md`) so it is standard, not per-task.
+
+4. **Expand source-metadata frontmatter.** `source_author` / `source_type` exist;
+   add first-class fields for **edition** and **version** (and consider
+   `source_year`, `source_publisher`) so bib provenance lives in structured
+   frontmatter rather than only inside the BibTeX body / filename.
+
 **Process for future upgrades:**
 - Re-run this audit against `:help news` for the target version before
   upgrading, not after. Check specifically: treesitter API changes (PKM's
