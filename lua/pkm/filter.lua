@@ -8,7 +8,10 @@
 -- Implements a small boolean filter language over note fields.
 -- All matching is case-insensitive. Tag matching via the tag: field is EXACT
 -- (case-insensitive); title:, text:, filename:, and any: matching are plain
--- substring (never fuzzy).
+-- substring (never fuzzy — a contiguous find, so `rpg` never matches
+-- `glorious parmeggiano`). The live search pickers pass `eval`'s
+-- `opts.tag_substring` to relax tag: to that same contiguous substring while
+-- typing; saved-view evaluation does not, so a view's tag: stays exact.
 --
 -- Grammar:
 --   expr      = and_expr (OR and_expr)*
@@ -335,16 +338,34 @@ end
 ---   any:value      — substring match across title, body, filename, AND tag values
 ---                    (tag values are also substring for `any:`, unlike exact for `tag:`)
 ---
+--- All substring matching is a plain, CONTIGUOUS `find` — never a fuzzy
+--- subsequence, so `rpg` matches `rpg` / `my-rpg`, never `glorious parmeggiano`.
+---
+--- `opts.tag_substring` relaxes ONLY the `tag:` rule to the same contiguous
+--- substring the other fields use. It exists for the live SEARCH pickers, where
+--- a tag typed key-by-key must narrow the list rather than vanish until it is
+--- complete. It is deliberately NOT passed by view evaluation (`match_all`,
+--- `count_*`, `match_set`) or `tag_sets`, which need `tag:` to mean one exact
+--- tag — a view `tag:rpg` must not swallow `rpg-campaign`, and `:PKMView remove`
+--- must know the single tag to strip.
+---
 ---@param tree table   AST node produced by M.parse()
 ---@param note table   Note data table
+---@param opts table|nil  { tag_substring = boolean }
 ---@return boolean
-function M.eval(tree, note)
+function M.eval(tree, note, opts)
   if tree.type == 'PRED' then
     local val = tree.value:lower()
 
     if tree.field == 'tag' then
+      local substring = opts ~= nil and opts.tag_substring == true
       for _, t in ipairs(note.tags or {}) do
-        if tostring(t):lower() == val then return true end
+        local tl = tostring(t):lower()
+        if substring then
+          if tl:find(val, 1, true) then return true end
+        elseif tl == val then
+          return true
+        end
       end
       return false
 
@@ -376,18 +397,18 @@ function M.eval(tree, note)
 
   elseif tree.type == 'AND' then
     for _, arg in ipairs(tree.args) do
-      if not M.eval(arg, note) then return false end
+      if not M.eval(arg, note, opts) then return false end
     end
     return true
 
   elseif tree.type == 'OR' then
     for _, arg in ipairs(tree.args) do
-      if M.eval(arg, note) then return true end
+      if M.eval(arg, note, opts) then return true end
     end
     return false
 
   elseif tree.type == 'NOT' then
-    return not M.eval(tree.args[1], note)
+    return not M.eval(tree.args[1], note, opts)
   end
 
   return false

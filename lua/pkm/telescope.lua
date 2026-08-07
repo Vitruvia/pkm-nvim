@@ -21,6 +21,12 @@ local M = {}
 local utils = require('pkm.utils')
 local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 
+-- These are live SEARCH pickers: a `tag:` typed key-by-key must narrow the list
+-- as a contiguous substring rather than vanish until the tag is spelled in full.
+-- Saved-view evaluation keeps `tag:` exact and never passes this. Read-only, so
+-- one shared table is reused across every keystroke and note.
+local SEARCH_EVAL = { tag_substring = true }
+
 -- The note-type filter cycle for the browse picker's <C-t> (false = all types).
 -- Mirrors the sidebar's <C-t> cycle (views.lua TYPE_CYCLE) so filtering to
 -- journal / scratchpad works the same way from the pop-up-less browse pickers.
@@ -134,7 +140,7 @@ local function live_picker(title, entries, seed, presorted, on_cycle, type_idx)
         local out = {}
         for _, item in ipairs(all_items) do
           if passes_type(item.entry.note_type, type_idx)
-          and (not tree or filter.eval(tree, item.entry)) then
+          and (not tree or filter.eval(tree, item.entry, SEARCH_EVAL)) then
             out[#out + 1] = item
           end
         end

@@ -475,6 +475,34 @@ t = filter.parse_prompt('tag: rpg')
 ok("parse_prompt 'tag: rpg' → tag",  t ~= nil and t.field == 'tag' and t.value == 'rpg')
 
 -- =============================================================================
+-- 10. eval — opts.tag_substring (live-search tag: narrowing)
+-- =============================================================================
+section("eval — opts.tag_substring (live search only)")
+
+local SUB = { tag_substring = true }
+
+t = filter.parse('tag:rpg')
+ok("tag:rpg exact matches (default)",   filter.eval(t, note('', {'rpg'})) == true)
+ok("tag:rpg exact matches (+substring)", filter.eval(t, note('', {'rpg'}), SUB) == true)
+
+t = filter.parse('tag:rp')   -- a partial tag, as while typing
+ok("tag:rp default exact = no match",   filter.eval(t, note('', {'rpg'})) == false)
+ok("tag:rp substring = match",          filter.eval(t, note('', {'rpg'}), SUB) == true)
+ok("tag:rp substring = mid-tag match",  filter.eval(t, note('', {'my-rpg'}), SUB) == true)
+
+-- CONTIGUOUS substring, NEVER a fuzzy subsequence: scattered r…p…g must not hit.
+t = filter.parse('tag:rpg')
+ok("no fuzzy: responsible-parenting",   filter.eval(t, note('', {'responsible-parenting'}), SUB) == false)
+ok("no fuzzy: glorious-parmeggiano",    filter.eval(t, note('', {'glorious-parmeggiano'}), SUB) == false)
+
+-- The flag threads through boolean nodes.
+t = filter.parse('tag:rp AND text:forge')
+ok("substring threads through AND",     filter.eval(t, note('', {'rpg'}, 'the forge'), SUB) == true)
+ok("AND still needs the other side",    filter.eval(t, note('', {'rpg'}, 'the anvil'), SUB) == false)
+t = filter.parse('NOT tag:rp')
+ok("substring threads through NOT",     filter.eval(t, note('', {'rpg'}), SUB) == false)
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 local total = pass + fail

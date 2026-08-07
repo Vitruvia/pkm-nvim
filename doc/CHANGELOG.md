@@ -74,6 +74,29 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.65.0] - 7/8/2026
+
+*In the search pickers, `tag:` now narrows as you type (contiguous substring),
+instead of the list vanishing until the tag is spelled out in full. Saved views
+keep exact `tag:`.*
+
+### Added
+
+-   **`tag:` narrows incrementally in the live search pickers.** `tag:` has
+    always been an EXACT match (that is what makes a saved view `tag:rpg` mean
+    the `rpg` tag and nothing near it), but in a search box that meant typing
+    `tag:r` → `tag:rp` → `tag:rpg` showed an empty list until the very last
+    keystroke. `filter.eval` now takes `opts.tag_substring`, which relaxes only
+    the `tag:` rule to the same **contiguous** substring the other fields use —
+    so `tag:rp` matches `rpg` and `my-rpg` as you type. It is a plain `find`,
+    never a fuzzy subsequence: `tag:rpg` will never match `glorious-parmeggiano`
+    or `responsible-parenting`. Passed by the live pickers only — `:PKMBrowse`,
+    the view note-lists, the `<C-f>` Browse-All, and the `vim.ui.select`
+    fallback. **Saved-view evaluation (`match_all`/`count_*`/`match_set`) and
+    `tag_sets` do NOT pass it**, so view precision and `:PKMView remove` (which
+    must know the single tag to strip) are unchanged: a view `tag:rpg` still
+    means exactly `rpg`. `test_filter.lua` 171/171 (+10).
+
 ## [1.64.1] - 7/8/2026
 
 *Filter descriptors now tolerate a space after the colon: `tag: rpg` works, not

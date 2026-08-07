@@ -64,6 +64,12 @@ local M = {}
 local utils = require('pkm.utils')
 local panel = require('pkm.panel')
 
+-- The note-listing pickers here are live SEARCH surfaces: a `tag:` typed
+-- key-by-key must narrow as a contiguous substring, not vanish until the tag is
+-- complete. Passed to filter.eval in the finders below. View EVALUATION
+-- (match_all/count_*/match_set) never passes it — there `tag:` stays exact.
+local SEARCH_EVAL = { tag_substring = true }
+
 -- =============================================================================
 -- SECTION: State
 -- =============================================================================
@@ -1135,7 +1141,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
             keep = e.display:lower():find(raw, 1, true) ~= nil
           else
             local note = index.get(e.value)
-            keep = note ~= nil and filter.eval(tree, note)
+            keep = note ~= nil and filter.eval(tree, note, SEARCH_EVAL)
           end
           if keep then filtered[#filtered + 1] = e end
         end
@@ -1334,7 +1340,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       -- filter.eval is never handed a nil tree.
       for _, p in ipairs(all_sorted) do
         local e = index.get(p)
-        if e and (not tree or filter.eval(tree, e)) then fp[#fp + 1] = p end
+        if e and (not tree or filter.eval(tree, e, SEARCH_EVAL)) then fp[#fp + 1] = p end
       end
       filtered_children, sorted = fc, fp
     end
@@ -1680,7 +1686,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
           local out = {}
           for _, item in ipairs(items) do
             local note = index.get(item.value)
-            if note ~= nil and filter.eval(tree, note) then out[#out + 1] = item end
+            if note ~= nil and filter.eval(tree, note, SEARCH_EVAL) then out[#out + 1] = item end
           end
           return out
         end,

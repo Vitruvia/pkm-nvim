@@ -32,6 +32,10 @@ local panel = require('pkm.panel')
 local config = {}
 local _display_mode = 'filename'  -- 'filename' | 'title'
 
+-- Browse is a SEARCH surface, so `tag:` narrows as a contiguous substring here
+-- too (parity with the Telescope pickers); saved-view eval keeps `tag:` exact.
+local SEARCH_EVAL = { tag_substring = true }
+
 -- Session-scoped "last opened" order, used only for buffers not currently
 -- shown in any editing window. Incremented on every BufEnter into a real,
 -- listed buffer; higher = more recently opened. Per-session by design --
@@ -693,7 +697,7 @@ function M.browse(filter_expr)
     end
     entries = {}
     for _, e in ipairs(all_entries) do
-      if filter.eval(tree, e) then entries[#entries + 1] = e end
+      if filter.eval(tree, e, SEARCH_EVAL) then entries[#entries + 1] = e end
     end
   else
     entries = all_entries
