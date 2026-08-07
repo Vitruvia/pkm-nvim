@@ -32,6 +32,11 @@
 --   word       →  any predicate
 --   "..."      →  any predicate
 --
+-- Whitespace after a known field's colon is allowed and ignored:
+--   field: value  and  field:  "quoted"   parse exactly like  field:value
+--   and  field:"quoted"  — a value that follows the colon is the field's value,
+-- glued or spaced. (A known field with nothing after it is still an error.)
+--
 -- Note data table consumed by eval():
 --   { path=string, filename=string, title=string, tags=string[], body=string }
 --   path     — absolute file path (not matched by eval; carried for callers)
@@ -133,16 +138,32 @@ local function tokenize(expr)
           if KNOWN_FIELDS[field] then
             local value
             if value_rest == '' then
-              -- No inline value; check for a quoted value immediately following
-              -- (e.g. tag:"ring forge" — scan stopped before the '"').
-              if i <= n and expr:sub(i, i) == '"' then
+              -- No value glued to the colon. Skip any whitespace, then take the
+              -- next token — a quoted string or a bare word — as the value, so
+              -- `tag: rpg` and `tag:  "ring forge"` read exactly like `tag:rpg`
+              -- and `tag:"ring forge"`. Users type the space after the colon by
+              -- reflex; rejecting it (the old behaviour) turned the whole thing
+              -- into a literal any-search that matched nothing. A field with
+              -- nothing after it — end of input, or a paren — is still an error.
+              while i <= n and expr:sub(i, i):match('%s') do i = i + 1 end
+              local nc = i <= n and expr:sub(i, i) or ''
+              if nc == '"' then
                 local qj = i + 1
                 while qj <= n and expr:sub(qj, qj) ~= '"' do qj = qj + 1 end
                 if qj > n then return nil, "unclosed quote in filter expression" end
                 value = expr:sub(i + 1, qj - 1)
                 i = qj + 1
-              else
+              elseif nc == '' or nc == '(' or nc == ')' then
                 return nil, string.format("field '%s:' has no value", field)
+              else
+                -- Bare word: read to the next whitespace, paren, or quote,
+                -- exactly as the top-level tokenizer reads a bare word.
+                local vj = i
+                while vj <= n and not expr:sub(vj, vj):match('[%s%(%)"]') do
+                  vj = vj + 1
+                end
+                value = expr:sub(i, vj - 1)
+                i = vj
               end
             else
               value = value_rest

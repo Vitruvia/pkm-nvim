@@ -74,6 +74,27 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.64.1] - 7/8/2026
+
+*Filter descriptors now tolerate a space after the colon: `tag: rpg` works, not
+only `tag:rpg`.*
+
+### Fixed
+
+-   **`tag: value` / `text: value` (a space after the field colon) now parse as
+    the field predicate**, exactly like the glued `tag:value`. The tokenizer
+    previously required the value to touch the colon; a space made `filter.parse`
+    fail, and every live picker's lenient fallback then treated the whole thing
+    as a literal any-search for the string `"tag: value"`, which matched nothing.
+    Found in the v1.64.0 smoke: typing `tag: <anything>` (the reflexive spacing)
+    returned no results in the browse and view pickers alike. The fix is in the
+    shared grammar (`pkm.filter` tokenizer: skip whitespace after a known field's
+    colon, then take the next quoted string or bare word as the value), so it
+    lands on **every** surface at once — `:PKMBrowse`, the view note-lists, the
+    sidebar `/`, and views.json filter expressions. A known field with nothing
+    after the colon (`tag:`, `tag:   `) is still an error, unchanged.
+    `test_filter.lua` 161/161 (+14).
+
 ## [1.64.0] - 7/8/2026
 
 *Descriptor search (`tag:` / `text:` / …) now works in the view note-lists and

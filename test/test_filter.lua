@@ -439,6 +439,42 @@ ok("bare word matches tag",       filter.eval(t, note('', {'forge'})) == true)
 ok("bare word no false match",    filter.eval(t, note('anvil', {'smith'}, 'hammer')) == false)
 
 -- =============================================================================
+-- 9. whitespace after a field colon (field: value == field:value)
+-- =============================================================================
+section("parse — whitespace after field colon")
+
+t, err = filter.parse('tag: rpg')
+ok("tag: rpg parses",                t ~= nil and err == nil)
+ok("tag: rpg → field 'tag'",         t ~= nil and t.field == 'tag')
+ok("tag: rpg → value 'rpg' (trimmed)", t ~= nil and t.value == 'rpg')
+ok("tag: rpg evals like tag:rpg",    t ~= nil and filter.eval(t, note('', {'rpg'})) == true)
+
+t = filter.parse('text:  forge')       -- multiple spaces
+ok("text:  forge → field 'text'",    t ~= nil and t.field == 'text')
+ok("text:  forge → value 'forge'",   t ~= nil and t.value == 'forge')
+
+t = filter.parse('tag: "ring forge"')  -- spaced, quoted
+ok("tag: \"ring forge\" → field",    t ~= nil and t.field == 'tag')
+ok("tag: \"ring forge\" → value",    t ~= nil and t.value == 'ring forge')
+
+t = filter.parse('tag: rpg AND text: forge')  -- spaced in a boolean
+ok("spaced fields in AND → AND",     t ~= nil and t.type == 'AND')
+ok("spaced AND matches",             t ~= nil
+  and filter.eval(t, note('', {'rpg'}, 'the forge')) == true)
+ok("spaced AND rejects partial",     t ~= nil
+  and filter.eval(t, note('', {'rpg'}, 'the anvil')) == false)
+
+-- A known field with nothing after the colon is still an error (unchanged).
+t, err = filter.parse('tag:')
+ok("bare 'tag:' still errors",       t == nil and err ~= nil)
+t, err = filter.parse('tag:   ')
+ok("'tag:' + spaces still errors",   t == nil and err ~= nil)
+
+-- parse_prompt degrades the error case to any-pred, as ever (never rejected).
+t = filter.parse_prompt('tag: rpg')
+ok("parse_prompt 'tag: rpg' → tag",  t ~= nil and t.field == 'tag' and t.value == 'rpg')
+
+-- =============================================================================
 -- Summary
 -- =============================================================================
 local total = pass + fail
