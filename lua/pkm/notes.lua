@@ -1500,17 +1500,19 @@ function M.rename_note(new_name)
   require('pkm.citations').update_references_on_rename(old_stem, new_stem, display_title)
   vim.notify('[pkm] renamed to: ' .. new_stem .. '.md', vim.log.levels.INFO)
 
-  -- Non-obstructive follow-up, INTERACTIVE PATH ONLY. When the name was typed at
-  -- the prompt (bare `:PKMNote rename`, so new_name is nil), offer to change the
-  -- title too. When a name was passed as an argument (`:PKMNote rename foo`, or
-  -- any script / headless caller), the command stays deterministic and never
-  -- prompts — that is the command-surface contract ("arguments = script-callable"),
-  -- and a prompt there would block a headless run. The filename rename above has
-  -- already succeeded and is never undone here: <C-c>/<Esc> (cancelreturn hands
-  -- back the current title), an unchanged value, or an emptied value all KEEP the
-  -- current title; only a genuinely new one is written, through the buffer holding
-  -- the just-renamed file, so there is no later W12 :w prompt.
-  if new_name == nil then
+  -- Non-obstructive follow-up, INTERACTIVE SESSIONS ONLY. Offer to change the
+  -- title too whenever a human is present to answer — i.e. a UI is attached —
+  -- for BOTH the bare and the argument form (Item 14: renaming offers the title,
+  -- however the rename was invoked). In a headless / scripted run no UI is
+  -- attached, so the prompt is skipped and can never block; agents rename through
+  -- pkm.api's rename_note_at, which never prompts either. The gate is the UI, not
+  -- "was a name passed", so a human who types `:PKMNote rename foo` still gets the
+  -- title offer. The filename rename above has already succeeded and is never
+  -- undone here: <C-c>/<Esc> (cancelreturn hands back the current title), an
+  -- unchanged value, or an emptied value all KEEP the current title; only a
+  -- genuinely new one is written, through the buffer holding the just-renamed
+  -- file, so there is no later W12 :w prompt.
+  if #vim.api.nvim_list_uis() > 0 then
     local current_title = (fm and type(fm.title) == 'string') and fm.title or ''
     vim.fn.inputsave()
     local new_title = vim.fn.input({

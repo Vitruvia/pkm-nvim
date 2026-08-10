@@ -71,20 +71,21 @@ check("the user edit reached disk", (function()
   for _, l in ipairs(vim.fn.readfile(r2.path)) do if l == 'a genuine user edit' then return true end end
   return false end)())
 
-print("\n== the ARGUMENT form of :PKMNote rename is deterministic: no title prompt ==")
--- rename_note('name') is the argument form (`:PKMNote rename name`). It must NOT
--- open the interactive title prompt — that would block a headless/scripted run
--- (this very test would hang) and break the "arguments = script-callable"
--- contract. Only the bare form (rename_note(nil), name typed at the prompt) may
--- offer the title. This call simply RETURNING is half the proof; the title
--- staying untouched is the other half.
+print("\n== headless (no UI attached) never opens the title prompt — cannot hang ==")
+-- The title prompt is gated on a UI being attached (#nvim_list_uis() > 0): an
+-- interactive human — bare OR argument form — is offered the title; a headless
+-- or scripted run (no UI) is not, so it can never block. This test IS headless,
+-- so rename_note MUST NOT prompt here. The call simply RETURNING is half the
+-- proof (a prompt would hang this test); the title staying untouched is the
+-- other half. (The interactive prompt itself needs a real UI and is smoke-tested.)
+assert(#vim.api.nvim_list_uis() == 0, 'expected a headless (UI-less) session')
 local n3 = api.create('note', { title = 'Keep This Title', by = 'claude', body = 'x.' })
 vim.cmd('edit ' .. vim.fn.fnameescape(n3.path))
 notes.rename_note('Arg Renamed Note')
 local p3 = vim.fn.expand('%:p')
-check("arg-form rename renamed the file and kept the marker",
+check("rename renamed the file and kept the marker",
   p3:match('0%d+_note_ByClaude_Arg_Renamed_Note%.md$'), vim.fn.fnamemodify(p3, ':t'))
-check("arg-form rename left the title untouched (no prompt fired)",
+check("no title prompt fired headless (title untouched)",
   disk_title(p3) == 'Keep This Title', tostring(disk_title(p3)))
 
 print("")
