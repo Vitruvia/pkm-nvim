@@ -269,8 +269,11 @@ noted caveat (but do both when it is easy). The detailed specs live under
 § Near goals / § Distant goals / § Potential goals below; this is the priority
 view over them.*
 
-**Pending-features status (as of v1.63.1).** There are **no non-deferred,
-near-term pending features left** — the two that were open both shipped: the
+**Pending-features status (updated 2026-08-10).** A fresh 14-item capture was
+triaged into **§ Triaged backlog — 2026-08-10 batch** (precedence-ordered; the
+top item **P1** is the `:PKMNote rename` → title prompt, which also clears a
+pending Gestor request). Before that batch there were **no non-deferred,
+near-term pending features left** — the two that were then open both shipped: the
 **forced-save prompt** (Near 5.1) in **v1.61.2** (a citation into an open,
 unmodified buffer now writes the backlink *through* the buffer, so a later `:w`
 no longer hits the phantom W12 prompt), and the **`pkm.sidebar` extraction**
@@ -391,6 +394,120 @@ v1.35/1.36/1.40 + structure-aware wrap + CONVENTIONS § Lists). **Pending:**
   deferred — decision under Area 1); review queue (Distant 5); smart search +
   relevance ranking (Distant 9); note sync (Distant 10); note versions / undo
   (Distant 11); metadata-system review; image / ASCII support.
+
+---
+
+## Triaged backlog — 2026-08-10 batch
+
+*The fourteen items in `temp/adicionar-roadmap.md` (the author's raw capture),
+triaged by **area** and **precedence**. Precedence follows the standing rule —
+command / `pkm.api`-touching work first (§ Forward plan by area), then
+error-throwing bugs, then other behaviour/feature/doc work, then the large
+extraction. This section is the single owner of these items until each ships or
+graduates into a version. **P9–P11 are pkm-syntax work** (sibling repo, lockstep
+per the suite contract) — recorded here only so the plan is whole; the fix lands
+there, not in this tree. The bugs (P4, P9, P10) may jump the queue if the author
+prefers stability-first over the doctrine order.*
+
+**Precedence:** P1·Item14 → P2·Item6 → P3·Item1 → P4·Item12 → P5·Item9 →
+P6·Item10 → P7·Item13 → P8·Item11 → P9·Item3 → P10·Item5 → P11·Item4 →
+P12·Item7 → P13·Item8 → P14·Item2.
+
+### Area 1 · pkm.api & agents — 🔺
+
+- **P1 · Item 14 — `:PKMNote rename` then offer a title change (non-obstructive).**
+  After a successful filename rename, confirm the rename and show the current
+  title, then present an editable prompt ("now renaming the title") pre-filled
+  with the current title. `<C-c>` / `<Esc>` / `<CR>` unchanged / clearing the text
+  then `<CR>` all **keep** the current title, and never undo the filename rename
+  that already succeeded. Needs a post-hoc **`pkm.api` title setter** (writes to
+  disk for a note by ref) — which also clears **Gestor request #2** (no post-hoc
+  setter for `title`/`source_*`); build the pure setter once and drive both the
+  command flow and the API from it. Pairs with **Gestor #1** (rename drops the
+  `By<Author>` filename marker) — fix that in the same `rename` pass so the two
+  rename defects land together.
+
+### Area 3 · Navigation + panels/sidebar — 🔺 / bugs
+
+- **P2 · Item 6 — buffer panel: open in a split.** The buffer panel has no working
+  action to open a file in a split. Add split (and vertical-split) open actions,
+  mirroring the sidebar's `<C-v>` convention; wire at the panel keymap layer.
+  *Command/panel-action-creating → 🔺.*
+- **P4 · Item 12 — sidebar "Not enough room" (E36) after emptying the layout with
+  `:quit`.** Closing all active windows with the sidebar open floats the sidebar to
+  the top and eats active space (the command line appears to climb; the buffer bar
+  stays above it). Reopening a buffer with `<CR>` in the buffer bar then throws
+  `E5108 … E36: Not enough room` (`ui.lua:250` `open_buffer` ← `ui.lua:337` ←
+  `panel.lua:316`). Only reproduces via `:quit`; pressing `d` in the buffer bar
+  preserves active-window space and does not error. Fix the layout math so an
+  emptied editor area is re-grown before `open_buffer`, or refuse/repair the
+  degenerate layout. *Error-throwing bug.*
+- **P5 · Item 9 — netrw windows ignored as last-active.** A window holding netrw is
+  not counted as the last active window. If this is required to keep the sidebar /
+  buffer-window lock (so they are never treated as the active window), **keep it** —
+  verify whether it is, and only change if netrw can be tracked without weakening
+  the lock.
+- **P6 · Item 10 — pop-up search state on reopen.** Searching in the views/browse
+  pop-up and then entering a note makes the next pop-up open drop the previous
+  search. Preferred resolution: **keep** the reset (fresh pop-up), and add a keymap
+  to **return to the previous search panel** (restore the last prompt/results).
+- **P7 · Item 13 — reconsider auto-sidebar in `:PKMMode`.** The author had
+  re-enabled the automatic sidebar in mode; re-evaluate the space budget and
+  consider reactivating. **Gated by P8** (the line-number decision) and any other
+  space-consuming change.
+- **P8 · Item 11 — reconsider markdown line numbers.** Evaluate reinstating line
+  numbers; assess **right-aligned** placement to recover the information at lower
+  space cost. Weigh left-side cost (space, esp. with two windows + sidebar) vs.
+  benefit (motions like `gq<N>j`). **Wrap alone is not sufficient motivation** —
+  reinstate only if other benefits are important. Feeds P7's space budget.
+
+### Area 4 · Syntax highlighting — pkm-syntax (sibling repo, lockstep)
+
+- **P9 · Item 3 — `((meta-comment))` mis-terminates when the body ends in `)`.** A
+  meta-comment whose content ends with a parenthesised clause loses the final `)`
+  highlight: the balancer treats the penultimate `)` as the second closing
+  delimiter when it is actually the first (the antepenult closes an inner text
+  paren). Fix the close-delimiter scan to balance nested parens. **Also audit the
+  highlighter for other failures** while here (see P10). *pkm-syntax bug.*
+- **P10 · Item 5 — a `<…>`/angle-bracket line is misread as a header and cascades.**
+  From a line containing `<deslocamento_exemplo-1>` onward, that line highlights as
+  a header and **all** subsequent highlights vanish (`#### Deslocamento` is the last
+  correctly-highlighted header). Likely the same class as the XML/angle work (P11):
+  an unrecognised `<…>` construct desyncs the scanner. *pkm-syntax bug; investigate
+  with P11.*
+- **P11 · Item 4 — highlight XML/angle-bracket markers.** Add highlighting for XML
+  markers **iff** it does not degrade performance. Related to P10 (the same
+  angle-bracket handling). *pkm-syntax feature.*
+
+### Area 5 · Markdown editing
+
+- **P3 · Item 1 — `<CR>` continues the enumeration when splitting a list line.**
+  Pressing `<CR>` mid-line inside an ordered list drops the new line out of the list
+  (no auto number). Desired: the new line takes the next ordinal and the list
+  renumbers. Must also fire when `<CR>` is pressed right after the space before the
+  item body (that position must keep behaving identically). Approach: an insert-mode
+  `<CR>` mapping (or autocmd) that emits `<CR>` + the continued marker, then
+  renumbers via the existing sequence renumber — reuse `markdown.lua`, do not
+  reinvent. *Self-contained, high daily value; ▹ (low API impact).*
+- **P14 · Item 2 — extract `markdown.lua` as `pkm-markdown`; apply to non-pkm
+  files.** The already-decided (3/8/2026) scheduled extraction — taken when a real
+  need appears — now carries an explicit requirement: the extracted module should be
+  applicable to **non-pkm** markdown files too, **optional and on by default** (e.g.
+  header-sensitive wrap, code-block handling), mirroring how pkm-syntax became a
+  standalone consumer-agnostic plugin. Largest item; lands last in this batch.
+
+### Area 6 · Documentation (`doc/pkm.txt`)
+
+- **P12 · Item 7 — help index links resolve ambiguously.** In `:help pkm`, following
+  an index link resolves ambiguously by cursor position: *before* the link it opens
+  Vim's or Lazy's help for the topic word (e.g. `keymaps`, `installation`); *on* the
+  link tag (e.g. `pkm-keymaps`) it opens the correct `pkm.txt` location. Make the
+  index entries unambiguous `|tag|` references so any activation lands in `pkm.txt`.
+- **P13 · Item 8 — keymaps section omits panel keymaps; sidebar section un-indexed.**
+  The `pkm.txt` keymaps section does not list the panel keymaps (buffer, sidebar,
+  browse, views); the `pkm-sidebar` section (which holds the sidebar keymaps) is not
+  clearly reachable from the index. Add the panel keymaps to the keymaps section (or
+  cross-reference) and index the sidebar section properly.
 
 ---
 
@@ -835,7 +952,7 @@ proper areas above** — this block is an inbox, not a finished plan.
 
 **Bugs**
 
-1. **`rename` drops the `By<Author>` filename marker.** `notes.rename_note_at`
+1. ✅ **RESOLVED (v1.66.0).** **`rename` drops the `By<Author>` filename marker.** `notes.rename_note_at`
    rebuilds the stem as `NNNN_type_<sanitize(new_name)>`, replacing *everything*
    after the type prefix — so `0009_bib_ByClaude_Foo` renamed to `Bar` becomes
    `0009_bib_Bar`, losing `ByClaude`. This contradicts the documented contract at
@@ -846,10 +963,13 @@ proper areas above** — this block is an inbox, not a finished plan.
    way it preserves the number+type prefix. (Workaround in use: include the marker
    in `new_name`, e.g. `rename(ref, 'ByClaude Foo')` — ugly, easy to forget.)
 
-2. **No post-hoc setter for note metadata** (`title`, `source_author`,
-   `source_type`). They are **create-only** opts; correcting them after creation
-   currently forces uncite → delete → recreate (destructive to numbering + graph).
-   Add e.g. `set_title(ref, s)` / `set_source_meta(ref, { author?, type?, ... })`.
+2. ✅ **RESOLVED (v1.66.0):** `pkm.api.set_title(ref, s)` and
+   `pkm.api.set_source_meta(ref, { author?, type? })` shipped (title + source
+   halves). **No post-hoc setter for note metadata** (`title`, `source_author`,
+   `source_type`). They were **create-only** opts; correcting them after creation
+   forced uncite → delete → recreate (destructive to numbering + graph).
+   *(Still open: request #4's `edition`/`version` fields were out of the chosen
+   scope — a future increment.)*
 
 **Convention / standard requests (from the gestor's owner)**
 

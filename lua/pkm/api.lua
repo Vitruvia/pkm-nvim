@@ -288,6 +288,35 @@ function M.rename(ref, new_name)
   return { ok = true, path = new_path, filename = meta.filename, title = meta.title }
 end
 
+--- Set a note's frontmatter title on disk — the post-hoc, persisting twin of
+--- :PKMNote settitle (which is buffer-only). Keeps any open buffer in step and
+--- propagates the new title to every note that cites this one, so correcting a
+--- title no longer needs an uncite → delete → recreate cycle.
+---@param ref string  path or citation reference
+---@param title string  Taken verbatim (may be empty)
+---@return table  { ok, error? }
+function M.set_title(ref, title)
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+  local ok, err = require('pkm.notes').set_title_at(path, title)
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
+--- Set a bib note's source metadata (source_author / source_type) on disk.
+--- Only the keys present in `opts` are written. Like set_title, correcting these
+--- after creation no longer forces recreating the note.
+---@param ref string  path or citation reference
+---@param opts table  { author?=string, type?=string }
+---@return table  { ok, error? }
+function M.set_source_meta(ref, opts)
+  local path = to_path(ref)
+  if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+  local ok, err = require('pkm.notes').set_source_meta_at(path, opts or {})
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
 --- Change a consolidated note's type (note/agg/bib): renames the file to the new
 --- type prefix and propagates through citations. Headless twin of :PKMNote
 --- changetype.

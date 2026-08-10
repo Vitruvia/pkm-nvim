@@ -1400,6 +1400,16 @@ function M.rename_file(path, new_stem)
 
   if bufnr then
     vim.api.nvim_buf_set_name(bufnr, new_path)
+    -- nvim_buf_set_name leaves the buffer NAMING a file it has not "edited"
+    -- (Vim's BF_NOTEDITED): a later :w to that now-existing path raises E13
+    -- ("File exists, add ! to override"), even though the buffer content already
+    -- matches disk. Force one silent, autocmd-free write of the identical
+    -- on-disk bytes to clear that flag and stamp the buffer's on-disk timestamp,
+    -- so ordinary saves — and the post-rename title write-through in
+    -- edit_frontmatter — are clean instead of prompting for `!`.
+    vim.api.nvim_buf_call(bufnr, function()
+      pcall(vim.cmd, 'silent keepalt noautocmd write!')
+    end)
     vim.bo[bufnr].modified = false
   end
 
@@ -1447,14 +1457,22 @@ function M.rename_note(new_name)
       vim.notify('[pkm] unrecognized consolidated note filename', vim.log.levels.WARN)
       return
     end
+    -- An agent-authorship marker (By<Author>_) is identity, not description:
+    -- like the number/type prefix it is kept for you and never enters the
+    -- editable name, so a rename cannot silently drop it (which would make
+    -- agent_authored read the note as human-written and flip the delete guard).
+    -- Same pattern as M.agent_authored.
+    local marker, bare = name_part:match('^(By%u%a*)_(.+)$')
+    local editable = bare or name_part
     local input = new_name
     if input == nil then
       vim.fn.inputsave()
-      input = vim.fn.input('Rename note: ', (name_part:gsub('_', ' ')))
+      input = vim.fn.input('Rename note: ', (editable:gsub('_', ' ')))
       vim.fn.inputrestore()
     end
     if not input or input == '' then return end
     local safe_name = sanitize_title(input)
+    if marker then safe_name = marker .. '_' .. safe_name end
     new_stem = string.format('%04d_%s_%s', tonumber(number), note_type, safe_name)
   else
     local input = new_name
@@ -1481,6 +1499,34 @@ function M.rename_note(new_name)
 
   require('pkm.citations').update_references_on_rename(old_stem, new_stem, display_title)
   vim.notify('[pkm] renamed to: ' .. new_stem .. '.md', vim.log.levels.INFO)
+
+  -- Non-obstructive follow-up, INTERACTIVE PATH ONLY. When the name was typed at
+  -- the prompt (bare `:PKMNote rename`, so new_name is nil), offer to change the
+  -- title too. When a name was passed as an argument (`:PKMNote rename foo`, or
+  -- any script / headless caller), the command stays deterministic and never
+  -- prompts — that is the command-surface contract ("arguments = script-callable"),
+  -- and a prompt there would block a headless run. The filename rename above has
+  -- already succeeded and is never undone here: <C-c>/<Esc> (cancelreturn hands
+  -- back the current title), an unchanged value, or an emptied value all KEEP the
+  -- current title; only a genuinely new one is written, through the buffer holding
+  -- the just-renamed file, so there is no later W12 :w prompt.
+  if new_name == nil then
+    local current_title = (fm and type(fm.title) == 'string') and fm.title or ''
+    vim.fn.inputsave()
+    local new_title = vim.fn.input({
+      prompt       = 'Now renaming the title (empty or unchanged keeps it): ',
+      default      = current_title,
+      cancelreturn = current_title,
+    })
+    vim.fn.inputrestore()
+
+    if new_title and new_title ~= '' and new_title ~= current_title then
+      local ok_t, err_t = M.set_title_at(new_filepath, new_title)
+      vim.notify(ok_t and ('[pkm] title set to: ' .. new_title)
+                       or  ('[pkm] title unchanged: ' .. (err_t or 'error')),
+                 ok_t and vim.log.levels.INFO or vim.log.levels.WARN)
+    end
+  end
 end
 
 -- =============================================================================
@@ -1693,12 +1739,18 @@ function M.rename_note_at(path, new_name)
 
   local new_stem
   if folder_type == 'consolidated' then
-    local number, note_type = old_stem:match('^(%d+)_([a-z]+)_(.+)$')
+    local number, note_type, name_part = old_stem:match('^(%d+)_([a-z]+)_(.+)$')
     if not number then
       return nil, 'unrecognized consolidated note filename: ' .. old_stem
     end
     if not new_name or new_name == '' then return nil, 'new name is empty' end
-    new_stem = string.format('%04d_%s_%s', tonumber(number), note_type, sanitize_title(new_name))
+    -- Preserve the By<Author>_ authorship marker across the rename — it is
+    -- identity carried in the name (see M.agent_authored), so new_name is the
+    -- bare human name and the marker is re-attached for the caller.
+    local marker = name_part:match('^(By%u%a*)_')
+    local safe = sanitize_title(new_name)
+    if marker then safe = marker .. '_' .. safe end
+    new_stem = string.format('%04d_%s_%s', tonumber(number), note_type, safe)
   else
     if not new_name or new_name:match('^%s*$') then return nil, 'new name is empty' end
     new_stem = sanitize_title(new_name)
@@ -1716,6 +1768,119 @@ function M.rename_note_at(path, new_name)
   require('pkm.citations').update_references_on_rename(old_stem, new_stem, display_title)
 
   return new_filepath, nil, { filename = new_stem .. '.md', title = display_title }
+end
+
+--- Apply a mutation to a note's frontmatter and persist it, keeping any open
+--- buffer honest — the write-through pattern from citations.manage_backlink.
+--- An **unmodified** buffer is written THROUGH (re-stamping Neovim's stored
+--- on-disk timestamp, so a later user `:w` sees no phantom W12 external-change
+--- prompt); a **modified** buffer receives the change in-buffer and the user's
+--- next `:w` persists it (so unsaved edits are never discarded and the index is
+--- not invalidated early); a note open in **no** buffer is written to disk.
+---@param path   string  Absolute note path
+---@param mutate fun(fm: table): boolean  Return true when it changed something
+---@return boolean ok
+---@return string|nil err
+local function edit_frontmatter(path, mutate)
+  path = vim.fn.fnamemodify(path, ':p')
+  if vim.fn.filereadable(path) ~= 1 then
+    return false, 'no such file: ' .. path
+  end
+
+  local bufnr        = require('pkm.bufsync').buffer_for(path)
+  local buf_modified = bufnr and vim.bo[bufnr].modified or false
+
+  -- A modified buffer may differ from disk; read from it so we compose with the
+  -- user's edits rather than overwrite them. Otherwise disk is the truth.
+  local content = (bufnr and buf_modified)
+    and vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    or  vim.fn.readfile(path)
+
+  local fm, content_start = yaml.parse_frontmatter(content)
+  if not fm then return false, 'no frontmatter found' end
+
+  if not mutate(fm) then return true end   -- nothing to change: a no-op success
+
+  local index = require('pkm.index')
+  if bufnr then
+    local fm_lines    = yaml.generate_yaml(fm)
+    local new_content = { '---' }
+    for _, line in ipairs(fm_lines)    do new_content[#new_content + 1] = line end
+    new_content[#new_content + 1] = '---'
+    for i = content_start, #content    do new_content[#new_content + 1] = content[i] end
+
+    vim.api.nvim_buf_call(bufnr, function()
+      pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, new_content)
+      if not buf_modified then
+        -- Persist by writing THROUGH the buffer (see manage_backlink): a disk
+        -- writefile would leave this buffer's load-time timestamp stale and a
+        -- later :w would see a phantom external change (W12). 'noautocmd' keeps
+        -- BufWritePost from re-firing on a change flow that already handles it.
+        pcall(vim.cmd, 'silent keepjumps noautocmd write')
+      end
+    end)
+
+    if not buf_modified then index.invalidate(path) end
+    pcall(function() require('pkm.syntax').refresh_fold(bufnr) end)
+  else
+    yaml.save_frontmatter(fm, content_start, path)
+    index.invalidate(path)
+  end
+
+  return true
+end
+
+--- Set a note's frontmatter title on disk, by path — the persisting twin of the
+--- buffer-only `set_title`. Keeps an open buffer in step (write-through) and
+--- propagates the new title to every note that cites this one. Headless-safe
+--- (pkm.api.set_title), so an agent can correct a title without an uncite →
+--- delete → recreate cycle.
+---@param path      string  Absolute note path
+---@param new_title string  Taken verbatim (may be empty)
+---@return boolean ok
+---@return string|nil err
+function M.set_title_at(path, new_title)
+  local changed = false
+  local ok, err = edit_frontmatter(path, function(fm)
+    if fm.title == new_title then return false end
+    fm.title = new_title
+    changed  = true
+    return true
+  end)
+  if not ok then return false, err end
+
+  if changed then
+    local citations = require('pkm.citations')
+    local _, id = citations.get_note_type_and_id(path)
+    -- Propagate the KNOWN new value, not a re-read (which could be stale).
+    if id then citations.propagate_titles({ [id] = new_title }) end
+  end
+  return true
+end
+
+--- Set a note's source metadata (source_author / source_type) on disk, by path.
+--- The post-hoc setter for a bib note's provenance: create-time values were the
+--- only way to set these, so a correction meant recreating the note. Only the
+--- keys present in `opts` are written; source metadata is not part of the
+--- citation graph, so nothing is propagated.
+---@param path string  Absolute note path
+---@param opts table   { author?=string, type?=string }
+---@return boolean ok
+---@return string|nil err
+function M.set_source_meta_at(path, opts)
+  opts = opts or {}
+  return edit_frontmatter(path, function(fm)
+    local changed = false
+    if opts.author ~= nil and fm.source_author ~= opts.author then
+      fm.source_author = opts.author
+      changed = true
+    end
+    if opts.type ~= nil and fm.source_type ~= opts.type then
+      fm.source_type = opts.type
+      changed = true
+    end
+    return changed
+  end)
 end
 
 -- =============================================================================

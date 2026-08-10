@@ -74,6 +74,61 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.66.0] - 10/8/2026
+
+*Post-hoc metadata setters, and a rename that keeps its author marker. Renaming
+a note now offers to change the title too; an agent (or any later correction)
+can set a title or a bib note's source metadata without recreating the note; and
+renaming an agent-authored note no longer silently strips its `By<Author>_` mark.*
+
+### Added
+
+-   **`:PKMNote rename` then offers to change the title.** After the filename
+    rename succeeds, a non-obstructive prompt appears, pre-seeded with the current
+    title. `<C-c>`/`<Esc>` (via `cancelreturn`), an unchanged value, or an emptied
+    value all KEEP the current title — only a genuinely new value is written, and
+    it is written THROUGH the buffer holding the just-renamed file, so a later `:w`
+    never hits a phantom W12 prompt. The filename rename is never undone by the
+    title step. *(Roadmap Triaged-backlog P1 / Item 14.)*
+-   **`pkm.api.set_title(ref, title)` — post-hoc title setter.** The persisting
+    twin of the buffer-only `:PKMNote settitle`: writes the frontmatter title to
+    disk by ref, keeps any open buffer in step (write-through), and propagates the
+    new title to every note that cites this one. Correcting a title no longer needs
+    an uncite → delete → recreate cycle. *(Gestor de Recursos request #2, title half.)*
+-   **`pkm.api.set_source_meta(ref, {author?, type?})` — post-hoc bib provenance.**
+    Sets `source_author` / `source_type` on disk; only the keys given are written;
+    source metadata is not part of the citation graph, so nothing propagates.
+    *(Gestor request #2, source half.)*
+-   New cores in `notes.lua`: `edit_frontmatter` — the reusable frontmatter
+    write-through helper factored from the `manage_backlink` pattern (unmodified
+    buffer written through and re-stamped; modified buffer changed in-buffer for the
+    user's next `:w`; unopened note written to disk) — plus `set_title_at` and
+    `set_source_meta_at` behind it. Tests: `test_set_meta_api.lua` (24/24),
+    `test_rename_marker.lua` (15/15).
+
+### Fixed
+
+-   **Rename no longer drops the `By<Author>_` authorship marker.** `rename_note`
+    and its headless twin `rename_note_at` rebuilt a consolidated stem as
+    `NNNN_type_<name>`, replacing everything after the type prefix — so renaming
+    `0009_bib_ByClaude_Foo` to `Bar` produced `0009_bib_Bar` and silently lost
+    `ByClaude`, which made `agent_authored` read the note as human-written and
+    disabled the agent delete-guard. The marker is now identity carried in the
+    name, like the number/type prefix: `new_name` is the bare human name and the
+    marker is re-attached automatically (same detection as `agent_authored`), so
+    the caller need not — and must not — restate it. *(Gestor request #1.)*
+-   **A save after a rename no longer demands `:w!` (E13).** `rename_file` renames
+    the file underneath the buffer with `nvim_buf_set_name`, which leaves Vim's
+    `BF_NOTEDITED` flag set — so a later `:w` to the now-existing path raised
+    `E13: File exists (add ! to override)` even with no real conflict. The new
+    title write-through both triggered this and had its write silently swallowed
+    (the title never reached disk). `rename_file` now forces one silent,
+    autocmd-free write of the identical on-disk bytes to clear the flag and stamp
+    the buffer's timestamp, so ordinary saves — and the post-rename title write —
+    are clean. This also closes the **latent** pre-existing case: rename a note,
+    edit it, `:w` → previously E13, now clean. Found in the v1.66.0 smoke (§3);
+    locked by `test_rename_title_flow.lua`.
+
 ## [1.65.0] - 7/8/2026
 
 *In the search pickers, `tag:` now narrows as you type (contiguous substring),
