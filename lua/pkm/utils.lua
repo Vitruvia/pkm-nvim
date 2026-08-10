@@ -209,6 +209,38 @@ function M.editing_wins()
   return wins
 end
 
+--- Run a window-creating command, resilient to E36 "Not enough room".
+--- The PKM panels are `winfixheight` / `winfixwidth`, so once the user closes
+--- every editing window (e.g. `:quit` with the sidebar + buffer panel open) a
+--- split from a panel can find no room to take and Vim raises E36 — which is the
+--- crash the buffer bar's `<CR>` hit. On failure, drop the fixed sizes across the
+--- tabpage so the split can reclaim space, retry, then restore the flags on the
+--- windows that survive (the panels re-assert their own height on next refresh).
+---@param cmd string  a :split / :vsplit / :new / … command
+---@return boolean ok  whether a window was created
+function M.win_create_resilient(cmd)
+  if pcall(vim.cmd, cmd) then return true end
+
+  local saved = {}
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_is_valid(w) then
+      saved[w] = { vim.wo[w].winfixheight, vim.wo[w].winfixwidth }
+      vim.wo[w].winfixheight = false
+      vim.wo[w].winfixwidth  = false
+    end
+  end
+
+  local ok = pcall(vim.cmd, cmd)
+
+  for w, f in pairs(saved) do
+    if vim.api.nvim_win_is_valid(w) then
+      vim.wo[w].winfixheight = f[1]
+      vim.wo[w].winfixwidth  = f[2]
+    end
+  end
+  return ok
+end
+
 --- Move the cursor to a window a note may be opened in, creating one if the
 --- tabpage has none, and return it.
 ---
@@ -239,8 +271,8 @@ function M.focus_editing_win(where)
 
     -- None at all: make one, on the side that suits the panel we are in.
     local from_bufpanel = vim.bo[vim.api.nvim_win_get_buf(cur)].filetype == 'pkm-bufpanel'
-    vim.cmd(from_bufpanel and 'noautocmd aboveleft split'
-                          or 'noautocmd rightbelow vsplit')
+    M.win_create_resilient(from_bufpanel and 'noautocmd aboveleft split'
+                                          or 'noautocmd rightbelow vsplit')
     return vim.api.nvim_get_current_win()
   end
 
@@ -259,8 +291,8 @@ function M.focus_editing_win(where)
   vim.api.nvim_set_current_win(win)
 
   if where == 'left' or where == 'right' then
-    vim.cmd(where == 'left' and 'noautocmd leftabove vsplit'
-                            or 'noautocmd rightbelow vsplit')
+    M.win_create_resilient(where == 'left' and 'noautocmd leftabove vsplit'
+                                            or 'noautocmd rightbelow vsplit')
     win = vim.api.nvim_get_current_win()
   end
 

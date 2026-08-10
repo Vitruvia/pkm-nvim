@@ -429,19 +429,20 @@ P12·Item7 → P13·Item8 → P14·Item2.
 
 ### Area 3 · Navigation + panels/sidebar — 🔺 / bugs
 
-- **P2 · Item 6 — buffer panel: open in a split.** The buffer panel has no working
-  action to open a file in a split. Add split (and vertical-split) open actions,
-  mirroring the sidebar's `<C-v>` convention; wire at the panel keymap layer.
-  *Command/panel-action-creating → 🔺.*
-- **P4 · Item 12 — sidebar "Not enough room" (E36) after emptying the layout with
-  `:quit`.** Closing all active windows with the sidebar open floats the sidebar to
-  the top and eats active space (the command line appears to climb; the buffer bar
-  stays above it). Reopening a buffer with `<CR>` in the buffer bar then throws
-  `E5108 … E36: Not enough room` (`ui.lua:250` `open_buffer` ← `ui.lua:337` ←
-  `panel.lua:316`). Only reproduces via `:quit`; pressing `d` in the buffer bar
-  preserves active-window space and does not error. Fix the layout math so an
-  emptied editor area is re-grown before `open_buffer`, or refuse/repair the
-  degenerate layout. *Error-throwing bug.*
+- ✅ **P2 · Item 6 — buffer panel: open in a split — DONE (v1.67.0).** `<C-v>`
+  (vertical) / `<C-s>` (horizontal) open the note under the cursor in a split of
+  the editing area, via `open_buffer_split` → `focus_editing_win` (never splits a
+  panel). Mirrors the view sidebar's `<C-v>`. **Needs author smoke (keys).**
+- ✅ **P4 · Item 12 — sidebar "Not enough room" (E36) — CRASH FIXED (v1.67.0).**
+  Closing every editing window with the sidebar + buffer panel open left only
+  `winfixheight`/`winfixwidth` panels; the buffer bar's `<CR>` then split from a
+  panel with no room to give → `E36: Not enough room` (`ui.lua` `open_buffer`).
+  New `utils.win_create_resilient` retries after dropping the fixed sizes across
+  the tab, then restores them; routed through `open_buffer` + `focus_editing_win`.
+  The E36 is terminal-dimension dependent (not headless-reproducible) →
+  `test_win_resilient` locks the helper; **the E36 itself needs author smoke.**
+  *Still open (cosmetic): the sidebar/command-line reclaiming space when the last
+  editing window closes via `:quit` — the crash is fixed, that layout polish is not.*
 - **P5 · Item 9 — netrw windows ignored as last-active.** A window holding netrw is
   not counted as the last active window. If this is required to keep the sidebar /
   buffer-window lock (so they are never treated as the active window), **keep it** —

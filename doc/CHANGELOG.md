@@ -74,6 +74,34 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.67.0] - 10/8/2026
+
+*The buffer panel can open a note in a split, and reopening a note after closing
+every editing window no longer crashes with E36. (Backlog P2/Item 6 + P4/Item 12.)*
+
+### Added
+
+-   **Buffer panel: open in a split (Item 6).** The bottom buffer panel had no way
+    to open a note in a split. `<C-v>` opens the note under the cursor in a
+    **vertical** split of the editing area, `<C-s>` in a **horizontal** one — each
+    lands in a real editing window (never splitting a panel), mirroring the view
+    sidebar's `<C-v>`.
+
+### Fixed
+
+-   **Reopening a note after `:quit`-ing every editing window no longer crashes
+    with E36 (Item 12).** With the sidebar and buffer panel open, closing all
+    editing windows left only `winfixheight`/`winfixwidth` panels; the buffer bar's
+    `<CR>` then split from a panel that could give no room → `E36: Not enough room`.
+    New `utils.win_create_resilient` retries the window creation after dropping the
+    fixed sizes across the tabpage, then restores them, so the note opens instead of
+    crashing. Routed through every panel-relative window creation (`open_buffer` and
+    `focus_editing_win`). The E36 is terminal-dimension dependent (not
+    headless-reproducible); `test_win_resilient` locks the helper's contract.
+    *(The related cosmetic symptom — the sidebar/command-line reclaiming space when
+    the last editing window is closed via `:quit` — is not addressed here; only the
+    crash on reopening is.)*
+
 ## [1.66.0] - 10/8/2026
 
 *Post-hoc metadata setters, and a rename that keeps its author marker. Renaming
