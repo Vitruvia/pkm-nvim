@@ -82,10 +82,10 @@ every editing window no longer crashes with E36. (Backlog P2/Item 6 + P4/Item 12
 ### Added
 
 -   **Buffer panel: open in a split (Item 6).** The bottom buffer panel had no way
-    to open a note in a split. `<C-v>` opens the note under the cursor in a
-    **vertical** split of the editing area, `<C-s>` in a **horizontal** one — each
-    lands in a real editing window (never splitting a panel), mirroring the view
-    sidebar's `<C-v>`.
+    to open a note in a split. `<C-v>` opens the note under the cursor in a vertical
+    split to the **right**, `<C-x>` to the **left** — each lands in a real editing
+    window (never splitting a panel), matching the view sidebar's `<C-v>` / `<C-x>`.
+    Vertical only; our panels don't use horizontal splits.
 
 ### Fixed
 
@@ -98,9 +98,15 @@ every editing window no longer crashes with E36. (Backlog P2/Item 6 + P4/Item 12
     crashing. Routed through every panel-relative window creation (`open_buffer` and
     `focus_editing_win`). The E36 is terminal-dimension dependent (not
     headless-reproducible); `test_win_resilient` locks the helper's contract.
-    *(The related cosmetic symptom — the sidebar/command-line reclaiming space when
-    the last editing window is closed via `:quit` — is not addressed here; only the
-    crash on reopening is.)*
+-   **Reopening a note no longer leaves it cramped in a sliver of space (Item 12).**
+    After every editing window is `:quit`-ed, the buffer panel grows to fill its
+    column (`winfixheight` is only best-effort when a panel is alone); opening a
+    note then split *that* inflated panel, leaving the note a few rows tall while
+    the panel hogged the rest. The buffer-panel open actions now refresh the panel
+    immediately, so it reclaims its compact height and the note gets the room. *(A
+    residual report — the command line appearing pushed up with dead space below on
+    `:quit` — could not be reproduced headless; `cmdheight`/`lines` stay put. Likely
+    tied to the terminal; pending one diagnostic from the author's real session.)*
 
 ## [1.66.0] - 10/8/2026
 

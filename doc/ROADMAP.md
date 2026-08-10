@@ -429,20 +429,21 @@ P12·Item7 → P13·Item8 → P14·Item2.
 
 ### Area 3 · Navigation + panels/sidebar — 🔺 / bugs
 
-- ✅ **P2 · Item 6 — buffer panel: open in a split — DONE (v1.67.0).** `<C-v>`
-  (vertical) / `<C-s>` (horizontal) open the note under the cursor in a split of
-  the editing area, via `open_buffer_split` → `focus_editing_win` (never splits a
-  panel). Mirrors the view sidebar's `<C-v>`. **Needs author smoke (keys).**
-- ✅ **P4 · Item 12 — sidebar "Not enough room" (E36) — CRASH FIXED (v1.67.0).**
-  Closing every editing window with the sidebar + buffer panel open left only
-  `winfixheight`/`winfixwidth` panels; the buffer bar's `<CR>` then split from a
-  panel with no room to give → `E36: Not enough room` (`ui.lua` `open_buffer`).
-  New `utils.win_create_resilient` retries after dropping the fixed sizes across
-  the tab, then restores them; routed through `open_buffer` + `focus_editing_win`.
-  The E36 is terminal-dimension dependent (not headless-reproducible) →
-  `test_win_resilient` locks the helper; **the E36 itself needs author smoke.**
-  *Still open (cosmetic): the sidebar/command-line reclaiming space when the last
-  editing window closes via `:quit` — the crash is fixed, that layout polish is not.*
+- ✅ **P2 · Item 6 — buffer panel: open in a split — DONE (v1.67.0; keys reworked
+  after smoke).** `<C-v>` = split **right**, `<C-x>` = split **left** (vertical
+  only, matching the sidebar) open the note under the cursor via `open_buffer_split`
+  → `focus_editing_win` (never splits a panel). *(First cut used `<C-v>`/`<C-s>`
+  vertical+horizontal — wrong: the system uses only vertical left/right; corrected.)*
+- ✅ **P4 · Item 12 — E36 crash + cramped reopen FIXED (v1.67.0).** (1) Closing
+  every editing window left only `winfix*` panels; the buffer bar's `<CR>` split
+  from a panel with no room → `E36: Not enough room`. `utils.win_create_resilient`
+  retries after dropping the fixed sizes, then restores; routed through
+  `open_buffer` + `focus_editing_win`; `test_win_resilient` locks it (E36 itself is
+  terminal-dependent → smoke). (2) After `:q` the buffer panel inflates to fill its
+  column, so a reopened note landed cramped; the panel open actions now refresh it
+  immediately to reclaim compact height. *Still open: a "command line pushed up /
+  dead space on `:quit`" report that did not reproduce headless (`cmdheight`/`lines`
+  unchanged) — awaiting a diagnostic from the author's terminal.*
 - **P5 · Item 9 — netrw windows ignored as last-active.** A window holding netrw is
   not counted as the last active window. If this is required to keep the sidebar /
   buffer-window lock (so they are never treated as the active window), **keep it** —

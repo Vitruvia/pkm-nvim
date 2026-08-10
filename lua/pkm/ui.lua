@@ -251,21 +251,28 @@ local function open_buffer(bufnr, panel_win)
     vim.bo.bufhidden = 'wipe'
     vim.api.nvim_set_current_buf(bufnr)
   end
+  -- While the editing area was gone (every window `:quit`-ed), the panel grew to
+  -- fill its column; opening a buffer then splits that inflated panel, cramping
+  -- the new window. Refresh so the panel reclaims its compact height at once —
+  -- its own BufEnter refresh does this too, but on a delay that leaves a visible
+  -- (or, if the refresh is suppressed, a lasting) cramp.
+  vim.schedule(M.refresh_bufpanel)
 end
 
---- Open `bufnr` from the buffer panel in a SPLIT of the editing area (Item 6):
---- land in a real editing window (making one, E36-resiliently, if the tab has
---- none) and split it — vertical (side-by-side) or horizontal (stacked) — before
---- showing the buffer. The panels are never split into; `focus_editing_win`
---- excludes them.
+--- Open `bufnr` from the buffer panel in a VERTICAL split of the editing area,
+--- to the left or right — the only split our panels use, mirroring the view
+--- sidebar's `<C-v>` = right / `<C-x>` = left (Item 6). Lands in a real editing
+--- window first (making one, E36-resiliently, if the tab has none); the panels
+--- are never split into (`focus_editing_win` excludes them).
 ---@param bufnr integer
----@param orient 'v'|'h'
-local function open_buffer_split(bufnr, orient)
+---@param side 'left'|'right'
+local function open_buffer_split(bufnr, side)
   if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then return end
   utils.focus_editing_win()
-  utils.win_create_resilient(orient == 'v' and 'noautocmd leftabove vsplit'
-                                            or  'noautocmd aboveleft split')
+  utils.win_create_resilient(side == 'left' and 'noautocmd leftabove vsplit'
+                                             or  'noautocmd rightbelow vsplit')
   vim.api.nvim_set_current_buf(bufnr)
+  vim.schedule(M.refresh_bufpanel)
 end
 
 --- Show `bufnr` in the Nth editing window (1 = leftmost, sorted left→right) —
@@ -289,6 +296,7 @@ local function open_buffer_in_slot(bufnr, panel_win, n)
   if not slot then return false, #sorted end
   vim.api.nvim_set_current_win(sorted[slot].win)
   vim.api.nvim_set_current_buf(bufnr)
+  vim.schedule(M.refresh_bufpanel)
   return true
 end
 
@@ -352,16 +360,17 @@ local _bufpanel = panel.create({
       open_buffer(bufnr, state.win)
     end,
 
-    -- <C-v>/<C-s>: open the buffer under the cursor in a vertical / horizontal
-    -- split of the editing area (Item 6 — the panel had no split-open). <C-v>
-    -- mirrors the view sidebar's "open in a vertical split".
+    -- <C-v>/<C-x>: open the buffer under the cursor in a vertical split to the
+    -- right / left of the editing area (Item 6 — the panel had no split-open),
+    -- matching the view sidebar's <C-v> = right / <C-x> = left. Vertical only;
+    -- our panels do not use horizontal splits.
     ['<C-v>'] = function(state)
       local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
-      open_buffer_split(bufnr, 'v')
+      open_buffer_split(bufnr, 'right')
     end,
-    ['<C-s>'] = function(state)
+    ['<C-x>'] = function(state)
       local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
-      open_buffer_split(bufnr, 'h')
+      open_buffer_split(bufnr, 'left')
     end,
 
     -- /: fuzzy pop-up over the open buffers (for when there are too many to scan).
