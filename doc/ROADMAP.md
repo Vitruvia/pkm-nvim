@@ -439,11 +439,13 @@ P12·Item7 → P13·Item8 → P14·Item2.
   from a panel with no room → `E36: Not enough room`. `utils.win_create_resilient`
   retries after dropping the fixed sizes, then restores; routed through
   `open_buffer` + `focus_editing_win`; `test_win_resilient` locks it (E36 itself is
-  terminal-dependent → smoke). (2) After `:q` the buffer panel inflates to fill its
-  column, so a reopened note landed cramped; the panel open actions now refresh it
-  immediately to reclaim compact height. *Still open: a "command line pushed up /
-  dead space on `:quit`" report that did not reproduce headless (`cmdheight`/`lines`
-  unchanged) — awaiting a diagnostic from the author's terminal.*
+  terminal-dependent → smoke). (2) The **"command line pushed up / dead space"** was
+  `cmdheight` ballooning: after `:q` the panels sit side-by-side full-height, and
+  the panel's `resize` shrank that row with nowhere to put the freed rows, so Neovim
+  inflated `cmdheight` (repro: 1→38 on 42 rows). The resize now **skips while no
+  editing window exists**; `test_bufpanel_cmdheight` locks it. (3) A reopened note
+  briefly landed cramped (panel resize on a delay) → the open actions refresh
+  immediately. The author's diagnostic (`lines=42 cmdheight=38`) pinned (2).
 - **P5 · Item 9 — netrw windows ignored as last-active.** A window holding netrw is
   not counted as the last active window. If this is required to keep the sidebar /
   buffer-window lock (so they are never treated as the active window), **keep it** —

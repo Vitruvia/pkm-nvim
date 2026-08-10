@@ -98,15 +98,21 @@ every editing window no longer crashes with E36. (Backlog P2/Item 6 + P4/Item 12
     crashing. Routed through every panel-relative window creation (`open_buffer` and
     `focus_editing_win`). The E36 is terminal-dimension dependent (not
     headless-reproducible); `test_win_resilient` locks the helper's contract.
+-   **The command line no longer balloons (`cmdheight` → dead space) after `:quit`
+    (Item 12).** With every editing window closed, the buffer panel and sidebar sit
+    side-by-side as one full-height row. The panel's `resize` then shrank that row
+    to a few lines — but with no editing window to absorb the freed rows, Neovim
+    inflated `cmdheight` to fill them (measured: `cmdheight 1 → 38` on a 42-row
+    screen, both panels crushed to 4 lines, a huge dead command-line area — the
+    author's "command line pushed up" report). The resize now **skips while no
+    editing window exists**, so the panel simply fills its column and `cmdheight`
+    stays put; reopening a note creates the window and the panel shrinks normally.
+    `test_bufpanel_cmdheight` locks it.
 -   **Reopening a note no longer leaves it cramped in a sliver of space (Item 12).**
-    After every editing window is `:quit`-ed, the buffer panel grows to fill its
-    column (`winfixheight` is only best-effort when a panel is alone); opening a
-    note then split *that* inflated panel, leaving the note a few rows tall while
-    the panel hogged the rest. The buffer-panel open actions now refresh the panel
-    immediately, so it reclaims its compact height and the note gets the room. *(A
-    residual report — the command line appearing pushed up with dead space below on
-    `:quit` — could not be reproduced headless; `cmdheight`/`lines` stay put. Likely
-    tied to the terminal; pending one diagnostic from the author's real session.)*
+    Related: opening a note splits the (now full-height) panel, and its own resize
+    ran on a delay — so the note briefly landed a few rows tall. The buffer-panel
+    open actions now refresh the panel immediately, so it reclaims its compact
+    height and the note gets the room (measured: note `h=36`, panel `h=3`).
 
 ## [1.66.0] - 10/8/2026
 

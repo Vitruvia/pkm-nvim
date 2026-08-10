@@ -338,7 +338,15 @@ local _bufpanel = panel.create({
   focus_on_open  = false,  -- glanceable, not modal — matches pre-port behaviour
   build_lines    = bufpanel_build_lines,
   resize = function(state, lines)
-    if state.win and vim.api.nvim_win_is_valid(state.win) then
+    -- Only shrink the panel while there is an editing window to hand the freed
+    -- rows to. With every editing window `:quit`-ed the panel sits side-by-side
+    -- with the sidebar as a full-height row; shrinking that row then has nowhere
+    -- to put the ~40 freed rows, so Neovim balloons `cmdheight` (the panels get
+    -- crushed to a few lines with a huge dead command-line area — Item 12). Left
+    -- unshrunk, the panel simply fills its column until a note reopens, at which
+    -- point the reopen's refresh shrinks it normally.
+    if state.win and vim.api.nvim_win_is_valid(state.win)
+       and #utils.editing_wins() > 0 then
       vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 8))
     end
   end,
