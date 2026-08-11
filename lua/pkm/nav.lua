@@ -183,12 +183,17 @@ M.sidebar_provider = {
     ['/']    = function() M.search() end,
     ['r']    = function(_, helpers) helpers.refresh() end,
     ['?']    = function()
+      -- Nav-mode keys = this provider's PLUS the sidebar's COMMON keys, which are
+      -- owned by sidebar.lua `sidebar_on_open` (<C-n> cycle content, q / <Esc>
+      -- close) and survive a provider switch. List BOTH layers, or the help lies
+      -- about what is actually bound. Keep in sync with sidebar_on_open.
       require('pkm.views').show_keymap_help(' PKM Nav Keymaps ', {
-        '  <CR>     jump to the heading under the cursor',
-        '  /        fuzzy-search the headings',
-        '  r        refresh the heading list',
-        '  q        close the sidebar',
-        '  ?        this help',
+        '  <CR>       jump to the heading under the cursor',
+        '  /          fuzzy-search the headings',
+        '  r          refresh the heading list',
+        '  <C-n>      cycle content (views ↔ nav)',
+        '  q / <Esc>  close the sidebar',
+        '  ?          this help',
       })
     end,
   },
