@@ -468,21 +468,34 @@ P12·Item7 → P13·Item8 → P14·Item2.
 
 ### Area 4 · Syntax highlighting — pkm-syntax (sibling repo, lockstep)
 
-- **P9 · Item 3 — `((meta-comment))` mis-terminates when the body ends in `)`.** A
-  meta-comment whose content ends with a parenthesised clause loses the final `)`
-  highlight: the balancer treats the penultimate `)` as the second closing
-  delimiter when it is actually the first (the antepenult closes an inner text
-  paren). Fix the close-delimiter scan to balance nested parens. **Also audit the
-  highlighter for other failures** while here (see P10). *pkm-syntax bug.*
-- **P10 · Item 5 — a `<…>`/angle-bracket line is misread as a header and cascades.**
-  From a line containing `<deslocamento_exemplo-1>` onward, that line highlights as
-  a header and **all** subsequent highlights vanish (`#### Deslocamento` is the last
-  correctly-highlighted header). Likely the same class as the XML/angle work (P11):
-  an unrecognised `<…>` construct desyncs the scanner. *pkm-syntax bug; investigate
-  with P11.*
-- **P11 · Item 4 — highlight XML/angle-bracket markers.** Add highlighting for XML
-  markers **iff** it does not degrade performance. Related to P10 (the same
-  angle-bracket handling). *pkm-syntax feature.*
+- ✅ **P9 · Item 3 — `((meta-comment))` mis-terminates when the body ends in `)` —
+  DONE (pkm-syntax, needs author push).** `find_meta_comments` rewritten from a lazy
+  `%(%(.-%)%)` (which stopped at the first `))`, dropping the final `)` of a trailing
+  parenthetical) to a **paren-depth balancer**: from the opening `((`, each `(`
+  deepens and each `)` closes, and the comment ends at the `)` that returns depth to
+  0; a lone balancing `)` (unbalanced inner parens) is rejected. Bounded to
+  `MAX_META_COMMENT_LINES`. 13/13 in `test_v159_p3.lua` (+5 new cases). *Author must
+  push pkm-syntax for `:Lazy sync` to pick it up.*
+- **P10 · Item 5 — a `<…>`/angle-bracket line is misread as a header and cascades —
+  INVESTIGATED; grammar limitation, documented.** Root cause (headless tree probe):
+  a bare valid HTML/XML tag line starts a CommonMark **HTML block** in the *bundled*
+  markdown grammar, which folds every following line into it until a blank line
+  (type 6/7) or EOF / close tag (type 1: `<pre>`/`<script>`/`<style>`/`<textarea>`) —
+  swallowing the headings below. pkm-syntax **cannot** change block segmentation. The
+  literal report string `<deslocamento_exemplo-1>` (underscore) does **not** reproduce
+  — an `_` is not a valid tag name, so it stays a paragraph; the hyphen form
+  (`<deslocamento-exemplo-1>`) does. Documented in the module's *Known behaviour*
+  (mechanism + workarounds: blank line after, backticks, or an underscore in the
+  name); the tag itself is now coloured by P11. *No code fix possible in a highlighter
+  without re-implementing block highlighting inside html_blocks — surfaced to author.*
+- ✅ **P11 · Item 4 — highlight XML/angle-bracket markers — DONE (pkm-syntax, needs
+  author push).** New `PKMXmlTag` matchadd (`xml_tag_pattern`, linked to `Identifier`):
+  colours `<tag>`, `</tag>`, `<tag/>`, `<tag attr="x">`, and `<placeholder_name>`
+  (name may carry `_`/`-`); leading `[A-Za-z]` keeps it off prose (`a < b`, `<3`).
+  matchadd is independent of tree-sitter, so it paints the marker even when the line
+  was folded into an html_block (P10) — a marker reads as a marker, not a broken
+  header. Perf-safe (per-window regex, like the existing legal-marker patterns).
+  11/11 in `test_xml_marker.lua`. *Author must push pkm-syntax.*
 
 ### Area 5 · Markdown editing
 

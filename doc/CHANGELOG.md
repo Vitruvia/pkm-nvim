@@ -74,6 +74,52 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.70.0] - 11/8/2026
+
+*Syntax batch, delivered through the **pkm-syntax** sibling dependency: the
+`((meta-comment))` paren-balance fix (Item 3) and XML/angle-bracket marker
+highlighting (Item 4); the `<…>`-cascade (Item 5) root-caused as a grammar limit
+and documented. The code lives in `pkm-syntax/lua/pkm-syntax/init.lua`; **the
+author must push the pkm-syntax repo** for `:Lazy sync` to pick it up. pkm-nvim's
+own `lua/` is unchanged — this version carries the suite coverage + docs.*
+
+### Fixed (pkm-syntax)
+
+-   **`((meta-comment))` keeps its final `)` when the body ends in a parenthetical
+    (Item 3).** `find_meta_comments` scanned for the close with a lazy
+    `%(%(.-%)%)`, so `((… (probably a level-2 heading)))` stopped at the FIRST
+    `))` — the inner aside's `)` plus one meta `)` — dropping the last `)`. Rewrote
+    it as a paren-depth balancer: from the opening `((`, each `(` deepens and each
+    `)` closes, and the comment ends at the `)` that returns depth to 0; a lone
+    balancing `)` (unbalanced inner parens) is rejected. Bounded to
+    `MAX_META_COMMENT_LINES`. Covered by `test_v159_p3.lua` (13/13, +5 cases).
+
+### Added (pkm-syntax)
+
+-   **XML/angle-bracket marker highlighting — `PKMXmlTag` (Item 4).** A matchadd
+    pattern (`xml_tag_pattern`, linked to `Identifier`) colours `<tag>`, `</tag>`,
+    `<tag/>`, `<tag attr="x">`, and bare placeholder markers `<deslocamento_exemplo-1>`
+    (the name may carry `_`/`-`). A leading `[A-Za-z]` requirement keeps it off prose
+    (`a < b`, `<3`). Being matchadd, it fires by regex independently of tree-sitter —
+    so it colours the marker even on a line the grammar folded into an html_block
+    (see Item 5). Perf-safe (per-window, like the legal-marker patterns). Covered by
+    `test_xml_marker.lua` (11/11).
+
+### Notes
+
+-   **Item 5 (`<…>` line reads like a header; highlights vanish below) — grammar
+    limitation, documented, no code fix.** A headless tree probe showed a bare valid
+    HTML/XML tag line starts a CommonMark **HTML block** in Neovim's *bundled*
+    markdown grammar, which folds every following line into it until a blank line
+    (type 6/7) or EOF / close tag (type 1: `<pre>`/`<script>`/`<style>`/`<textarea>`)
+    — swallowing the headings below. pkm-syntax cannot change block segmentation. The
+    literal report string `<deslocamento_exemplo-1>` (underscore) does **not**
+    reproduce — `_` is not a valid HTML tag name, so it stays a paragraph; the hyphen
+    form does. Documented in the module's *Known behaviour* with the mechanism and
+    three workarounds (blank line after the marker, backticks `` `<tag>` ``, or an
+    underscore in the name). The new `PKMXmlTag` highlight at least makes such a
+    marker read as an intentional marker rather than a broken header.
+
 ## [1.69.0] - 11/8/2026
 
 *Reopen the previous pop-up search with `<leader>fP`. (Backlog P6 / Item 10;

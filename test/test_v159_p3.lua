@@ -84,5 +84,42 @@ do
   check("empty buffer", #got == 0)
 end
 
+-- Item 3: a comment whose text ENDS in a parenthetical must keep its final ')'.
+-- The old lazy `.-)` stopped at the first "))", losing the last ')'.
+do
+  local got = syntax._find_meta_comments({ "((a note (with an aside)))" })
+  check("trailing parenthetical keeps final ')'",
+    #got == 1 and pos_eq(got[1], 0, 0, 0, 26))
+end
+
+do
+  -- The report's own case (single line): three closing parens, all inside.
+  local line = "((the map lives in each study guide (probably as a level-2 heading)))"
+  local got = syntax._find_meta_comments({ line })
+  check("reported case: three trailing parens all covered",
+    #got == 1 and pos_eq(got[1], 0, 0, 0, #line))
+end
+
+do
+  local got = syntax._find_meta_comments({ "((mid (nested) tail))" })
+  check("nested paren mid-comment", #got == 1 and pos_eq(got[1], 0, 0, 0, 21))
+end
+
+do
+  -- Reported case spanning lines: the closing "))" rides a trailing "(…))".
+  local got = syntax._find_meta_comments({
+    "((the map lives in the study guide of each subject",
+    "(probably as a level-2 heading))).",
+  })
+  check("multi-line comment with trailing parenthetical",
+    #got == 1 and pos_eq(got[1], 0, 0, 1, 33))
+end
+
+do
+  -- Unbalanced inner parens do NOT form a meta-comment (ends on a lone ')').
+  local got = syntax._find_meta_comments({ "((a)b) plain" })
+  check("unbalanced inner parens rejected", #got == 0)
+end
+
 print(string.format("\n%s", failures == 0 and "ALL PASS" or (failures .. " FAILURE(S)")))
 if failures > 0 then vim.cmd("cquit 1") end
