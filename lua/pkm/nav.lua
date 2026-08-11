@@ -176,12 +176,21 @@ end
 M.sidebar_provider = {
   name        = 'nav',
   label       = 'Nav',
-  statusline  = '  PKM Nav  · CR jump  · / search  · r refresh  · q close',
+  statusline  = '  PKM Nav  · CR jump  · / search  · r refresh  · ? help  · q close',
   build_lines = build_lines,
   keymaps     = {
     ['<CR>'] = on_select,
     ['/']    = function() M.search() end,
     ['r']    = function(_, helpers) helpers.refresh() end,
+    ['?']    = function()
+      require('pkm.views').show_keymap_help(' PKM Nav Keymaps ', {
+        '  <CR>     jump to the heading under the cursor',
+        '  /        fuzzy-search the headings',
+        '  r        refresh the heading list',
+        '  q        close the sidebar',
+        '  ?        this help',
+      })
+    end,
   },
   --- Seed state + place the cursor on the first heading when nav becomes active.
   init      = function() return { query = '' } end,

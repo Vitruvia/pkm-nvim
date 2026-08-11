@@ -330,6 +330,23 @@ local function bufpanel_search(panel_win)
   backend.pick_list('PKM Buffers', items, function(bufnr) open_buffer(bufnr, panel_win) end)
 end
 
+--- Whatever the panel's row-map holds for the cursor's line (a buffer number for
+--- the buffer panel, a tag for the tag panel), read from the panel's window. The
+--- cached window handle in `state.win` can go stale when layout churn replaces
+--- the panel's window without its id being pruned (`get_tab()`, unlike
+--- `get_state()`, does not validate it) — which crashed the split keys with
+--- "Invalid window id". Fall back to the current window, which IS the panel when
+--- this buffer-local mapping fires, so the cursor read is always valid.
+---@param state table
+---@return any|nil
+local function panel_row_target(state)
+  local win = state.win
+  if not (win and vim.api.nvim_win_is_valid(win)) then
+    win = vim.api.nvim_get_current_win()
+  end
+  return state.map and state.map[vim.api.nvim_win_get_cursor(win)[1]]
+end
+
 local _bufpanel = panel.create({
   name           = 'bufpanel',
   split_cmd      = 'noautocmd botright split',
@@ -352,7 +369,7 @@ local _bufpanel = panel.create({
   end,
   keymaps = {
     ['<CR>'] = function(state)
-      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      local bufnr = panel_row_target(state)
       if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
       -- [count]<CR>: open in the Nth editing window (1 = leftmost), like the view
       -- sidebar; a bare <CR> uses the alternate / first non-panel window.
@@ -373,11 +390,11 @@ local _bufpanel = panel.create({
     -- matching the view sidebar's <C-v> = right / <C-x> = left. Vertical only;
     -- our panels do not use horizontal splits.
     ['<C-v>'] = function(state)
-      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      local bufnr = panel_row_target(state)
       open_buffer_split(bufnr, 'right')
     end,
     ['<C-x>'] = function(state)
-      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      local bufnr = panel_row_target(state)
       open_buffer_split(bufnr, 'left')
     end,
 
@@ -387,14 +404,14 @@ local _bufpanel = panel.create({
     -- <C-g>: echo the full path of the buffer under the cursor — the number the
     -- row labels strip, plus where the file actually lives.
     ['<C-g>'] = function(state)
-      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      local bufnr = panel_row_target(state)
       if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
       local name = vim.api.nvim_buf_get_name(bufnr)
       if name ~= '' then vim.notify(name, vim.log.levels.INFO) end
     end,
 
     ['d'] = function(state, helpers)
-      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      local bufnr = panel_row_target(state)
       if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
 
       if vim.bo[bufnr].modified then
@@ -428,7 +445,7 @@ local _bufpanel = panel.create({
     end,
 
     ['D'] = function(state, helpers)
-      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      local bufnr = panel_row_target(state)
       if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
 
       -- Force-closing a saved buffer costs nothing and so asks nothing.
@@ -456,7 +473,7 @@ local _bufpanel = panel.create({
     end,
 
     ['w'] = function(state, helpers)
-      local bufnr = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      local bufnr = panel_row_target(state)
       if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
       local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function()
         vim.cmd('write')
@@ -574,7 +591,7 @@ local _tag_panel = panel.create({
   end,
   keymaps = {
     ['<CR>'] = function(state, helpers)
-      local tag = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
+      local tag = panel_row_target(state)
       if not tag then return end
       -- Close and restore focus to the original note window BEFORE calling
       -- into citations.add_tag/remove_tag — both operate on "current

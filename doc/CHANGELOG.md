@@ -113,6 +113,18 @@ every editing window no longer crashes with E36. (Backlog P2/Item 6 + P4/Item 12
     ran on a delay — so the note briefly landed a few rows tall. The buffer-panel
     open actions now refresh the panel immediately, so it reclaims its compact
     height and the note gets the room (measured: note `h=36`, panel `h=3`).
+-   **Buffer-panel split keys no longer crash with "Invalid window id".** The panel
+    handlers read the cursor from a cached `state.win`, which layout churn can leave
+    pointing at a closed window (`get_tab()` does not prune it). A new
+    `panel_row_target` reads from the panel's window, falling back to the current
+    window — which *is* the panel when its buffer-local mapping fires — so `<C-v>` /
+    `<C-x>` (and the other row handlers, plus the tag panel's) never crash on a stale
+    handle.
+-   **Sidebar `?` help now works in nav mode.** The nav provider used a declarative
+    keymap table that never bound `?`, so its help float never opened (only the
+    views provider wired it). `?` is now bound in nav to the same centred keymap-help
+    float (`views.show_keymap_help`, now exposed for peer providers), and the nav
+    statusline advertises it.
 
 ## [1.66.0] - 10/8/2026
 

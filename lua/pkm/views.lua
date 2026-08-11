@@ -3365,6 +3365,9 @@ end
 -- unchanged. is_sidebar_open / get_sidebar_win are re-exported above; open_sidebar
 -- and focus_sidebar are the views-specific entry points and stay defined here.
 M.refresh_sidebar_if_open   = sidebar.refresh_sidebar_if_open
+-- Exposed so a peer sidebar provider (nav) can show the same centred keymap-help
+-- float the views provider uses — providers depend on views already.
+M.show_keymap_help          = show_keymap_help
 M.register_sidebar_provider = sidebar.register_sidebar_provider
 M.sidebar_provider_is       = sidebar.sidebar_provider_is
 M.sidebar_provider          = sidebar.sidebar_provider
