@@ -74,6 +74,21 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.71.0] - 11/8/2026
+
+*Re-enable the automatic sidebar in `:PKMMode` (backlog P7 / Item 13).*
+
+### Changed
+
+-   **`:PKMMode` opens the sidebar by default again (Item 13).**
+    `config.pkm_mode.layout.sidebar` default flipped `false → true`, so `M.activate()`
+    opens the sidebar (which follows focus — nav for a markdown note, views otherwise)
+    alongside the buffer panel. The space budget is favourable now: Item 11 (line
+    numbers) is skipped, so nothing competes for the left margin, and the **v1.67.0**
+    panel-space fixes removed the multi-panel E36/cmdheight problems. One reversible
+    config value (`layout.sidebar = false` restores the old behaviour); the space
+    *feel* rides the author's smoke.
+
 ## [1.70.0] - 11/8/2026
 
 *Syntax batch, delivered through the **pkm-syntax** sibling dependency: the

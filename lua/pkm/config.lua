@@ -135,7 +135,8 @@ local defaults = {
       enter_dir = false,  -- activate when CWD is/becomes PKM root (DirChanged)
     },
     layout = {
-      sidebar  = false,    -- open views sidebar on activation
+      sidebar  = true,    -- open the sidebar on activation (follows focus:
+                          --   nav for a markdown note, views otherwise)
       bufpanel = true,    -- open buffer panel on activation
     },
     index = {

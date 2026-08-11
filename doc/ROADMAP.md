@@ -456,15 +456,20 @@ P12·Item7 → P13·Item8 → P14·Item2.
   reset; added `<leader>fP` (`keymaps.nav_search_resume`) → `popup.resume()` →
   Telescope native resume (restores the previous pop-up's prompt + results; needs
   Telescope). Needs author smoke.
-- **P7 · Item 13 — reconsider auto-sidebar in `:PKMMode`.** The author had
-  re-enabled the automatic sidebar in mode; re-evaluate the space budget and
-  consider reactivating. **Gated by P8** (the line-number decision) and any other
-  space-consuming change.
-- **P8 · Item 11 — reconsider markdown line numbers.** Evaluate reinstating line
-  numbers; assess **right-aligned** placement to recover the information at lower
-  space cost. Weigh left-side cost (space, esp. with two windows + sidebar) vs.
-  benefit (motions like `gq<N>j`). **Wrap alone is not sufficient motivation** —
-  reinstate only if other benefits are important. Feeds P7's space budget.
+- ✅ **P7 · Item 13 — auto-sidebar in `:PKMMode` — RE-ENABLED (v1.71.0).**
+  `config.pkm_mode.layout.sidebar` default flipped `false → true`, so `M.activate()`
+  opens the sidebar (which follows focus: nav for a note, views otherwise) alongside
+  the buffer panel. Space budget is favourable now: P8/Item 11 (line numbers) is
+  SKIPPED so there is no left-margin competition, and the v1.67.0 panel-space fixes
+  removed the multi-panel E36/cmdheight problems. One reversible config value; the
+  space *feel* rides the author's smoke (note 0293). Verified `activate()` opens the
+  sidebar headlessly; no test asserted the old default.
+- ⏭️ **P8 · Item 11 — reconsider markdown line numbers — SKIPPED (author,
+  2026-08-10: "not worth implementing now").** Was: evaluate reinstating line
+  numbers, possibly **right-aligned** to recover the information at lower space cost,
+  weighing left-side cost (space, esp. with two windows + sidebar) vs. benefit
+  (motions like `gq<N>j`); **wrap alone is not sufficient motivation**. Revisit only
+  if the author raises it again.
 
 ### Area 4 · Syntax highlighting — pkm-syntax (sibling repo, lockstep)
 
