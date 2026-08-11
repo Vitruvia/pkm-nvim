@@ -485,14 +485,12 @@ P12·Item7 → P13·Item8 → P14·Item2.
 
 ### Area 5 · Markdown editing
 
-- **P3 · Item 1 — `<CR>` continues the enumeration when splitting a list line.**
-  Pressing `<CR>` mid-line inside an ordered list drops the new line out of the list
-  (no auto number). Desired: the new line takes the next ordinal and the list
-  renumbers. Must also fire when `<CR>` is pressed right after the space before the
-  item body (that position must keep behaving identically). Approach: an insert-mode
-  `<CR>` mapping (or autocmd) that emits `<CR>` + the continued marker, then
-  renumbers via the existing sequence renumber — reuse `markdown.lua`, do not
-  reinvent. *Self-contained, high daily value; ▹ (low API impact).*
+- ✅ **P3 · Item 1 — `<CR>` continues ordered-list numbering — DONE (v1.68.0).**
+  Buffer-local insert `<CR>` on PKM notes (`mode.enable_note_buffer`) → new pure
+  `markdown.plan_list_continuation` + `markdown.list_newline`: the tail becomes the
+  next-numbered item and the family cascade-renumbers (`renumber_at_cursor(quiet)`).
+  Falls back to an ordinary newline on non-list lines and while a completion menu is
+  open. `test_list_continue` (12). Needs author smoke (insert-mode + fallback fidelity).
 - **P14 · Item 2 — extract `markdown.lua` as `pkm-markdown`; apply to non-pkm
   files.** The already-decided (3/8/2026) scheduled extraction — taken when a real
   need appears — now carries an explicit requirement: the extracted module should be

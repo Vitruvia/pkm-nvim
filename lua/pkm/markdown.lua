@@ -453,7 +453,10 @@ end
 ---@param start_line integer  1-indexed, inclusive
 ---@param end_line   integer  1-indexed, inclusive
 ---@return nil
-function M.renumber_sequence(start_line, end_line)
+---@param start_line integer
+---@param end_line integer
+---@param quiet boolean|nil  suppress the "renumbered N items" notice (list-<CR>)
+function M.renumber_sequence(start_line, end_line, quiet)
   local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
 
   -- ── helpers ──────────────────────────────────────────────────────────────
@@ -677,7 +680,7 @@ function M.renumber_sequence(start_line, end_line)
   end
 
   vim.api.nvim_buf_set_lines(0, start_line - 1, end_line, false, new_lines)
-  if changed > 0 then
+  if changed > 0 and not quiet then
     vim.notify(
       string.format('[pkm] renumbered %d %s', changed, changed == 1 and 'item' or 'items'),
       vim.log.levels.INFO
@@ -699,10 +702,61 @@ end
 
 --- Renumber the ordered sequence in the paragraph surrounding the cursor.
 --- Paragraph bounds are determined by blank lines or buffer boundaries.
+---@param quiet boolean|nil  suppress the "renumbered N items" notice
 ---@return nil
-function M.renumber_at_cursor()
+function M.renumber_at_cursor(quiet)
   local s, e = paragraph_bounds()
-  M.renumber_sequence(s, e)
+  M.renumber_sequence(s, e, quiet)
+end
+
+-- =============================================================================
+-- SECTION: List continuation on <CR>
+-- =============================================================================
+
+--- Plan how to split an ordered-list item at a cursor column: the text kept on
+--- the current line, the new continued line (next ordinal + the tail after the
+--- cursor), and where the cursor should land on it. Returns nil when the line is
+--- not a plain ordered-list item — the caller inserts an ordinary newline then.
+--- Pure: no buffer or window access, so it is unit-testable headlessly.
+---@param line string
+---@param col integer  0-indexed byte column of the cursor (bytes before it stay)
+---@return { before: string, newline: string, cursor_col: integer }|nil
+function M.plan_list_continuation(line, col)
+  local indent, num, sep = line:match('^(%s*)(%d+)([.)]) ')
+  if not indent then return nil end
+  col = math.max(0, math.min(col, #line))
+  local before = (line:sub(1, col):gsub('%s+$', ''))
+  local after  = (line:sub(col + 1):gsub('^%s+', ''))
+  local marker = indent .. tostring(tonumber(num) + 1) .. sep .. ' '
+  return { before = before, newline = marker .. after, cursor_col = #marker }
+end
+
+--- Insert-mode `<CR>` on a PKM note: continue an ordered list (the tail becomes
+--- the next-numbered item, then the family is cascade-renumbered so following
+--- items stay sequential) or fall back to an ordinary newline. Bound
+--- buffer-locally by mode.enable_note_buffer; the ordinary-newline fallback keeps
+--- `<CR>` unchanged everywhere that is not a plain ordered-list line.
+function M.list_newline()
+  local function ordinary_cr()
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n', false)
+  end
+  -- Never hijack <CR> while a completion / pop-up menu is open — the user's own
+  -- <CR> (accept the entry) must stand.
+  if vim.fn.pumvisible() == 1 then return ordinary_cr() end
+
+  local win  = vim.api.nvim_get_current_win()
+  local pos  = vim.api.nvim_win_get_cursor(win)
+  local plan = M.plan_list_continuation(vim.api.nvim_get_current_line(), pos[2])
+  if not plan then return ordinary_cr() end
+  local row = pos[1]
+  vim.api.nvim_buf_set_lines(0, row - 1, row, false, { plan.before, plan.newline })
+  -- Cascade-renumber the family (quiet), with the cursor inside it, then land
+  -- after the possibly-rewritten marker on the new line.
+  vim.api.nvim_win_set_cursor(win, { row + 1, 0 })
+  pcall(M.renumber_at_cursor, true)
+  local newline = vim.api.nvim_buf_get_lines(0, row, row + 1, false)[1] or plan.newline
+  local mk = newline:match('^(%s*%d+[.)] )') or ''
+  vim.api.nvim_win_set_cursor(win, { row + 1, #mk })
 end
 
 -- =============================================================================

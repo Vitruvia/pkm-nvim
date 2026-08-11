@@ -69,6 +69,11 @@ end
 local function enable_note_buffer(bufnr)
   require('pkm.syntax').enable(bufnr)
   vim.bo[bufnr].formatexpr = "v:lua.require('pkm.markdown').formatexpr()"
+  -- Insert-mode <CR> continues an ordered list — the tail becomes the next
+  -- numbered item and the family renumbers (Item 1). Buffer-local so it only
+  -- affects PKM notes; on any non-list line it falls back to an ordinary newline.
+  vim.keymap.set('i', '<CR>', function() require('pkm.markdown').list_newline() end,
+    { buffer = bufnr, silent = true, desc = 'PKM: continue ordered list / newline' })
 end
 
 --- Enable PKM syntax on every listed PKM buffer currently open.

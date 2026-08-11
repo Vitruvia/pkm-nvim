@@ -74,7 +74,23 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
-## [1.67.0] - 10/8/2026
+## [1.68.0] - 10/8/2026
+
+*Pressing `<CR>` inside an ordered list now continues the numbering. (Backlog
+P3 / Item 1.)*
+
+### Added
+
+-   **`<CR>` continues an ordered list (Item 1).** In a PKM note, pressing `<CR>`
+    inside a plain ordered-list item now splits it: the text after the cursor
+    becomes the **next-numbered** item and the family cascade-renumbers so the
+    following items stay sequential. It fires wherever the cursor is on the item
+    (end of line → a fresh empty next item; mid-text → the tail moves down), and
+    on any non-list line — or while a completion menu is open — it falls back to an
+    ordinary newline, so `<CR>` is unchanged everywhere else. Buffer-local to PKM
+    notes (wired in `mode.enable_note_buffer`); reuses `markdown.renumber_at_cursor`
+    (now with a `quiet` flag so it does not announce each keystroke). Pure core
+    `markdown.plan_list_continuation`; `test_list_continue` (12).
 
 *The buffer panel can open a note in a split, and reopening a note after closing
 every editing window no longer crashes with E36. (Backlog P2/Item 6 + P4/Item 12.)*
