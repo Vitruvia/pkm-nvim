@@ -519,16 +519,20 @@ P12·Item7 → P13·Item8 → P14·Item2.
 
 ### Area 6 · Documentation (`doc/pkm.txt`)
 
-- **P12 · Item 7 — help index links resolve ambiguously.** In `:help pkm`, following
-  an index link resolves ambiguously by cursor position: *before* the link it opens
-  Vim's or Lazy's help for the topic word (e.g. `keymaps`, `installation`); *on* the
-  link tag (e.g. `pkm-keymaps`) it opens the correct `pkm.txt` location. Make the
-  index entries unambiguous `|tag|` references so any activation lands in `pkm.txt`.
-- **P13 · Item 8 — keymaps section omits panel keymaps; sidebar section un-indexed.**
-  The `pkm.txt` keymaps section does not list the panel keymaps (buffer, sidebar,
-  browse, views); the `pkm-sidebar` section (which holds the sidebar keymaps) is not
-  clearly reachable from the index. Add the panel keymaps to the keymaps section (or
-  cross-reference) and index the sidebar section properly.
+- ✅ **P12 · Item 7 — help index links resolve ambiguously — DONE (v1.71.1).** The
+  CONTENTS is now a pure-link TOC: each entry *is* its `|pkm-…|` tag, so `CTRL-]`
+  anywhere useful on a line lands in `pkm.txt` — the old bare label to the left of
+  the link (`Keymaps`, `Installation`) that jumped to Vim's/Lazy's help is gone. A
+  header line explains the change.
+- ✅ **P13 · Item 8 — keymaps section omits panel keymaps; sidebar section un-indexed
+  — DONE (v1.71.1).** New `*pkm-panel-keymaps*` subsection in §12 documents the
+  buffer-panel keys (`<CR>`/`[count]<CR>`/`<C-v>`/`<C-x>`/`/`/`<C-g>`/`d`/`q`) and the
+  browse/views picker keys (`<Tab>`/`<C-a>`/`<C-t>`/`<C-l>` + the descriptor prompt),
+  and cross-refs the sidebar; both `|pkm-sidebar|` and `|pkm-panel-keymaps|` are now
+  in the CONTENTS index. Also added the sidebar's `<C-n>` (views↔nav) to the
+  `pkm-sidebar` section and fixed a broken `|pkm-search|` ref (added the `*pkm-search*`
+  tag). All keys verified against source (sidebar.lua/nav.lua/ui.lua/panel.lua/
+  telescope.lua); helptags clean, no broken `|pkm-…|` refs.
 
 ---
 

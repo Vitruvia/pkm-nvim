@@ -74,6 +74,30 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.71.1] - 11/8/2026
+
+*Docs (`doc/pkm.txt`): unambiguous help navigation + panel keymaps (Items 7, 8).*
+
+### Fixed
+
+-   **Help index links land in `pkm.txt` regardless of cursor position (Item 7).**
+    The CONTENTS is now a pure-link TOC — each entry *is* its `|pkm-…|` tag, so
+    `CTRL-]` on a line jumps into this file instead of Vim's/Lazy's help for a bare
+    label word (`Keymaps`, `Installation`) that used to sit to the left of the link.
+-   **Broken `|pkm-search|` reference (3 call sites) now resolves** — added the
+    `*pkm-search*` tag to the WORKFLOW SEARCH subsection it pointed at.
+
+### Added
+
+-   **Panel keymaps documented — `*pkm-panel-keymaps*` in §12 (Item 8).** A new
+    subsection lists the buffer-panel keys (`<CR>`, `[count]<CR>`, `<C-v>` split
+    right, `<C-x>` split left, `/`, `<C-g>`, `d`, `q`/`<Esc>`) and the browse/views
+    picker keys (`<Tab>`/`<S-Tab>` mark, `<C-a>` bulk act, `<C-t>` type cycle, `<C-l>`
+    pop-up provider cycle, plus the descriptor prompt), and cross-refs the sidebar.
+    Both `|pkm-sidebar|` and `|pkm-panel-keymaps|` are now in the CONTENTS index, and
+    the sidebar's `<C-n>` (views↔nav) key was added to the `pkm-sidebar` section. All
+    keys verified against source; helptags clean.
+
 ## [1.71.0] - 11/8/2026
 
 *Re-enable the automatic sidebar in `:PKMMode` (backlog P7 / Item 13).*

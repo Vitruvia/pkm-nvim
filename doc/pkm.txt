@@ -3,20 +3,27 @@
 ==============================================================================
 CONTENTS                                                       *pkm-contents*
 
-    1. Introduction ............................ |pkm-introduction|
-    2. Requirements ............................ |pkm-requirements|
-    3. Installation ............................ |pkm-installation|
-    4. Setup ................................... |pkm-setup|
-    5. Workflow ................................ |pkm-workflow|
-    6. Commands ................................ |pkm-commands|
-    7. PKM Mode ................................ |pkm-mode|
-    8. Trash ................................... |pkm-trash|
-    9. Citations ............................... |pkm-citations|
-   10. Export .................................. |pkm-export|
-   11. Configuration ........................... |pkm-configuration|
-   12. Keymaps ................................. |pkm-keymaps|
-   13. Frontmatter ............................. |pkm-frontmatter|
-   14. File Naming ............................. |pkm-naming|
+Press CTRL-] (or <CR>) on a |link| below to jump. Each entry IS its pkm tag, so
+activation always lands in this file — never in Vim's or another plugin's help
+for a same-named word (the old TOC put a bare label like "Keymaps" or
+"Installation" to the left of the link, and CTRL-] on that word jumped away).
+
+    1. |pkm-introduction|
+    2. |pkm-requirements|
+    3. |pkm-installation|
+    4. |pkm-setup|
+    5. |pkm-workflow|
+    6. |pkm-commands|
+       |pkm-sidebar|          (the sidebar panel and its keymaps)
+    7. |pkm-mode|
+    8. |pkm-trash|
+    9. |pkm-citations|
+   10. |pkm-export|
+   11. |pkm-configuration|
+   12. |pkm-keymaps|
+       |pkm-panel-keymaps|    (buffer / browse / views panel keymaps)
+   13. |pkm-frontmatter|
+   14. |pkm-naming|
 
 ==============================================================================
 1. INTRODUCTION                                             *pkm-introduction*
@@ -128,7 +135,7 @@ Use `:PKMCite <target>` to cite another note (bare |:PKMCite| opens a picker),
 or `:PKMCite insert` to insert a structured citation at the cursor. The cited
 note automatically receives a backlink, maintained bidirectionally and on save.
 
-SEARCH~
+SEARCH~                                                           *pkm-search*
 Use |:PKMBrowse| for live filter-as-you-type search across all notes.
 Use |:PKMTags| to browse by tag, or to add, remove or rename a tag across many
 notes at once. The tag picker lists how many notes carry each tag and previews
@@ -647,6 +654,9 @@ The sidebar (`:PKMPanel sidebar`) has two modes: overview
            Focus switches to the main editing window first so files open
            there, not over the sidebar.
   r        Refresh current mode in place.
+  <C-n>    Cycle the sidebar content: views (this panel) <-> nav (the focused
+           note's heading index). The same sidebar hosts both; this switches
+           which one it shows. (See also |pkm-panel-keymaps| for nav's keys.)
   q / <Esc>  Close the sidebar.
   ?        Show this keymap help as a floating window.
 
@@ -1025,6 +1035,45 @@ Off by default — assign a key to enable~
   header_next      any-level header motion (this is ]] )
   header_prev      any-level header motion (this is [[ )
   toggle_file_explorer   toggle netrw / PKM views sidebar
+
+------------------------------------------------------------------------------
+PANEL KEYMAPS                                              *pkm-panel-keymaps*
+
+The keymaps above are the GLOBAL keys. Each panel also has its OWN keys, live
+only while that panel is focused. They are not overridable through the config
+`keymaps` table (which governs the global keys); they are the panel's fixed UI.
+
+SIDEBAR (views + nav)~
+  The full sidebar key list — <CR>, /, r, <C-t>, <Tab>/<S-Tab>, <C-a>, T, b,
+  <C-b>, <C-n> (cycle views <-> nav), q/<Esc>, ? — is documented in its own
+  section: see |pkm-sidebar|. In the nav (heading-index) content the working
+  keys are <CR> jump to the heading, / search the headings, r refresh, <C-n>
+  cycle back to views, q/<Esc> close, ? help.
+
+BUFFER PANEL (`:PKMPanel buffers`, <leader>pb)~
+  <CR>       Open the buffer under the cursor in the main editing window.
+  [count]<CR>  Open it in the Nth editing window, counted left to right
+             (1 = leftmost); warns if N exceeds the open editing windows.
+  <C-v>      Open it in a vertical split to the RIGHT of the editing area.
+  <C-x>      Open it in a vertical split to the LEFT. (Vertical only — the
+             panels do not use horizontal splits.)
+  /          Fuzzy pop-up over the open buffers (when too many to scan).
+  <C-g>      Echo the full path of the buffer under the cursor.
+  d          Close the buffer under the cursor (prompts to save if modified).
+  q / <Esc>  Close the buffer panel.
+
+BROWSE / VIEWS PICKERS (Telescope: :PKMBrowse, <leader>ff, view note lists,
+the <leader>fp pop-up)~
+  <Tab> / <S-Tab>  Mark / unmark the note under the cursor.
+  <C-a>      Run a bulk action on the marked notes — or, with none marked, on
+             every note currently listed. See |pkm-search|.
+  <C-t>      Cycle the note-type filter, applied on top of the typed prompt:
+             all -> note -> agg -> bib -> journal -> scratch -> all. (This is
+             the non-sidebar way to reach journal/scratchpad notes.)
+  <C-l>      In the cyclable pop-up (<leader>fp) only: switch to the next
+             content provider (browse -> views -> nav). A no-op elsewhere.
+  The prompt takes the descriptor language (tag:, text:, title:, filename:,
+  type:, AND/OR/NOT, quotes) as well as plain text — see |pkm-search|.
 
 ==============================================================================
 13. FRONTMATTER                                               *pkm-frontmatter*
