@@ -74,6 +74,27 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.69.0] - 11/8/2026
+
+*Reopen the previous pop-up search with `<leader>fP`. (Backlog P6 / Item 10;
+plus P5 / Item 9 resolved with no code.)*
+
+### Added
+
+-   **Resume the last pop-up search — `<leader>fP` (Item 10).** Opening the pop-up
+    (`<leader>fp`) is always a FRESH search by design: search, open a note, reopen
+    → clean. The new `<leader>fP` (`keymaps.nav_search_resume`) instead reopens the
+    **previous** search with its prompt and results intact, via Telescope's native
+    resume (`popup.resume()`; needs Telescope — the `vim.ui.select` fallback keeps
+    no picker to restore).
+
+### Notes
+
+-   **Item 9 (netrw as last-active) — resolved, no code.** netrw's exclusion from
+    `utils.PANEL_FILETYPES` is independent of the sidebar/buffer-panel lock (those
+    are locked by their own `winfixbuf`/filetypes); it exists so a note is not
+    opened into the file explorer. Author chose to keep netrw excluded.
+
 ## [1.68.0] - 10/8/2026
 
 *Pressing `<CR>` inside an ordered list now continues the numbering. (Backlog

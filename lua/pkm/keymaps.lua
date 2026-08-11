@@ -85,6 +85,12 @@ function M.register(config)
     end, { desc = 'PKM: heading pop-up (cyclable panel)', silent = true })
   end
 
+  if k.nav_search_resume then
+    vim.keymap.set('n', k.nav_search_resume, function()
+      require('pkm.popup').resume()      -- reopen the previous pop-up search (Item 10)
+    end, { desc = 'PKM: resume last pop-up search', silent = true })
+  end
+
   if k.view_panel then
     require('pkm.views').set_panel_keymap(k.view_panel)
   end

@@ -446,15 +446,16 @@ P12·Item7 → P13·Item8 → P14·Item2.
   editing window exists**; `test_bufpanel_cmdheight` locks it. (3) A reopened note
   briefly landed cramped (panel resize on a delay) → the open actions refresh
   immediately. The author's diagnostic (`lines=42 cmdheight=38`) pinned (2).
-- **P5 · Item 9 — netrw windows ignored as last-active.** A window holding netrw is
-  not counted as the last active window. If this is required to keep the sidebar /
-  buffer-window lock (so they are never treated as the active window), **keep it** —
-  verify whether it is, and only change if netrw can be tracked without weakening
-  the lock.
-- **P6 · Item 10 — pop-up search state on reopen.** Searching in the views/browse
-  pop-up and then entering a note makes the next pop-up open drop the previous
-  search. Preferred resolution: **keep** the reset (fresh pop-up), and add a keymap
-  to **return to the previous search panel** (restore the last prompt/results).
+- ✅ **P5 · Item 9 — netrw as last-active — RESOLVED (no code; author decision).**
+  Verified: netrw's entry in `utils.PANEL_FILETYPES` (utils.lua:182) is **independent**
+  of the sidebar/bufpanel lock — those are locked by their own `winfixbuf`/filetypes,
+  not by this set. netrw is excluded for a *separate* reason (a note must not clobber
+  the file explorer). Author chose to **keep netrw excluded**; no change. Offer stands
+  to make netrw a normal editing target later if wanted.
+- ✅ **P6 · Item 10 — pop-up search resume — DONE (v1.69.0).** Kept the fresh-open
+  reset; added `<leader>fP` (`keymaps.nav_search_resume`) → `popup.resume()` →
+  Telescope native resume (restores the previous pop-up's prompt + results; needs
+  Telescope). Needs author smoke.
 - **P7 · Item 13 — reconsider auto-sidebar in `:PKMMode`.** The author had
   re-enabled the automatic sidebar in mode; re-evaluate the space budget and
   consider reactivating. **Gated by P8** (the line-number decision) and any other

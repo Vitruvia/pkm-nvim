@@ -199,6 +199,7 @@ local defaults = {
     browse          = "<leader>ff",
     browse_tags     = "<leader>ft",
     nav_search      = "<leader>fp",    -- cyclable pop-up (nav; <C-l> → views → browse)
+    nav_search_resume = "<leader>fP",  -- reopen the PREVIOUS pop-up search (Item 10)
     -- Views — saved filters only, no panes (`<leader>v`)
     view_last    = "<leader>vl",
     view_list    = "<leader>va",       -- va = view all

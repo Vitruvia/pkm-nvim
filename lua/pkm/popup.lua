@@ -50,4 +50,19 @@ function M.open(provider)
   end
 end
 
+--- Reopen the PREVIOUS pop-up search with its prompt and results intact (Item
+--- 10). `M.open` is always a FRESH search by design — searching, entering a note,
+--- and reopening starts clean; this is the separate "go back to what I was
+--- searching" key. It uses Telescope's native resume, so it needs Telescope (the
+--- `vim.ui.select` fallback keeps no picker to restore) and brings back whichever
+--- provider was last shown, exactly as it was left.
+function M.resume()
+  local ok, builtin = pcall(require, 'telescope.builtin')
+  if not ok then
+    vim.notify('[pkm] resume needs Telescope', vim.log.levels.WARN)
+    return
+  end
+  builtin.resume()
+end
+
 return M
