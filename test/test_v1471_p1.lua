@@ -20,6 +20,11 @@ vim.fn.writefile({ '# Title', 'note[0042] and text.' }, nonpkm)
 vim.cmd('edit ' .. vim.fn.fnameescape(nonpkm))
 local buf = vim.api.nvim_get_current_buf()
 vim.bo[buf].filetype = 'markdown'
+-- highlight_all_markdown now defaults ON (v1.74.0), and min_init already ran
+-- pkm.setup(), so its live FileType autocmd has already enabled this buffer.
+-- Disable it to recreate the pre-setup "not yet enabled" state this test exercises:
+-- the point is that setup()'s existing-buffer loop (below) re-enables it.
+require('pkm.syntax').disable(buf)
 
 print("== before setup: not highlighted ==")
 -- pkm.syntax is safe to require before setup; is_active should be false.

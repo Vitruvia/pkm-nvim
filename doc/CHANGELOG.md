@@ -7,19 +7,25 @@
 *The sections below are living project state, not release notes: they are
 carried forward from version to version and consulted before any fix.*
 
-### Status checkpoint (post-v1.72.0, 12/8/2026)
+### Status checkpoint (post-v1.74.0, 12/8/2026)
 
 - **Full headless suite green: 101/101** `test_*.lua` files report their pass
   marker (`test_phase1_old` passes by self-skipping its populated-root assertions
-  on the empty temp root — legacy, not a regression). Run after the v1.72.0
-  markdown-extraction split, which now loads the `pkm-markdown` sibling via
-  `test/min_init.lua`'s runtimepath prepend (same mechanism as pkm-syntax).
-- **Pending-features audit** (verified against live code, not just docs): the only
-  **non-deferred, near-term** pending features are two — the **forced-save prompt**
-  (Near 5.1; `bufsync.lua` still prompts via `vim.fn.confirm`) and the
-  **`pkm.sidebar` extraction** (no `lua/pkm/sidebar.lua`; host still in
-  `views.lua`). Everything else pending is deferred or long-horizon — see
-  ROADMAP § Forward plan by area, "Pending-features status".
+  on the empty temp root — legacy, not a regression). Run after the v1.72.0–v1.73.0
+  markdown-extraction split (loads the `pkm-markdown` sibling via
+  `test/min_init.lua`'s runtimepath prepend, same mechanism as pkm-syntax) and the
+  v1.74.0 `highlight_all_markdown` default flip.
+- **Pending-features audit** (verified against live code, not just docs): there are
+  **no non-deferred, near-term pending features left.** The two that a prior
+  checkpoint listed are both already shipped — the **forced-save prompt** (Near 5.1)
+  in **v1.61.2** (`bufsync` writes the backlink *through* the buffer, so a later `:w`
+  no longer hits the phantom W12 prompt) and the **`pkm.sidebar` extraction** (Area 3)
+  in **v1.61.3** (`lua/pkm/sidebar.lua` is the container host; `views.lua` is a
+  provider re-exporting its API). Everything still pending is deferred (vault
+  lifecycle create/merge/split + `convert`; persistent/mtime index; Phase 3.4
+  journal-scratch nav + block-element indexing; `:PKMView stats`; commands-outside-
+  vault) or long-horizon — see ROADMAP § Forward plan by area, "Pending-features
+  status".
 
 ### Known Bugs (queued)
 
@@ -72,6 +78,32 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
     ~200+ views.
+
+---
+
+## [1.74.0] - 12/8/2026
+
+*After the v1.72.0–v1.73.0 markdown-extraction smoke passed, the standalone
+treatment is turned on for everyone by default.*
+
+### Changed
+
+-   **`pkm_mode.syntax.highlight_all_markdown` now defaults to `true`.** pkm-nvim
+    ships the two sibling plugins (pkm-syntax, pkm-markdown) as dependencies, so
+    every markdown buffer — not just vault notes — now gets their treatment out of
+    the box: pkm-syntax highlighting (list markers, citations, meta-comments, YAML
+    injection) **and** the pkm-markdown editing utilities (`gq`/`gw` structure-aware
+    wrap via `formatexpr`, ordered-list `<CR>` continuation). PKM notes are
+    unchanged (they still get the full note behaviour — frontmatter fold, window
+    options — via the `open_note` trigger, and the FileType path skips them). A
+    plain markdown buffer still does **not** get the note behaviour, only the pure
+    highlight + edit. Set `highlight_all_markdown = false` to restore the old
+    behaviour (non-vault markdown left untouched). The mechanism (a FileType
+    autocmd in `mode.lua` that runs `syntax.enable(buf, true)` + `markdown.attach(buf)`,
+    guarded against double-wiring by `pkm_markdown_attached`) is unchanged — only
+    the default flipped. `test_v1420_p1` asserts the new default; `test_v1420_p1`
+    and `test_v1471_p1` establish their clean baseline explicitly now that the
+    global default is on (`syntax.disable` before the enable each verifies).
 
 ---
 

@@ -149,11 +149,13 @@ local defaults = {
       -- highlighting (list markers, citations, meta-comments, YAML injection)
       -- from pkm-syntax AND the pkm-markdown editing utilities (gq/gw
       -- structure-aware wrap via formatexpr, ordered-list <CR> continuation) —
-      -- but NOT the note behaviour (frontmatter fold, window options). Off by
-      -- default so opening an unrelated README is untouched. (This is the seam
-      -- for consuming pkm-syntax and pkm-markdown as standalone plugins; a
-      -- non-pkm-nvim config gets the same via their own setup().)
-      highlight_all_markdown = false,
+      -- but NOT the note behaviour (frontmatter fold, window options). On by
+      -- default: pkm-nvim ships the two sibling plugins, so every markdown
+      -- buffer gets their treatment, mirroring what depending on them means.
+      -- Set to false to leave non-vault markdown (an unrelated README) untouched.
+      -- (This is the seam for consuming pkm-syntax and pkm-markdown as standalone
+      -- plugins; a non-pkm-nvim config gets the same via their own setup().)
+      highlight_all_markdown = true,
     },
   },
 

@@ -28,6 +28,11 @@ local function fresh_buf()
   vim.api.nvim_set_current_buf(buf)
   vim.bo[buf].filetype = 'markdown'
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, frontmatter)
+  -- highlight_all_markdown now defaults ON (v1.74.0), so mode's live FileType
+  -- autocmd has already highlight-enabled this buffer; enable() is a no-op while
+  -- active, so disable first — each block below then tests the syntax.enable()
+  -- seam (highlight_only vs full) from a known-clean state.
+  syntax.disable(buf)
   return buf
 end
 
@@ -49,10 +54,10 @@ check("subalínea extmarks placed here too",
 check("frontmatter fold created (foldlevel(1) >= 1)",
   vim.fn.foldlevel(1) >= 1, 'foldlevel(1)=' .. vim.fn.foldlevel(1))
 
-print("== the config flag defaults to off ==")
+print("== the config flag defaults to on (v1.74.0) ==")
 local cfg = require('pkm').config
-check("syntax.highlight_all_markdown defaults false",
-  cfg.pkm_mode and cfg.pkm_mode.syntax and cfg.pkm_mode.syntax.highlight_all_markdown == false,
+check("syntax.highlight_all_markdown defaults true",
+  cfg.pkm_mode and cfg.pkm_mode.syntax and cfg.pkm_mode.syntax.highlight_all_markdown == true,
   vim.inspect(cfg.pkm_mode and cfg.pkm_mode.syntax))
 
 print("")
