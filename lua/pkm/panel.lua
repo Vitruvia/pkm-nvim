@@ -114,20 +114,36 @@ function M.create(spec)
     return _tabs[id]
   end
 
-  --- Ensure at least one main editing window exists alongside this panel.
-  --- Prevents the panel from becoming the tabpage's sole non-float window.
+  --- Ensure at least one main EDITING window exists alongside this panel.
+  --- "Editing" means a non-float window that is not itself a PKM panel. Counting
+  --- another panel here was the bug that stranded the user with the sidebar and
+  --- the buffer panel both open and no note window after the last note was
+  --- `:quit`: each panel saw the OTHER panel as a main window, so neither
+  --- restored one, leaving a panel-only tabpage whose collapsed layout stacked
+  --- the sidebar as a full-width strip. Recreate the main window on the side
+  --- that suits this panel — beside a managed-width side panel (the sidebar),
+  --- above a bottom bar (the buffer panel) — so the surviving layout still reads
+  --- as sidebar-left / bufpanel-bottom rather than a horizontal stack.
   local function ensure_main_window()
     local t = get_tab()
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-      if win ~= t.win and vim.api.nvim_win_get_config(win).relative == '' then
+      if win ~= t.win and vim.api.nvim_win_get_config(win).relative == ''
+         and not vim.bo[vim.api.nvim_win_get_buf(win)].filetype:match('^pkm%-') then
         return
       end
     end
     if t.win and vim.api.nvim_win_is_valid(t.win) then
       local cur = vim.api.nvim_get_current_win()
       vim.api.nvim_set_current_win(t.win)
-      vim.cmd('noautocmd aboveleft new')
+      vim.cmd(spec.width and 'noautocmd rightbelow vnew' or 'noautocmd aboveleft new')
       vim.bo.bufhidden = 'wipe'
+      -- The `noautocmd` split above suppresses the managed-width WinResized
+      -- re-assert, so a side panel would sit at half width until the next
+      -- resize; restore it here so the sidebar snaps back to its column at once.
+      local w = resolve_width()
+      if w and vim.api.nvim_win_is_valid(t.win) then
+        pcall(vim.api.nvim_win_set_width, t.win, w)
+      end
       if vim.api.nvim_win_is_valid(cur) then
         vim.api.nvim_set_current_win(cur)
       end

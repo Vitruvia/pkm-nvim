@@ -192,12 +192,23 @@ function M.activate()
   local views = require('pkm.views')
   local ui    = require('pkm.ui')
 
+  -- The trigger here is opening a note, so focus must stay IN that note. The
+  -- sidebar opens focused on itself (right when the user asks for it directly via
+  -- :PKMPanel), but on auto-activation the user wants to land in the note they
+  -- just opened — not the sidebar. Remember where we were and restore it after
+  -- the panels open, so the auto-sidebar (v1.71.0, Item 13) never steals focus.
+  local origin = vim.api.nvim_get_current_win()
+
   if _config.layout.sidebar and not views.is_sidebar_open() then
     views.open_sidebar()
   end
 
   if _config.layout.bufpanel and not ui.is_bufpanel_open() then
     ui.toggle_bufpanel()
+  end
+
+  if vim.api.nvim_win_is_valid(origin) then
+    vim.api.nvim_set_current_win(origin)
   end
 
   if _config.index.prebuild and not require('pkm.index').is_built() then

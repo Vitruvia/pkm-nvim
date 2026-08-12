@@ -182,8 +182,10 @@ end
 
 do
   -- The sidebar is a real buffer, so its mapping is assertable here. The
-  -- Telescope pickers are not, and stay smoke-only.
-  views.open_sidebar()
+  -- Telescope pickers are not, and stay smoke-only. open_sidebar() TOGGLES, and
+  -- since v1.71.0 the sidebar may already be open from PKM-mode auto-activation
+  -- earlier in this file — so open it only when closed, or the toggle shuts it.
+  if not views.is_sidebar_open() then views.open_sidebar() end
   vim.wait(500, function() return views.is_sidebar_open() end, 10)
 
   local win = views.get_sidebar_win()

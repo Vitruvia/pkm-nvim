@@ -117,17 +117,38 @@ end
 -- SECTION: Keymap actions (provider keymaps: fn(state, helpers))
 -- =============================================================================
 
---- Jump the source window to the heading under the cursor.
+--- The window to jump in, reviving it when the note's window was closed but its
+--- buffer still lives (e.g. after `:quit` of the last note window). Re-displays
+--- the source buffer in an editing window rather than dead-ending, since the
+--- heading list on screen is still that note's. Returns a window, or nil only
+--- when the buffer itself is gone.
+---@return integer|nil win
+local function live_source_win()
+  if _source and vim.api.nvim_win_is_valid(_source.win) then return _source.win end
+  if _source and vim.api.nvim_buf_is_valid(_source.buf) then
+    local win = require('pkm.utils').focus_editing_win()
+    vim.api.nvim_win_set_buf(win, _source.buf)
+    _source.win = win
+    return win
+  end
+  return nil
+end
+
+M._live_source_win = live_source_win   -- for tests
+
+--- Jump the source window to the heading under the cursor, reopening the note if
+--- its window was closed since the sidebar last captured it.
 local function on_select(state)
   local row    = vim.api.nvim_win_get_cursor(0)[1]
   local target = state.map and state.map[row]
   if not target then return end
-  if not (_source and vim.api.nvim_win_is_valid(_source.win)) then
+  local win = live_source_win()
+  if not win then
     vim.notify('[pkm] the note window is gone', vim.log.levels.WARN)
     return
   end
-  vim.api.nvim_set_current_win(_source.win)
-  pcall(vim.api.nvim_win_set_cursor, _source.win, { target, 0 })
+  vim.api.nvim_set_current_win(win)
+  pcall(vim.api.nvim_win_set_cursor, win, { target, 0 })
   vim.cmd('normal! zz')
 end
 
@@ -164,9 +185,10 @@ function M.search(opts)
   end
   local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
   backend.pick_list('Headings', items, function(lnum)
-    if _source and vim.api.nvim_win_is_valid(_source.win) then
-      vim.api.nvim_set_current_win(_source.win)
-      pcall(vim.api.nvim_win_set_cursor, _source.win, { lnum, 0 })
+    local win = live_source_win()
+    if win then
+      vim.api.nvim_set_current_win(win)
+      pcall(vim.api.nvim_win_set_cursor, win, { lnum, 0 })
       vim.cmd('normal! zz')
     end
   end, opts)

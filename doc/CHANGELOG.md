@@ -74,6 +74,43 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.71.2] - 11/8/2026
+
+*Fix the sidebar/buffer-panel note-open bug found in the v1.67.0 & v1.71.0 smoke
+(notes 0289, 0293), and stop the auto-sidebar stealing focus from the note.*
+
+### Fixed
+
+-   **`:quit`-ing the last note window with the sidebar AND buffer panel open no
+    longer strands the tabpage on panels.** `panel.ensure_main_window` returned as
+    soon as it found any non-float window other than its own — but with two panels
+    open, each panel counted the OTHER panel as a "main window", so neither
+    recreated an editing window. The tabpage was left panels-only, the sidebar
+    collapsed to a full-width strip above the buffer panel, and note-opens landed
+    in the wrong place. It now ignores `pkm-*` panel windows when deciding, and
+    recreates the main window on the side that suits the panel (beside a
+    managed-width side panel, above a bottom bar), restoring its managed width so
+    the sidebar snaps back to a left column instead of a strip.
+-   **The sidebar's nav `<CR>` no longer dead-ends with "the note window is gone".**
+    When the source note's window was closed (e.g. by that `:quit`) but its buffer
+    still lives, `nav` now re-displays the note in an editing window and jumps,
+    instead of warning and doing nothing. It only reports the note as gone when the
+    buffer itself is truly gone.
+-   **The auto-sidebar (v1.71.0, Item 13) no longer steals focus from the note.**
+    `M.activate()` opens the sidebar (which is `focus_on_open = true` — correct when
+    opened directly via `:PKMPanel`), but on auto-activation the user wants to stay
+    in the note they just opened. `activate()` now restores focus to the origin
+    window after opening the panels. This also fixed 11 headless tests that had
+    been silently reading the sidebar buffer instead of the note since the v1.71.0
+    default flip (the suite is genuinely 101/101 again).
+
+### Tests
+
+-   `test_sidebar_reopen.lua` (new, 8 checks): proves the main-window recreation
+    (editing window restored, sidebar keeps its managed width) and nav's revive
+    path. `test_v190_p2.lua` now opens the sidebar deterministically (guarded, not
+    a blind toggle) so the auto-sidebar default can't shut it.
+
 ## [1.71.1] - 11/8/2026
 
 *Docs (`doc/pkm.txt`): unambiguous help navigation + panel keymaps (Items 7, 8).*
