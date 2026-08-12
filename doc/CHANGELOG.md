@@ -7,12 +7,13 @@
 *The sections below are living project state, not release notes: they are
 carried forward from version to version and consulted before any fix.*
 
-### Status checkpoint (post-v1.61.1, 5/8/2026)
+### Status checkpoint (post-v1.72.0, 12/8/2026)
 
-- **Full headless suite green: 89/89** `test_*.lua` files report their pass
+- **Full headless suite green: 101/101** `test_*.lua` files report their pass
   marker (`test_phase1_old` passes by self-skipping its populated-root assertions
-  on the empty temp root — legacy, not a regression). Run after the v1.61.1
-  docs-only batch; `git show --stat HEAD` confirmed that commit touches no `lua/`.
+  on the empty temp root — legacy, not a regression). Run after the v1.72.0
+  markdown-extraction split, which now loads the `pkm-markdown` sibling via
+  `test/min_init.lua`'s runtimepath prepend (same mechanism as pkm-syntax).
 - **Pending-features audit** (verified against live code, not just docs): the only
   **non-deferred, near-term** pending features are two — the **forced-save prompt**
   (Near 5.1; `bufsync.lua` still prompts via `vim.fn.confirm`) and the
@@ -71,6 +72,54 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
     ~200+ views.
+
+---
+
+## [1.72.0] - 12/8/2026
+
+*Backlog Item 2 / Phase 7 — the last item. The markdown editing utilities are
+extracted into a standalone sibling plugin, mirroring the pkm-syntax split.*
+
+### Changed
+
+-   **`lua/pkm/markdown.lua` (1267 lines) extracted to the standalone `pkm-markdown`
+    plugin** (github.com/Vitruvia/pkm-markdown), a sibling of pkm-syntax. The module
+    body moved **byte-for-byte** (it was already `require('pkm.*')`-free); pkm-nvim
+    keeps only a **thin facade** at `lua/pkm/markdown.lua` (1267 → 61 lines) that
+    lazily re-exports `require('pkm-markdown')` — the exact pattern of `pkm.syntax`,
+    with a graceful no-op stub + one-time warning if the plugin is absent. All seven
+    in-repo consumers (`commands/header`, `commands/list`, `init`, `keymaps`, `mode`,
+    `nav`, `notes`) keep `require('pkm.markdown')` unchanged. pkm-nvim now DEPENDS on
+    **two** siblings (pkm-syntax = highlighting, pkm-markdown = editing); add both to
+    your plugin manager alongside pkm-nvim.
+-   **`pkm-markdown` gains a standalone `setup(opts)` / `attach(bufnr, opts)`** for
+    non-pkm markdown files (`{ wrap?, lists?, symbols? }`, all editing on by default):
+    a `FileType markdown` autocmd wires `formatexpr` (gq/gw reflow) and the ordered-list
+    `<CR>` continuation onto each buffer, idempotently. pkm-nvim never calls it (it
+    drives the functions directly); the buffer-local `pkm_markdown_attached` flag —
+    now also set by pkm-nvim's `enable_note_buffer` — makes the two never double-wire
+    a note buffer when both are installed.
+
+### Fixed
+
+-   **`formatexpr` regression the extraction exposed (facade + Neovim `v:lua`).**
+    `formatexpr` is wired as `"v:lua.require('pkm.markdown').formatexpr()"` (mode.lua).
+    Neovim's `v:lua.require('mod').field` does a **raw** field lookup on the require
+    result — it does **not** honour `__index` (unlike a plain Lua `require().field`
+    call, and unlike a `v:lua.Global.field` path, both of which do). So the facade's
+    pure-`__index` proxy was invisible to it: `.formatexpr` read nil and Vim silently
+    fell back to its internal formatter, so `gq`/`gw` stopped routing through the
+    structure-aware wrap. Fixed by defining `formatexpr` as a **real key** on the
+    facade (the only export invoked through `v:lua`); every other export stays on the
+    lazy `__index` proxy. Reproduced minimally and covered by `test_v1410_p1`.
+
+### Infrastructure
+
+-   `test/min_init.lua` prepends the `../pkm-markdown` sibling to the runtimepath
+    (same relative resolution as pkm-syntax — moving the suite needs no change).
+-   Suite-level `pkm-suite/CLAUDE.md` records the second dependency + its lockstep
+    API contract; `pkm-markdown` ships its own `CLAUDE.md` (Dependencies: none) and
+    `README.md`. Full headless suite **101/101** green after the split.
 
 ---
 

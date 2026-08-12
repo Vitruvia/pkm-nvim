@@ -366,13 +366,12 @@ v1.35/1.36/1.40 + structure-aware wrap + CONVENTIONS § Lists). **Pending:**
 - **Parágrafo único** is the one unclassified legal marker (deferred — needs a
   per-article § count).
 - **Displays / tables** (Distant goals 1); **insertable folds** (Potential goals).
-- **`markdown.lua` extract-vs-keep (decided 3/8/2026): keep in-tree now.** The
-  module is already **extraction-clean** (zero `require('pkm.*')`) and can become a
-  `pkm-markdown` plugin the way highlighting became `pkm-syntax` — but the split is
-  a **scheduled follow-up**, taken only when a real need appears (a second consumer,
-  or the module outgrowing the plugin). New markdown features (header/content
-  **folds**, displays/tables) land **in `markdown.lua`** and ride the eventual
-  extraction; building them does not wait on the split.
+- ✅ **`markdown.lua` extract-vs-keep — EXTRACTED (v1.72.0).** The scheduled split
+  (decided 3/8/2026, kept in-tree until a real need) was taken as Item 2 / P14: the
+  module is now the standalone `pkm-markdown` sibling, consumed through a thin lazy
+  facade (see Area 5 · P14 above and the CHANGELOG v1.72.0 entry). New markdown
+  features (header/content **folds**, displays/tables) now land **in `pkm-markdown`**
+  and are re-exported through the facade — same lockstep discipline as pkm-syntax.
 
 ### 6 · Other — ▹
 
@@ -510,12 +509,20 @@ P12·Item7 → P13·Item8 → P14·Item2.
   next-numbered item and the family cascade-renumbers (`renumber_at_cursor(quiet)`).
   Falls back to an ordinary newline on non-list lines and while a completion menu is
   open. `test_list_continue` (12). Needs author smoke (insert-mode + fallback fidelity).
-- **P14 · Item 2 — extract `markdown.lua` as `pkm-markdown`; apply to non-pkm
-  files.** The already-decided (3/8/2026) scheduled extraction — taken when a real
-  need appears — now carries an explicit requirement: the extracted module should be
-  applicable to **non-pkm** markdown files too, **optional and on by default** (e.g.
-  header-sensitive wrap, code-block handling), mirroring how pkm-syntax became a
-  standalone consumer-agnostic plugin. Largest item; lands last in this batch.
+- ✅ **P14 · Item 2 — extract `markdown.lua` as `pkm-markdown`; apply to non-pkm
+  files — DONE (v1.72.0).** The 1267-line module moved **byte-for-byte** to the new
+  standalone sibling `pkm-markdown` (github.com/Vitruvia/pkm-markdown); pkm-nvim keeps
+  a thin lazy facade at `lua/pkm/markdown.lua` (1267→61 lines) re-exporting
+  `require('pkm-markdown')`, mirroring `pkm.syntax`. The non-pkm requirement is met by
+  a standalone `setup(opts)`/`attach()` — a `FileType markdown` autocmd wiring
+  `formatexpr` + the ordered-list `<CR>` (both on by default; `{ wrap?, lists?,
+  symbols? }`), guarded by `pkm_markdown_attached` so it never double-wires a buffer
+  pkm-nvim owns. `test/min_init.lua` prepends the sibling to rtp; suite `CLAUDE.md`
+  records the second lockstep dependency. Fixed a `formatexpr` regression the split
+  exposed (Neovim `v:lua.require('mod').field` ignores `__index` → `formatexpr` made a
+  real key on the facade). Suite 101/101. **This was the last open backlog item —
+  the 2026-08-10 14-item batch is now fully resolved.** Needs author smoke (standalone
+  `setup()` on a plain markdown file; note-buffer gq/gw still routes through the wrap).
 
 ### Area 6 · Documentation (`doc/pkm.txt`)
 

@@ -74,6 +74,10 @@ local function enable_note_buffer(bufnr)
   -- affects PKM notes; on any non-list line it falls back to an ordinary newline.
   vim.keymap.set('i', '<CR>', function() require('pkm.markdown').list_newline() end,
     { buffer = bufnr, silent = true, desc = 'PKM: continue ordered list / newline' })
+  -- Claim this buffer for pkm-nvim's own wiring: if a user ALSO runs pkm-markdown
+  -- standalone (setup()), its FileType autocmd checks this flag and yields the
+  -- note buffers pkm-nvim owns instead of re-wiring the same behaviour.
+  vim.b[bufnr].pkm_markdown_attached = true
 end
 
 --- Enable PKM syntax on every listed PKM buffer currently open.

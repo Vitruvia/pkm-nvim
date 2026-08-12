@@ -66,6 +66,15 @@ if vim.fn.isdirectory(pkm_syntax_root) == 1 then
   vim.opt.runtimepath:prepend(pkm_syntax_root)
 end
 
+-- The markdown editing utilities were likewise extracted to the sibling
+-- `pkm-markdown` plugin (pkm-nvim depends on it too). Same relative resolution,
+-- so moving the suite needs no change here; without it, pkm.markdown degrades to
+-- a no-op stub.
+local pkm_markdown_root = vim.fn.fnamemodify(repo_root, ':h') .. '/pkm-markdown'
+if vim.fn.isdirectory(pkm_markdown_root) == 1 then
+  vim.opt.runtimepath:prepend(pkm_markdown_root)
+end
+
 -- Disposable test run: never read or write the user's real ShaDa file
 -- (marks, registers, command/search history, oldfiles). Equivalent to
 -- passing -i NONE on the command line, set here so it applies automatically
