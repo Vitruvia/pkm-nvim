@@ -58,5 +58,32 @@ out = vim.api.nvim_buf_get_lines(0, 0, -1, false)
 check("mid-text split makes the tail the next item",
   eq(table.concat(out, '|'), '1. texto|2. texto|3. texto'), table.concat(out, '|'))
 
+print("\n== plan_list_continuation: roman / alpha / inciso families ==")
+p = md.plan_list_continuation('ii. second', 10)            -- lowercase-roman subalínea
+check("roman i. is a list", p ~= nil and p.newline:match('^i+%. ') ~= nil, p and p.newline)
+p = md.plan_list_continuation('b) second', 9)              -- alpha
+check("alpha b) is a list", p ~= nil and p.newline:match('^%l+%) ') ~= nil, p and p.newline)
+p = md.plan_list_continuation('II - second', 11)           -- legal inciso
+check("inciso II - is a list", p ~= nil and p.newline:match('^[IVXLCDM]+ %- ') ~= nil, p and p.newline)
+check("'civil.' prose is not a list (invalid roman)", md.plan_list_continuation('civil. text', 6) == nil)
+
+print("\n== list_newline: roman / alpha / inciso continue & renumber ==")
+local function run(lines, row, col)
+  vim.cmd('enew!')
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+  vim.api.nvim_win_set_cursor(0, { row, col })
+  md.list_newline()
+  return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '|')
+end
+-- Mid-text split after the first word (a valid normal-mode column), mirroring the
+-- arabic case above; the tail becomes the next item and the family renumbers.
+local out2
+out2 = run({ 'i. texto', 'ii. texto texto' }, 2, #'ii. texto')
+check("roman list continues (i.→ii.→iii.)", out2 == 'i. texto|ii. texto|iii. texto', out2)
+out2 = run({ 'a) texto', 'b) texto texto' }, 2, #'b) texto')
+check("alpha list continues (a)→b)→c))", out2 == 'a) texto|b) texto|c) texto', out2)
+out2 = run({ 'I - texto', 'II - texto texto' }, 2, #'II - texto')
+check("inciso list continues (I -→II -→III -)", out2 == 'I - texto|II - texto|III - texto', out2)
+
 print("")
 if failures == 0 then print("ALL PASS") else print(string.format("%d FAILURE(S)", failures)) end

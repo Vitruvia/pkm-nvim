@@ -75,6 +75,29 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.73.0] - 12/8/2026
+
+*Smoke follow-up (note 0297, Percurso B): the insert-mode `<CR>` list continuation
+now covers the roman, legal-inciso and alpha families, not only arabic numerals.*
+
+### Added
+
+-   **Insert-mode `<CR>` continues roman (`i.`/`ii.`), legal-inciso (`I -`/`II -`)
+    and alpha (`a)`/`a.`) ordered lists, not just arabic `1.`/`1)`.** The list-`<CR>`
+    continuation (v1.68.0) only recognised arabic numerals, so pressing `<CR>` in a
+    roman/alpha/legal list dropped to a plain newline (the v1.72.0 Percurso B smoke).
+    `pkm-markdown.plan_list_continuation` now detects the same ordered families
+    `renumber_sequence` does, in the same order (arabic → inciso → subalínea
+    [validated roman, so `i.` reads as roman i, not the 9th letter] → alpha); the new
+    item carries a same-family marker and the existing cascade renumber
+    (`renumber_at_cursor`) assigns the correct ordinal to every item. `gq`/`gw`
+    already reflowed every family (hanging indent), so only the continuation needed
+    the fix. test_list_continue +7 (pure detection + end-to-end renumber for each
+    family). This is a **pkm-markdown-side** change (the module lives there now),
+    consumed unchanged through the facade — **push both repos**.
+
+---
+
 ## [1.72.1] - 12/8/2026
 
 *Smoke follow-up to v1.72.0 (note 0297, Percurso B): the standalone editing
