@@ -521,8 +521,15 @@ P12·Item7 → P13·Item8 → P14·Item2.
   records the second lockstep dependency. Fixed a `formatexpr` regression the split
   exposed (Neovim `v:lua.require('mod').field` ignores `__index` → `formatexpr` made a
   real key on the facade). Suite 101/101. **This was the last open backlog item —
-  the 2026-08-10 14-item batch is now fully resolved.** Needs author smoke (standalone
-  `setup()` on a plain markdown file; note-buffer gq/gw still routes through the wrap).
+  the 2026-08-10 14-item batch is now fully resolved.** Author smoke passed
+  (standalone `setup()` on a plain markdown file; note-buffer gq/gw routes through the
+  wrap). **Smoke follow-ups shipped:** v1.72.1 — the `highlight_all_markdown` path drives
+  pkm-**markdown** editing too, not just pkm-syntax highlight (`enable_plain_markdown`
+  also `attach()`es); v1.73.0 — the `<CR>` list continuation covers **all** ordered
+  families (roman/inciso/alpha), not just arabic (lockstep pkm-markdown change);
+  **v1.74.0 — `highlight_all_markdown` now defaults `true`, so the standalone treatment
+  is global by default** (every markdown buffer, not just vault notes; `= false`
+  restores the old scoping).
 
 ### Area 6 · Documentation (`doc/pkm.txt`)
 
