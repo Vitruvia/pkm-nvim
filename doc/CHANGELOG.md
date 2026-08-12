@@ -75,6 +75,32 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.72.1] - 12/8/2026
+
+*Smoke follow-up to v1.72.0 (note 0297, Percurso B): the standalone editing
+utilities now reach non-vault markdown through the dependency, as highlighting does.*
+
+### Fixed
+
+-   **`highlight_all_markdown` now enables the pkm-markdown editing utilities on
+    non-vault markdown too, not just pkm-syntax highlighting.** With
+    `highlight_all_markdown = true`, adding pkm-markdown as a dependency lit up
+    highlighting on every markdown buffer but left `formatexpr` / the ordered-list
+    `<CR>` unwired outside the vault — so `gq`/`gw` structure-aware wrap and list
+    continuation worked in notes but not in a plain `.md` (the v1.72.0 smoke
+    finding). `mode.enable_plain_markdown` now also calls
+    `require('pkm.markdown').attach(bufnr)` alongside `pkm.syntax.enable` —
+    idempotent, and the `pkm_markdown_attached` guard keeps it from double-wiring
+    notes or a buffer a standalone `setup()` already took. One switch
+    (`pkm_mode.syntax.highlight_all_markdown`) now gives all markdown the full pkm
+    treatment; a non-pkm-nvim config gets the same via
+    `require('pkm-markdown').setup()`. (Note: `test/min_init.lua` keeps the default
+    `highlight_all_markdown = false`, so a smoke of this behaviour needs the real
+    config or an explicit `setup()` — min_init never wired standalone markdown, the
+    same reason it never highlighted non-vault markdown.)
+
+---
+
 ## [1.72.0] - 12/8/2026
 
 *Backlog Item 2 / Phase 7 — the last item. The markdown editing utilities are

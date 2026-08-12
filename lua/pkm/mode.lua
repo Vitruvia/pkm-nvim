@@ -146,16 +146,24 @@ function M.setup(cfg)
     end,
   })
 
-  -- Optional: highlight ALL markdown files, not only PKM notes. A PKM note is
-  -- left to the open_note trigger above (full behaviour, incl. folds); any other
-  -- markdown buffer gets the pure highlighting (highlight_only), independent of
-  -- PKM mode being active. This is the standalone-plugin path — the highlighter
-  -- runs with no dependency on note state.
+  -- Optional: apply the standalone-plugin treatment to ALL markdown files, not
+  -- only PKM notes. A PKM note is left to the open_note trigger above (full
+  -- behaviour, incl. folds); any other markdown buffer gets pure highlighting
+  -- (highlight_only) AND the pkm-markdown editing utilities, independent of PKM
+  -- mode being active. Both run with no dependency on note state — this is the
+  -- symmetric consumer of the two sibling plugins: turning this on makes adding
+  -- pkm-markdown as a dependency behave like pkm-syntax (it applies everywhere,
+  -- not just in the vault), which is what a dependency on it is expected to do.
   if _config.syntax.enabled and _config.syntax.highlight_all_markdown then
     local function enable_plain_markdown(bufnr)
       local path = vim.api.nvim_buf_get_name(bufnr)
       if path ~= '' and is_pkm_file(path) then return end   -- PKM note → full path
       require('pkm.syntax').enable(bufnr, true)
+      -- Editing utilities to match: formatexpr (gq/gw structure-aware wrap) and
+      -- the ordered-list <CR> continuation. attach() is idempotent and yields any
+      -- buffer pkm-nvim already owns (the pkm_markdown_attached guard), so this
+      -- never double-wires a note nor a buffer a standalone setup() already took.
+      require('pkm.markdown').attach(bufnr)
     end
 
     vim.api.nvim_create_autocmd('FileType', {

@@ -144,12 +144,15 @@ local defaults = {
     },
     syntax = {
       enabled = true,     -- enable PKM syntax highlighting on activation
-      -- Highlight *all* markdown files, not only PKM notes. When true, a plain
-      -- markdown buffer outside the vault gets the pure highlighting (list
-      -- markers, citations, meta-comments, YAML injection) but NOT the note
-      -- behaviour (frontmatter fold, window options). Off by default so opening
-      -- an unrelated README is untouched. (This is the seam for extracting the
-      -- highlighter as a standalone plugin.)
+      -- Apply the sibling plugins to *all* markdown files, not only PKM notes.
+      -- When true, a plain markdown buffer outside the vault gets the pure
+      -- highlighting (list markers, citations, meta-comments, YAML injection)
+      -- from pkm-syntax AND the pkm-markdown editing utilities (gq/gw
+      -- structure-aware wrap via formatexpr, ordered-list <CR> continuation) —
+      -- but NOT the note behaviour (frontmatter fold, window options). Off by
+      -- default so opening an unrelated README is untouched. (This is the seam
+      -- for consuming pkm-syntax and pkm-markdown as standalone plugins; a
+      -- non-pkm-nvim config gets the same via their own setup().)
       highlight_all_markdown = false,
     },
   },
