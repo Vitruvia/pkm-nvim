@@ -94,7 +94,7 @@ end
 ---@param presorted boolean|nil  When true, skip the internal type/title sort
 ---@param on_cycle  fun()|nil  <C-l> closes and calls this (pop-up-container cycle)
 ---@param type_idx  integer|nil  TYPE_CYCLE index; <C-t> cycles it (default 1 = all)
-local function live_picker(title, entries, seed, presorted, on_cycle, type_idx)
+local function live_picker(title, entries, seed, presorted, on_cycle, type_idx, record)
   local t = require_telescope()
   if not t then return end
   local filter = require('pkm.filter')
@@ -154,6 +154,10 @@ local function live_picker(title, entries, seed, presorted, on_cycle, type_idx)
     previewer = t.conf.file_previewer({}),
     attach_mappings = function(prompt_bufnr, map)
       t.actions.select_default:replace(function()
+        -- Record what was typed BEFORE closing, so the pop-up container can bring
+        -- this exact search back on resume (Item 10 refinement). record is nil for
+        -- every non-pop-up caller, so their behaviour is unchanged.
+        if record then record(t.state.get_current_line()) end
         t.actions.close(prompt_bufnr)
         local sel = t.state.get_selected_entry()
         if sel then vim.cmd('edit ' .. vim.fn.fnameescape(sel.value)) end
@@ -181,7 +185,7 @@ local function live_picker(title, entries, seed, presorted, on_cycle, type_idx)
             -- the selection can be redone rather than merely narrowed.
             on_back = function()
               live_picker(title, entries, prompt ~= '' and prompt or seed,
-                presorted, on_cycle, type_idx)
+                presorted, on_cycle, type_idx, record)
             end,
           })
         end)
@@ -209,7 +213,7 @@ local function live_picker(title, entries, seed, presorted, on_cycle, type_idx)
         local next_idx = (type_idx % #TYPE_CYCLE) + 1
         vim.schedule(function()
           live_picker(title, entries, prompt ~= '' and prompt or nil,
-            presorted, on_cycle, next_idx)
+            presorted, on_cycle, next_idx, record)
         end)
       end
       map('i', '<C-t>', type_cyc)
@@ -383,7 +387,8 @@ end
 ---@param filter_expr string|nil  Optional seed expression (e.g. from :PKMBrowse tag:x)
 function M.browse(filter_expr, opts)
   local index = require('pkm.index')
-  live_picker('PKMBrowse', index.get_all(), filter_expr, nil, opts and opts.on_cycle)
+  live_picker('PKMBrowse', index.get_all(), filter_expr, nil,
+    opts and opts.on_cycle, nil, opts and opts.record)
 end
 
 --- Scoped live browser over a pre-computed path list.
@@ -441,7 +446,7 @@ function M.pick_list(title, items, on_select, opts)
   opts = opts or {}
   local t = require_telescope()
   if not t then return end
-  t.pickers.new({}, {
+  t.pickers.new({ default_text = opts.seed or '' }, {
     prompt_title = opts.on_cycle and (title .. '  ·  <C-l> next panel') or title,
     finder = t.finders.new_table({
       results     = items,
@@ -452,6 +457,9 @@ function M.pick_list(title, items, on_select, opts)
     sorter = t.conf.generic_sorter({}),
     attach_mappings = function(prompt_bufnr, map)
       t.actions.select_default:replace(function()
+        -- Record the typed prompt before closing (pop-up resume, Item 10). record
+        -- is nil for non-pop-up callers, leaving their behaviour unchanged.
+        if opts.record then opts.record(t.state.get_current_line()) end
         local entry = t.state.get_selected_entry()
         t.actions.close(prompt_bufnr)
         if entry then vim.schedule(function() on_select(entry.value) end) end

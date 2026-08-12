@@ -74,6 +74,36 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.71.3] - 11/8/2026
+
+*Pop-up search resume made pop-up-specific (v1.69.0 smoke, note 0291), and the
+pkm-syntax Item 5 "Known behaviour" note corrected (v1.70.0 smoke, note 0292).*
+
+### Changed
+
+-   **`<leader>fP` now resumes the pop-up's OWN last search (Item 10 refinement).**
+    It used Telescope's native `resume()`, which brings back whatever picker was
+    last — so opening the pop-up clean with `<leader>fp` in between made resume show
+    that empty panel instead of the search (the author's smoke finding). `pkm.popup`
+    now records the last *committed* pop-up search (provider + typed query, captured
+    only when an entry is chosen with something typed) and reopens THAT, seeded with
+    the query. A fresh open no longer clears it. Falls back to native `resume()` only
+    when nothing has been committed yet (the immediate search→resume case).
+    `telescope.pick_list` gained `opts.seed`/`opts.record`, and `live_picker` a
+    trailing `record` arg — both nil for every non-pop-up caller, so browse / the
+    sidebar `/` / views pickers are byte-for-byte unchanged. Telescope-only path;
+    smoke-verified (the pop-up pickers are not headless-assertable, per convention).
+
+### Docs (pkm-syntax, `042db0e`)
+
+-   **Item 5 "Known behaviour" note corrected.** It claimed a bare-tag line makes
+    headings below "lose their highlight"; the v1.70.0 smoke showed that does not
+    reproduce visibly. The note now states the real fact (a bare tag starts a
+    CommonMark HTML block that folds following lines into one `html_block` at the
+    tree-sitter level) but records that Vim's regex markdown syntax still colours
+    `#` markers regardless, so it rarely shows — with the workarounds kept as
+    optional for a tree-sitter-only setup. Comment-only; no behaviour change.
+
 ## [1.71.2] - 11/8/2026
 
 *Fix the sidebar/buffer-panel note-open bug found in the v1.67.0 & v1.71.0 smoke

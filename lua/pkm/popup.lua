@@ -21,6 +21,13 @@ local M = {}
 
 local ORDER = { 'browse', 'views', 'nav' }
 
+-- The last pop-up search worth returning to: { provider, query }. Set only when a
+-- pop-up search is COMMITTED (an entry is chosen with something typed), never by a
+-- fresh open — so opening the pop-up clean and then pressing resume brings back the
+-- earlier search rather than the empty panel that fresh open would otherwise leave
+-- as Telescope's "last picker". This is what makes resume pop-up-specific.
+local _last = nil
+
 --- The provider after `from` in the cycle order.
 ---@param from string
 ---@return string
@@ -33,15 +40,22 @@ end
 
 M._next_provider = next_provider   -- exposed for tests
 
---- Open the cyclable pop-up on `provider`. <C-l> re-opens on the next provider.
----@param provider string|nil  'browse' | 'views' | 'nav' (default 'browse')
-function M.open(provider)
+--- Launch the pop-up on `provider`, optionally seeding the prompt with `seed`.
+--- `record` remembers a committed search (provider + typed query) as `_last` for
+--- M.resume; `on_cycle` moves to the next provider (fresh, no seed).
+---@param provider string
+---@param seed string|nil
+local function launch(provider, seed)
   if not vim.tbl_contains(ORDER, provider) then provider = 'browse' end
-  local opts     = { on_cycle = function() M.open(next_provider(provider)) end }
+  local opts = {
+    on_cycle = function() launch(next_provider(provider), nil) end,
+    record   = function(query) _last = { provider = provider, query = query or '' } end,
+    seed     = seed,
+  }
   local has_tele = pcall(require, 'telescope')
 
   if provider == 'browse' then
-    if has_tele then require('pkm.telescope').browse(nil, opts)
+    if has_tele then require('pkm.telescope').browse(seed, opts)
     else             require('pkm.ui').browse() end
   elseif provider == 'views' then
     require('pkm.views').popup_search(opts)
@@ -50,19 +64,33 @@ function M.open(provider)
   end
 end
 
---- Reopen the PREVIOUS pop-up search with its prompt and results intact (Item
---- 10). `M.open` is always a FRESH search by design — searching, entering a note,
---- and reopening starts clean; this is the separate "go back to what I was
---- searching" key. It uses Telescope's native resume, so it needs Telescope (the
---- `vim.ui.select` fallback keeps no picker to restore) and brings back whichever
---- provider was last shown, exactly as it was left.
+M._launch = launch   -- exposed for tests
+
+--- Open the cyclable pop-up on `provider`. <C-l> re-opens on the next provider.
+--- Always a FRESH search by design (no seed) — see M.resume for going back.
+---@param provider string|nil  'browse' | 'views' | 'nav' (default 'browse')
+function M.open(provider)
+  launch(provider, nil)
+end
+
+--- Reopen the pop-up's OWN previous search — the last provider, seeded with the
+--- last typed query (Item 10). Unlike Telescope's native resume (which brings back
+--- whatever picker was last, so a fresh pop-up open would shadow the real search),
+--- this is pop-up-specific: `_last` is set only when a search is committed, so
+--- opening the pop-up clean in between does not clear it. Falls back to Telescope's
+--- native resume when nothing has been committed yet (the immediate search→resume
+--- flow, before any selection). Needs Telescope either way.
 function M.resume()
-  local ok, builtin = pcall(require, 'telescope.builtin')
-  if not ok then
+  local has_tele = pcall(require, 'telescope')
+  if not has_tele then
     vim.notify('[pkm] resume needs Telescope', vim.log.levels.WARN)
     return
   end
-  builtin.resume()
+  if _last and _last.query ~= '' then
+    launch(_last.provider, _last.query)
+  else
+    require('telescope.builtin').resume()
+  end
 end
 
 return M
