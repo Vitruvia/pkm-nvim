@@ -10,10 +10,21 @@
       "Bash(git clean:*)",
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
-      "Bash(rm -rf:*)"
+      "Bash(rm -rf:*)",
+      "Bash(git -C \"P:/Note-Vault/01 - Vitruvia\":*)",
+      "Bash(git -C P:/Note-Vault/01 - Vitruvia:*)",
+      "Edit(P:/Note-Vault/01 - Vitruvia/**)",
+      "Write(P:/Note-Vault/01 - Vitruvia/**)",
+      "Edit(P:\\Note-Vault\\01 - Vitruvia\\**)",
+      "Write(P:\\Note-Vault\\01 - Vitruvia\\**)",
+      "Bash(git -C \"P:/Note-Vault/02 - LLM-Claude\":*)",
+      "Bash(git -C P:/Note-Vault/02 - LLM-Claude:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-nvim-bkp\":*)",
+      "Bash(git -C P:/Active/pkm-suite/pkm-nvim-bkp:*)",
+      "Bash(git -C \"P:/Note-Vault/00 - NotesTeste\" push:*)",
+      "Bash(git -C P:/Note-Vault/00 - NotesTeste push:*)"
     ],
     "ask": [
-      "Bash(git push:*)",
       "Bash(git merge:*)",
       "Bash(git rebase:*)",
       "Bash(git checkout:*)",
@@ -22,8 +33,14 @@
     "allow": [
       "Bash(luacheck:*)",
       "Bash(nvim --headless:*)",
-      "Bash(git tag:*)",
-      "Bash(git commit:*)"
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-nvim\" commit:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-nvim\" push:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-nvim\" tag:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-syntax\" commit:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-syntax\" push:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-syntax\" tag:*)",
+      "Bash(git -C \"P:/Note-Vault/00 - NotesTeste\" commit:*)",
+      "Bash(git -C \"P:/Note-Vault/00 - NotesTeste\" add:*)"
     ]
   }
 }

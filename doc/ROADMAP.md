@@ -1025,6 +1025,58 @@ proper areas above** — this block is an inbox, not a finished plan.
    `source_year`, `source_publisher`) so bib provenance lives in structured
    frontmatter rather than only inside the BibTeX body / filename.
 
+---
+
+## Requests from the PKM vault-gestor session (2026-08-12) — pending dev triage
+
+Raised during a real Manager-mode reorg of a user vault (create views, extract/insert
+by tag, consolidate tags). **Full audit + action plan + technical anchors + acceptance
+criteria: `temp/pkm-gestor-auditoria-e-plano.md`.** Triage into the areas above; this is
+an inbox. Anchors verified on disk 2026-08-12 (grep to confirm no drift).
+
+**Code (pkm.api / plugin) — for the dev:**
+
+- **F1 · P1 · `set_membership` unusable on any OR-composed view.** `lua/pkm/views.lua:688`
+  `set_membership` + `lua/pkm/filter.lua:584` `tag_sets`. Every subview of `Concursos`
+  (an OR view) rejects add/remove as "can be satisfied several ways". Fix: intersect
+  candidate tag-sets with the note's **present** tags, and De-Morgan `NOT(A OR B OR C)`.
+  Accept: add/remove on a Concursos subview returns `ok=true` for a note already carrying
+  the parent tag.
+- **F4 · P2 · no top-level view creation in the API.** Add `api.save_view(name, expr)` in
+  `lua/pkm/api.lua:962`-neighbourhood, wrapping `lua/pkm/views.lua:870` `save` (only
+  `save_subproject` is exposed today).
+- **F5 · P2 · no compact structural projection.** `api.notes()` dumps every full record
+  (~90 KB / 667 notes). Add `api.structure()` (view tree + per-view counts + tag catalog)
+  and **document the view/tag model in the skill** (views = composed tag-filters; parent
+  AND-chain; single defining tag needed for membership writes).
+- **F6 · P3 · headless JSON contract.** `print(vim.json.encode(...))` lands on stderr mixed
+  with `notify`; silence notify under headless or document "capture stderr".
+- **F7 · P3 · malformed view filter.** `tag:"estatística" OR "statistics"` — bare quoted
+  term; `lua/pkm/filter.lua:285` `parse` should reject/normalise, and the def be fixed.
+
+**Sibling repos (appendix — user's own test findings):**
+
+- **Ap.1 · pkm-syntax.** Alphabetic list `A -`…`E -`: only `C -`/`D -` get highlighted; the
+  `X -` uppercase-letter prefix is not a defined marker and should highlight consistently
+  (all or none).
+- **Ap.2 · pkm-markdown.** `<CR>` list-continuation also fires on an intra-item line break;
+  move continuation to `<S-CR>` (or a toggle). Revisit `list_newline`.
+- **Ap.3 · pkm-markdown.** `test123.md` shows `2. 2. a` (doubled prefix) after arabic-list
+  editing — possible renumber/continuation artifact; reproduce and verify.
+
+**Convention (ready to apply, not triage):** tag-naming standard (singular default; plural
+only for idiomatically-plural domain objects; one canonical per concept, merge synonyms; no
+slash tags; semantic nuance in the body not the tag; one view = one canonical tag). Fold into
+`doc/CONVENTIONS.md` (new § Tags) + reference in `AGENT_PROTOCOL.md`/skill. Full text in the
+report's § D.
+
+**Already resolved this session (policy/config, not code):** F2 (vault-selection ambiguity) and
+F3 (permission inconsistency) — `CLAUDE.md` Fixed-facts now carries the gestor→`01`-via-`pkm.api`
+carve-out, and `.claude/settings.json` denies raw `Edit`/`Write` on the `01` path so `pkm.api` is
+the sole write path.
+
+---
+
 **Process for future upgrades:**
 - Re-run this audit against `:help news` for the target version before
   upgrading, not after. Check specifically: treesitter API changes (PKM's

@@ -59,9 +59,18 @@ conflict, say so explicitly rather than silently choosing one.
 - Vaults live under `P:\Note-Vault\` (moved there 27/7/2026; `P:\Notes` and
   `P:\NotesTeste` no longer exist). `01 - Vitruvia` is the **primary vault** and,
   like the "Agregador de Questões" project, belongs to **another** workflow:
-  never read, write, or reason about it while developing this plugin — the
-  rename changed its address, not its status. `00 - NotesTeste` is the test
-  vault; smoke notes and every experiment go there.
+  never read, write, or reason about it while **developing this plugin** — the
+  rename changed its address, not its status. **The one carve-out is a gestor
+  (Manager-mode) task the user explicitly directs at their vault:** then the
+  assistant MAY operate `01` **automatically, without re-asking**, but **only
+  through `pkm.api`** (headless `nvim … --root=…/01`) — the authorized,
+  structured, trash-guarded path (already permitted by the `Bash(nvim
+  --headless:*)` allow). Even then: **git on `01` stays denied** (the user
+  versions it), and **raw file edits are forbidden** (Edit/Write on the `01`
+  path are denied in `.claude/settings.json`) — the API is the sole write path.
+  Announce the target vault before acting, and back up first (a `pkm.api`
+  tag/`views.json` snapshot). `00 - NotesTeste` is the test vault; smoke notes
+  and every experiment go there.
 - **Vault paths contain spaces.** In a shell, quote the whole flag —
   `-- "--root=P:/Note-Vault/00 - NotesTeste"` — or argv splits it into three.
 
