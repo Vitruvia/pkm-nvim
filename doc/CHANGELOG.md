@@ -64,16 +64,14 @@ two found while evaluating multi-vault support, along with the one below.)*
   - **G9 — FIXED, CONFIRMED (v1.76.0).** After a `:Lazy sync` the block-aware inciso
     scan (`find_inciso_markers`, pkm-syntax `bc81a34`) passed the author's smoke:
     an `A -/B -/C -/D -` alpha list no longer mis-paints its C/D/I items. Closed.
-  - **G10 — REGRESSION, root-caused, awaiting a design pick.** Continuation was moved
-    to `<S-CR>` with the working `<CR>→continue` mapping removed. The author's terminal
-    does **not** deliver Shift+Enter to Neovim as a distinct `<S-CR>` (it collapses to
-    plain `<CR>`), so continuation never fires and **both keys now just insert a
-    newline** — worse than before. The earlier "smoke confirmed `<S-CR>` delivered"
-    note was wrong: `[Console]::ReadKey` proves a .NET console app distinguishes the
-    keys, not that Neovim receives `<S-CR>`. Fix needs a **deliverable** trigger; the
-    author's own `<C-j>` is free in insert mode (bound only in n/x/t for window-nav).
-    Options in ROADMAP G10 — awaiting the pick (recommend `<CR>`=continue + `<C-j>`
-    plain break, or the inverse).
+  - **G10 — FIXED (v1.78.0), pending smoke.** The `<S-CR>` attempt failed because the
+    author's terminal collapses Shift+Enter to a plain `<CR>` before Neovim sees it,
+    so continuation never fired and both keys just newlined. Per the author's choice
+    (they break inside items more than they continue lists), continuation moved to
+    **`<C-j>`** (Ctrl-J, a real LF byte every terminal delivers) and **`<CR>` is now
+    a plain newline** (Neovim default — no mapping). Lockstep: pkm-markdown `attach`
+    + pkm-nvim `mode.lua`; `list_newline` unchanged. `<C-j>` is free in the author's
+    insert mode (bound only in n/x/t for window-nav). Awaiting a terminal smoke.
   - **G8 — reclassified as a HIGHLIGHT issue (pkm-syntax), not the pkm-markdown
     continuation.** The author clarified: when `2. 2. test` appears, the ordered-list
     marker highlight paints **both** `2.` tokens, so it reads as if `2. 2.` is the
@@ -140,6 +138,34 @@ fired — is **fixed in v1.17.0**; see that entry.)*
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
     ~200+ views.
+
+---
+
+## [1.78.0] - 13/8/2026
+
+G10, redone. Ordered-list continuation now lives on **`<C-j>`**, and a plain
+**`<CR>` is an ordinary newline**. Lockstep pkm-markdown + pkm-nvim.
+
+### Changed
+
+- **List continuation moved from `<S-CR>` to `<C-j>` (Ctrl-J); `<CR>` = plain
+  newline.** The v1.72.x/dfc9688 attempt put continuation on `<S-CR>`, but the
+  author's terminal collapses Shift+Enter to a plain `<CR>` before Neovim receives
+  it — so continuation never fired and both keys just newlined (a regression). Per
+  the author's preference (they break inside items more often than they continue
+  lists), the **common** action stays on Enter as a plain newline, and the
+  deliberate "next numbered item" is `<C-j>` — a real control byte (LF) every
+  terminal delivers. Changed in both surfaces that wire it: pkm-markdown `attach`
+  and pkm-nvim `mode.lua` `enable_note_buffer` (lockstep); `list_newline` /
+  `plan_list_continuation` are unchanged. `<C-j>` is free in the author's insert
+  mode (their config binds it only in normal/visual/terminal, for window-nav).
+
+### Verification
+
+- `luacheck` clean on `mode.lua`; pkm-markdown `init.lua` unchanged but for the
+  keymap/comments (its 2 pre-existing `s`-unused warnings remain). `test_list_continue`
+  and the full suite (102/102 files) pass — `list_newline` logic is untouched. The
+  keymap itself is interactive, so it awaits the author's terminal smoke.
 
 ---
 

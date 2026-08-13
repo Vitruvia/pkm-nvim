@@ -578,19 +578,14 @@ G9) may jump the queue if the author prefers stability-first over the doctrine o
 G11·settings-deny → G8·Ap.3 → G9·Ap.1 → G10·Ap.2. (G11 is config correctness —
 a possibly-unenforced vault-safety guard; slot it wherever safety-first warrants.)
 
-**Status (13/8/2026, after the author's smoke):** **✅ DONE — G1–G7, G9, G11**
-(pkm-nvim v1.75.0 + pkm-syntax v1.76.0/G9, all pushed; G9 smoke-confirmed). **Still
-open:**
-- **G10 — REGRESSION, awaiting a design pick.** The `<CR>`→`<S-CR>` swap fails: the
-  author's terminal does not deliver Shift+Enter to Neovim as `<S-CR>` (it collapses
-  to `<CR>`), and the old working `<CR>→continue` mapping was removed — so **both keys
-  now just newline**, continuation is dead. The `[Console]::ReadKey` "smoke" proved
-  only that a .NET console app distinguishes the keys, NOT that Neovim receives
-  `<S-CR>`. `<C-j>` is free in the author's insert mode (bound only in n/x/t). Options
-  in the G10 item — recommend `<CR>`=continue + `<C-j>` plain break.
+**Status (13/8/2026, after the author's smoke):** **✅ DONE — G1–G7, G9, G10, G11**
+(pkm-nvim v1.75.0/v1.78.0 + pkm-syntax v1.76.0/G9, all pushed; G9 smoke-confirmed,
+G10 fixed pending smoke). **Still open — G8 only (of the batch):**
 - **G8 — reclassified: a HIGHLIGHT issue, not the continuation.** The author clarified
   it's that `2. 2. test` paints BOTH `2.` tokens as the marker (only the first is).
   pkm-syntax concern; needs a repro of what paints the second `N.`. See the G8 item.
+- **G10 — FIXED (v1.78.0):** continuation on `<C-j>`, `<CR>` = plain newline (the
+  `<S-CR>` byte never reached Neovim). Lockstep pkm-markdown + pkm-nvim. Pending smoke.
 
 **✅ NEW (13/8): views-panel note-type switch — DONE (v1.77.0), pending smoke.**
 `<C-t>` type cycle added to `telescope_view_picker` + `float_view_picker` (see its
@@ -723,22 +718,17 @@ whole.*
   after `:Lazy sync`** (13/8) — the `A -/B -/C -/D -` case no longer mis-paints.
   Closed.
 - **G10 · Ap.2 — pkm-markdown: `<CR>` continuation intrudes on intra-item breaks.
-  ⚠️ REGRESSION (13/8/2026), root-caused, needs a new approach.** The chosen swap
-  (continuation `<CR>`→`<S-CR>`, plain `<CR>`=newline; changed in pkm-markdown
-  `attach` + pkm-nvim `mode.lua`, lockstep) **fails on the author's terminal**: it
-  does not deliver Shift+Enter to Neovim as a distinct `<S-CR>` — the byte stream
-  collapses to a plain `<CR>`. With the old `<CR>→continue` mapping removed, **both
-  physical keys now just insert a newline**; continuation is gone entirely (worse
-  than the original complaint). The earlier `[Console]::ReadKey` "smoke" was
-  misread — it shows a .NET console app can read the two as distinct *key events*,
-  not that Neovim receives `<S-CR>` from the terminal's byte stream. **Options for the
-  real fix (a decision):** (i) restore `<CR>`=continue and bind a *deliverable* key
-  for a plain break inside an item — `<C-j>` (literal LF, always delivered) is the
-  safe choice; `<C-CR>` shares `<S-CR>`'s delivery risk; (ii) a config toggle
-  (`list_continuation` on/off) the user flips to break inside items; (iii) enable the
-  kitty keyboard protocol so `<S-CR>` becomes deliverable (terminal-dependent; may
-  not work on the author's setup, so not a safe default). Recommend (i) with `<C-j>`.
-  **Blocked on the author's pick.**
+  ✅ FIXED (13/8/2026), v1.78.0, pending smoke.** The `<S-CR>` attempt failed: the
+  author's terminal collapses Shift+Enter to a plain `<CR>` before Neovim sees it, so
+  continuation never fired and both keys just newlined. The `[Console]::ReadKey`
+  "smoke" was misread — it shows a .NET console app reads the keys apart, not that
+  Neovim receives `<S-CR>`. **Fix (author's choice):** continuation on **`<C-j>`**
+  (Ctrl-J, a real LF byte every terminal delivers); **`<CR>` is a plain newline**
+  (default, no mapping). The author breaks inside items more than they continue
+  lists, so the common action stays on Enter. Lockstep pkm-markdown `attach` +
+  pkm-nvim `mode.lua`; `list_newline`/`plan_list_continuation` unchanged. `<C-j>` is
+  free in the author's insert mode (bound only n/x/t for window-nav). luacheck clean,
+  `test_list_continue` + suite 102/102 pass; awaits the author's terminal smoke.
 - **views panel — no note-type switch. ✅ DONE (13/8/2026), v1.77.0, pending smoke.**
   Root cause: opening a view (`M.open` → `telescope_view_picker`, the `<leader>va` →
   select pop-up) had no `<C-t>` type cycle, though the sidebar detail mode, the browse
