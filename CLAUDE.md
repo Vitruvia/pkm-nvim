@@ -51,8 +51,17 @@ conflict, say so explicitly rather than silently choosing one.
   `dev`**, including releases: a version is closed and tagged on `dev`. `main`
   is **not** a release line — it holds periodic stable backups of `dev`, merged
   via the `pkm-merge` alias, and only when the user asks. `push.followTags` is
-  set on this repo, so an annotated tag rides along with the user's ordinary
-  `git push`; the tag is still mine to create, the push still theirs.
+  set on this repo, so an annotated tag rides along with an ordinary `git push`.
+  **Commit, push, and tag are all mine by default** (13/8/2026; settings.json
+  `allow` grants them for all three suite repos — use the `git -C "<repo>"` form so
+  the rules match). **Only merge needs an explicit instruction.** Tagging is my call
+  by best practice: an **annotated** tag on the version-closing commit, created at
+  version close **once the version is verified** — the headless suite for API/pure
+  changes, and the author's smoke *is* the verification for interactive surfaces
+  (highlight, keymaps, pickers), so tag after that smoke confirms. pkm-nvim owns the
+  version line (tag it; siblings stay untagged, referenced by SHA). Push tags
+  explicitly (`push.followTags` won't carry them on a no-op branch push). See
+  [[pkm-workflow-commit-push]].
 - Reference materials (read-only): `/mnt/p/Resources/<subpasta>` /
   `P:\Resources\<subpasta>` — e.g. *Programming in Lua, 4th ed.* Consult for
   language semantics; the Lua 5.4 manual remains the higher authority.
@@ -82,10 +91,15 @@ conflict, say so explicitly rather than silently choosing one.
    repo lives on Google Drive sync; object-database rewrites corrupt it.
    (`.claude/settings.json` also denies these, and `gc.auto=0` is set globally.
    This rule is the human-readable backstop, not the only guard.)
-2. **Never commit to `main`, and never push, tag, or merge without an explicit
-   instruction in the current turn.** Default working branch is `dev`. Pushing
-   prematurely breaks the Standing Verification Protocol, which requires
-   commit → push → `:Lazy sync` → verify → *then* tag.
+2. **Never commit to `main`** (default working branch is `dev`; `main` is
+   backup-only via `pkm-merge`, on request). **Commit, push, and tag are mine by
+   default** (13/8/2026 policy; settings.json `allow` grants them for the three
+   suite repos — use `git -C "<repo>"`). **Only merge needs an explicit instruction
+   in the current turn**, and never `--force`-push. The Standing Verification
+   Protocol still governs a *release*: commit → push → `:Lazy sync` → verify →
+   *then* tag — I create the annotated tag at version close once that verification
+   passes (the author's smoke *is* the verification for interactive surfaces), then
+   push it explicitly.
 3. **Every `Edit` anchor comes from a read done in this session**, ideally the
    read immediately preceding the edit — never an `old_string` reconstructed
    from memory of an earlier read. An `Edit` that fails on a bad anchor is the
@@ -134,7 +148,8 @@ conflict, say so explicitly rather than silently choosing one.
    Flag any bug found-but-not-asked-about clearly and add it to CHANGELOG Known
    Bugs, but do not fix it unless asked; if it risks data corruption or silent
    failure, say so explicitly.
-6. **Stop before commit/push/tag/merge** — those are user-gated (Rule 2). Update
+6. **Commit, push, and tag are mine to do by default; stop only before *merge*** —
+   merge stays gated (Rule 2). Tag at version close, once verified. Update
    `doc/CHANGELOG.md` / `LLM_CONTEXT.md` / `ROADMAP.md` on the version cadence
    (batched after a completed version), not mid-phase, unless asked.
 
