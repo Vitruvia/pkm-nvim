@@ -33,11 +33,16 @@ carried forward from version to version and consulted before any fix.*
   **Shipped 13/8/2026 in v1.75.0:** the pkm-nvim half — **G1–G7 and G11**
   (quote-aware args, present-tag-aware `set_membership`, `api.save_view` /
   `structure` / `tag_catalog` / `emit`, the mixed-filter warning, the tag convention,
-  and the settings-hygiene cleanup); **G8 and G10** landed the same day in the
-  siblings. **G9 shipped 13/8/2026 in v1.76.0** (pkm-syntax): the block-aware
-  inciso scan. **Batch complete** except **G12** (a settings.json push-permission
-  grant the agent cannot self-apply — awaiting the user). v1.75.0/v1.76.0 not
-  committed-as-a-unit/pushed/tagged yet.
+  and the settings-hygiene cleanup) — committed + pushed (`e7e74e9`, dev). **The
+  sibling items G8–G10 are NOT done:** the author's 13/8 real-terminal smoke reopened
+  them — **G10** regressed (`<S-CR>` is not delivered to Neovim on the author's
+  terminal, so continuation is dead on both keys), **G8** still misbehaves, and
+  **G9** (block-aware inciso, pushed as pkm-syntax `bc81a34` / documented as v1.76.0)
+  is unconfirmed pending a `:Lazy sync` + re-smoke. See Known Bugs. Also still open:
+  **G12** (settings.json push grant — the user applied it; commit/push are now
+  allowed for the suite repos) and a new **views-panel note-type-switch** feature
+  gap (reported 13/8). Net: **G1–G7, G11 done; G8–G10 reopened; G9 awaiting
+  re-smoke.**
 
 ### Known Bugs (queued)
 
@@ -55,21 +60,32 @@ two found while evaluating multi-vault support, along with the one below.)*
   spaced-argument command, not only `rename`.
 
 - **Sibling-repo items (ROADMAP § Triaged backlog — 2026-08-12 batch, G8–G10) —
-  all FIXED.** **G8** (pkm-markdown: the `2. 2.` doubled prefix — continuing with the
-  cursor inside the marker folded the old marker into the tail; `plan_list_continuation`
-  now keeps the item whole in that case). **G10** (pkm-markdown + pkm-nvim lockstep:
-  list continuation moved to `<S-CR>`, `<CR>` is a plain newline — terminal smoke
-  confirmed `<S-CR>` is delivered distinctly on the author's Windows 10 console).
-  **G9 FIXED in v1.76.0** (pkm-syntax): the inciso pattern `[IVXLCDM]+ -` painted
-  `C -`/`D -` (Roman numerals) but not `A/B/E -`, and a stateless `matchadd` could
-  not tell a real inciso `C -` (100) from a letter in an uppercase-alpha list. The
-  chosen fix (b) is a **block-aware extmark scan** (`find_inciso_markers`): a
-  contiguous same-indent run of ` - ` markers is painted only when *every* marker is
-  a canonical roman numeral, so an `A -/B -/C -/D -` list suppresses roman painting
-  across the whole block; a lone `C -` stays an inciso. *(The in-vault F1/G2 and
-  F7/G4 issues were addressed in v1.75.0 — see that entry; the malformed
-  **Estatística view definition** itself is vault data to correct with the
-  now-available `api.save_view`.)*
+  REOPENED by real-terminal smoke (13/8/2026).** The code changes landed but the
+  author's in-Neovim smoke shows the intended behaviour is not achieved; do NOT
+  treat these as closed.
+  - **G10 — REGRESSION, root-caused.** Continuation was moved to `<S-CR>` with the
+    working `<CR>→continue` mapping removed. The author's terminal does **not**
+    deliver Shift+Enter to Neovim as a distinct `<S-CR>` (it collapses to plain
+    `<CR>`), so continuation never fires and **both keys now just insert a newline**
+    — worse than before. The earlier "smoke confirmed `<S-CR>` delivered" note was
+    wrong: the `[Console]::ReadKey` test proves a .NET console app distinguishes the
+    keys, not that Neovim receives `<S-CR>`. Fix needs a **deliverable** trigger (e.g.
+    keep `<CR>`=continue and add `<C-j>`/`<C-CR>` for a plain break, or a config
+    toggle, or enable the kitty keyboard protocol) — a decision, see ROADMAP G10.
+  - **G8 — still misbehaving** (pkm-markdown, per author smoke: "both have
+    highlight, not desired"). The `plan_list_continuation` doubled-prefix change did
+    not resolve the observed problem; needs an exact repro to root-cause.
+  - **G9 — fix shipped v1.76.0 but UNCONFIRMED.** The block-aware inciso scan
+    (`find_inciso_markers`) was committed to pkm-syntax (`bc81a34`) and pushed only
+    just before the author reported "persists" — i.e. before a `:Lazy sync` could
+    pull it. Awaiting a **re-smoke after sync**; if it still persists, reopen with a
+    concrete repro. *(The in-vault F1/G2 and F7/G4 issues were addressed in v1.75.0.)*
+
+- **No note-type switch inside a views panel (feature gap, reported 13/8/2026).**
+  A view (e.g. "Aprendizado") shows all its notes with no way to filter to a single
+  note type — e.g. only `notes` or only `journals`. Browse and the sidebar already
+  have a comparable type toggle; the views panel should offer the same. Tracked in
+  ROADMAP for design (one-panel policy — an in-panel type cycle, not a new command).
 
 *(The `PKMCitation` highlight bug found 27/7/2026 — the `matchadd` regex that never
 fired — is **fixed in v1.17.0**; see that entry.)*
@@ -120,9 +136,13 @@ fired — is **fixed in v1.17.0**; see that entry.)*
 
 ## [1.76.0] - 13/8/2026
 
-The last open item of the 2026-08-12 vault-gestor batch, **G9**, closed in the
-`pkm-syntax` sibling. Standalone highlight-only change; no lockstep (the roman
-validator is already duplicated by design, `Dependencies: none`).
+The 2026-08-12 batch item **G9**, addressed in the `pkm-syntax` sibling. Standalone
+highlight-only change; no lockstep (the roman validator is already duplicated by
+design, `Dependencies: none`). **Status: code shipped + pushed (pkm-syntax
+`bc81a34`), headless-verified, but the author's visual re-smoke is still pending —
+it was pushed just before the author reported G9 "persists", i.e. before a `:Lazy
+sync` could pull it. Treat as unconfirmed until re-smoked; a highlight is exactly
+the kind of change the headless suite cannot see.**
 
 ### Fixed
 

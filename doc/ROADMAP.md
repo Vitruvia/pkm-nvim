@@ -578,17 +578,25 @@ G9) may jump the queue if the author prefers stability-first over the doctrine o
 G11·settings-deny → G8·Ap.3 → G9·Ap.1 → G10·Ap.2. (G11 is config correctness —
 a possibly-unenforced vault-safety guard; slot it wherever safety-first warrants.)
 
-**Status (13/8/2026):** **✅ DONE — G1–G11** (all code items). pkm-nvim v1.75.0
-(G1–G7, G11) + docs; **G8, G10** in pkm-markdown (lockstep with pkm-nvim `mode.lua`
-for G10); **G9** in pkm-syntax as **v1.76.0**. All verified headless (suite 102/102);
-smoke note 0298 queued; **not yet committed-as-a-unit/pushed/tagged**. G10's
-`<CR>`→`<S-CR>` swap (user chose Shift+Enter) — the **interactive smoke passed**: the
-author's Windows 10 console delivers `Enter/None` vs `Enter/Shift` as distinct
-events (`[Console]::ReadKey`). G9 was resolved with option **(b)**, the block-aware
-extmark scan — see the G9 item. **⛔ G12** — the only item left; a permission
-**grant** the agent is blocked from self-applying (auto-mode classifier); awaiting
-the user to edit `.claude/settings.json` (exact rules in the G12 item). The G-item
-detail below is kept until each item fully lands.
+**Status (13/8/2026, updated after real-terminal smoke):** **✅ DONE — G1–G7, G11**
+(pkm-nvim v1.75.0, committed + pushed `e7e74e9`, dev; suite verified). **⚠️ REOPENED
+by the author's in-Neovim smoke — G8, G9, G10 are NOT done:**
+- **G10 — REGRESSION.** The `<CR>`→`<S-CR>` swap fails: the author's terminal does
+  not deliver Shift+Enter to Neovim as `<S-CR>` (it collapses to `<CR>`), and the old
+  working `<CR>→continue` mapping was removed — so **both keys now just newline**,
+  continuation is dead. The `[Console]::ReadKey` "smoke" proved only that a .NET
+  console app distinguishes the keys, NOT that Neovim receives `<S-CR>`. Needs a
+  deliverable trigger — decision pending (see the G10 item).
+- **G8 — still misbehaving** (author: "both have highlight, not desired"); needs an
+  exact repro to root-cause.
+- **G9 — code shipped (pkm-syntax `bc81a34`, block-aware scan, option b) but
+  UNCONFIRMED**: pushed just before the author reported "persists", i.e. before a
+  `:Lazy sync`. Awaiting re-smoke after sync.
+
+**⛔ G12** — the user applied the settings.json grant; commit + push are now allowed
+for the three suite repos (only merge stays gated). **New (13/8): views-panel
+note-type switch** — a feature gap, see its item below. The G-item detail below is
+kept until each item fully lands.
 
 ### Area 1 · pkm.api & agents / command surface — 🔺
 
@@ -688,37 +696,59 @@ detail below is kept until each item fully lands.
 *These land in the sibling repo, not this tree; recorded here only so the plan is
 whole.*
 
-- **G8 · Ap.3 — pkm-markdown: doubled `2. 2.` list prefix. ✅ FIXED (13/8/2026).**
-  Root cause: `plan_list_continuation` built the new line's tail as
-  `line:sub(col+1)`, so continuing with the cursor **inside the marker** (col < the
-  marker length) folded the *old* marker into the tail → `<new> <old> text`, which
-  the cascade renumber then normalised to `2. 2.`. Fix: capture the prefix length
-  per family and, when the cursor is in the indent/marker, keep the current item
-  whole and start a fresh empty next item (never re-fold the marker). Verified:
-  reproduced old→new for arabic/alpha, existing continuation suite 19/19.
-- **G9 · Ap.1 — pkm-syntax: inconsistent alphabetic-list highlight. ✅ FIXED
-  (13/8/2026), v1.76.0, option (b).** `INCISO_LIST_PATTERN`
+- **G8 · Ap.3 — pkm-markdown: doubled `2. 2.` list prefix. ⚠️ REOPENED (13/8/2026)
+  by author smoke.** The first fix (capture per-family prefix length; when the cursor
+  is in the indent/marker, keep the current item whole instead of folding the old
+  marker into the tail via `line:sub(col+1)`) shipped in `dfc9688` and passed the
+  headless continuation suite (19/19), but the author's in-Neovim smoke reports the
+  problem persists — noted as **"both have highlight, not desired"** (both prefixes
+  appear / are highlighted). NEXT: obtain the exact keystroke repro (which family,
+  cursor position, `<CR>` vs `<S-CR>`) — the fix may be entangled with G10 (if
+  continuation is firing on a key it shouldn't, the doubled prefix follows). Do not
+  re-close without a smoke that reproduces then clears it.
+- **G9 · Ap.1 — pkm-syntax: inconsistent alphabetic-list highlight. 🟡 CODE SHIPPED,
+  UNCONFIRMED (13/8/2026), option (b).** `INCISO_LIST_PATTERN`
   (`\C\v^[ \t>]*\zs[IVXLCDM]+ +-\ze(\s|$)`) matched uppercase **Roman** markers + ` -`;
   in an `A -`…`E -` alphabetic list only `C -` (100) and `D -` (500) were Roman
   numerals, so only those painted. A stateless `matchadd` cannot tell a real inciso
-  `C -` from a letter `C -` in an alpha list. **Chosen fix (b), block-aware:** inciso
-  moved off `matchadd` to a buffer-scoped extmark scan (`find_inciso_markers` /
+  `C -` from a letter `C -` in an alpha list. **Fix (b), block-aware:** inciso moved
+  off `matchadd` to a buffer-scoped extmark scan (`find_inciso_markers` /
   `refresh_inciso_markers`, ns `pkm_inciso`, mirroring the subalínea validator) that
   groups a contiguous same-indent run of ` - ` markers and paints it **only when
   every marker is a canonical roman numeral** — any non-Roman uppercase letter in the
   run suppresses painting across the whole block; a lone `C -` is its own block and
-  still paints. Boundary: indent change or a blank line between markers; non-blank
-  continuation lines stay inside. The pattern constant is retained (test-pinned) as
-  the single-line recognition spec. Covered by `test/test_v1760_p1.lua`; suite
-  102/102; luacheck clean.
+  still paints. Covered by `test/test_v1760_p1.lua`; suite 102/102; luacheck clean.
+  **BUT:** committed to pkm-syntax `bc81a34` and pushed only just before the author
+  reported G9 "persists" — i.e. before a `:Lazy sync` could pull it, so the report
+  almost certainly predates the fix. A highlight change is invisible to the headless
+  suite. NEXT: `:Lazy sync` pkm-syntax, re-smoke the `A -/B -/C -/D -` case; if it
+  still persists, capture the exact lines and reopen.
 - **G10 · Ap.2 — pkm-markdown: `<CR>` continuation intrudes on intra-item breaks.
-  ✅ DONE (13/8/2026), needs terminal smoke.** Per the user's choice, continuation
-  moved from `<CR>` to **`<S-CR>` (Shift+Enter)**; a plain `<CR>` is now an ordinary
-  newline so a line can be broken inside an item. Changed in **both** repos
-  (pkm-markdown `attach` + pkm-nvim `mode.lua` note buffers — lockstep; `list_newline`
-  itself unchanged). **Caveat:** `<S-CR>` only fires if the terminal sends it
-  distinctly (most GUI/modern terminals do) — confirm in the real setup; if not, fall
-  back to a modifier-for-newline or a toggle.
+  ⚠️ REGRESSION (13/8/2026), root-caused, needs a new approach.** The chosen swap
+  (continuation `<CR>`→`<S-CR>`, plain `<CR>`=newline; changed in pkm-markdown
+  `attach` + pkm-nvim `mode.lua`, lockstep) **fails on the author's terminal**: it
+  does not deliver Shift+Enter to Neovim as a distinct `<S-CR>` — the byte stream
+  collapses to a plain `<CR>`. With the old `<CR>→continue` mapping removed, **both
+  physical keys now just insert a newline**; continuation is gone entirely (worse
+  than the original complaint). The earlier `[Console]::ReadKey` "smoke" was
+  misread — it shows a .NET console app can read the two as distinct *key events*,
+  not that Neovim receives `<S-CR>` from the terminal's byte stream. **Options for the
+  real fix (a decision):** (i) restore `<CR>`=continue and bind a *deliverable* key
+  for a plain break inside an item — `<C-j>` (literal LF, always delivered) is the
+  safe choice; `<C-CR>` shares `<S-CR>`'s delivery risk; (ii) a config toggle
+  (`list_continuation` on/off) the user flips to break inside items; (iii) enable the
+  kitty keyboard protocol so `<S-CR>` becomes deliverable (terminal-dependent; may
+  not work on the author's setup, so not a safe default). Recommend (i) with `<C-j>`.
+  **Blocked on the author's pick.**
+- **NEW · views panel — no note-type switch. Reported 13/8/2026, needs design.**
+  A view (e.g. "Aprendizado") lists all its notes with no way to narrow to a single
+  note type — show only `notes`, or only `journals`, within the view. Browse and the
+  sidebar already expose a comparable type filter/toggle; the views panel should too.
+  Shape per the one-panel policy: an **in-panel type cycle** (a key that rotates
+  all-types → notes → journals → … within the open view), reusing whatever the
+  browse/sidebar toggle already calls — NOT a new `:PKM…` command and not a wizard.
+  NEXT: locate the browse/sidebar type-filter mechanism and mirror it in the views
+  panel provider.
 
 ---
 
