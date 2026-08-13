@@ -288,6 +288,28 @@ local function entry_names(entries)
   return names
 end
 
+-- The note-type filter cycle shared by every view surface — the sidebar's
+-- `<C-t>` (detail mode), the Telescope view picker, and the float fallback.
+-- `false` = no filter (all types pass); the rest are index `note_type` values.
+-- Cycling `<C-t>` steps through this list, wrapping back to `false`.
+local TYPE_CYCLE = { false, 'note', 'agg', 'bib', 'journal', 'scratch' }
+
+--- True if a note of `note_type` passes the filter value `want`
+--- (`false`/nil = every type passes). Pure.
+---@param note_type string|nil
+---@param want string|false|nil
+---@return boolean
+local function type_passes(note_type, want)
+  return (not want) or (note_type or 'other') == want
+end
+
+--- The TYPE_CYCLE index after `idx` (wraps to 1). Pure.
+---@param idx integer|nil
+---@return integer
+local function next_type_idx(idx)
+  return ((idx or 1) % #TYPE_CYCLE) + 1
+end
+
 --- Sort a path list by note type (note→agg→bib→journal→scratch) then title.
 ---@param paths string[]
 ---@return string[]  New sorted array
@@ -1143,7 +1165,7 @@ end
 --- filter.lua expression (tag:/text:/title:/filename:/type: + AND/OR/NOT), the
 --- same language :PKMBrowse uses; a bare word matches any field. Subview rows
 --- are views, not notes, so they narrow by name substring instead.
-local function telescope_view_picker(name, paths, invocation_win, invocation_was_sidebar)
+local function telescope_view_picker(name, paths, invocation_win, invocation_was_sidebar, type_idx)
   local pickers      = require('telescope.pickers')
   local finders      = require('telescope.finders')
   local actions      = require('telescope.actions')
@@ -1151,6 +1173,11 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
   local previewers   = require('telescope.previewers')
   local sorters      = require('telescope.sorters')
   local index        = require('pkm.index')
+
+  -- Active note-type filter (<C-t> cycles it). false = all types. Applied on top
+  -- of the typed prompt, always — so it narrows an empty prompt too.
+  type_idx = type_idx or 1
+  local active_type = TYPE_CYCLE[type_idx]
 
   local children = get_view_children(name)
   local sorted   = sort_paths_by_type(paths)
@@ -1186,26 +1213,35 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
     layout_config    = { prompt_position = 'top' },
   }, {
     prompt_title = string.format(
-      'PKMView: %s  (%d note%s)  ?  help',
-      name, total, total == 1 and '' or 's'),
+      'PKMView: %s  (%d note%s)%s  ·  <C-t> type  ·  ?  help',
+      name, total, total == 1 and '' or 's',
+      active_type and ('  ·  [' .. active_type .. ']') or ''),
 
     finder = finders.new_dynamic({
     fn = function(prompt)
         local filter = require('pkm.filter')
         local tree   = filter.parse_prompt(prompt)   -- nil = match everything
-        if not tree then return entries end
-        -- Subview rows are views, not notes: they cannot satisfy a note filter,
-        -- so they narrow by the raw prompt as a name substring (today's UX) and
-        -- simply drop out of a structured predicate like tag:x.
-        local raw      = prompt:lower()
+        local raw    = prompt:lower()
         local filtered = {}
         for _, e in ipairs(entries) do
           local keep
           if e.is_subview then
-            keep = e.display:lower():find(raw, 1, true) ~= nil
+            -- Subview rows are structural (views, not notes): show them only
+            -- when no type filter is active (a type filter means "show me notes
+            -- of this type"). Then they narrow by the raw prompt as a name
+            -- substring, dropping out of a structured predicate like tag:x.
+            if active_type then
+              keep = false
+            elseif tree == nil then
+              keep = true
+            else
+              keep = e.display:lower():find(raw, 1, true) ~= nil
+            end
           else
             local note = index.get(e.value)
-            keep = note ~= nil and filter.eval(tree, note, SEARCH_EVAL)
+            keep = note ~= nil
+              and type_passes(note.note_type, active_type)
+              and (tree == nil or filter.eval(tree, note, SEARCH_EVAL))
           end
           if keep then filtered[#filtered + 1] = e end
         end
@@ -1265,6 +1301,18 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
       local function go_browse()
         actions.close(prompt_bufnr)
         vim.schedule(function() M.open_views_panel('browse') end)
+      end
+
+      -- <C-t>: cycle the note-type filter (all → note → agg → bib → journal →
+      -- scratch) — the way to see only, say, the journals inside this view.
+      -- Reopens the picker with the next type, matching the sidebar and browse
+      -- <C-t>; also overrides Telescope's default <C-t> (open-in-tab).
+      local function type_cyc()
+        actions.close(prompt_bufnr)
+        vim.schedule(function()
+          telescope_view_picker(name, paths, invocation_win, invocation_was_sidebar,
+            next_type_idx(type_idx))
+        end)
       end
 
       -- <C-v>/<C-x>: open the selected note in a split right/left of the
@@ -1331,6 +1379,7 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
           '  <C-p>    go to parent view',
           '  <C-s>    go to subviews',
           '  <C-f>    browse all notes',
+          '  <C-t>    cycle note-type filter (all/note/agg/bib/journal/scratch)',
           '  <C-v>    open note: split right',
           '  <C-x>    open note: split left',
           '  ?        this help',
@@ -1361,6 +1410,8 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
       map('n', '<C-s>', go_children)
       map('i', '<C-f>', go_browse)
       map('n', '<C-f>', go_browse)
+      map('i', '<C-t>', type_cyc)
+      map('n', '<C-t>', type_cyc)
       map('i', '<C-v>', function() do_split('right') end)
       map('n', '<C-v>', function() do_split('right') end)
       map('i', '<C-x>', function() do_split('left') end)
@@ -1387,6 +1438,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
   local listed       = {}    -- note paths in display order, for <C-a>
   local marked       = {}    -- path → true; survives re-render and filtering
   local filter_query = nil
+  local type_active  = false  -- <C-t> note-type filter; false = all types
 
   local function render()
     local sorted, filtered_children = all_sorted, children
@@ -1409,12 +1461,25 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       filtered_children, sorted = fc, fp
     end
 
+    -- The <C-t> note-type filter is applied on top of the / filter. A specific
+    -- type means "show me only notes of this type", so structural subview rows
+    -- are hidden while it is active.
+    if type_active then
+      local ft = {}
+      for _, p in ipairs(sorted) do
+        local e = index.get(p)
+        if e and (e.note_type or 'other') == type_active then ft[#ft + 1] = p end
+      end
+      sorted, filtered_children = ft, {}
+    end
+
     local total         = #sorted + #filtered_children
     local filter_label   = (filter_query and filter_query ~= '')
       and ('  [filter: ' .. filter_query .. ']') or ''
+    local type_label     = type_active and ('  [type: ' .. type_active .. ']') or ''
     local header = string.format(
-      '  View: %s  ·  %d note%s%s  ·  <CR> open  ·  / filter  ·  ? help  ·  q close',
-      name, total, total == 1 and '' or 's', filter_label)
+      '  View: %s  ·  %d note%s%s%s  ·  <CR> open  ·  / filter  ·  <C-t> type  ·  ? help  ·  q close',
+      name, total, total == 1 and '' or 's', filter_label, type_label)
     local lines = { header, '  ' .. string.rep('─', math.max(#header - 2, 10)) }
     line_paths, line_subs = {}, {}
 
@@ -1526,6 +1591,19 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     render()
   end
 
+  -- <C-t>: cycle the note-type filter (all → note → agg → bib → journal →
+  -- scratch), re-rendering in place. The float-panel equivalent of the sidebar
+  -- and Telescope <C-t>.
+  local function cycle_type()
+    local idx = 1
+    for i, v in ipairs(TYPE_CYCLE) do
+      if v == type_active then idx = i; break end
+    end
+    type_active = TYPE_CYCLE[next_type_idx(idx)]
+    render()
+    vim.notify('[pkm] type filter: ' .. (type_active or 'all'), vim.log.levels.INFO)
+  end
+
   -- <Tab>/<S-Tab>: mark the note under the cursor and step on. render() puts
   -- the cursor back at the top, so it is restored explicitly here.
   ---@param step integer
@@ -1562,6 +1640,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
   local ko = { noremap = true, silent = true, buffer = buf }
   vim.keymap.set('n', '<CR>',  open_at_cursor, ko)
   vim.keymap.set('n', '/',     do_search,      ko)
+  vim.keymap.set('n', '<C-t>', cycle_type,     ko)
   vim.keymap.set('n', '<Tab>',   function() toggle_mark_at_cursor(1)  end, ko)
   vim.keymap.set('n', '<S-Tab>', function() toggle_mark_at_cursor(-1) end, ko)
   vim.keymap.set('n', '<C-a>', bulk_actions,   ko)
@@ -1612,6 +1691,7 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
       '  <C-p>    go to parent view',
       '  <C-s>    go to subviews',
       '  <C-f>    browse all notes',
+      '  <C-t>    cycle note-type filter (all/note/agg/bib/journal/scratch)',
       '  <C-v>    open note: split right',
       '  <C-x>    open note: split left',
       '  /        filter — tag:/text:/title:/filename:, AND/OR/NOT',
@@ -3263,8 +3343,8 @@ local function apply_views_keymaps(buf)
   -- <C-s>: no-op — prevents global split keymaps from acting on the sidebar.
   vim.keymap.set('n', '<C-s>', function() end, ko)
 
-  -- <C-t>: cycle type filter (detail mode only).
-  local TYPE_CYCLE = { false, 'note', 'agg', 'bib', 'journal', 'scratch' }
+  -- <C-t>: cycle type filter (detail mode only). TYPE_CYCLE is module-level,
+  -- shared with the Telescope/float view pickers.
   vim.keymap.set('n', '<C-t>', function()
     local ct = get_tab()
     if ct.mode ~= 'detail' then

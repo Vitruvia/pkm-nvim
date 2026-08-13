@@ -60,28 +60,37 @@ two found while evaluating multi-vault support, along with the one below.)*
   spaced-argument command, not only `rename`.
 
 - **Sibling-repo items (ROADMAP § Triaged backlog — 2026-08-12 batch, G8–G10) —
-  REOPENED by real-terminal smoke (13/8/2026).** The code changes landed but the
-  author's in-Neovim smoke shows the intended behaviour is not achieved; do NOT
-  treat these as closed.
-  - **G10 — REGRESSION, root-caused.** Continuation was moved to `<S-CR>` with the
-    working `<CR>→continue` mapping removed. The author's terminal does **not**
-    deliver Shift+Enter to Neovim as a distinct `<S-CR>` (it collapses to plain
-    `<CR>`), so continuation never fires and **both keys now just insert a newline**
-    — worse than before. The earlier "smoke confirmed `<S-CR>` delivered" note was
-    wrong: the `[Console]::ReadKey` test proves a .NET console app distinguishes the
-    keys, not that Neovim receives `<S-CR>`. Fix needs a **deliverable** trigger (e.g.
-    keep `<CR>`=continue and add `<C-j>`/`<C-CR>` for a plain break, or a config
-    toggle, or enable the kitty keyboard protocol) — a decision, see ROADMAP G10.
-  - **G8 — still misbehaving** (pkm-markdown, per author smoke: "both have
-    highlight, not desired"). The `plan_list_continuation` doubled-prefix change did
-    not resolve the observed problem; needs an exact repro to root-cause.
-  - **G9 — fix shipped v1.76.0 but UNCONFIRMED.** The block-aware inciso scan
-    (`find_inciso_markers`) was committed to pkm-syntax (`bc81a34`) and pushed only
-    just before the author reported "persists" — i.e. before a `:Lazy sync` could
-    pull it. Awaiting a **re-smoke after sync**; if it still persists, reopen with a
-    concrete repro. *(The in-vault F1/G2 and F7/G4 issues were addressed in v1.75.0.)*
+  status after the author's 13/8 smoke:**
+  - **G9 — FIXED, CONFIRMED (v1.76.0).** After a `:Lazy sync` the block-aware inciso
+    scan (`find_inciso_markers`, pkm-syntax `bc81a34`) passed the author's smoke:
+    an `A -/B -/C -/D -` alpha list no longer mis-paints its C/D/I items. Closed.
+  - **G10 — REGRESSION, root-caused, awaiting a design pick.** Continuation was moved
+    to `<S-CR>` with the working `<CR>→continue` mapping removed. The author's terminal
+    does **not** deliver Shift+Enter to Neovim as a distinct `<S-CR>` (it collapses to
+    plain `<CR>`), so continuation never fires and **both keys now just insert a
+    newline** — worse than before. The earlier "smoke confirmed `<S-CR>` delivered"
+    note was wrong: `[Console]::ReadKey` proves a .NET console app distinguishes the
+    keys, not that Neovim receives `<S-CR>`. Fix needs a **deliverable** trigger; the
+    author's own `<C-j>` is free in insert mode (bound only in n/x/t for window-nav).
+    Options in ROADMAP G10 — awaiting the pick (recommend `<CR>`=continue + `<C-j>`
+    plain break, or the inverse).
+  - **G8 — reclassified as a HIGHLIGHT issue (pkm-syntax), not the pkm-markdown
+    continuation.** The author clarified: when `2. 2. test` appears, the ordered-list
+    marker highlight paints **both** `2.` tokens, so it reads as if `2. 2.` is the
+    prefix when only the first `2.` is the marker. The continuation fix (dfc9688)
+    stands; the residual concern is that the second `N.` (list-item content) is being
+    highlighted as a marker. Needs a repro of what paints it (tree-sitter list_marker
+    vs. a pkm-syntax pattern) before a fix. Tracked in ROADMAP.
 
-- **No note-type switch inside a views panel (feature gap, reported 13/8/2026).**
+- **No note-type switch inside the Telescope VIEW pop-up — FIXED 13/8/2026 (v1.77.0),
+  pending smoke.** Root cause: opening a view (`M.open` → `telescope_view_picker`, the
+  `<leader>va` → select pop-up) had no `<C-t>` type cycle, though the sidebar detail
+  mode, the browse `live_picker`, and the Telescope note picker all did. Added the
+  `<C-t>` cycle (all → note → agg → bib → journal → scratch) to `telescope_view_picker`
+  **and** its no-Telescope fallback `float_view_picker`, sharing a module-level
+  `TYPE_CYCLE` (the sidebar's local copy was deduped to it). The cycle is surfaced in
+  each picker's title and `?` help (the complaint was discoverability). Below: the
+  original gap description for reference.
   A view (e.g. "Aprendizado") shows all its notes with no way to filter to a single
   note type — e.g. only `notes` or only `journals`. Browse and the sidebar already
   have a comparable type toggle; the views panel should offer the same. Tracked in
@@ -134,15 +143,41 @@ fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.77.0] - 13/8/2026
+
+Note-type switching inside the Telescope **view pop-up** (`<leader>va` → pick a
+view). Reported as a gap: a view showed all its notes with no way to see only,
+say, its journals — even though the sidebar detail mode, the browse `live_picker`,
+and the Telescope note picker already had that on `<C-t>`.
+
+### Added
+
+- **`<C-t>` note-type filter in the view pickers.** `telescope_view_picker` and its
+  no-Telescope fallback `float_view_picker` now cycle the note-type filter
+  (all → note → agg → bib → journal → scratch) on `<C-t>`, applied on top of any
+  typed/`/` filter — the same cycle the sidebar and browse already use. A specific
+  type hides the structural subview rows (a type filter means "show me notes of this
+  type"); `all` restores them. The active type shows in the picker title and the
+  `?` help lists the key (the report was as much about discoverability as function).
+- Shared `TYPE_CYCLE` promoted to a module-level constant in `views.lua`, with pure
+  `type_passes` / `next_type_idx` helpers; the sidebar's duplicate local was removed.
+
+### Verification
+
+- `luacheck` clean on `views.lua` (the one long-line warning is the pre-existing
+  config string, now at :596). `views.lua` parses; full suite 102/102 files clean.
+  The picker `<C-t>` behaviour is interactive (a Telescope prompt the headless suite
+  cannot drive) — pending the author's smoke in the `<leader>va` pop-up.
+
+---
+
 ## [1.76.0] - 13/8/2026
 
-The 2026-08-12 batch item **G9**, addressed in the `pkm-syntax` sibling. Standalone
+The 2026-08-12 batch item **G9**, fixed in the `pkm-syntax` sibling. Standalone
 highlight-only change; no lockstep (the roman validator is already duplicated by
-design, `Dependencies: none`). **Status: code shipped + pushed (pkm-syntax
-`bc81a34`), headless-verified, but the author's visual re-smoke is still pending —
-it was pushed just before the author reported G9 "persists", i.e. before a `:Lazy
-sync` could pull it. Treat as unconfirmed until re-smoked; a highlight is exactly
-the kind of change the headless suite cannot see.**
+design, `Dependencies: none`). **Status: shipped (pkm-syntax `bc81a34`),
+headless-verified, and CONFIRMED by the author's smoke after `:Lazy sync` (13/8) —
+an `A -/B -/C -/D -` alpha list no longer mis-paints its roman-letter items.**
 
 ### Fixed
 

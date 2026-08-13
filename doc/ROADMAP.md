@@ -578,25 +578,25 @@ G9) may jump the queue if the author prefers stability-first over the doctrine o
 G11·settings-deny → G8·Ap.3 → G9·Ap.1 → G10·Ap.2. (G11 is config correctness —
 a possibly-unenforced vault-safety guard; slot it wherever safety-first warrants.)
 
-**Status (13/8/2026, updated after real-terminal smoke):** **✅ DONE — G1–G7, G11**
-(pkm-nvim v1.75.0, committed + pushed `e7e74e9`, dev; suite verified). **⚠️ REOPENED
-by the author's in-Neovim smoke — G8, G9, G10 are NOT done:**
-- **G10 — REGRESSION.** The `<CR>`→`<S-CR>` swap fails: the author's terminal does
-  not deliver Shift+Enter to Neovim as `<S-CR>` (it collapses to `<CR>`), and the old
-  working `<CR>→continue` mapping was removed — so **both keys now just newline**,
-  continuation is dead. The `[Console]::ReadKey` "smoke" proved only that a .NET
-  console app distinguishes the keys, NOT that Neovim receives `<S-CR>`. Needs a
-  deliverable trigger — decision pending (see the G10 item).
-- **G8 — still misbehaving** (author: "both have highlight, not desired"); needs an
-  exact repro to root-cause.
-- **G9 — code shipped (pkm-syntax `bc81a34`, block-aware scan, option b) but
-  UNCONFIRMED**: pushed just before the author reported "persists", i.e. before a
-  `:Lazy sync`. Awaiting re-smoke after sync.
+**Status (13/8/2026, after the author's smoke):** **✅ DONE — G1–G7, G9, G11**
+(pkm-nvim v1.75.0 + pkm-syntax v1.76.0/G9, all pushed; G9 smoke-confirmed). **Still
+open:**
+- **G10 — REGRESSION, awaiting a design pick.** The `<CR>`→`<S-CR>` swap fails: the
+  author's terminal does not deliver Shift+Enter to Neovim as `<S-CR>` (it collapses
+  to `<CR>`), and the old working `<CR>→continue` mapping was removed — so **both keys
+  now just newline**, continuation is dead. The `[Console]::ReadKey` "smoke" proved
+  only that a .NET console app distinguishes the keys, NOT that Neovim receives
+  `<S-CR>`. `<C-j>` is free in the author's insert mode (bound only in n/x/t). Options
+  in the G10 item — recommend `<CR>`=continue + `<C-j>` plain break.
+- **G8 — reclassified: a HIGHLIGHT issue, not the continuation.** The author clarified
+  it's that `2. 2. test` paints BOTH `2.` tokens as the marker (only the first is).
+  pkm-syntax concern; needs a repro of what paints the second `N.`. See the G8 item.
 
-**⛔ G12** — the user applied the settings.json grant; commit + push are now allowed
-for the three suite repos (only merge stays gated). **New (13/8): views-panel
-note-type switch** — a feature gap, see its item below. The G-item detail below is
-kept until each item fully lands.
+**✅ NEW (13/8): views-panel note-type switch — DONE (v1.77.0), pending smoke.**
+`<C-t>` type cycle added to `telescope_view_picker` + `float_view_picker` (see its
+item below). **⛔ G12** — the user applied the settings.json grant; commit + push are
+now allowed for the three suite repos (only merge stays gated). The G-item detail
+below is kept until each item fully lands.
 
 ### Area 1 · pkm.api & agents / command surface — 🔺
 
@@ -696,18 +696,19 @@ kept until each item fully lands.
 *These land in the sibling repo, not this tree; recorded here only so the plan is
 whole.*
 
-- **G8 · Ap.3 — pkm-markdown: doubled `2. 2.` list prefix. ⚠️ REOPENED (13/8/2026)
-  by author smoke.** The first fix (capture per-family prefix length; when the cursor
-  is in the indent/marker, keep the current item whole instead of folding the old
-  marker into the tail via `line:sub(col+1)`) shipped in `dfc9688` and passed the
-  headless continuation suite (19/19), but the author's in-Neovim smoke reports the
-  problem persists — noted as **"both have highlight, not desired"** (both prefixes
-  appear / are highlighted). NEXT: obtain the exact keystroke repro (which family,
-  cursor position, `<CR>` vs `<S-CR>`) — the fix may be entangled with G10 (if
-  continuation is firing on a key it shouldn't, the doubled prefix follows). Do not
-  re-close without a smoke that reproduces then clears it.
-- **G9 · Ap.1 — pkm-syntax: inconsistent alphabetic-list highlight. 🟡 CODE SHIPPED,
-  UNCONFIRMED (13/8/2026), option (b).** `INCISO_LIST_PATTERN`
+- **G8 · Ap.3 — RECLASSIFIED (13/8/2026): a highlight issue in pkm-syntax, not the
+  pkm-markdown continuation.** The author clarified the residual concern: when a line
+  reads `2. 2. test`, the ordered-list marker highlight paints **both** `2.` tokens,
+  so it looks like `2. 2.` is the prefix when only the first `2.` is the marker (the
+  second is item content). The pkm-markdown doubled-prefix fix (`dfc9688`, keep the
+  item whole when the cursor is in the marker; suite 19/19) stands and is not the
+  subject here. NEXT (pkm-syntax): reproduce `2. 2. test` and identify what paints the
+  second `N.` — tree-sitter's `list_marker` capture (a grammar quirk where the content
+  `2.` is read as a nested marker) vs. a pkm-syntax matchadd. If tree-sitter, the fix
+  is a query/`; extends` adjustment or an extmark override; if a pkm pattern, tighten
+  it to line-start only. Do not fix blind — confirm the painter first.
+- **G9 · Ap.1 — pkm-syntax: inconsistent alphabetic-list highlight. ✅ FIXED +
+  CONFIRMED (13/8/2026), v1.76.0, option (b).** `INCISO_LIST_PATTERN`
   (`\C\v^[ \t>]*\zs[IVXLCDM]+ +-\ze(\s|$)`) matched uppercase **Roman** markers + ` -`;
   in an `A -`…`E -` alphabetic list only `C -` (100) and `D -` (500) were Roman
   numerals, so only those painted. A stateless `matchadd` cannot tell a real inciso
@@ -718,11 +719,9 @@ whole.*
   every marker is a canonical roman numeral** — any non-Roman uppercase letter in the
   run suppresses painting across the whole block; a lone `C -` is its own block and
   still paints. Covered by `test/test_v1760_p1.lua`; suite 102/102; luacheck clean.
-  **BUT:** committed to pkm-syntax `bc81a34` and pushed only just before the author
-  reported G9 "persists" — i.e. before a `:Lazy sync` could pull it, so the report
-  almost certainly predates the fix. A highlight change is invisible to the headless
-  suite. NEXT: `:Lazy sync` pkm-syntax, re-smoke the `A -/B -/C -/D -` case; if it
-  still persists, capture the exact lines and reopen.
+  Committed to pkm-syntax `bc81a34`, pushed, and **confirmed by the author's smoke
+  after `:Lazy sync`** (13/8) — the `A -/B -/C -/D -` case no longer mis-paints.
+  Closed.
 - **G10 · Ap.2 — pkm-markdown: `<CR>` continuation intrudes on intra-item breaks.
   ⚠️ REGRESSION (13/8/2026), root-caused, needs a new approach.** The chosen swap
   (continuation `<CR>`→`<S-CR>`, plain `<CR>`=newline; changed in pkm-markdown
@@ -740,15 +739,17 @@ whole.*
   kitty keyboard protocol so `<S-CR>` becomes deliverable (terminal-dependent; may
   not work on the author's setup, so not a safe default). Recommend (i) with `<C-j>`.
   **Blocked on the author's pick.**
-- **NEW · views panel — no note-type switch. Reported 13/8/2026, needs design.**
-  A view (e.g. "Aprendizado") lists all its notes with no way to narrow to a single
-  note type — show only `notes`, or only `journals`, within the view. Browse and the
-  sidebar already expose a comparable type filter/toggle; the views panel should too.
-  Shape per the one-panel policy: an **in-panel type cycle** (a key that rotates
-  all-types → notes → journals → … within the open view), reusing whatever the
-  browse/sidebar toggle already calls — NOT a new `:PKM…` command and not a wizard.
-  NEXT: locate the browse/sidebar type-filter mechanism and mirror it in the views
-  panel provider.
+- **views panel — no note-type switch. ✅ DONE (13/8/2026), v1.77.0, pending smoke.**
+  Root cause: opening a view (`M.open` → `telescope_view_picker`, the `<leader>va` →
+  select pop-up) had no `<C-t>` type cycle, though the sidebar detail mode, the browse
+  `live_picker`, and the Telescope note picker all did. Added the in-panel `<C-t>`
+  cycle (all → note → agg → bib → journal → scratch, applied on top of the prompt/`/`
+  filter; a specific type hides structural subview rows) to **both**
+  `telescope_view_picker` and the no-Telescope fallback `float_view_picker`, sharing a
+  module-level `TYPE_CYCLE` (the sidebar's duplicate local was deduped). Surfaced in
+  each picker's title + `?` help (the report was half discoverability). No new command
+  (one-panel policy honoured). `luacheck` clean, suite 102/102; the picker `<C-t>` is
+  interactive so it awaits the author's smoke in the `<leader>va` pop-up.
 
 ---
 
