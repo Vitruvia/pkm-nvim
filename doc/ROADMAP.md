@@ -578,14 +578,14 @@ G9) may jump the queue if the author prefers stability-first over the doctrine o
 G11·settings-deny → G8·Ap.3 → G9·Ap.1 → G10·Ap.2. (G11 is config correctness —
 a possibly-unenforced vault-safety guard; slot it wherever safety-first warrants.)
 
-**Status (13/8/2026):** **✅ DONE — G1, G2, G3, G4, G5, G6, G7, G11** (pkm-nvim
-v1.75.0 + docs; verified headless, smoke note 0298 queued) **and G8, G10**
-(pkm-markdown, lockstep with pkm-nvim `mode.lua` for G10). All verified; **not yet
-committed/pushed/tagged**. G10's `<CR>`→`<S-CR>` swap (user chose Shift+Enter) needs
-one **interactive smoke** to confirm the terminal delivers `<S-CR>` distinctly.
-**⏳ OPEN — G9** (pkm-syntax): root-caused (the inciso pattern `[IVXLCDM]+ -` matches
-`C -`/`D -` because C/D are Roman numerals) but it is a **stateless-vs-block-aware
-design decision**, not a one-liner — see the G9 item. **⛔ G12** — a permission
+**Status (13/8/2026):** **✅ DONE — G1–G11** (all code items). pkm-nvim v1.75.0
+(G1–G7, G11) + docs; **G8, G10** in pkm-markdown (lockstep with pkm-nvim `mode.lua`
+for G10); **G9** in pkm-syntax as **v1.76.0**. All verified headless (suite 102/102);
+smoke note 0298 queued; **not yet committed-as-a-unit/pushed/tagged**. G10's
+`<CR>`→`<S-CR>` swap (user chose Shift+Enter) — the **interactive smoke passed**: the
+author's Windows 10 console delivers `Enter/None` vs `Enter/Shift` as distinct
+events (`[Console]::ReadKey`). G9 was resolved with option **(b)**, the block-aware
+extmark scan — see the G9 item. **⛔ G12** — the only item left; a permission
 **grant** the agent is blocked from self-applying (auto-mode classifier); awaiting
 the user to edit `.claude/settings.json` (exact rules in the G12 item). The G-item
 detail below is kept until each item fully lands.
@@ -696,18 +696,21 @@ whole.*
   per family and, when the cursor is in the indent/marker, keep the current item
   whole and start a fresh empty next item (never re-fold the marker). Verified:
   reproduced old→new for arabic/alpha, existing continuation suite 19/19.
-- **G9 · Ap.1 — pkm-syntax: inconsistent alphabetic-list highlight. ⏳ ROOT-CAUSED,
-  DECISION NEEDED.** `INCISO_LIST_PATTERN` (`pkm-syntax/…/init.lua:241`,
-  `\C\v^[ \t>]*\zs[IVXLCDM]+ +-\ze(\s|$)`) matches uppercase **Roman** markers + ` -`.
-  In an `A -`…`E -` alphabetic list only `C -` (C=100) and `D -` (D=500) are Roman
-  numerals, so only those paint — hence the inconsistency. A real legal *inciso*
-  `C -` (100) is **indistinguishable** from a letter `C -` in an alpha list by a
-  stateless `matchadd`. **Fork:** (a) document as a known limitation (like the
-  html-block Item-5 grammar limit) — recommend uppercase alpha lists use a
-  different marker; or (b) build a **block-aware** inciso pass (extmarks, like the
-  subalínea validator) that suppresses Roman-inciso highlighting inside a block that
-  also contains non-Roman uppercase `X -` markers (A/B/E/F…). (b) is a real feature,
-  not a patch. **No code changed yet — awaiting the choice.**
+- **G9 · Ap.1 — pkm-syntax: inconsistent alphabetic-list highlight. ✅ FIXED
+  (13/8/2026), v1.76.0, option (b).** `INCISO_LIST_PATTERN`
+  (`\C\v^[ \t>]*\zs[IVXLCDM]+ +-\ze(\s|$)`) matched uppercase **Roman** markers + ` -`;
+  in an `A -`…`E -` alphabetic list only `C -` (100) and `D -` (500) were Roman
+  numerals, so only those painted. A stateless `matchadd` cannot tell a real inciso
+  `C -` from a letter `C -` in an alpha list. **Chosen fix (b), block-aware:** inciso
+  moved off `matchadd` to a buffer-scoped extmark scan (`find_inciso_markers` /
+  `refresh_inciso_markers`, ns `pkm_inciso`, mirroring the subalínea validator) that
+  groups a contiguous same-indent run of ` - ` markers and paints it **only when
+  every marker is a canonical roman numeral** — any non-Roman uppercase letter in the
+  run suppresses painting across the whole block; a lone `C -` is its own block and
+  still paints. Boundary: indent change or a blank line between markers; non-blank
+  continuation lines stay inside. The pattern constant is retained (test-pinned) as
+  the single-line recognition spec. Covered by `test/test_v1760_p1.lua`; suite
+  102/102; luacheck clean.
 - **G10 · Ap.2 — pkm-markdown: `<CR>` continuation intrudes on intra-item breaks.
   ✅ DONE (13/8/2026), needs terminal smoke.** Per the user's choice, continuation
   moved from `<CR>` to **`<S-CR>` (Shift+Enter)**; a plain `<CR>` is now an ordinary

@@ -33,9 +33,11 @@ carried forward from version to version and consulted before any fix.*
   **Shipped 13/8/2026 in v1.75.0:** the pkm-nvim half — **G1–G7 and G11**
   (quote-aware args, present-tag-aware `set_membership`, `api.save_view` /
   `structure` / `tag_catalog` / `emit`, the mixed-filter warning, the tag convention,
-  and the settings-hygiene cleanup). **Still open:** **G8–G10** (sibling repos
-  pkm-syntax/pkm-markdown) and **G12** (a settings.json push-permission grant the
-  agent cannot self-apply — awaiting the user). Not committed/pushed/tagged yet.
+  and the settings-hygiene cleanup); **G8 and G10** landed the same day in the
+  siblings. **G9 shipped 13/8/2026 in v1.76.0** (pkm-syntax): the block-aware
+  inciso scan. **Batch complete** except **G12** (a settings.json push-permission
+  grant the agent cannot self-apply — awaiting the user). v1.75.0/v1.76.0 not
+  committed-as-a-unit/pushed/tagged yet.
 
 ### Known Bugs (queued)
 
@@ -52,17 +54,21 @@ two found while evaluating multi-vault support, along with the one below.)*
   `(APU) Administração Pública` view (rename + restore). Fixes every
   spaced-argument command, not only `rename`.
 
-- **Sibling-repo items (ROADMAP § Triaged backlog — 2026-08-12 batch, G8–G10).**
-  **G8 FIXED** (pkm-markdown: the `2. 2.` doubled prefix — continuing with the cursor
-  inside the marker folded the old marker into the tail; `plan_list_continuation` now
-  keeps the item whole in that case). **G10 DONE** (pkm-markdown + pkm-nvim lockstep:
-  list continuation moved to `<S-CR>`, `<CR>` is a plain newline — needs a terminal
-  smoke to confirm `<S-CR>` delivery). **G9 STILL OPEN, root-caused:** pkm-syntax's
-  inciso pattern `[IVXLCDM]+ -` paints `C -`/`D -` (Roman numerals) but not `A/B/E -`,
-  and a stateless `matchadd` cannot tell a real inciso `C -` (100) from a letter in an
-  alpha list — needs a decision (document-as-limitation vs. a block-aware pass). *(The
-  in-vault F1/G2 and F7/G4 issues were addressed in v1.75.0 — see that entry; the
-  malformed **Estatística view definition** itself is vault data to correct with the
+- **Sibling-repo items (ROADMAP § Triaged backlog — 2026-08-12 batch, G8–G10) —
+  all FIXED.** **G8** (pkm-markdown: the `2. 2.` doubled prefix — continuing with the
+  cursor inside the marker folded the old marker into the tail; `plan_list_continuation`
+  now keeps the item whole in that case). **G10** (pkm-markdown + pkm-nvim lockstep:
+  list continuation moved to `<S-CR>`, `<CR>` is a plain newline — terminal smoke
+  confirmed `<S-CR>` is delivered distinctly on the author's Windows 10 console).
+  **G9 FIXED in v1.76.0** (pkm-syntax): the inciso pattern `[IVXLCDM]+ -` painted
+  `C -`/`D -` (Roman numerals) but not `A/B/E -`, and a stateless `matchadd` could
+  not tell a real inciso `C -` (100) from a letter in an uppercase-alpha list. The
+  chosen fix (b) is a **block-aware extmark scan** (`find_inciso_markers`): a
+  contiguous same-indent run of ` - ` markers is painted only when *every* marker is
+  a canonical roman numeral, so an `A -/B -/C -/D -` list suppresses roman painting
+  across the whole block; a lone `C -` stays an inciso. *(The in-vault F1/G2 and
+  F7/G4 issues were addressed in v1.75.0 — see that entry; the malformed
+  **Estatística view definition** itself is vault data to correct with the
   now-available `api.save_view`.)*
 
 *(The `PKMCitation` highlight bug found 27/7/2026 — the `matchadd` regex that never
@@ -109,6 +115,42 @@ fired — is **fixed in v1.17.0**; see that entry.)*
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
     ~200+ views.
+
+---
+
+## [1.76.0] - 13/8/2026
+
+The last open item of the 2026-08-12 vault-gestor batch, **G9**, closed in the
+`pkm-syntax` sibling. Standalone highlight-only change; no lockstep (the roman
+validator is already duplicated by design, `Dependencies: none`).
+
+### Fixed
+
+- **G9 · uppercase-alpha lists no longer get their roman-letter items
+  mis-highlighted.** The legal-inciso marker (`I -`, `II -`, …) was painted by a
+  per-line `matchadd` on `[IVXLCDM]+ +-`. In an uppercase-**alphabetic** list
+  (`A -`, `B -`, `C -`, `D -` …) that regex paints exactly the items whose letter
+  is a roman numeral (C, D, I, L, M, V, X) and leaves A/B/E/… plain — a ransom-note
+  list. A stateless regex cannot tell a genuine inciso `C -` (100) from the third
+  item of an alpha list. Fix **(b)**, block-aware: inciso moved off `matchadd` to a
+  buffer-scoped extmark scan (`find_inciso_markers` / `refresh_inciso_markers`,
+  namespace `pkm_inciso`) that groups a contiguous same-indent run of ` - ` markers
+  into a block and paints it **only when every marker is a canonical roman numeral**.
+  Any non-roman letter in the run marks it an alpha list and suppresses roman
+  painting across the whole block; a lone `C -` is its own block and still reads as
+  an inciso. Block boundary: a change of indent width or a blank line between
+  markers; non-blank continuation lines stay inside the block. The
+  `inciso_list_pattern` constant is kept (still test-pinned) as the single-line
+  recognition spec.
+
+### Verification
+
+- New `test/test_v1760_p1.lua` exercises `syntax._find_inciso_markers`: roman block
+  paints all, alpha block paints none, lone `C -`/`A -`, blank-line and indent
+  boundaries, continuation lines, blockquote prefixes, and the dropped `.`/`)`
+  forms. The v1.35.0 pattern pin (`test_v1350_p1.lua`) still passes. Full suite
+  102/102 files clean. `luacheck` clean on the changed file (the 2 remaining
+  warnings are pre-existing `ok`-shadow in `enable`).
 
 ---
 
