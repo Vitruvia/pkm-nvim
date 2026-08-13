@@ -583,11 +583,11 @@ a possibly-unenforced vault-safety guard; slot it wherever safety-first warrants
 (G9), all pushed; G9 smoke-confirmed. **G8 closed as won't-fix** (`2. 2. test` is
 correct CommonMark — the second `2.` is a genuine nested list marker; see its item).
 **G12** applied by the author (commit/push allowed for the suite repos). Plus the
-separate **views-panel `<C-t>` type switch** (v1.77.0). **Pending only the author's
-smoke:** v1.77.0 (`<leader>va` → view → `<C-t>`) and v1.78.0 (`<C-j>`/`<CR>`).
-Nothing tagged.
+separate **views-panel `<C-t>` type switch** (v1.77.0). **Both interactive fixes
+SMOKE-CONFIRMED by the author (13/8):** v1.77.0 (`<leader>va` → view → `<C-t>`) and
+v1.78.0 (`<C-j>`/`<CR>`). The batch is fully closed and verified. Nothing tagged.
 
-**✅ NEW (13/8): views-panel note-type switch — DONE (v1.77.0), pending smoke.**
+**✅ NEW (13/8): views-panel note-type switch — DONE + CONFIRMED (v1.77.0).**
 `<C-t>` type cycle added to `telescope_view_picker` + `float_view_picker` (see its
 item below). **⛔ G12** — the user applied the settings.json grant; commit + push are
 now allowed for the three suite repos (only merge stays gated). The G-item detail
@@ -721,7 +721,7 @@ whole.*
   after `:Lazy sync`** (13/8) — the `A -/B -/C -/D -` case no longer mis-paints.
   Closed.
 - **G10 · Ap.2 — pkm-markdown: `<CR>` continuation intrudes on intra-item breaks.
-  ✅ FIXED (13/8/2026), v1.78.0, pending smoke.** The `<S-CR>` attempt failed: the
+  ✅ FIXED + CONFIRMED (13/8/2026), v1.78.0.** The `<S-CR>` attempt failed: the
   author's terminal collapses Shift+Enter to a plain `<CR>` before Neovim sees it, so
   continuation never fired and both keys just newlined. The `[Console]::ReadKey`
   "smoke" was misread — it shows a .NET console app reads the keys apart, not that
@@ -731,8 +731,8 @@ whole.*
   lists, so the common action stays on Enter. Lockstep pkm-markdown `attach` +
   pkm-nvim `mode.lua`; `list_newline`/`plan_list_continuation` unchanged. `<C-j>` is
   free in the author's insert mode (bound only n/x/t for window-nav). luacheck clean,
-  `test_list_continue` + suite 102/102 pass; awaits the author's terminal smoke.
-- **views panel — no note-type switch. ✅ DONE (13/8/2026), v1.77.0, pending smoke.**
+  `test_list_continue` + suite 102/102 pass; smoke-confirmed by the author (13/8).
+- **views panel — no note-type switch. ✅ DONE + CONFIRMED (13/8/2026), v1.77.0.**
   Root cause: opening a view (`M.open` → `telescope_view_picker`, the `<leader>va` →
   select pop-up) had no `<C-t>` type cycle, though the sidebar detail mode, the browse
   `live_picker`, and the Telescope note picker all did. Added the in-panel `<C-t>`
@@ -742,7 +742,7 @@ whole.*
   module-level `TYPE_CYCLE` (the sidebar's duplicate local was deduped). Surfaced in
   each picker's title + `?` help (the report was half discoverability). No new command
   (one-panel policy honoured). `luacheck` clean, suite 102/102; the picker `<C-t>` is
-  interactive so it awaits the author's smoke in the `<leader>va` pop-up.
+  interactive so it was smoke-confirmed by the author (13/8) in the `<leader>va` pop-up.
 
 ---
 

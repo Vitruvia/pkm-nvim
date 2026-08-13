@@ -41,8 +41,9 @@ carried forward from version to version and consulted before any fix.*
   fixed). **G12** the user applied (commit/push now allowed for the suite repos).
   A separate 13/8 report — **no note-type switch in the view pop-up** — was fixed as
   **v1.77.0** (`<C-t>` cycle in `telescope_view_picker` + `float_view_picker`).
-  **Pending only the author's smoke:** v1.77.0 (`<leader>va` → view → `<C-t>`) and
-  v1.78.0 (`<C-j>` continues, `<CR>` breaks). Nothing tagged.
+  **Smoke-confirmed by the author (13/8):** v1.77.0 (`<leader>va` → view → `<C-t>`)
+  and v1.78.0 (`<C-j>` continues, `<CR>` breaks) both pass. The batch is fully closed
+  and verified. Nothing tagged.
 
 ### Known Bugs (queued)
 
@@ -64,7 +65,7 @@ two found while evaluating multi-vault support, along with the one below.)*
   - **G9 — FIXED, CONFIRMED (v1.76.0).** After a `:Lazy sync` the block-aware inciso
     scan (`find_inciso_markers`, pkm-syntax `bc81a34`) passed the author's smoke:
     an `A -/B -/C -/D -` alpha list no longer mis-paints its C/D/I items. Closed.
-  - **G10 — FIXED (v1.78.0), pending smoke.** The `<S-CR>` attempt failed because the
+  - **G10 — FIXED (v1.78.0), smoke-confirmed.** The `<S-CR>` attempt failed because the
     author's terminal collapses Shift+Enter to a plain `<CR>` before Neovim sees it,
     so continuation never fired and both keys just newlined. Per the author's choice
     (they break inside items more than they continue lists), continuation moved to
@@ -87,7 +88,7 @@ two found while evaluating multi-vault support, along with the one below.)*
     is correct. No code change.
 
 - **No note-type switch inside the Telescope VIEW pop-up — FIXED 13/8/2026 (v1.77.0),
-  pending smoke.** Root cause: opening a view (`M.open` → `telescope_view_picker`, the
+  smoke-confirmed.** Root cause: opening a view (`M.open` → `telescope_view_picker`, the
   `<leader>va` → select pop-up) had no `<C-t>` type cycle, though the sidebar detail
   mode, the browse `live_picker`, and the Telescope note picker all did. Added the
   `<C-t>` cycle (all → note → agg → bib → journal → scratch) to `telescope_view_picker`
@@ -171,7 +172,8 @@ G10, redone. Ordered-list continuation now lives on **`<C-j>`**, and a plain
 - `luacheck` clean on `mode.lua`; pkm-markdown `init.lua` unchanged but for the
   keymap/comments (its 2 pre-existing `s`-unused warnings remain). `test_list_continue`
   and the full suite (102/102 files) pass — `list_newline` logic is untouched. The
-  keymap itself is interactive, so it awaits the author's terminal smoke.
+  keymap itself is interactive; **smoke-confirmed by the author (13/8)**: `<C-j>`
+  continues the list, plain `<CR>` breaks inside an item.
 
 ---
 
@@ -199,7 +201,7 @@ and the Telescope note picker already had that on `<C-t>`.
 - `luacheck` clean on `views.lua` (the one long-line warning is the pre-existing
   config string, now at :596). `views.lua` parses; full suite 102/102 files clean.
   The picker `<C-t>` behaviour is interactive (a Telescope prompt the headless suite
-  cannot drive) — pending the author's smoke in the `<leader>va` pop-up.
+  cannot drive) — **smoke-confirmed by the author (13/8)** in the `<leader>va` pop-up.
 
 ---
 
