@@ -30,19 +30,19 @@ carried forward from version to version and consulted before any fix.*
   spaced-name bug, the `set_membership` OR-view defect, the `api.save_view` /
   `api.structure` gaps, the tag-naming convention, and sibling pkm-syntax/pkm-markdown
   fixes) — triaged as **G1–G12** in ROADMAP § Triaged backlog — 2026-08-12 batch.
-  **Shipped 13/8/2026 in v1.75.0:** the pkm-nvim half — **G1–G7 and G11**
-  (quote-aware args, present-tag-aware `set_membership`, `api.save_view` /
-  `structure` / `tag_catalog` / `emit`, the mixed-filter warning, the tag convention,
-  and the settings-hygiene cleanup) — committed + pushed (`e7e74e9`, dev). **The
-  sibling items G8–G10 are NOT done:** the author's 13/8 real-terminal smoke reopened
-  them — **G10** regressed (`<S-CR>` is not delivered to Neovim on the author's
-  terminal, so continuation is dead on both keys), **G8** still misbehaves, and
-  **G9** (block-aware inciso, pushed as pkm-syntax `bc81a34` / documented as v1.76.0)
-  is unconfirmed pending a `:Lazy sync` + re-smoke. See Known Bugs. Also still open:
-  **G12** (settings.json push grant — the user applied it; commit/push are now
-  allowed for the suite repos) and a new **views-panel note-type-switch** feature
-  gap (reported 13/8). Net: **G1–G7, G11 done; G8–G10 reopened; G9 awaiting
-  re-smoke.**
+  **The 2026-08-12 batch (G1–G12) is COMPLETE (13/8/2026).** Timeline: v1.75.0
+  (`e7e74e9`) shipped the pkm-nvim half G1–G7, G11; v1.76.0 (pkm-syntax `bc81a34`)
+  fixed G9 (block-aware inciso), smoke-confirmed; the author's real-terminal smoke
+  then reopened G8/G10, both since resolved — **G10** redone in v1.78.0 (continuation
+  on `<C-j>`, `<CR>` = plain newline, after `<S-CR>` proved undeliverable to Neovim;
+  lockstep pkm-markdown `0b0a768` + pkm-nvim `db0863b`), and **G8** closed as
+  won't-fix (`2. 2. test` is correct CommonMark — the second `2.` is a genuine nested
+  list marker; the doubled prefix that produced it was the continuation bug, already
+  fixed). **G12** the user applied (commit/push now allowed for the suite repos).
+  A separate 13/8 report — **no note-type switch in the view pop-up** — was fixed as
+  **v1.77.0** (`<C-t>` cycle in `telescope_view_picker` + `float_view_picker`).
+  **Pending only the author's smoke:** v1.77.0 (`<leader>va` → view → `<C-t>`) and
+  v1.78.0 (`<C-j>` continues, `<CR>` breaks). Nothing tagged.
 
 ### Known Bugs (queued)
 
@@ -72,13 +72,19 @@ two found while evaluating multi-vault support, along with the one below.)*
     a plain newline** (Neovim default — no mapping). Lockstep: pkm-markdown `attach`
     + pkm-nvim `mode.lua`; `list_newline` unchanged. `<C-j>` is free in the author's
     insert mode (bound only in n/x/t for window-nav). Awaiting a terminal smoke.
-  - **G8 — reclassified as a HIGHLIGHT issue (pkm-syntax), not the pkm-markdown
-    continuation.** The author clarified: when `2. 2. test` appears, the ordered-list
-    marker highlight paints **both** `2.` tokens, so it reads as if `2. 2.` is the
-    prefix when only the first `2.` is the marker. The continuation fix (dfc9688)
-    stands; the residual concern is that the second `N.` (list-item content) is being
-    highlighted as a marker. Needs a repro of what paints it (tree-sitter list_marker
-    vs. a pkm-syntax pattern) before a fix. Tracked in ROADMAP.
+  - **G8 — CLOSED 13/8/2026 as WON'T-FIX (correct CommonMark, not a bug).**
+    Reproduced `2. 2. test` under pkm-syntax headlessly, per column: **no** pkm
+    matchadd matches it (arabic families aren't matchadd'd; all `start=-1`) and **no**
+    pkm extmarks touch the line. The `@markup.list` on both `2.`s is tree-sitter's,
+    and the parse tree shows it is *right*: `2. 2. test` is a `list_item` (marker
+    `2. `) **containing a nested `list`** whose item's marker is the second `2. ` —
+    standard CommonMark (a list may start on the marker line; content begins at the
+    post-marker column). pkm-syntax's `highlights.scm:14`
+    (`(list_marker_dot) @markup.list`) intentionally paints markers at every nesting
+    depth, so the nested `2.` is highlighted by design. The doubled `2. 2.` only ever
+    came from the old continuation bug, already fixed (`dfc9688`), so it is no longer
+    produced accidentally. Author's decision: won't-fix + document; the highlighting
+    is correct. No code change.
 
 - **No note-type switch inside the Telescope VIEW pop-up — FIXED 13/8/2026 (v1.77.0),
   pending smoke.** Root cause: opening a view (`M.open` → `telescope_view_picker`, the

@@ -578,14 +578,14 @@ G9) may jump the queue if the author prefers stability-first over the doctrine o
 G11·settings-deny → G8·Ap.3 → G9·Ap.1 → G10·Ap.2. (G11 is config correctness —
 a possibly-unenforced vault-safety guard; slot it wherever safety-first warrants.)
 
-**Status (13/8/2026, after the author's smoke):** **✅ DONE — G1–G7, G9, G10, G11**
-(pkm-nvim v1.75.0/v1.78.0 + pkm-syntax v1.76.0/G9, all pushed; G9 smoke-confirmed,
-G10 fixed pending smoke). **Still open — G8 only (of the batch):**
-- **G8 — reclassified: a HIGHLIGHT issue, not the continuation.** The author clarified
-  it's that `2. 2. test` paints BOTH `2.` tokens as the marker (only the first is).
-  pkm-syntax concern; needs a repro of what paints the second `N.`. See the G8 item.
-- **G10 — FIXED (v1.78.0):** continuation on `<C-j>`, `<CR>` = plain newline (the
-  `<S-CR>` byte never reached Neovim). Lockstep pkm-markdown + pkm-nvim. Pending smoke.
+**Status (13/8/2026):** **✅ 2026-08-12 batch COMPLETE — G1–G12.** pkm-nvim v1.75.0
+(G1–G7, G11) + v1.78.0 (G10, `<C-j>` continue / `<CR>` break) + pkm-syntax v1.76.0
+(G9), all pushed; G9 smoke-confirmed. **G8 closed as won't-fix** (`2. 2. test` is
+correct CommonMark — the second `2.` is a genuine nested list marker; see its item).
+**G12** applied by the author (commit/push allowed for the suite repos). Plus the
+separate **views-panel `<C-t>` type switch** (v1.77.0). **Pending only the author's
+smoke:** v1.77.0 (`<leader>va` → view → `<C-t>`) and v1.78.0 (`<C-j>`/`<CR>`).
+Nothing tagged.
 
 **✅ NEW (13/8): views-panel note-type switch — DONE (v1.77.0), pending smoke.**
 `<C-t>` type cycle added to `telescope_view_picker` + `float_view_picker` (see its
@@ -691,17 +691,20 @@ below is kept until each item fully lands.
 *These land in the sibling repo, not this tree; recorded here only so the plan is
 whole.*
 
-- **G8 · Ap.3 — RECLASSIFIED (13/8/2026): a highlight issue in pkm-syntax, not the
-  pkm-markdown continuation.** The author clarified the residual concern: when a line
-  reads `2. 2. test`, the ordered-list marker highlight paints **both** `2.` tokens,
-  so it looks like `2. 2.` is the prefix when only the first `2.` is the marker (the
-  second is item content). The pkm-markdown doubled-prefix fix (`dfc9688`, keep the
-  item whole when the cursor is in the marker; suite 19/19) stands and is not the
-  subject here. NEXT (pkm-syntax): reproduce `2. 2. test` and identify what paints the
-  second `N.` — tree-sitter's `list_marker` capture (a grammar quirk where the content
-  `2.` is read as a nested marker) vs. a pkm-syntax matchadd. If tree-sitter, the fix
-  is a query/`; extends` adjustment or an extmark override; if a pkm pattern, tighten
-  it to line-start only. Do not fix blind — confirm the painter first.
+- **G8 · Ap.3 — CLOSED (13/8/2026) as WON'T-FIX: correct CommonMark, not a bug.**
+  Reproduced headlessly and inspected per column: no pkm matchadd matches `2. 2. test`
+  (arabic families aren't matchadd'd) and no pkm extmarks touch the line. The parse
+  tree is decisive —
+  `list_item("2. 2. test") → list_marker_dot("2. ") + list("2. test") →
+  list_item → list_marker_dot("2. ") + paragraph("test")`: the second `2.` is a
+  **nested** ordered-list marker, exactly as CommonMark specifies (a list may begin on
+  the marker line; content starts at the post-marker column, and `2. test` there is
+  itself a list item). pkm-syntax's `highlights.scm` line 14
+  (`(list_marker_dot) @markup.list`) intentionally paints markers at every nesting
+  depth, so the nested `2.` is highlighted by design. The doubled `2. 2.` only ever
+  came from the old continuation bug, already fixed (`dfc9688`), so it is no longer
+  produced accidentally. Author chose won't-fix — the highlighting is correct. No code
+  change.
 - **G9 · Ap.1 — pkm-syntax: inconsistent alphabetic-list highlight. ✅ FIXED +
   CONFIRMED (13/8/2026), v1.76.0, option (b).** `INCISO_LIST_PATTERN`
   (`\C\v^[ \t>]*\zs[IVXLCDM]+ +-\ze(\s|$)`) matched uppercase **Roman** markers + ` -`;
