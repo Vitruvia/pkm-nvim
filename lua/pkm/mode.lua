@@ -69,11 +69,13 @@ end
 local function enable_note_buffer(bufnr)
   require('pkm.syntax').enable(bufnr)
   vim.bo[bufnr].formatexpr = "v:lua.require('pkm.markdown').formatexpr()"
-  -- Insert-mode <CR> continues an ordered list — the tail becomes the next
-  -- numbered item and the family renumbers (Item 1). Buffer-local so it only
-  -- affects PKM notes; on any non-list line it falls back to an ordinary newline.
-  vim.keymap.set('i', '<CR>', function() require('pkm.markdown').list_newline() end,
-    { buffer = bufnr, silent = true, desc = 'PKM: continue ordered list / newline' })
+  -- Insert-mode <S-CR> (Shift+Enter) continues an ordered list — the tail becomes
+  -- the next numbered item and the family renumbers. A plain <CR> is left as an
+  -- ordinary newline so a line can be broken *inside* a list item without
+  -- advancing the enumeration (G10). Buffer-local so it only affects PKM notes.
+  -- (Needs a terminal that sends <S-CR> distinctly; verify in the real setup.)
+  vim.keymap.set('i', '<S-CR>', function() require('pkm.markdown').list_newline() end,
+    { buffer = bufnr, silent = true, desc = 'PKM: continue ordered list (Shift+Enter)' })
   -- Claim this buffer for pkm-nvim's own wiring: if a user ALSO runs pkm-markdown
   -- standalone (setup()), its FileType autocmd checks this flag and yields the
   -- note buffers pkm-nvim owns instead of re-wiring the same behaviour.

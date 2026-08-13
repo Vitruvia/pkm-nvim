@@ -286,7 +286,12 @@ and the in-place `convert` normaliser (Area 1); the persistent / mtime-cached in
 (Functionality 3.1) — or **long-horizon** (the rest of Distant / Potential, which
 carry "do not design toward"). A handful of open threads are **eval-driven and
 open-ended** rather than scheduled features: growing agent-assisted smoke testing
-and the retrieval/revision follow-ups (Area 1).
+and the retrieval/revision follow-ups (Area 1). **New (2026-08-12):** a real
+vault-gestor Manager-mode session plus the author's smoke pass produced a fresh
+batch — see § Triaged backlog — 2026-08-12 batch (the `:PKMView rename`
+spaced-name bug, the `set_membership` OR-view defect, the `api.save_view` /
+`api.structure` gaps, the tag-naming convention, and the sibling
+pkm-syntax/pkm-markdown fixes). None have shipped yet.
 
 ### 1 · pkm.api & agents — 🔺 highest priority
 
@@ -547,6 +552,170 @@ P12·Item7 → P13·Item8 → P14·Item2.
   `pkm-sidebar` section and fixed a broken `|pkm-search|` ref (added the `*pkm-search*`
   tag). All keys verified against source (sidebar.lua/nav.lua/ui.lua/panel.lua/
   telescope.lua); helptags clean, no broken `|pkm-…|` refs.
+
+---
+
+## Triaged backlog — 2026-08-12 batch (vault-gestor audit + user smoke findings)
+
+*A second capture, from a real Manager-mode reorg of a user vault (create views,
+extract/insert by tag, consolidate tags), the author's smoke findings, and one
+freshly-reported command bug. The raw inbox + full audit, technical anchors, and
+acceptance criteria live in `temp/pkm-gestor-auditoria-e-plano.md` (and the
+"Requests from the PKM vault-gestor session" pointer below); **this section is the
+single owner of the triage** until each item ships or graduates into a version.
+Anchors verified on disk 2026-08-12 (grep to confirm no drift).*
+
+*Precedence follows the standing rule — command / `pkm.api`-touching work first,
+then correctness bugs, then discovery/quality, then convention/doc work, then the
+sibling-repo (pkm-syntax / pkm-markdown) items, which land there in lockstep per
+the suite contract and are recorded here only so the plan is whole. F2/F3
+(vault-selection ambiguity, permission inconsistency) were already resolved this
+session at the policy/config level — `CLAUDE.md` Fixed-facts + `.claude/settings.json`
+— so they are not code work and are not listed. The correctness bugs (G2, G4, G8,
+G9) may jump the queue if the author prefers stability-first over the doctrine order.*
+
+**Precedence:** G1·rename → G2·F1 → G3·F4 → G4·F7 → G5·F5 → G6·F6 → G7·tags →
+G11·settings-deny → G8·Ap.3 → G9·Ap.1 → G10·Ap.2. (G11 is config correctness —
+a possibly-unenforced vault-safety guard; slot it wherever safety-first warrants.)
+
+**Status (13/8/2026):** **✅ DONE — G1, G2, G3, G4, G5, G6, G7, G11** (pkm-nvim
+v1.75.0 + docs; verified headless, smoke note 0298 queued) **and G8, G10**
+(pkm-markdown, lockstep with pkm-nvim `mode.lua` for G10). All verified; **not yet
+committed/pushed/tagged**. G10's `<CR>`→`<S-CR>` swap (user chose Shift+Enter) needs
+one **interactive smoke** to confirm the terminal delivers `<S-CR>` distinctly.
+**⏳ OPEN — G9** (pkm-syntax): root-caused (the inciso pattern `[IVXLCDM]+ -` matches
+`C -`/`D -` because C/D are Roman numerals) but it is a **stateless-vs-block-aware
+design decision**, not a one-liner — see the G9 item. **⛔ G12** — a permission
+**grant** the agent is blocked from self-applying (auto-mode classifier); awaiting
+the user to edit `.claude/settings.json` (exact rules in the G12 item). The G-item
+detail below is kept until each item fully lands.
+
+### Area 1 · pkm.api & agents / command surface — 🔺
+
+- **G1 · `:PKMView rename` fails on a spaced view name; quotes make it worse.**
+  Renaming e.g. `(APU) Administração Pública` reports
+  `[pkm] usage: :PKMView rename <existing view> <new name>`, and quoting the name
+  does not help. Root cause (verified on disk 2026-08-12): `pkm.args.parse`
+  (`lua/pkm/args.lua:70`) reads `opts.fargs`, which Neovim splits on whitespace
+  **without stripping quotes** — so `"(APU) Administração Pública"` arrives as the
+  tokens `"(APU)` … `Pública"` carrying literal quote characters. `act_view_rename`
+  (`lua/pkm/commands/view.lua:133`) then resolves the old name by greedily matching
+  the longest **prefix** of the words against the known-view set; the embedded
+  quotes make every candidate miss, so `old` stays nil and the usage warning fires.
+  Even unquoted, the greedy heuristic is fragile once the **new** name is multi-word
+  (there is no explicit boundary between old and new). **Fix (shared lever):** make
+  `args.lua` quote-aware — strip a matched pair of surrounding quotes so a quoted
+  argument becomes one token — which fixes *every* command that takes a spaced name,
+  not just rename; and/or give `rename` an explicit old/new delimiter. **Accept:** a
+  quoted spaced old name renames; a multi-word new name after a quoted old name
+  works; names like `(APU) …` round-trip. Command-surface + shared parser → highest.
+
+- **G2 · F1 — `set_membership` unusable on any OR-composed view.**
+  `lua/pkm/views.lua:688` `set_membership` + `lua/pkm/filter.lua:584` `tag_sets`.
+  Under an OR parent (`Concursos` = `tag:"concurso-público" OR tag:"concursos-públicos"`),
+  every subview's effective filter carries an OR, so add/remove is rejected as "can
+  be satisfied several ways — choose interactively" even when the note already
+  carries the parent tag (only one set is genuinely unsatisfied). **Fix:** intersect
+  candidate tag-sets with the note's **present** tags (a satisfied set is not a
+  choice) and apply De Morgan to `NOT(A OR B OR C)` on removal. **Accept:**
+  `api.set_membership(note, '<Concursos subview>', 'add')` for a note already tagged
+  `concurso-público` returns `ok=true` (not "several ways"); removal from a `_meta`
+  subview idem. Headless repro in the report's technical annex.
+
+- **G3 · F4 — no top-level view creation in `pkm.api`.** Only `save_subproject` is
+  exposed; add `api.save_view(name, expr)` in the `lua/pkm/api.lua:962`
+  neighbourhood (mirror `save_subproject`), wrapping `lua/pkm/views.lua:870` `save`.
+  **Accept:** headless `api.save_view('X','tag:"y"')` creates a top-level view and
+  returns `{ok=true}`.
+
+- **G4 · F7 — malformed view filter silently accepted.** `lua/pkm/filter.lua:285`
+  `parse` accepts `tag:"estatística" OR "statistics"` — the second term is a bare
+  quoted string, not `tag:"statistics"`, so it becomes a silent no-op. **Fix:**
+  reject or normalise a bare `OR "x"` with no field; correct the *Estatística* view
+  definition. **Accept:** the parser rejects/normalises the bare term and the
+  *Estatística* view matches `statistics`.
+
+- **G5 · F5 — no compact structural projection.** `api.notes()`
+  (`lua/pkm/api.lua:815`) dumps every full record (~90 KB / 667 notes); there is no
+  light "view tree + per-view counts + tag catalog" read, nor "notes in view X"
+  without pulling everything and filtering client-side. **Fix:** add
+  `api.structure()` / `api.tag_catalog()`; and **document the view/tag model in the
+  skill** (views = composed tag-filters, AND-chained by parent; a single defining
+  tag is needed for membership writes). **Accept:** one call returns structure +
+  counts without `notes()`; the skill describes the model.
+
+- **G6 · F6 — headless JSON contract.** `print(vim.json.encode(...))` lands on
+  **stderr**, mixed with `vim.notify` lines ("PKMView: saved view …"), diverging
+  from what `PKM_API.md` implies (clean stdout). **Fix:** silence `notify` under
+  `--headless` / API calls, or document "capture stderr / last line". **Accept:** a
+  headless `print(vim.json.encode(...))` emits only JSON on stdout.
+
+### Area 6 · Documentation / conventions
+
+- **G7 · Tag-naming convention → `doc/CONVENTIONS.md` (new § Tags).** Ready to
+  apply (report § D), not triage: singular by default; plural only for
+  idiomatically-plural domain objects (`estudos`, `guia-estudos`); one canonical per
+  concept, merge synonyms with `rename_tag`; no slash tags (`a/b` reads as
+  hierarchy and hurts retrieval); semantic nuance in the body, not the tag; one view
+  = one canonical tag where possible (OR-alias views are exactly what break G2/F1).
+  Reference from `AGENT_PROTOCOL.md` / the `pkm-notes` skill.
+
+- **G11 · `.claude/settings.json` — `Write(...)` deny rules on the `01` vault path
+  don't match; only `Edit(path)` rules do.** File-permission checks apply to
+  `Edit(path)` rules, and those cover *all* file-editing tools; a `Write(...)` rule on
+  a path is silently not enforced. So the `01 - Vitruvia` write-guard must be expressed
+  as `Edit(...)`, not `Write(...)`. Audit the settings for any `Write(P:/Note-Vault/01 - Vitruvia/**)`
+  / `Write(P:\\Note-Vault\\01 - Vitruvia\\**)` deny rules and replace them with the
+  `Edit(...)` equivalents (both slash forms), so the raw-edit prohibition on the primary
+  vault is actually in force (pkm.api stays the sole write path). Verify the `00`/`02`
+  lanes and any other path-scoped `Write(...)` rules for the same gap. **Config
+  correctness — potential silent hole in the vault-safety guard.** **✅ DONE
+  (v1.75.0):** the two ineffective `Write(...01 - Vitruvia...)` deny lines removed;
+  the `Edit(...)` guards were already present and remain the enforcing rules.
+
+- **G12 · `.claude/settings.json` — git-lane permissions for the siblings.** Allow
+  pushing **pkm-syntax** and **pkm-markdown** (commit/push/tag, matching the existing
+  pkm-syntax allow); move **pkm-nvim `push`** from `allow` to `ask` (keep pkm-nvim
+  `commit`/`tag` and any pre-push as `allow`). **⛔ Blocked for the agent:** adding a
+  permission **grant** to settings.json is refused by the auto-mode classifier
+  (self-widening guard), so the user must apply it. Exact rules: add
+  `Bash(git -C "P:/Active/pkm-suite/pkm-nvim" push:*)` to `ask`; move that same line
+  out of `allow`; add `Bash(git -C "P:/Active/pkm-suite/pkm-markdown" commit|push|tag:*)`
+  to `allow`. **Config — user action required.**
+
+### Sibling repos — pkm-syntax / pkm-markdown (lockstep per suite contract)
+
+*These land in the sibling repo, not this tree; recorded here only so the plan is
+whole.*
+
+- **G8 · Ap.3 — pkm-markdown: doubled `2. 2.` list prefix. ✅ FIXED (13/8/2026).**
+  Root cause: `plan_list_continuation` built the new line's tail as
+  `line:sub(col+1)`, so continuing with the cursor **inside the marker** (col < the
+  marker length) folded the *old* marker into the tail → `<new> <old> text`, which
+  the cascade renumber then normalised to `2. 2.`. Fix: capture the prefix length
+  per family and, when the cursor is in the indent/marker, keep the current item
+  whole and start a fresh empty next item (never re-fold the marker). Verified:
+  reproduced old→new for arabic/alpha, existing continuation suite 19/19.
+- **G9 · Ap.1 — pkm-syntax: inconsistent alphabetic-list highlight. ⏳ ROOT-CAUSED,
+  DECISION NEEDED.** `INCISO_LIST_PATTERN` (`pkm-syntax/…/init.lua:241`,
+  `\C\v^[ \t>]*\zs[IVXLCDM]+ +-\ze(\s|$)`) matches uppercase **Roman** markers + ` -`.
+  In an `A -`…`E -` alphabetic list only `C -` (C=100) and `D -` (D=500) are Roman
+  numerals, so only those paint — hence the inconsistency. A real legal *inciso*
+  `C -` (100) is **indistinguishable** from a letter `C -` in an alpha list by a
+  stateless `matchadd`. **Fork:** (a) document as a known limitation (like the
+  html-block Item-5 grammar limit) — recommend uppercase alpha lists use a
+  different marker; or (b) build a **block-aware** inciso pass (extmarks, like the
+  subalínea validator) that suppresses Roman-inciso highlighting inside a block that
+  also contains non-Roman uppercase `X -` markers (A/B/E/F…). (b) is a real feature,
+  not a patch. **No code changed yet — awaiting the choice.**
+- **G10 · Ap.2 — pkm-markdown: `<CR>` continuation intrudes on intra-item breaks.
+  ✅ DONE (13/8/2026), needs terminal smoke.** Per the user's choice, continuation
+  moved from `<CR>` to **`<S-CR>` (Shift+Enter)**; a plain `<CR>` is now an ordinary
+  newline so a line can be broken inside an item. Changed in **both** repos
+  (pkm-markdown `attach` + pkm-nvim `mode.lua` note buffers — lockstep; `list_newline`
+  itself unchanged). **Caveat:** `<S-CR>` only fires if the terminal sends it
+  distinctly (most GUI/modern terminals do) — confirm in the real setup; if not, fall
+  back to a modifier-for-newline or a toggle.
 
 ---
 
@@ -1027,48 +1196,14 @@ proper areas above** — this block is an inbox, not a finished plan.
 
 ---
 
-## Requests from the PKM vault-gestor session (2026-08-12) — pending dev triage
+## Requests from the PKM vault-gestor session (2026-08-12)
 
 Raised during a real Manager-mode reorg of a user vault (create views, extract/insert
-by tag, consolidate tags). **Full audit + action plan + technical anchors + acceptance
-criteria: `temp/pkm-gestor-auditoria-e-plano.md`.** Triage into the areas above; this is
-an inbox. Anchors verified on disk 2026-08-12 (grep to confirm no drift).
-
-**Code (pkm.api / plugin) — for the dev:**
-
-- **F1 · P1 · `set_membership` unusable on any OR-composed view.** `lua/pkm/views.lua:688`
-  `set_membership` + `lua/pkm/filter.lua:584` `tag_sets`. Every subview of `Concursos`
-  (an OR view) rejects add/remove as "can be satisfied several ways". Fix: intersect
-  candidate tag-sets with the note's **present** tags, and De-Morgan `NOT(A OR B OR C)`.
-  Accept: add/remove on a Concursos subview returns `ok=true` for a note already carrying
-  the parent tag.
-- **F4 · P2 · no top-level view creation in the API.** Add `api.save_view(name, expr)` in
-  `lua/pkm/api.lua:962`-neighbourhood, wrapping `lua/pkm/views.lua:870` `save` (only
-  `save_subproject` is exposed today).
-- **F5 · P2 · no compact structural projection.** `api.notes()` dumps every full record
-  (~90 KB / 667 notes). Add `api.structure()` (view tree + per-view counts + tag catalog)
-  and **document the view/tag model in the skill** (views = composed tag-filters; parent
-  AND-chain; single defining tag needed for membership writes).
-- **F6 · P3 · headless JSON contract.** `print(vim.json.encode(...))` lands on stderr mixed
-  with `notify`; silence notify under headless or document "capture stderr".
-- **F7 · P3 · malformed view filter.** `tag:"estatística" OR "statistics"` — bare quoted
-  term; `lua/pkm/filter.lua:285` `parse` should reject/normalise, and the def be fixed.
-
-**Sibling repos (appendix — user's own test findings):**
-
-- **Ap.1 · pkm-syntax.** Alphabetic list `A -`…`E -`: only `C -`/`D -` get highlighted; the
-  `X -` uppercase-letter prefix is not a defined marker and should highlight consistently
-  (all or none).
-- **Ap.2 · pkm-markdown.** `<CR>` list-continuation also fires on an intra-item line break;
-  move continuation to `<S-CR>` (or a toggle). Revisit `list_newline`.
-- **Ap.3 · pkm-markdown.** `test123.md` shows `2. 2. a` (doubled prefix) after arabic-list
-  editing — possible renumber/continuation artifact; reproduce and verify.
-
-**Convention (ready to apply, not triage):** tag-naming standard (singular default; plural
-only for idiomatically-plural domain objects; one canonical per concept, merge synonyms; no
-slash tags; semantic nuance in the body not the tag; one view = one canonical tag). Fold into
-`doc/CONVENTIONS.md` (new § Tags) + reference in `AGENT_PROTOCOL.md`/skill. Full text in the
-report's § D.
+by tag, consolidate tags). **Now triaged** into § Triaged backlog — 2026-08-12 batch
+above (items G1–G10), which is the single owner of these items. Full audit + action
+plan + technical anchors + acceptance criteria: `temp/pkm-gestor-auditoria-e-plano.md`;
+the raw user capture: `temp/adicionar-roadmap.md`. Anchors verified on disk 2026-08-12
+(grep to confirm no drift).
 
 **Already resolved this session (policy/config, not code):** F2 (vault-selection ambiguity) and
 F3 (permission inconsistency) — `CLAUDE.md` Fixed-facts now carries the gestor→`01`-via-`pkm.api`

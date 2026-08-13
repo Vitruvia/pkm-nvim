@@ -693,25 +693,57 @@ function M.set_membership(path, view_name, kind)
   local target = (kind == 'add') and tree or { type = 'NOT', args = { tree } }
   local alts   = require('pkm.filter').tag_sets(target)
 
-  local usable = {}
+  -- The note's present tags. A tag the note already carries (or already lacks)
+  -- is not a decision to make: it collapses an alternative's residual work, and
+  -- — crucially — a subview under an OR parent the note ALREADY satisfies is not
+  -- "several ways", because the branch to use is already chosen. Without this,
+  -- every OR-composed view rejected an otherwise-unambiguous add/remove.
+  local present = {}
+  local entry   = require('pkm.index').get(vim.fn.fnamemodify(path, ':p'))
+  for _, t in ipairs((entry and entry.tags) or {}) do
+    present[tostring(t):lower()] = true
+  end
+
+  -- Reduce each tag-satisfiable alternative to the residual it still needs given
+  -- the present tags, then keep the unique cheapest. Cost 0 means the note is
+  -- already on the intended side (already a member on add, already out on
+  -- remove) — nothing to write. A unique cheapest residual is applied; a tie
+  -- between *different* cheapest residuals is the genuine ambiguity that belongs
+  -- to the interactive form. (The least-destructive tie-break for removal —
+  -- prefer stripping the subview's own tag over a parent tag — needs the
+  -- subview's own filter, which is not exposed yet; until then a real tie still
+  -- defers to interactive rather than guess which tag to strip.)
+  local best, best_cost, ambiguous
   for _, alt in ipairs(alts) do
-    if #alt.blockers == 0 and (#alt.add > 0 or #alt.remove > 0) then
-      usable[#usable + 1] = alt
+    if #alt.blockers == 0 then
+      local radd, rrem = {}, {}
+      for _, t in ipairs(alt.add)    do if not present[t] then radd[#radd + 1] = t end end
+      for _, t in ipairs(alt.remove) do if present[t]     then rrem[#rrem + 1] = t end end
+      local cost = #radd + #rrem
+      if cost == 0 then
+        return true, nil  -- already on the intended side
+      end
+      table.sort(radd); table.sort(rrem)
+      local key = table.concat(radd, ',') .. '|' .. table.concat(rrem, ',')
+      if not best or cost < best_cost then
+        best, best_cost, ambiguous = { add = radd, remove = rrem, key = key }, cost, false
+      elseif cost == best_cost and key ~= best.key then
+        ambiguous = true
+      end
     end
   end
 
-  if #usable == 0 then
+  if not best then
     return false, string.format(
       "'%s' has no tag condition to change with tags alone", view_name)
   end
-  if #usable > 1 then
+  if ambiguous then
     return false, string.format(
       "'%s' can be satisfied several ways — choose interactively with :PKMView %s %s",
       view_name, kind, view_name)
   end
 
-  local alt = usable[1]
-  return require('pkm.tags').write_note_tags(path, { add = alt.add, remove = alt.remove })
+  return require('pkm.tags').write_note_tags(path, { add = best.add, remove = best.remove })
 end
 
 --- Return all note paths matching the named view's filter expression.
@@ -862,16 +894,48 @@ end
 -- SECTION: Public API — write
 -- =============================================================================
 
+--- Warn (without blocking) when a filter mixes a field predicate with an `any`
+--- predicate under the same boolean — the shape of `tag:"x" OR "statistics"`,
+--- where the second term is a free-text any-search, not the `tag:"statistics"`
+--- the author most likely meant (G4/F7). The parse tree cannot distinguish a
+--- deliberate free-text term from a forgotten field prefix, and a standalone
+--- quoted any-search is a documented feature — so this INFORMS rather than
+--- rejects, and the view still saves. Pure; recurses into sub-expressions.
+---@param tree table|nil
+---@return boolean suspicious
+local function mixes_field_and_any(tree)
+  if type(tree) ~= 'table' then return false end
+  if tree.type == 'AND' or tree.type == 'OR' then
+    local has_field, has_any = false, false
+    for _, arg in ipairs(tree.args) do
+      if arg.type == 'PRED' then
+        if arg.field == 'any' then has_any = true else has_field = true end
+      end
+      if mixes_field_and_any(arg) then return true end
+    end
+    return has_field and has_any
+  elseif tree.type == 'NOT' then
+    return mixes_field_and_any(tree.args[1])
+  end
+  return false
+end
+
 --- Add or replace a named view in views.json.
 --- Validates the filter expression before writing.
 ---@param name string
 ---@param expr string
 ---@return boolean success
 function M.save(name, expr)
-  local _, err = require('pkm.filter').parse(expr)
+  local tree, err = require('pkm.filter').parse(expr)
   if err then
     vim.notify('PKMView: invalid expression — ' .. err, vim.log.levels.ERROR)
     return false
+  end
+  if mixes_field_and_any(tree) then
+    vim.notify(string.format(
+      "PKMView: '%s' mixes a field term with a free-text term under a boolean "
+      .. "(e.g. `tag:x OR \"y\"`). If you meant a tag, write it as `tag:\"y\"`.",
+      name), vim.log.levels.WARN)
   end
 
   local data = load_sidecar()

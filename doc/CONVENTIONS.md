@@ -188,6 +188,39 @@ The five legal levels, outermost to innermost (LC 95/1998):
 
 ---
 
+## Tags
+
+Tags are the vocabulary a vault is retrieved and organised by — and, because a
+view is a saved tag-filter, the vocabulary its *structure* is built from. A tag
+that drifts (a synonym here, a plural there, a slash somewhere) fragments both
+retrieval and every view that filters on it. The rules keep one word per idea:
+
+1.  **Singular by default** — one canonical term per concept (`aprendizado`, not
+    `aprendizados`).
+2.  **Plural only when the domain object is idiomatically plural** — "os estudos"
+    → `estudos`, `guia-estudos`; not `estudo`.
+3.  **One canonical per concept; merge synonyms** with `rename_tag`
+    (`guias` → `guia-estudos`, `learning` → `aprendizado`). Do not let two tags
+    name the same idea.
+4.  **No slash tags** (`a/b`): the slash reads as a hierarchy separator and hurts
+    retrieval. Use a single hyphenated term instead.
+5.  **Semantic nuance goes in the body, not the tag** — the process
+    `aprendizagem` and the result `aprendizado` collapse to one tag
+    (`aprendizado`); the distinction, if it matters, is prose.
+6.  **One view = one canonical tag where possible.** A view whose filter is an
+    OR of alias tags (`tag:"concurso-público" OR tag:"concursos-públicos"`) is
+    exactly the shape that made membership writes ambiguous — prefer a single
+    defining tag and merge the aliases into it. When a view legitimately spans
+    several tags, give the *subview* its own single defining tag so membership
+    stays writable.
+
+These rules are what let an assistant put a note "in" a view by writing tags:
+membership is *having the tags the view filters on*, so a clean one-tag-per-idea
+vocabulary keeps that operation unambiguous (see `AGENT_PROTOCOL.md` and the
+`pkm-notes` skill's view/tag model).
+
+---
+
 ## Assistant-Authored Notes
 
 Notes an LLM assistant creates or edits follow extra conventions, so authorship

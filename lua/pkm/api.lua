@@ -967,6 +967,93 @@ function M.save_subproject(name, parent, filter_expr)
   return { ok = true }
 end
 
+--- Save a *top-level* view defined by a filter expression — the parentless twin
+--- of `save_subproject`. Until now only subprojects could be created through the
+--- API, so an agent reorganising a vault could add children but not the root view
+--- they hang from. Replaces an existing view of the same name, exactly as
+--- `views.save` (and the interactive `:PKMView new`) does. Fails when the name is
+--- blank or the filter does not parse.
+---@param name string
+---@param expr string  A filter expression in the :PKMBrowse / views DSL
+---@return table  { ok, error? }
+function M.save_view(name, expr)
+  if type(name) ~= 'string' or name:match('^%s*$') then
+    return { ok = false, error = 'a view name is required' }
+  end
+  if type(expr) ~= 'string' or expr:match('^%s*$') then
+    return { ok = false, error = 'a filter expression is required' }
+  end
+  local ok = require('pkm.views').save(name, expr)
+  if not ok then
+    return { ok = false, error = 'could not save view (filter invalid)' }
+  end
+  return { ok = true }
+end
+
+-- =============================================================================
+-- SECTION: Structure (compact projection)
+-- =============================================================================
+
+--- A compact structural projection of the vault — the view list with per-view
+--- match counts, the tag catalog with per-tag counts, and the note total —
+--- WITHOUT dumping every full note record the way `notes()` does. This is the
+--- cheap "what is in here, how is it organised" read an agent makes to orient
+--- itself before drilling in with `query` / `view_members`. Counts come from the
+--- same AND-chained filter each view resolves to, so a subview's count already
+--- reflects its parent composition.
+---@return table  { ok, total_notes, views = {{name,count}}, tags = {{tag,count}} }
+function M.structure()
+  local entries = require('pkm.index').get_all()
+  local names   = require('pkm.views').list()
+  local counts  = require('pkm.views').count_many(names)
+
+  local views = {}
+  for _, name in ipairs(names) do
+    views[#views + 1] = { name = name, count = counts[name] or 0 }
+  end
+
+  local tally = {}
+  for _, e in ipairs(entries) do
+    for _, t in ipairs(e.tags or {}) do
+      tally[t] = (tally[t] or 0) + 1
+    end
+  end
+  local tags = {}
+  for tag, count in pairs(tally) do tags[#tags + 1] = { tag = tag, count = count } end
+  table.sort(tags, function(a, b)
+    if a.count ~= b.count then return a.count > b.count end
+    return a.tag < b.tag
+  end)
+
+  return { ok = true, total_notes = #entries, views = views, tags = tags }
+end
+
+--- The tag catalog alone (tag → count, most-used first) — the tag half of
+--- `structure()`, for a caller that only needs the vocabulary.
+---@return table  { ok, tags = {{tag,count}} }
+function M.tag_catalog()
+  return { ok = true, tags = M.structure().tags }
+end
+
+-- =============================================================================
+-- SECTION: Output (headless contract)
+-- =============================================================================
+
+--- Write a value as one line of JSON to real stdout (fd 1). Under
+--- `nvim --headless`, `print()` and `vim.notify` go to the message stream on
+--- **stderr**, so JSON emitted with `print` is interleaved with notify noise
+--- ("PKMView: saved view …") and an agent must strip stderr to parse it. `emit`
+--- bypasses the message stream: it writes only the JSON to stdout, giving the
+--- clean-stdout contract `PKM_API.md` documents. Returns the encoded string too.
+---@param value any  Any JSON-encodable value
+---@return string json
+function M.emit(value)
+  local json = vim.json.encode(value)
+  io.stdout:write(json)
+  io.stdout:write('\n')
+  return json
+end
+
 -- =============================================================================
 -- SECTION: UI state (read)
 -- =============================================================================

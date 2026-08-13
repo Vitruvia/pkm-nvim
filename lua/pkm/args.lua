@@ -58,6 +58,59 @@ local M = {}
 -- The value is everything after the first `=`, so `title=a=b` is title → "a=b".
 local NAMED = '^([%a][%w_%-]*)=(.*)$'
 
+--- Re-join tokens that a single quoted argument was split across.
+--- Neovim hands `opts.fargs` already split on whitespace, and it does NOT honour
+--- quotes — so `"(APU) Administração Pública"` arrives as three tokens each still
+--- carrying a literal quote. This restores the user's intent: a run of tokens
+--- from an opening `"`/`'` to the matching closing quote becomes one token, with
+--- the surrounding quotes stripped. An unterminated quote is left verbatim (the
+--- token keeps its quote, so nothing is silently swallowed). This is what lets a
+--- view/tag/name with spaces be passed unambiguously to any typed command.
+---@param fargs string[]
+---@return string[]
+local function regroup_quoted(fargs)
+  local out = {}
+  local i = 1
+  while i <= #fargs do
+    local tok = fargs[i]
+    local q = tok:sub(1, 1)
+    if q == '"' or q == "'" then
+      local body = tok:sub(2)
+      -- Quote opens and closes within the same token: "name".
+      if #body >= 1 and body:sub(-1) == q then
+        out[#out + 1] = body:sub(1, -2)
+        i = i + 1
+      else
+        -- Accumulate until the token that ends with the matching quote.
+        local parts, j, closed = { body }, i + 1, false
+        while j <= #fargs do
+          local t = fargs[j]
+          if t:sub(-1) == q then
+            parts[#parts + 1] = t:sub(1, -2)
+            closed, j = true, j + 1
+            break
+          end
+          parts[#parts + 1] = t
+          j = j + 1
+        end
+        if closed then
+          out[#out + 1] = table.concat(parts, ' ')
+          i = j
+        else
+          -- No closing quote in the remaining tokens: keep the original token
+          -- verbatim rather than eating the rest of the line.
+          out[#out + 1] = tok
+          i = i + 1
+        end
+      end
+    else
+      out[#out + 1] = tok
+      i = i + 1
+    end
+  end
+  return out
+end
+
 --- Read a command's arguments into their structural parts.
 ---@param opts table  A command callback's opts (needs `.fargs`; reads `.bang`)
 ---@param spec table|nil
@@ -67,7 +120,7 @@ function M.parse(opts, spec)
   spec = spec or {}
 
   local named, positional = {}, {}
-  for _, tok in ipairs(opts.fargs or {}) do
+  for _, tok in ipairs(regroup_quoted(opts.fargs or {})) do
     local key, value = nil, nil
     if spec.named then key, value = tok:match(NAMED) end
     if key then

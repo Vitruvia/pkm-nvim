@@ -25,7 +25,17 @@ carried forward from version to version and consulted before any fix.*
   lifecycle create/merge/split + `convert`; persistent/mtime index; Phase 3.4
   journal-scratch nav + block-element indexing; `:PKMView stats`; commands-outside-
   vault) or long-horizon — see ROADMAP § Forward plan by area, "Pending-features
-  status".
+  status". **Superseded 12/8/2026:** a vault-gestor Manager-mode session plus the
+  author's smoke pass produced a fresh, non-deferred batch (the `:PKMView rename`
+  spaced-name bug, the `set_membership` OR-view defect, the `api.save_view` /
+  `api.structure` gaps, the tag-naming convention, and sibling pkm-syntax/pkm-markdown
+  fixes) — triaged as **G1–G12** in ROADMAP § Triaged backlog — 2026-08-12 batch.
+  **Shipped 13/8/2026 in v1.75.0:** the pkm-nvim half — **G1–G7 and G11**
+  (quote-aware args, present-tag-aware `set_membership`, `api.save_view` /
+  `structure` / `tag_catalog` / `emit`, the mixed-filter warning, the tag convention,
+  and the settings-hygiene cleanup). **Still open:** **G8–G10** (sibling repos
+  pkm-syntax/pkm-markdown) and **G12** (a settings.json push-permission grant the
+  agent cannot self-apply — awaiting the user). Not committed/pushed/tagged yet.
 
 ### Known Bugs (queued)
 
@@ -34,8 +44,29 @@ drifts in Ph2, `:PKMOrphans` and the `bench.lua` separator in Ph3, the absolute
 `original_path` in Ph4 and the `E484` on emptying the trash in Ph5 — the last
 two found while evaluating multi-vault support, along with the one below.)*
 
-*No open bugs. (The `PKMCitation` highlight bug found 27/7/2026 — the `matchadd`
-regex that never fired — is **fixed in v1.17.0**; see that entry.)*
+- **FIXED in v1.75.0 — `:PKMView rename` on a spaced view name (G1).** The cause
+  was `pkm.args.parse` reading `opts.fargs`, which Neovim splits on whitespace
+  without honouring quotes. `args.lua` is now quote-aware (a `"…"`/`'…'` group
+  rejoins into one token), so a quoted spaced old name — and a multi-word new name
+  after it — round-trips; verified end-to-end against the real
+  `(APU) Administração Pública` view (rename + restore). Fixes every
+  spaced-argument command, not only `rename`.
+
+- **Sibling-repo items (ROADMAP § Triaged backlog — 2026-08-12 batch, G8–G10).**
+  **G8 FIXED** (pkm-markdown: the `2. 2.` doubled prefix — continuing with the cursor
+  inside the marker folded the old marker into the tail; `plan_list_continuation` now
+  keeps the item whole in that case). **G10 DONE** (pkm-markdown + pkm-nvim lockstep:
+  list continuation moved to `<S-CR>`, `<CR>` is a plain newline — needs a terminal
+  smoke to confirm `<S-CR>` delivery). **G9 STILL OPEN, root-caused:** pkm-syntax's
+  inciso pattern `[IVXLCDM]+ -` paints `C -`/`D -` (Roman numerals) but not `A/B/E -`,
+  and a stateless `matchadd` cannot tell a real inciso `C -` (100) from a letter in an
+  alpha list — needs a decision (document-as-limitation vs. a block-aware pass). *(The
+  in-vault F1/G2 and F7/G4 issues were addressed in v1.75.0 — see that entry; the
+  malformed **Estatística view definition** itself is vault data to correct with the
+  now-available `api.save_view`.)*
+
+*(The `PKMCitation` highlight bug found 27/7/2026 — the `matchadd` regex that never
+fired — is **fixed in v1.17.0**; see that entry.)*
 
 ### Known limitations
 
@@ -78,6 +109,83 @@ regex that never fired — is **fixed in v1.17.0**; see that entry.)*
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
     ~200+ views.
+
+---
+
+## [1.75.0] - 13/8/2026
+
+The pkm-nvim half of the 2026-08-12 vault-gestor batch: the reported command bug,
+the OR-view membership defect, and the missing agent-API surfaces — G1–G7 and G11.
+The sibling-repo items (G8–G10) and the push-permission config (G12) are tracked
+separately (see ROADMAP § Triaged backlog and Known Bugs).
+
+### Fixed
+
+- **G1 · `:PKMView rename` on a spaced view name; quoting no longer makes it
+  worse.** `pkm.args.parse` (`lua/pkm/args.lua`) is now quote-aware: a run of
+  `opts.fargs` tokens from an opening `"`/`'` to the matching close rejoins into one
+  argument, quotes stripped; an unterminated quote is left verbatim. This fixes
+  *every* command that takes a spaced name (view/tag/title), not just `rename`.
+  Verified end-to-end against the real `(APU) Administração Pública` view.
+- **G2 · `set_membership` on OR-composed views (F1).** `views.set_membership`
+  (`lua/pkm/views.lua`) now resolves the view's tag-sets **against the note's
+  present tags**: an alternative the note already satisfies costs nothing (already a
+  member), and the unique *cheapest* residual is applied — so a subview under an OR
+  parent the note already satisfies is written unambiguously instead of being
+  refused as "several ways". A genuine tie between distinct cheapest tag-sets still
+  defers to the interactive form (no destructive guess). *Known follow-up:* the
+  least-destructive removal tie-break (strip the subview's own tag, not a parent
+  tag) needs the subview's own filter exposed; until then a real removal tie still
+  defers.
+
+### Added
+
+- **G3 · `api.save_view(name, expr)`** — create a **top-level** view from the API
+  (the parentless twin of `save_subproject`); wraps `views.save`.
+- **G5 · `api.structure()` / `api.tag_catalog()`** — a compact projection (view
+  list + per-view counts + tag catalog + note total) so an agent can orient without
+  `api.notes()` dumping every full record. The view/tag model is now documented in
+  `doc/PKM_API.md`, the `pkm-notes` skill, and `doc/CONVENTIONS.md` § Tags.
+- **G6 · `api.emit(value)`** — write one line of JSON to **real stdout** (fd 1),
+  bypassing the message stream that `print`/`vim.notify` use (stderr under
+  `--headless`), for a clean, parseable headless contract.
+
+### Changed
+
+- **G4 · malformed view-filter warning (F7).** `views.save` now emits a
+  non-blocking warning when a saved view mixes a field predicate with a free-text
+  `any` term under the same boolean (`tag:x OR "y"`) — the shape of the
+  *Estatística* mistake — while still saving. Filter **parse semantics are
+  unchanged** (the documented standalone-quoted any-search still works); rejecting
+  bare quoted terms would break it, and the tree cannot distinguish a deliberate
+  free-text term from a forgotten field prefix.
+- **G7 · tag-naming convention** documented in `doc/CONVENTIONS.md` § Tags
+  (singular by default; one canonical per concept, merge synonyms; no slash tags;
+  nuance in the body; one view = one canonical tag).
+- **G11 · settings hygiene.** Removed the two ineffective `Write(...01 - Vitruvia...)`
+  deny rules from `.claude/settings.json` — file-permission checks match `Edit(...)`
+  rules (which cover all file-editing tools and were already present), so the
+  `Write` rules implied a guard they did not provide. The vault write-guard is
+  unchanged and intact.
+
+### Sibling repos (pkm-markdown, lockstep — land in that repo, not this tree)
+
+- **G8** — pkm-markdown `plan_list_continuation` no longer doubles a list prefix
+  (`2. 2.`): continuing with the cursor inside the marker keeps the current item
+  whole instead of folding the old marker into the new line.
+- **G10** — list continuation moved from `<CR>` to **`<S-CR>`** (Shift+Enter) so a
+  plain `<CR>` breaks a line inside an item; changed in pkm-markdown's `attach` and
+  this repo's `mode.lua` note-buffer wiring (lockstep). `list_newline` unchanged.
+  Needs a terminal smoke to confirm `<S-CR>` is delivered distinctly.
+- **G9** (pkm-syntax) remains open — see Known Bugs.
+
+### Verification
+
+- New headless coverage for G2/G3/G4/G5/G6 (all green) and a G1 round-trip against
+  the real `(APU) Administração Pública` view; `luacheck` clean on every changed
+  module; existing membership/args/filter tests pass unchanged. Smoke note **0298**
+  queued into the test vault's "Smoke Tests" view for the interactive gestures
+  (`:PKMView rename`/`add`/`new`).
 
 ---
 

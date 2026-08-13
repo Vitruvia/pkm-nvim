@@ -73,8 +73,11 @@ api.cite_source(note, { title='Stein 2003', bibtex='@book{...}' })  -- find/crea
 api.tag(paths, { add = { 'x' }, remove = { 'y' } })   -- bulk retag
 api.find('afo')                -- search views + tags + titles at once (ACTIVE vault) — START HERE for "where is X"
 api.find_all('afo')            -- CROSS-VAULT: which of my vaults holds X? (groups matches per vault)
+api.structure()                -- COMPACT map: views+counts + tag catalog, no full dump — START HERE to orient in a vault
 api.views()                    -- list projects/views — a subject is often a VIEW, not a tag
 api.view_members(name)         -- the notes in a view
+api.save_view(name, 'tag:"x"') -- create a TOP-LEVEL view; api.save_subproject(name,parent,expr) for a child
+api.set_membership(path, view, 'add')  -- put a note in a view by writing its defining tag(s)
 api.query('tag:afo AND type:note')   -- filter the index → { ok, matches }
 api.get(path)                  -- one note's index entry (metadata)
 api.read(ref)                  -- a note IN FULL: body + resolved cites/cited_by — retrieve-before-working
@@ -92,6 +95,15 @@ api.actions()                  -- discover the enumerable bulk operations
 ```
 
 See `PKM_API.md` for the complete list and every return shape.
+
+**View/tag model.** A view is a saved **filter over tags**; a subview's effective
+filter is its parent's **AND**-ed with its own (composed down the whole chain), so
+a subview always matches a subset of its parent. Putting a note "in" a view means
+giving it the tags the view filters on — so membership writes need the view to
+reduce to a single defining tag (or one the note already partly satisfies). Keep
+one canonical tag per concept and avoid OR-of-alias views (`doc/CONVENTIONS.md`
+§ Tags). Use `api.structure()` to see the whole view tree + tag catalog cheaply
+before drilling in.
 
 ## Finding notes
 

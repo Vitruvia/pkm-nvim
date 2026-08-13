@@ -68,6 +68,17 @@ nvim --headless -u pkm-init.lua \
   -c "lua print(vim.json.encode(require('pkm.api').query('tag:direito AND type:note')))" -c "qa!"
 ```
 
+**Clean stdout.** Under `--headless`, `print` and `vim.notify` go to the message
+stream on **stderr**, so JSON printed with `print(vim.json.encode(...))` arrives
+mixed with notify lines ("PKMView: saved view …"). Prefer `api.emit(value)`, which
+writes only the JSON to **stdout**, and read stdout alone:
+
+```sh
+nvim --headless -u pkm-init.lua \
+  -c "lua require('pkm.api').emit(require('pkm.api').structure())" -c "qa!" 2>/dev/null
+# → {"ok":true,"total_notes":667,"views":[…],"tags":[…]}   (stdout only, parseable)
+```
+
 **Vault selection.** The vault is whatever the init's `root_path` names, or the
 registry default, or `$PKM_VAULT` — nothing outside the registry names a vault.
 An assistant defaults to writing in its own vault; writing in another is an
@@ -144,8 +155,31 @@ path.
 |---|---|
 | `views()` | the view registry. |
 | `view_members(name)` | the note paths matching a named view's full filter chain. |
-| `set_membership(path, view_name, kind)` | `{ ok }` — add/remove a note from a view by writing the tags that define it. `kind` is `"add"`/`"remove"`. Returns an error (never a prompt) when the view is not a single-way tag condition. |
+| `set_membership(path, view_name, kind)` | `{ ok }` — add/remove a note from a view by writing the tags that define it. `kind` is `"add"`/`"remove"`. Resolves the view's tag condition **against the note's present tags**, so a subview under an OR parent the note already satisfies is written unambiguously; returns an error (never a prompt) only when the change is genuinely ambiguous (distinct cheapest tag-sets) or the view is not a tag condition. |
+| `save_view(name, expr)` | `{ ok }` — save a **top-level** view defined by a filter expression (the parentless twin of `save_subproject`). Replaces an existing view of the same name. Fails when the name is blank or the filter does not parse. |
 | `save_subproject(name, parent, filter_expr)` | `{ ok }` — save a sub-view under an existing parent, defined by a filter expression. Fails if the parent is missing or the filter does not parse. |
+
+**The view/tag model.** A view is a saved **filter over tags** (the same DSL as
+`query`). A subview's effective filter is its parent's filter **AND**-ed with its
+own, composed down the whole parent chain — so a subview always matches a subset
+of its parent. Putting a note "in" a view means giving it the tags the view
+filters on; that is why membership needs a view to reduce to a **single defining
+tag** (or a set the note already partly satisfies) to be writable — an OR of
+alias tags is ambiguous to write (prefer one canonical tag; see
+`doc/CONVENTIONS.md` § Tags). Read the whole shape cheaply with `structure()`.
+
+### Structure (compact projection)
+
+| Function | Returns |
+|---|---|
+| `structure()` | `{ ok, total_notes, views = [{ name, count }], tags = [{ tag, count }] }` — the view list with per-view **match counts** (already reflecting each view's full parent AND-chain) and the **tag catalog** with per-tag counts, plus the note total — *without* dumping every full record the way `notes()` does. The cheap "what is in here / how is it organised" read to make **before** drilling in with `query`/`view_members`. |
+| `tag_catalog()` | `{ ok, tags = [{ tag, count }] }` — the tag half of `structure()`, most-used first, for a caller that only needs the vocabulary. |
+
+### Output (headless contract)
+
+| Function | Returns |
+|---|---|
+| `emit(value)` | writes `value` as **one line of JSON to real stdout** (fd 1) and returns the encoded string. Use this instead of `print(vim.json.encode(...))` in headless invocations: under `--headless`, `print`/`vim.notify` land on the **message stream (stderr)**, so JSON printed that way is interleaved with notify noise. `emit` keeps stdout clean JSON — capture stdout alone (`2>/dev/null`) and it parses. |
 
 ### UI state (read)
 
@@ -205,7 +239,10 @@ The surface above is the base layer; it grows as the protocol's operations are
 wrapped. The note-lifecycle writes (`rename`, `changetype`, `transpose` — the
 last covering both promote and transpose), the view-membership writes
 (`set_membership`, `save_subproject`), and the vault-wide `rename_tag` (which
-subsumes `tags.merge`) landed in v1.18.0. The marked-comment write into a
+subsumes `tags.merge`) landed in v1.18.0. Top-level view creation (`save_view`),
+the compact projection (`structure` / `tag_catalog`), and the clean-stdout helper
+(`emit`) landed in v1.75.0 — with `set_membership` made present-tag-aware so
+OR-composed subviews are writable. The marked-comment write into a
 *user's* note (`annotate`) landed in v1.19.0. The UI snapshot (`ui_state`) landed
 in v1.20.0. The find-or-create source citation (`cite_source`) landed in v1.22.0.
 Cross-vault search (`find_all`) landed in v1.23.0, relevance ranking in v1.24.0,
