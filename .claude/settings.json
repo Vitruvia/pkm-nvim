@@ -37,6 +37,9 @@
       "Bash(git -C \"P:/Active/pkm-suite/pkm-syntax\" commit:*)",
       "Bash(git -C \"P:/Active/pkm-suite/pkm-syntax\" push:*)",
       "Bash(git -C \"P:/Active/pkm-suite/pkm-syntax\" tag:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-markdown\" commit:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-markdown\" push:*)",
+      "Bash(git -C \"P:/Active/pkm-suite/pkm-markdown\" tag:*)",
       "Bash(git -C \"P:/Note-Vault/00 - NotesTeste\" commit:*)",
       "Bash(git -C \"P:/Note-Vault/00 - NotesTeste\" add:*)"
     ]

@@ -1,58 +1,22 @@
-1.  Em uma lista enumerada, apertar <CR> para "descer" parte de uma linha não
-inclui a linha gerada na lista automaticamente. Ex:
+1.  O highlight destaca `C - ` e `D -` abaixo, mas não as outras letras. Não
+    me lembro de termos criado prefixo nesse formato, então não era para nada
+    ser destacado.
 
-    ```(indesejado)
-    
-    -- Antes
+A - das remissões, de forma nacionalizada.
+B - dos subsídios, de forma funcional.
+C - das transferências, de forma municipalizada.
+D - das isenções, de forma regionalizada.
+E - das anistias, de forma setorizada.
 
-    1. texto
-    2. texto{{<CR> aqui}} texto
 
-    -- Depois
+2.  A função de avançar a enumeração ao apertar `<CR>` mostrou-se
+    prejudicial, pois ocorre também quando quero quebrar a linha dentro de uma
+    mesma enumeração. Sugiro mudar para `<S-CR>` (shift + enter) se viável no
+    neovim, ou para outra sequência simples similar.
 
-    1. texto
-    2. texto
-    texto
-
-    ```
-
-    Automatizar a geração da enumeração ou criar um keymap que execute `<CR> +
-    enumeração`.
-
-    Nota: o resultado ocorre igualmente mesmo se o `<CR>` for inserido após o espaço,
-    logo antes do primeiro caractere `t` do segundo `texto` da linha. Esse comportamento
-    deve ser mantido.
-
-    ```(desejado)
-    -- Antes
-
-    1. texto
-    2. texto{{<CR> aqui}} texto
-
-    -- Depois
-
-    1. texto
-    2. texto
-    3. texto
-    ```
-
-2.  Considerar a extração do módulo de markdown (como foi feito com o syntax) e
-    a aplicação a arquivos não pkm (opcional, ligado por padrão). Ex: wrap
-    sensível a headers e blocos de código.
-
-3.  O highlight de comentários falha quando o elemento final acaba em
-    parênteses. Por exemplo, último parênteses no texto abaixo aparece sem o
-    highlight, porque o sistema considera que o penúltimo parêntese já é o
-    "segundo parêntese de fechamento", quando na verdade é o primeiro (pois o
-    antepenúltimo fecha apenas o texto "provavelmente como heading nível 2"):
-
-    ```
-    ((O sistema de heurísticas também deve ser capaz, quando solicitado, de criar
-    ou completar um espécie de "mapa do conteúdo", o qual envolverá os assuntos,
-    referências e trechos relevantes, formas de cobrança, heurísticas utilizadas,
-    dentre outros. Essa e uma ideia em concepção, que pode ou não ser desenvolvida.
-    O provável local desse mapa será o guia de estudos de cada disciplina
-    (provavelmente como heading nível 2))).
-    ```
-
-    Verifique e corrija outras possíveis falhas do highlight.
+3.  Markdown: comando para avançar para o header de próximo nível/nível
+    anterior. Também função para avançar para o header de #n níveis acima
+    ou anteriores, onde #n é o número digitado como parte do comando (sugiro
+    #]/#[ se estiverem livres. Como o próximo nível é apenas o comando com
+    o número 1 digitado, podemos nos abster de criar o comando "próximo
+    nível/nível anterior, se você achar adequado).
