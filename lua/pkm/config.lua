@@ -232,21 +232,23 @@ local defaults = {
     -- ]h / [h: unmodified, and in the bracket family the native motion lives in.
     header_next_same   = "]h",   -- next header of the current header's level
     header_prev_same   = "[h",   -- previous header of the current header's level
-    -- Relative-level jumps by an exact level DELTA typed as the key's digit, in all
-    -- four direction × level combinations. <prefix>N jumps to the header exactly N
-    -- levels away, searching backward ([) or forward (]). The two aligned motions are
-    -- bare — [N = N shallower backward (to an ancestor: [1 parent, [2 grandparent),
-    -- ]N = N deeper forward (to a descendant: ]1 first child, ]3 the level-6 header
-    -- ahead) — and the two crossed motions carry a level letter — [lN = N deeper
-    -- backward (a descendant before the cursor), ]uN = N shallower forward (an
-    -- ancestor-level header ahead). Each prefix binds N = 1..6; a target outside 1..6
-    -- just does not move. Set any prefix to false to unbind it. [ / ] rather than the
-    -- terminal-natural #: [ and ] are already prefix keys, so no native command gains
-    -- input latency, whereas #N would make the very common `#` wait on a timeout.
-    header_prev_shallower_prefix = "[",   -- [N  = N shallower, backward (ancestor)
-    header_next_deeper_prefix    = "]",   -- ]N  = N deeper, forward (descendant)
-    header_prev_deeper_prefix    = "[l",  -- [lN = N deeper, backward (descendant behind)
-    header_next_shallower_prefix = "]u",  -- ]uN = N shallower, forward (ancestor-level ahead)
+    -- Relative-level header jumps by an exact level DELTA typed as the key's digit.
+    -- Two axes make the four motions: a DIRECTION bracket (prev/next) and a LEVEL
+    -- letter (shallower/deeper). Every explicit combination is bound —
+    --   [uN  N shallower, backward     [lN  N deeper, backward
+    --   ]uN  N shallower, forward      ]lN  N deeper, forward
+    -- and, when header_level_jump_bare is true, the two most common also get a bare
+    -- shortcut: [N = [uN (up to an ancestor), ]N = ]lN (down to a descendant). So
+    -- [1 = parent, [2 = grandparent, ]1 = first child, ]3 = the level-6 header ahead.
+    -- N = 1..6; a target outside 1..6 just does not move. Set any key to false to drop
+    -- the motions that use it. [ / ] rather than the terminal-natural #: they are
+    -- already prefix keys, so no native command gains input latency, whereas #N would
+    -- make the very common `#` (search-word-backward) wait on a timeout.
+    header_prev_key        = "[",   -- backward-searching bracket
+    header_next_key        = "]",   -- forward-searching bracket
+    header_shallower_key   = "u",   -- level letter: upper / shallower (fewer #)
+    header_deeper_key      = "l",   -- level letter: lower / deeper (more #)
+    header_level_jump_bare = true,  -- also bind bare [N (prev+shallower) / ]N (next+deeper)
     -- Any-level jumps, left unbound: this is ]] / [[ . Assign only if you want
     -- what those lack — a count, Visual mode, a jumplist entry, and working
     -- without the tree-sitter markdown parser (:PKMHeader next has all of it).

@@ -168,20 +168,20 @@ design, see Known Bugs G9.)
 
 ### Added
 
-- **`[N` / `]N` / `[lN` / `]uN` — relative-level header jumps** (buffer-local on
-  markdown, normal and Visual mode, jumplist-marked). The digit `N` is the **level
-  delta**, in all four direction × level combinations. The two **aligned** motions are
-  bare: `[N` = `N` levels **shallower**, backward (to an ancestor — `[1` parent, `[2`
-  grandparent); `]N` = `N` levels **deeper**, forward (to a descendant — `]1` first
-  child, `]3` the level-6 header ahead). The two **crossed** motions carry a level
-  letter (`l` lower/deeper, `u` upper/shallower): `[lN` = `N` deeper, **backward** (a
-  descendant that sits before the cursor); `]uN` = `N` shallower, **forward** (an
-  ancestor-level header ahead, i.e. the next section boundary). The target level is
-  **exact** (`enclosing ± N`); a target outside `1..6` simply does not move. Above every
-  heading it falls back to the nearest header of any level. Each prefix binds `N = 1..6`;
-  config keys `header_prev_shallower_prefix` (`[`) / `header_next_deeper_prefix` (`]`) /
-  `header_prev_deeper_prefix` (`[l`) / `header_next_shallower_prefix` (`]u`), any
-  settable to `false` to unbind.
+- **`[uN` `[lN` `]uN` `]lN` (+ bare `[N` / `]N`) — relative-level header jumps**
+  (buffer-local on markdown, normal and Visual mode, jumplist-marked). Two axes: a
+  **direction** bracket (`[` backward, `]` forward) × a **level** letter (`u` upper/
+  shallower, `l` lower/deeper), with the digit `N` as the exact **level delta**. All
+  four explicit combinations are bound — `[uN` shallower-backward (ancestor), `]lN`
+  deeper-forward (descendant), `[lN` deeper-backward (a descendant before the cursor),
+  `]uN` shallower-forward (an ancestor-level header ahead) — and the two most common
+  also get **bare shortcuts**: `[N` = `[uN` (`[1` parent, `[2` grandparent), `]N` =
+  `]lN` (`]1` first child, `]3` the level-6 header ahead). The target level is **exact**
+  (`enclosing ± N`); a target outside `1..6` simply does not move. Above every heading it
+  falls back to the nearest header of any level. Config is the two axes:
+  `header_prev_key` (`[`) / `header_next_key` (`]`) / `header_shallower_key` (`u`) /
+  `header_deeper_key` (`l`), plus `header_level_jump_bare` (the `[N`/`]N` shortcuts);
+  each key `false` drops the motions that use it.
   - **Design (why the digit-in-key, and why `[`/`]` not `#`):** the author wants the
     number to mean *how many levels* (jump to the n±k header), not an ordinal — so the
     digit is baked into the key (`]3`, not a count). This iterated twice earlier the
@@ -205,10 +205,11 @@ design, see Known Bugs G9.)
   (parent/grandparent, exact `n+3`, exact-not-`≥` when the level is absent = no move,
   below-level-1 = no move, override of explicit `level`, above-all-headings fallback,
   and the two crossed directions — deeper-backward, shallower-forward); full file green.
-  All 24 digit maps verified interactively via `nvim_input` (`[1`/`]1` land parent/child,
-  `[l2` finds a deeper header behind, `]u1` a shallower header ahead, absent levels stay
-  put). The keymaps are interactive — **pending the author's smoke** before the tag.
-  (The `[N`/`]N` half was already author-smoked; the crossed `[lN`/`]uN` pair is new.)
+  All 36 digit maps verified interactively via `nvim_input` (`[u1`=`[1`=parent,
+  `]l1`=`]1`=child, `[l2` a deeper header behind, `]u1` a shallower header ahead, absent
+  levels stay put). The keymaps are interactive — **pending the author's smoke** before
+  the tag. (The bare `[N`/`]N` half was already author-smoked; the four explicit
+  `[u`/`[l`/`]u`/`]l` forms are new.)
 
 ---
 

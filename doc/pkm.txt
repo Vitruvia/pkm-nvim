@@ -954,10 +954,11 @@ destination prompt appears.
       toggle_syntax      = false,          -- :PKMSyntax toggle
       header_next_same   = "]h",   -- next header of the current level
       header_prev_same   = "[h",   -- previous header of the current level
-      header_prev_shallower_prefix = "[",  -- [N  = N shallower, backward
-      header_next_deeper_prefix    = "]",  -- ]N  = N deeper, forward
-      header_prev_deeper_prefix    = "[l", -- [lN = N deeper, backward
-      header_next_shallower_prefix = "]u", -- ]uN = N shallower, forward
+      header_prev_key        = "[",   -- backward bracket
+      header_next_key        = "]",   -- forward bracket
+      header_shallower_key   = "u",   -- level letter: shallower ([uN, ]uN)
+      header_deeper_key      = "l",   -- level letter: deeper ([lN, ]lN)
+      header_level_jump_bare = true,  -- also bind bare [N / ]N shortcuts
       header_next        = false,  -- any level: this is ]] , left to Neovim
       header_prev        = false,  -- any level: this is [[ , left to Neovim
     },
@@ -1023,15 +1024,14 @@ MARKDOWN EDITING (<leader>M, and ]h / [h)~
   <leader>Mr   :PKMList renumber     (normal and visual)
   ]h           next header of the current header's level
   [h           previous header of the current header's level
-  [N           jump N levels SHALLOWER, backward (to an ancestor):
-               [1 = parent, [2 = grandparent (N = the level delta)
-  ]N           jump N levels DEEPER, forward (to a descendant):
-               ]1 = first child, ]3 = the header at level 6 ahead
-  [lN          jump N levels DEEPER, backward (a descendant behind cursor)
-  ]uN          jump N levels SHALLOWER, forward (an ancestor-level ahead)
-               (markdown buffers only, normal and visual; N = 1..6, exact
-               level, no move if that level is absent; any-level header
-               jumps are Neovim's own ]] and [[ )
+  header level jumps: <dir><level>N, N = the exact level delta (1..6).
+  dir  [ backward  ] forward   ·   level  u shallower  l deeper
+  [uN  N shallower, backward (ancestor)   [lN  N deeper, backward
+  ]uN  N shallower, forward               ]lN  N deeper, forward (descendant)
+  [N   bare shortcut = [uN  ([1 parent, [2 grandparent)
+  ]N   bare shortcut = ]lN  (]1 first child, ]3 the level-6 header ahead)
+               (markdown buffers only, normal and visual; exact level, no
+               move if absent; any-level jumps are Neovim's own ]] and [[ )
 
 Off by default — assign a key to enable~
   new_relative     :PKMNote relative

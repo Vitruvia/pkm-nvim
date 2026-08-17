@@ -266,20 +266,29 @@ function M.register(config)
     { lhs = k.header_prev_same, dir = 'prev', level = 'same', desc = 'previous header of the same level' },
   }
 
-  -- Relative-level jumps: <prefix>N = N levels shallower/deeper (exact delta),
-  -- the digit baked into the key. All four direction × level combinations, since
-  -- searching backward for a deeper header, or forward for a shallower one, are
-  -- both meaningful (a descendant behind the cursor / an ancestor-level header
-  -- ahead). The two "aligned" motions ([N, ]N) stay bare; the two "crossed" ones
-  -- carry a level letter (l = lower/deeper, u = upper/shallower). N = 1..6, a
-  -- target outside 1..6 just does not move.
+  -- Relative-level jumps on two axes: a DIRECTION bracket ([ backward / ] forward)
+  -- and a LEVEL letter (u shallower / l deeper), the delta typed as the digit. All
+  -- four explicit <dir><level>N combos are bound, since searching backward for a
+  -- deeper header, or forward for a shallower one, are both meaningful (a descendant
+  -- behind the cursor / an ancestor-level header ahead). The two aligned motions
+  -- ([u, ]l) also get bare shortcuts [N / ]N when header_level_jump_bare is set.
+  -- N = 1..6, a target outside 1..6 just does not move.
   local MAX_HEADING_LEVEL = 6
-  local level_jumps = {
-    { prefix = k.header_prev_shallower_prefix, dir = 'prev', sign = -1, word = 'shallower, backward' },
-    { prefix = k.header_next_deeper_prefix,    dir = 'next', sign =  1, word = 'deeper, forward' },
-    { prefix = k.header_prev_deeper_prefix,    dir = 'prev', sign =  1, word = 'deeper, backward' },
-    { prefix = k.header_next_shallower_prefix, dir = 'next', sign = -1, word = 'shallower, forward' },
-  }
+  local prev_key, next_key = k.header_prev_key, k.header_next_key
+  local up_key,   down_key = k.header_shallower_key, k.header_deeper_key
+  local level_jumps = {}
+  local function add_jump(prefix, dir, sign, word)
+    if prefix then level_jumps[#level_jumps + 1] =
+      { prefix = prefix, dir = dir, sign = sign, word = word } end
+  end
+  if prev_key and up_key   then add_jump(prev_key .. up_key,   'prev', -1, 'shallower, backward') end
+  if prev_key and down_key then add_jump(prev_key .. down_key, 'prev',  1, 'deeper, backward') end
+  if next_key and up_key   then add_jump(next_key .. up_key,   'next', -1, 'shallower, forward') end
+  if next_key and down_key then add_jump(next_key .. down_key, 'next',  1, 'deeper, forward') end
+  if k.header_level_jump_bare then
+    add_jump(prev_key, 'prev', -1, 'shallower, backward (bare)')
+    add_jump(next_key, 'next',  1, 'deeper, forward (bare)')
+  end
 
   local function bind_motions(bufnr)
     for _, m in ipairs(motions) do
