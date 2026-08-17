@@ -91,7 +91,10 @@ two found while evaluating multi-vault support, along with the one below.)*
     depth, so the nested `2.` is highlighted by design. The doubled `2. 2.` only ever
     came from the old continuation bug, already fixed (`dfc9688`), so it is no longer
     produced accidentally. Author's decision: won't-fix + document; the highlighting
-    is correct. No code change.
+    is correct. No code change. **Re-raised 17/8/2026** (a session confirmed both
+    markers paint on `1. 2. a`, incl. real content like `1. 2020. text`, via pure
+    tree-sitter); after the mechanism was shown, the **author reaffirmed won't-fix** —
+    a fix would override correct CommonMark parsing. Still closed.
 
 - **No note-type switch inside the Telescope VIEW pop-up — FIXED 13/8/2026 (v1.77.0),
   smoke-confirmed.** Root cause: opening a view (`M.open` → `telescope_view_picker`, the
