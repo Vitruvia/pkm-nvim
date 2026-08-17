@@ -954,8 +954,10 @@ destination prompt appears.
       toggle_syntax      = false,          -- :PKMSyntax toggle
       header_next_same   = "]h",   -- next header of the current level
       header_prev_same   = "[h",   -- previous header of the current level
-      header_rel_next    = "]H",   -- [count] levels shallower, forward
-      header_rel_prev    = "[H",   -- [count] levels shallower, backward
+      header_shallower_next = "]H", -- next shallower header (Nth)
+      header_shallower_prev = "[H", -- previous shallower header (parent)
+      header_deeper_next    = "]L", -- next deeper header (child)
+      header_deeper_prev    = "[L", -- previous deeper header
       header_next        = false,  -- any level: this is ]] , left to Neovim
       header_prev        = false,  -- any level: this is [[ , left to Neovim
     },
@@ -1021,8 +1023,10 @@ MARKDOWN EDITING (<leader>M, and ]h / [h)~
   <leader>Mr   :PKMList renumber     (normal and visual)
   ]h           next header of the current header's level
   [h           previous header of the current header's level
-  ]H  [H       header [count] levels SHALLOWER than the enclosing section:
-               bare = parent, 2]H = grandparent ([ backward, ] forward)
+  [H  ]H       previous / next SHALLOWER header (toward the title);
+               [H = parent, 2[H = grandparent (count = the Nth shallower)
+  [L  ]L       previous / next DEEPER header (into subsections);
+               ]L = first child ahead (count = the Nth deeper)
                (markdown buffers only, normal and visual, count-aware;
                any-level jumps are Neovim's own ]] and [[ )
 

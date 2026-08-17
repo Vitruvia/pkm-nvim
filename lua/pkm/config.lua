@@ -232,14 +232,18 @@ local defaults = {
     -- ]h / [h: unmodified, and in the bracket family the native motion lives in.
     header_next_same   = "]h",   -- next header of the current header's level
     header_prev_same   = "[h",   -- previous header of the current header's level
-    -- Relative-level jumps: go to the header [count] levels SHALLOWER than the
-    -- enclosing section — 2]H lands on the header 2 levels up. count 1 (a bare
-    -- ]H / [H) is the parent, and the count is the level delta, not a repeat.
-    -- ]H / [H rather than the terminal-natural #] / #[ : ] and [ are already
-    -- prefix keys, so no native command gains input latency, whereas mapping #[
-    -- would make the very common `#` (search-word-backward) wait on a timeout.
-    header_rel_next    = "]H",   -- forward  to a header [count] levels shallower
-    header_rel_prev    = "[H",   -- backward to a header [count] levels shallower
+    -- Relative-level jumps, four motions on two axes — direction ([ backward,
+    -- ] forward) x level relative to the enclosing section (H = shallower, toward
+    -- the title; L = deeper, into subsections). The count is the ORDINAL in that
+    -- direction: from a ### section, [H is the parent ## and 2[H the grandparent #,
+    -- while ]L is the first #### ahead. H/L rather than the terminal-natural #]/#[
+    -- keys: ] and [ are already prefix keys, so no native command gains input
+    -- latency, whereas mapping #[ would make the very common `#` (search-word-
+    -- backward) wait on a timeout.
+    header_shallower_next = "]H",   -- forward  to the next shallower header
+    header_shallower_prev = "[H",   -- backward to the previous shallower header (parent)
+    header_deeper_next    = "]L",   -- forward  to the next deeper header (child)
+    header_deeper_prev    = "[L",   -- backward to the previous deeper header
     -- Any-level jumps, left unbound: this is ]] / [[ . Assign only if you want
     -- what those lack — a count, Visual mode, a jumplist entry, and working
     -- without the tree-sitter markdown parser (:PKMHeader next has all of it).
