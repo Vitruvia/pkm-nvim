@@ -80,6 +80,17 @@ conflict, say so explicitly rather than silently choosing one.
   Announce the target vault before acting, and back up first (a `pkm.api`
   tag/`views.json` snapshot). `00 - NotesTeste` is the test vault; smoke notes
   and every experiment go there.
+- **`pkm.api` is a capability provider to the `ferramentas-concursos` program.**
+  That program's agents (mentor, agregador, estimador, especialistas) reach the
+  vaults **only** through `pkm.api` — the neovim **UI is for the human, not for
+  agents** (the reserved capability), and the API is the shared, structured, safe
+  surface they drive. Its invariants are the ones already fixed above: vault `01`
+  read-only except an explicitly-directed gestor task (via API, never raw edits,
+  git on `01` denied); writes `by='claude'`; never fabricate. The consumer-side
+  doctrine of that interop (shared-capability principle, collaboration graph,
+  cross-call invariants) is canonical in
+  `P:\Active\ferramentas-concursos\substrato\doc\interop.md`; nothing there
+  overrides this repo's rules — it consumes them.
 - **Vault paths contain spaces.** In a shell, quote the whole flag —
   `-- "--root=P:/Note-Vault/00 - NotesTeste"` — or argv splits it into three.
 
