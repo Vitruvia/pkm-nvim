@@ -207,9 +207,9 @@ design, see Known Bugs G9.)
   and the two crossed directions — deeper-backward, shallower-forward); full file green.
   All 36 digit maps verified interactively via `nvim_input` (`[u1`=`[1`=parent,
   `]l1`=`]1`=child, `[l2` a deeper header behind, `]u1` a shallower header ahead, absent
-  levels stay put). The keymaps are interactive — **pending the author's smoke** before
-  the tag. (The bare `[N`/`]N` half was already author-smoked; the four explicit
-  `[u`/`[l`/`]u`/`]l` forms are new.)
+  levels stay put). The keymaps are interactive — **smoke-confirmed by the author
+  (17/8/2026)** across all forms (bare `[N`/`]N` and the four explicit `[u`/`[l`/`]u`/
+  `]l`); **tagged `v1.79.0`**.
 
 ---
 
