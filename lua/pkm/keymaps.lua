@@ -264,14 +264,24 @@ function M.register(config)
     { lhs = k.header_prev,      dir = 'prev', level = nil,    desc = 'previous header' },
     { lhs = k.header_next_same, dir = 'next', level = 'same', desc = 'next header of the same level' },
     { lhs = k.header_prev_same, dir = 'prev', level = 'same', desc = 'previous header of the same level' },
+    -- Relative-level: the count is the number of levels to climb, not a repeat,
+    -- so it feeds level_rel and the ordinal count stays 1 (the nearest such
+    -- header). A bare ]H / [H (count 1) is the parent.
+    { lhs = k.header_rel_next,  dir = 'next', rel = true,     desc = 'header [count] levels shallower (forward)' },
+    { lhs = k.header_rel_prev,  dir = 'prev', rel = true,     desc = 'header [count] levels shallower (backward)' },
   }
 
   local function bind_motions(bufnr)
     for _, m in ipairs(motions) do
       if m.lhs then
         vim.keymap.set({ 'n', 'x' }, m.lhs, function()
-          require('pkm.markdown').goto_heading({
-            dir = m.dir, count = vim.v.count1, level = m.level })
+          if m.rel then
+            require('pkm.markdown').goto_heading({
+              dir = m.dir, level_rel = vim.v.count1, count = 1 })
+          else
+            require('pkm.markdown').goto_heading({
+              dir = m.dir, count = vim.v.count1, level = m.level })
+          end
         end, { buffer = bufnr, desc = 'PKM: ' .. m.desc, silent = true })
       end
     end

@@ -62,9 +62,23 @@ two found while evaluating multi-vault support, along with the one below.)*
 
 - **Sibling-repo items (ROADMAP § Triaged backlog — 2026-08-12 batch, G8–G10) —
   status after the author's 13/8 smoke:**
-  - **G9 — FIXED, CONFIRMED (v1.76.0).** After a `:Lazy sync` the block-aware inciso
-    scan (`find_inciso_markers`, pkm-syntax `bc81a34`) passed the author's smoke:
-    an `A -/B -/C -/D -` alpha list no longer mis-paints its C/D/I items. Closed.
+  - **G9 — CONTIGUOUS case FIXED, CONFIRMED (v1.76.0); BLANK-SEPARATED variant
+    REOPENED 17/8/2026.** After a `:Lazy sync` the block-aware inciso scan
+    (`find_inciso_markers`, pkm-syntax `bc81a34`) passed the author's smoke on a
+    *contiguous* `A -/B -/C -/D -` list — no C/D/I mis-paint. **But** when the same
+    alpha items are separated by **blank lines** (the shape in the author's real
+    note), each marker becomes its own single-line block, and v1.76.0's deliberate
+    "a lone marker is its own block, so a standalone `C -` reference still reads as an
+    inciso" carve-out then paints exactly the roman-valid letters — **C** (100) and
+    **D** (500) — while A/B/E stay plain: the ransom-note symptom returns. Reproduced
+    headlessly against the current pkm-syntax working tree (clean; only inciso commit
+    is `bc81a34`): contiguous → 0 painted; blank-separated `A B C D E` → 2 painted
+    `[C -, D -]`. Fix (a pkm-syntax change, deferred pending the author's go-ahead —
+    they believed it already fixed): blank lines between same-indent single-letter
+    ` - ` markers should not split the block, so an alpha list with paragraph spacing
+    suppresses all of it, while a genuinely standalone `C -` in prose (broken from
+    other markers by real text, not just blanks) still highlights. Batch item 1 of
+    `temp/adicionar-roadmap.md`.
   - **G10 — FIXED (v1.78.0), smoke-confirmed.** The `<S-CR>` attempt failed because the
     author's terminal collapses Shift+Enter to a plain `<CR>` before Neovim sees it,
     so continuation never fired and both keys just newlined. Per the author's choice
@@ -145,6 +159,44 @@ fired — is **fixed in v1.17.0**; see that entry.)*
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
     ~200+ views.
+
+---
+
+## [1.79.0] - 17/8/2026
+
+Relative-level header navigation: jump to the header `[count]` levels **shallower**
+than the enclosing section — the parent with a bare `]H`/`[H`, an ancestor with a
+count. Lockstep pkm-markdown + pkm-nvim. (From the `temp/adicionar-roadmap.md`
+batch item 3; items 1–2 of that batch were already resolved — item 2 by v1.78.0's
+`<C-j>` split, and the inciso-highlight item is tracked as a still-open pkm-syntax
+defect, see Known Bugs.)
+
+### Added
+
+- **`]H` / `[H` — relative-level header motion** (buffer-local on markdown, normal
+  and Visual mode, jumplist-marked). The count is the number of levels to climb, not
+  a repeat: from a `###` section, `]H`/`[H` reach the enclosing `##` (parent), `2]H`
+  the `#` (grandparent); the target level is `enclosing - count`, clamped at 1. `[H`
+  searches backward, `]H` forward. Above every heading it falls back to the nearest
+  header of any level, so the motion still moves. Config keys `header_rel_next` /
+  `header_rel_prev`; both default-bound.
+  - **Why `]H`/`[H`, not the requested `#]`/`#[`:** `]` and `[` are already prefix
+    keys, so no native command gains input latency; mapping `#[` would make the very
+    common `#` (search-word-backward) wait on `timeoutlen`. Set the config keys to
+    `#]`/`#[` if that trade is acceptable.
+  - `pkm-markdown.find_heading_target` gained `opts.level_rel` (the pure core; it
+    resolves the enclosing heading's level the way `level = 'same'` does, then
+    subtracts). `goto_heading` passes it straight through. Lockstep: the surface
+    lives in pkm-markdown (`47a0c8c`), the keymap in pkm-nvim `keymaps.lua`.
+
+### Verification
+
+- `luacheck` clean on `keymaps.lua` / `config.lua`; pkm-markdown `init.lua` keeps its
+  2 pre-existing `s`-unused warnings, none new. `test_v1100_p1` +7 relative-level
+  cases (parent/grandparent both directions, level-1 clamp, `level_rel` overriding an
+  explicit `level`, above-all-headings fallback); full file green. The keymap is
+  interactive — **pending the author's smoke** (jump up the hierarchy from a deep
+  section, with and without a count) before the version is tagged.
 
 ---
 

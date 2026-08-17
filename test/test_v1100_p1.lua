@@ -140,6 +140,33 @@ check("'same' above every heading falls back to any level",
   target(1, { level = 'same' }) == '7', target(1, { level = 'same' }))
 
 -- =============================================================================
+-- Relative level — climb N levels shallower than the enclosing section
+-- =============================================================================
+
+-- Cursor on line 19, inside the '### Level three' section (heading on 18).
+check("level_rel 1 backward is the parent (## before)",
+  target(19, { dir = 'prev', level_rel = 1 }) == '12',
+  target(19, { dir = 'prev', level_rel = 1 }))
+check("level_rel 1 forward is the next header at the parent level",
+  target(19, { dir = 'next', level_rel = 1 }) == '20',
+  target(19, { dir = 'next', level_rel = 1 }))
+check("level_rel 2 backward is the grandparent (# before)",
+  target(19, { dir = 'prev', level_rel = 2 }) == '7',
+  target(19, { dir = 'prev', level_rel = 2 }))
+check("level_rel 2 forward is the next level-1 header",
+  target(19, { dir = 'next', level_rel = 2 }) == '22',
+  target(19, { dir = 'next', level_rel = 2 }))
+check("level_rel clamps at level 1, not below",
+  target(19, { dir = 'prev', level_rel = 5 }) == '7',
+  target(19, { dir = 'prev', level_rel = 5 }))
+check("level_rel overrides an explicit level",
+  target(19, { dir = 'prev', level_rel = 1, level = 6 }) == '12',
+  target(19, { dir = 'prev', level_rel = 1, level = 6 }))
+check("level_rel above every heading falls back to any level",
+  target(1, { dir = 'next', level_rel = 1 }) == '7',
+  target(1, { dir = 'next', level_rel = 1 }))
+
+-- =============================================================================
 -- Degenerate input
 -- =============================================================================
 
