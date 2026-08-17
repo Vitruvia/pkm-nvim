@@ -159,47 +159,51 @@ fired — is **fixed in v1.17.0**; see that entry.)*
 
 ## [1.79.0] - 17/8/2026
 
-Relative-level header navigation — **four count-numbered motions** for moving through
-the heading hierarchy relative to the current section. Lockstep pkm-markdown + pkm-nvim.
-(From the `temp/adicionar-roadmap.md` batch item 3; batch items 1–2 were already
+Relative-level header navigation — **`[N` / `]N` jump an exact number of heading levels**
+up or down the hierarchy from the current section. Lockstep pkm-markdown + pkm-nvim.
+(From the retired `temp/adicionar-roadmap.md` batch item 3; batch items 1–2 were already
 resolved — item 2 by v1.78.0's `<C-j>` split, and item 1, the inciso highlight, is
 intended behaviour, not a bug — a standalone roman `C -` at line start highlights by
 design, see Known Bugs G9.)
 
 ### Added
 
-- **`[H` `]H` `[L` `]L` — relative-level header motions** (buffer-local on markdown,
-  normal and Visual mode, jumplist-marked). Two axes: **direction** (`[` backward,
-  `]` forward) × **level relative to the enclosing section** (`H` = shallower, toward
-  the title; `L` = deeper, into subsections). The count is the **ordinal** in that
-  direction, so from a `###` section: `[H` = the parent `##`, `2[H` = the grandparent
-  `#`; `]H` = the next shallower header ahead; `]L` = the first deeper header ahead
-  (a `####`); `[L` = the previous deeper header. Above every heading, `rel` falls back
-  to the nearest header of any level so the motion still moves. Config keys
-  `header_shallower_next` / `header_shallower_prev` / `header_deeper_next` /
-  `header_deeper_prev`; all default-bound.
-  - **Design (why four, and why `H`/`L` not `#]`/`#[`):** the earlier single-axis
-    `]H`/`[H` = "N levels shallower" (an intermediate commit this session, `d1cb987`)
-    had no forward target from a deep or last section, so `]H` read as broken; the
-    author asked for the full {previous,next} × {shallower,deeper} set with the count
-    as the ordinal. `H`/`L` rather than the terminal-natural `#]`/`#[`: `[`/`]` are
-    already prefix keys so no native command gains input latency, whereas mapping `#[`
-    would make the very common `#` (search-word-backward) wait on `timeoutlen`.
-  - `pkm-markdown.find_heading_target` gained `opts.rel = 'shallower'|'deeper'` (the
-    pure core; it resolves the enclosing level the way `level = 'same'` does, then
-    matches `< L` / `> L` and lets the existing `count` loop walk the Nth). Replaces
-    the intermediate `opts.level_rel`. `goto_heading` passes it through. Lockstep:
-    the surface lives in pkm-markdown (`c337393`), the keymap in pkm-nvim `keymaps.lua`.
+- **`[N` / `]N` — relative-level header jumps** (buffer-local on markdown, normal and
+  Visual mode, jumplist-marked). The digit `N` is the **level delta**: `[N` jumps `N`
+  levels **shallower** (backward, to an ancestor), `]N` jumps `N` levels **deeper**
+  (forward, to a descendant). From a `###` section: `[1` = the parent `##`, `[2` = the
+  grandparent `#`, `]1` = the first child `####`, `]3` = the header at level 6 ahead.
+  The target level is **exact** (`enclosing ± N`); a target outside `1..6` (e.g. `]2`
+  where no such deeper level exists, or `[5` past the title) simply does not move.
+  Above every heading it falls back to the nearest header of any level. Each prefix
+  binds `N = 1..6`; config keys `header_shallower_prefix` (`[`) / `header_deeper_prefix`
+  (`]`), either settable to `false` to unbind that half.
+  - **Design (why the digit-in-key, and why `[`/`]` not `#`):** the author wants the
+    number to mean *how many levels* (jump to the n±k header), not an ordinal — so the
+    digit is baked into the key (`]3`, not a count). This iterated twice earlier the
+    same session (an intermediate `level_rel` in `d1cb987`, then a four-motion ordinal
+    set in `073dda2`) before settling here. `[`/`]` rather than the terminal-natural
+    `#N`: `[`/`]` are already prefix keys so no native command gains input latency,
+    whereas `#N` would make the very common `#` (search-word-backward) wait on
+    `timeoutlen`. Trade-off accepted: the digit-in-key inverts Vim's count convention,
+    but a repeat count on these motions is meaningless anyway (each jump changes the
+    level), and markdown's 6-level cap makes single-digit deltas sufficient.
+  - `pkm-markdown.find_heading_target` gained `opts.level_delta` (signed; the pure core
+    resolves the enclosing level the way `level = 'same'` does, then targets exactly
+    `enclosing + level_delta`). Replaces the intermediate `opts.rel`/`level_rel`.
+    `goto_heading` passes it through. Lockstep: the surface lives in pkm-markdown
+    (`e254ddf`), the keymap loop in pkm-nvim `keymaps.lua`.
 
 ### Verification
 
 - `luacheck` clean on `keymaps.lua` / `config.lua`; pkm-markdown `init.lua` keeps its
-  2 pre-existing `s`-unused warnings, none new. `test_v1100_p1` +9 relative cases
-  (shallower/deeper, both directions, ordinal count, prev-deeper-none = nil, `rel`
-  overriding an explicit `level`, above-all-headings fallback); full file green. All
-  four motions verified interactively via `nvim_input` (parent/grandparent/child/next-
-  shallower land correctly, `[L` with nothing behind stays put). The keymaps are
-  interactive — **pending the author's smoke** before the version is tagged.
+  2 pre-existing `s`-unused warnings, none new. `test_v1100_p1` +8 `level_delta` cases
+  (parent/grandparent, exact `n+3`, exact-not-`≥` when the level is absent = no move,
+  below-level-1 = no move, override of explicit `level`, above-all-headings fallback);
+  full file green. The `[1`/`[2`/`]1`/`]2` keys and all 12 digit maps verified
+  interactively via `nvim_input` (parent/grandparent/child land, `]2` with no such
+  level stays put). The keymaps are interactive — **pending the author's smoke**
+  before the version is tagged.
 
 ---
 

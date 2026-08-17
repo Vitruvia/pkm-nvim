@@ -264,12 +264,15 @@ function M.register(config)
     { lhs = k.header_prev,      dir = 'prev', level = nil,    desc = 'previous header' },
     { lhs = k.header_next_same, dir = 'next', level = 'same', desc = 'next header of the same level' },
     { lhs = k.header_prev_same, dir = 'prev', level = 'same', desc = 'previous header of the same level' },
-    -- Relative to the enclosing level; the count is the ordinal (2]H = 2nd
-    -- shallower forward), handled by the same count path as the others.
-    { lhs = k.header_shallower_next, dir = 'next', rel = 'shallower', desc = 'next shallower header' },
-    { lhs = k.header_shallower_prev, dir = 'prev', rel = 'shallower', desc = 'previous shallower header' },
-    { lhs = k.header_deeper_next,    dir = 'next', rel = 'deeper',    desc = 'next deeper header' },
-    { lhs = k.header_deeper_prev,    dir = 'prev', rel = 'deeper',    desc = 'previous deeper header' },
+  }
+
+  -- Relative-level jumps: <prefix>N = N levels shallower/deeper (exact delta),
+  -- the digit baked into the key. [ = shallower (backward), ] = deeper (forward);
+  -- N = 1..6 (markdown's level range), a target outside 1..6 just does not move.
+  local MAX_HEADING_LEVEL = 6
+  local level_jumps = {
+    { prefix = k.header_shallower_prefix, dir = 'prev', sign = -1, word = 'shallower' },
+    { prefix = k.header_deeper_prefix,    dir = 'next', sign =  1, word = 'deeper' },
   }
 
   local function bind_motions(bufnr)
@@ -277,8 +280,19 @@ function M.register(config)
       if m.lhs then
         vim.keymap.set({ 'n', 'x' }, m.lhs, function()
           require('pkm.markdown').goto_heading({
-            dir = m.dir, count = vim.v.count1, level = m.level, rel = m.rel })
+            dir = m.dir, count = vim.v.count1, level = m.level })
         end, { buffer = bufnr, desc = 'PKM: ' .. m.desc, silent = true })
+      end
+    end
+    for _, j in ipairs(level_jumps) do
+      if j.prefix then
+        for n = 1, MAX_HEADING_LEVEL do
+          local delta = j.sign * n
+          vim.keymap.set({ 'n', 'x' }, j.prefix .. n, function()
+            require('pkm.markdown').goto_heading({ dir = j.dir, level_delta = delta })
+          end, { buffer = bufnr, silent = true,
+                 desc = 'PKM: header ' .. n .. ' level(s) ' .. j.word })
+        end
       end
     end
   end

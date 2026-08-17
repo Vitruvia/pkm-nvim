@@ -954,10 +954,8 @@ destination prompt appears.
       toggle_syntax      = false,          -- :PKMSyntax toggle
       header_next_same   = "]h",   -- next header of the current level
       header_prev_same   = "[h",   -- previous header of the current level
-      header_shallower_next = "]H", -- next shallower header (Nth)
-      header_shallower_prev = "[H", -- previous shallower header (parent)
-      header_deeper_next    = "]L", -- next deeper header (child)
-      header_deeper_prev    = "[L", -- previous deeper header
+      header_shallower_prefix = "[", -- [N = N levels shallower (ancestor)
+      header_deeper_prefix    = "]", -- ]N = N levels deeper (descendant)
       header_next        = false,  -- any level: this is ]] , left to Neovim
       header_prev        = false,  -- any level: this is [[ , left to Neovim
     },
@@ -1023,12 +1021,13 @@ MARKDOWN EDITING (<leader>M, and ]h / [h)~
   <leader>Mr   :PKMList renumber     (normal and visual)
   ]h           next header of the current header's level
   [h           previous header of the current header's level
-  [H  ]H       previous / next SHALLOWER header (toward the title);
-               [H = parent, 2[H = grandparent (count = the Nth shallower)
-  [L  ]L       previous / next DEEPER header (into subsections);
-               ]L = first child ahead (count = the Nth deeper)
-               (markdown buffers only, normal and visual, count-aware;
-               any-level jumps are Neovim's own ]] and [[ )
+  [N           jump N levels SHALLOWER (backward, to an ancestor):
+               [1 = parent, [2 = grandparent (N = the level delta)
+  ]N           jump N levels DEEPER (forward, to a descendant):
+               ]1 = first child, ]3 = the header at level 6 ahead
+               (markdown buffers only, normal and visual; N = 1..6, exact
+               level, no move if that level is absent; any-level header
+               jumps are Neovim's own ]] and [[ )
 
 Off by default — assign a key to enable~
   new_relative     :PKMNote relative

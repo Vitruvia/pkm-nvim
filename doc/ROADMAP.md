@@ -368,17 +368,14 @@ repos in lockstep. **Further syntax/fold features now land in pkm-syntax, not he
 Legal lists are complete end-to-end (renumber v1.34/1.37/1.38/1.39 + highlight
 v1.35/1.36/1.40 + structure-aware wrap + CONVENTIONS § Lists). **Pending:**
 
-- **Header navigation — SHIPPED v1.79.0 (`073dda2` + pkm-markdown `c337393`), but a
-  key/count REDESIGN is under discussion with the author.** Same-level `]h`/`[h` and
-  an absolute-level goto already existed; v1.79.0 added relative-level motion. The
-  design iterated in one session and is **not settled** (untagged, pre-smoke): the
-  shipped form is four motions `[H`/`]H` (shallower) + `[L`/`]L` (deeper) where the
-  count is the *ordinal* (Nth such header). The author has since clarified they want
-  the count to be the *level delta* (jump to a header exactly n±k levels away — "the
-  n+3-levels-deeper header"), proposing numbered keys `[1`/`]1`/`[2`/`]2`. Open
-  decision: delta-vs-ordinal count, and literal-digit keys vs `{count}[H`/`{count}]H`.
-  Resolve, re-implement in `pkm-markdown.find_heading_target` + `keymaps.lua`
-  (lockstep), then the v1.79.0 tag follows the author's smoke. (From the retired
+- **Header navigation — SHIPPED v1.79.0; design SETTLED, awaiting the author's smoke
+  before the tag.** Same-level `]h`/`[h` and an absolute-level goto already existed;
+  v1.79.0 adds **`[N`/`]N` relative-level jumps** — `[N` = N levels shallower
+  (ancestor), `]N` = N levels deeper (descendant), the digit an exact level delta.
+  (Design iterated 3× this session before settling — `level_rel` → four-motion ordinal
+  → this literal-digit delta; see CHANGELOG v1.79.0.) Pure core
+  `find_heading_target(level_delta)` in pkm-markdown, keymap loop in `keymaps.lua`
+  (lockstep). Only the author's interactive smoke + tag remain. (From the retired
   `temp/adicionar-roadmap.md` batch, item 3.)
 - **Parágrafo único** is the one unclassified legal marker (deferred — needs a
   per-article § count).

@@ -140,38 +140,35 @@ check("'same' above every heading falls back to any level",
   target(1, { level = 'same' }) == '7', target(1, { level = 'same' }))
 
 -- =============================================================================
--- Relative level — shallower / deeper than the enclosing section, count = Nth
+-- Relative level — exact delta from the enclosing section (the [N / ]N keys)
 -- =============================================================================
 
 -- Cursor on line 19, inside the '### Level three' section (heading on 18, L3).
-check("shallower prev 1st is the parent (## before)",
-  target(19, { dir = 'prev', rel = 'shallower' }) == '12',
-  target(19, { dir = 'prev', rel = 'shallower' }))
-check("shallower prev 2nd climbs past the parent (# before)",
-  target(19, { dir = 'prev', rel = 'shallower', count = 2 }) == '7',
-  target(19, { dir = 'prev', rel = 'shallower', count = 2 }))
-check("shallower next 1st exits the subtree forward (## after)",
-  target(19, { dir = 'next', rel = 'shallower' }) == '20',
-  target(19, { dir = 'next', rel = 'shallower' }))
-check("shallower next 2nd reaches the level-1 after",
-  target(19, { dir = 'next', rel = 'shallower', count = 2 }) == '22',
-  target(19, { dir = 'next', rel = 'shallower', count = 2 }))
-check("deeper next 1st is the first deeper header ahead (L6)",
-  target(19, { dir = 'next', rel = 'deeper' }) == '26',
-  target(19, { dir = 'next', rel = 'deeper' }))
-check("deeper prev with nothing deeper behind is nil",
-  target(19, { dir = 'prev', rel = 'deeper' }) == 'nil',
-  target(19, { dir = 'prev', rel = 'deeper' }))
+check("delta -1 backward is the parent ## (L2 before)",
+  target(19, { dir = 'prev', level_delta = -1 }) == '12',
+  target(19, { dir = 'prev', level_delta = -1 }))
+check("delta -2 backward is the grandparent # (L1 before)",
+  target(19, { dir = 'prev', level_delta = -2 }) == '7',
+  target(19, { dir = 'prev', level_delta = -2 }))
+check("delta +3 forward is the exact L6 header (n+3)",
+  target(19, { dir = 'next', level_delta = 3 }) == '26',
+  target(19, { dir = 'next', level_delta = 3 }))
+check("delta +1 with no L4 heading present does not move (exact, not >=)",
+  target(19, { dir = 'next', level_delta = 1 }) == 'nil',
+  target(19, { dir = 'next', level_delta = 1 }))
+check("delta below level 1 matches nothing (cannot go shallower than #)",
+  target(19, { dir = 'prev', level_delta = -5 }) == 'nil',
+  target(19, { dir = 'prev', level_delta = -5 }))
 -- Cursor on line 13, inside '## Level two A' (heading on 12, L2).
-check("deeper next from a level-2 section is the L3 below it",
-  target(13, { dir = 'next', rel = 'deeper' }) == '18',
-  target(13, { dir = 'next', rel = 'deeper' }))
-check("rel overrides an explicit level",
-  target(19, { dir = 'prev', rel = 'shallower', level = 6 }) == '12',
-  target(19, { dir = 'prev', rel = 'shallower', level = 6 }))
-check("rel above every heading falls back to any level",
-  target(1, { dir = 'next', rel = 'shallower' }) == '7',
-  target(1, { dir = 'next', rel = 'shallower' }))
+check("delta +1 from a level-2 section is the L3 below it",
+  target(13, { dir = 'next', level_delta = 1 }) == '18',
+  target(13, { dir = 'next', level_delta = 1 }))
+check("level_delta overrides an explicit level",
+  target(19, { dir = 'prev', level_delta = -1, level = 6 }) == '12',
+  target(19, { dir = 'prev', level_delta = -1, level = 6 }))
+check("level_delta above every heading falls back to any level",
+  target(1, { dir = 'next', level_delta = -1 }) == '7',
+  target(1, { dir = 'next', level_delta = -1 }))
 
 -- =============================================================================
 -- Degenerate input

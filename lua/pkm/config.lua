@@ -232,18 +232,17 @@ local defaults = {
     -- ]h / [h: unmodified, and in the bracket family the native motion lives in.
     header_next_same   = "]h",   -- next header of the current header's level
     header_prev_same   = "[h",   -- previous header of the current header's level
-    -- Relative-level jumps, four motions on two axes — direction ([ backward,
-    -- ] forward) x level relative to the enclosing section (H = shallower, toward
-    -- the title; L = deeper, into subsections). The count is the ORDINAL in that
-    -- direction: from a ### section, [H is the parent ## and 2[H the grandparent #,
-    -- while ]L is the first #### ahead. H/L rather than the terminal-natural #]/#[
-    -- keys: ] and [ are already prefix keys, so no native command gains input
-    -- latency, whereas mapping #[ would make the very common `#` (search-word-
-    -- backward) wait on a timeout.
-    header_shallower_next = "]H",   -- forward  to the next shallower header
-    header_shallower_prev = "[H",   -- backward to the previous shallower header (parent)
-    header_deeper_next    = "]L",   -- forward  to the next deeper header (child)
-    header_deeper_prev    = "[L",   -- backward to the previous deeper header
+    -- Relative-level jumps by an exact level DELTA typed as the key's digit:
+    -- <shallower_prefix>N jumps N levels SHALLOWER (backward, to an ancestor) and
+    -- <deeper_prefix>N jumps N levels DEEPER (forward, to a descendant). So from a
+    -- ### section [1 = the parent ##, [2 = the grandparent #, ]1 = the first ####
+    -- child, ]3 = the header at level 6 ahead. Each prefix binds N = 1..6; a target
+    -- outside 1..6 just does not move. Set a prefix to false to unbind that half.
+    -- [ / ] rather than the terminal-natural #: [ and ] are already prefix keys, so
+    -- no native command gains input latency, whereas #N would make the very common
+    -- `#` (search-word-backward) wait on a timeout.
+    header_shallower_prefix = "[",  -- [N = N levels shallower (backward, ancestor)
+    header_deeper_prefix    = "]",  -- ]N = N levels deeper (forward, descendant)
     -- Any-level jumps, left unbound: this is ]] / [[ . Assign only if you want
     -- what those lack — a count, Visual mode, a jumplist entry, and working
     -- without the tree-sitter markdown parser (:PKMHeader next has all of it).
