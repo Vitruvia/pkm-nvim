@@ -267,12 +267,18 @@ function M.register(config)
   }
 
   -- Relative-level jumps: <prefix>N = N levels shallower/deeper (exact delta),
-  -- the digit baked into the key. [ = shallower (backward), ] = deeper (forward);
-  -- N = 1..6 (markdown's level range), a target outside 1..6 just does not move.
+  -- the digit baked into the key. All four direction × level combinations, since
+  -- searching backward for a deeper header, or forward for a shallower one, are
+  -- both meaningful (a descendant behind the cursor / an ancestor-level header
+  -- ahead). The two "aligned" motions ([N, ]N) stay bare; the two "crossed" ones
+  -- carry a level letter (l = lower/deeper, u = upper/shallower). N = 1..6, a
+  -- target outside 1..6 just does not move.
   local MAX_HEADING_LEVEL = 6
   local level_jumps = {
-    { prefix = k.header_shallower_prefix, dir = 'prev', sign = -1, word = 'shallower' },
-    { prefix = k.header_deeper_prefix,    dir = 'next', sign =  1, word = 'deeper' },
+    { prefix = k.header_prev_shallower_prefix, dir = 'prev', sign = -1, word = 'shallower, backward' },
+    { prefix = k.header_next_deeper_prefix,    dir = 'next', sign =  1, word = 'deeper, forward' },
+    { prefix = k.header_prev_deeper_prefix,    dir = 'prev', sign =  1, word = 'deeper, backward' },
+    { prefix = k.header_next_shallower_prefix, dir = 'next', sign = -1, word = 'shallower, forward' },
   }
 
   local function bind_motions(bufnr)

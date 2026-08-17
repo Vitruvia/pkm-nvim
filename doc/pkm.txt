@@ -954,8 +954,10 @@ destination prompt appears.
       toggle_syntax      = false,          -- :PKMSyntax toggle
       header_next_same   = "]h",   -- next header of the current level
       header_prev_same   = "[h",   -- previous header of the current level
-      header_shallower_prefix = "[", -- [N = N levels shallower (ancestor)
-      header_deeper_prefix    = "]", -- ]N = N levels deeper (descendant)
+      header_prev_shallower_prefix = "[",  -- [N  = N shallower, backward
+      header_next_deeper_prefix    = "]",  -- ]N  = N deeper, forward
+      header_prev_deeper_prefix    = "[l", -- [lN = N deeper, backward
+      header_next_shallower_prefix = "]u", -- ]uN = N shallower, forward
       header_next        = false,  -- any level: this is ]] , left to Neovim
       header_prev        = false,  -- any level: this is [[ , left to Neovim
     },
@@ -1021,10 +1023,12 @@ MARKDOWN EDITING (<leader>M, and ]h / [h)~
   <leader>Mr   :PKMList renumber     (normal and visual)
   ]h           next header of the current header's level
   [h           previous header of the current header's level
-  [N           jump N levels SHALLOWER (backward, to an ancestor):
+  [N           jump N levels SHALLOWER, backward (to an ancestor):
                [1 = parent, [2 = grandparent (N = the level delta)
-  ]N           jump N levels DEEPER (forward, to a descendant):
+  ]N           jump N levels DEEPER, forward (to a descendant):
                ]1 = first child, ]3 = the header at level 6 ahead
+  [lN          jump N levels DEEPER, backward (a descendant behind cursor)
+  ]uN          jump N levels SHALLOWER, forward (an ancestor-level ahead)
                (markdown buffers only, normal and visual; N = 1..6, exact
                level, no move if that level is absent; any-level header
                jumps are Neovim's own ]] and [[ )

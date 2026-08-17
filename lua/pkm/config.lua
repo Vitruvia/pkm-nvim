@@ -232,17 +232,21 @@ local defaults = {
     -- ]h / [h: unmodified, and in the bracket family the native motion lives in.
     header_next_same   = "]h",   -- next header of the current header's level
     header_prev_same   = "[h",   -- previous header of the current header's level
-    -- Relative-level jumps by an exact level DELTA typed as the key's digit:
-    -- <shallower_prefix>N jumps N levels SHALLOWER (backward, to an ancestor) and
-    -- <deeper_prefix>N jumps N levels DEEPER (forward, to a descendant). So from a
-    -- ### section [1 = the parent ##, [2 = the grandparent #, ]1 = the first ####
-    -- child, ]3 = the header at level 6 ahead. Each prefix binds N = 1..6; a target
-    -- outside 1..6 just does not move. Set a prefix to false to unbind that half.
-    -- [ / ] rather than the terminal-natural #: [ and ] are already prefix keys, so
-    -- no native command gains input latency, whereas #N would make the very common
-    -- `#` (search-word-backward) wait on a timeout.
-    header_shallower_prefix = "[",  -- [N = N levels shallower (backward, ancestor)
-    header_deeper_prefix    = "]",  -- ]N = N levels deeper (forward, descendant)
+    -- Relative-level jumps by an exact level DELTA typed as the key's digit, in all
+    -- four direction × level combinations. <prefix>N jumps to the header exactly N
+    -- levels away, searching backward ([) or forward (]). The two aligned motions are
+    -- bare — [N = N shallower backward (to an ancestor: [1 parent, [2 grandparent),
+    -- ]N = N deeper forward (to a descendant: ]1 first child, ]3 the level-6 header
+    -- ahead) — and the two crossed motions carry a level letter — [lN = N deeper
+    -- backward (a descendant before the cursor), ]uN = N shallower forward (an
+    -- ancestor-level header ahead). Each prefix binds N = 1..6; a target outside 1..6
+    -- just does not move. Set any prefix to false to unbind it. [ / ] rather than the
+    -- terminal-natural #: [ and ] are already prefix keys, so no native command gains
+    -- input latency, whereas #N would make the very common `#` wait on a timeout.
+    header_prev_shallower_prefix = "[",   -- [N  = N shallower, backward (ancestor)
+    header_next_deeper_prefix    = "]",   -- ]N  = N deeper, forward (descendant)
+    header_prev_deeper_prefix    = "[l",  -- [lN = N deeper, backward (descendant behind)
+    header_next_shallower_prefix = "]u",  -- ]uN = N shallower, forward (ancestor-level ahead)
     -- Any-level jumps, left unbound: this is ]] / [[ . Assign only if you want
     -- what those lack — a count, Visual mode, a jumplist entry, and working
     -- without the tree-sitter markdown parser (:PKMHeader next has all of it).

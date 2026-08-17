@@ -169,6 +169,19 @@ check("level_delta overrides an explicit level",
 check("level_delta above every heading falls back to any level",
   target(1, { dir = 'next', level_delta = -1 }) == '7',
   target(1, { dir = 'next', level_delta = -1 }))
+-- The two "crossed" motions: dir and level_delta are independent, so a deeper
+-- header can be sought BACKWARD and a shallower one FORWARD.
+-- Cursor on line 21 (inside '## Level two B' at 20, L2); an L3 (18) is behind it.
+check("crossed: deeper backward finds the L3 before the cursor",
+  target(21, { dir = 'prev', level_delta = 1 }) == '18',
+  target(21, { dir = 'prev', level_delta = 1 }))
+-- Cursor on line 19 (inside '### Level three' at 18, L3); an L2 (20) is ahead.
+check("crossed: shallower forward finds the L2 after the cursor",
+  target(19, { dir = 'next', level_delta = -1 }) == '20',
+  target(19, { dir = 'next', level_delta = -1 }))
+check("crossed: shallower forward, 2 levels, reaches the L1 after",
+  target(19, { dir = 'next', level_delta = -2 }) == '22',
+  target(19, { dir = 'next', level_delta = -2 }))
 
 -- =============================================================================
 -- Degenerate input
