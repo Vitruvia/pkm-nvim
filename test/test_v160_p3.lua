@@ -146,36 +146,36 @@ do
   views._views_panel.close()
 end
 
-print("\n== view-deletion panel: lifecycle, content, and a real delete ==")
+print("\n== view-deletion selector: picker + confirm performs the delete ==")
 do
-  views._delete_panel.open({ filter = '' })
-  check("deletion panel opens", views._delete_panel.is_open())
+  -- v1.81.0: deletion is the shared Telescope picker (headless → pkm.ui.pick_list
+  -- → vim.ui.select), then a native vim.fn.confirm. Both are stubbed to drive the
+  -- selection and the "Yes" so the full path — pick the view, confirm, delete —
+  -- runs without a human. The scratch view was saved at the top of the file.
+  check("scratch view present before delete",
+    vim.tbl_contains(views.list(), '__test_v160_p3_view'))
 
-  local win = views._delete_panel.get_win()
-  local buf = vim.api.nvim_win_get_buf(win)
-  local lines_before = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local found_before = false
-  for _, line in ipairs(lines_before) do
-    if line:find('__test_v160_p3_view', 1, true) then found_before = true end
+  local o_select, o_confirm = vim.ui.select, vim.fn.confirm
+  local picker_saw_scratch = false
+  vim.ui.select = function(items, _opts, on_choice)
+    for _, it in ipairs(items) do
+      local val = (type(it) == 'table') and it.value or it
+      if val == '__test_v160_p3_view' then picker_saw_scratch = true end
+    end
+    for _, it in ipairs(items) do
+      local val = (type(it) == 'table') and it.value or it
+      if val == '__test_v160_p3_view' then on_choice(it); return end
+    end
+    on_choice(nil)
   end
-  check("scratch view appears in the deletion panel", found_before)
+  vim.fn.confirm = function() return 1 end   -- "Yes"
+  local ok = pcall(views.open_view_deletion_panel)
+  vim.ui.select, vim.fn.confirm = o_select, o_confirm
 
-  -- The confirm dialog itself is interactive (vim.fn.confirm) and left to
-  -- manual smoke; the delete it ultimately performs is exercised directly.
-  local ok_delete = views.delete('__test_v160_p3_view')
-  check("M.delete() succeeds", ok_delete)
-  check("view no longer in M.list()", not vim.tbl_contains(views.list(), '__test_v160_p3_view'))
-
-  views._delete_panel.refresh()
-  local lines_after = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local found_after = false
-  for _, line in ipairs(lines_after) do
-    if line:find('__test_v160_p3_view', 1, true) then found_after = true end
-  end
-  check("scratch view no longer in the refreshed deletion panel", not found_after)
-
-  views._delete_panel.close()
-  check("deletion panel closes", not views._delete_panel.is_open())
+  check("deletion selector ran without error", ok)
+  check("scratch view was offered in the picker", picker_saw_scratch)
+  check("view deleted through the picker + confirm",
+    not vim.tbl_contains(views.list(), '__test_v160_p3_view'))
 end
 
 print(string.format("\n%s", failures == 0 and "ALL PASS" or (failures .. " FAILURE(S)")))

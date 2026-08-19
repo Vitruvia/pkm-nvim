@@ -1179,6 +1179,33 @@ local function pick_view_from(title, names, on_select)
   ui_pick(title, entries, on_select)
 end
 
+--- `ui_pick` over the WHOLE view hierarchy: every view in tree order, indented
+--- by depth with a ▶/• marker and a live count, so the parent/child structure
+--- the old split panels drew is preserved inside the fuzzy picker. This is the
+--- selection surface for "pick one view, then act on it" (`:PKMView update`,
+--- `:PKMView delete`) -- the big, growing lists, which is exactly where a real
+--- picker matters most and a plain Neovim window reads worst.
+---@param title     string
+---@param on_select fun(name:string)  the chosen view's name
+local function pick_view_tree(title, on_select)
+  local entries = build_tree_entries()
+  if #entries == 0 then
+    vim.notify('[pkm] no views defined', vim.log.levels.WARN)
+    return
+  end
+  local counts = M.count_many(entry_names(entries))
+  local items  = {}
+  for _, e in ipairs(entries) do
+    local indent = string.rep('  ', e.depth)
+    local marker = e.has_children and '▶ ' or '• '
+    items[#items + 1] = {
+      display = string.format('%s%s%s  (%d)', indent, marker, e.name, counts[e.name] or 0),
+      value   = e.name,
+    }
+  end
+  ui_pick(title, items, on_select)
+end
+
 --- Show a small floating window listing keymap hints, one per line. Shared
 --- by every Telescope-backed picker in this file so prompt titles can stay
 --- short (a single "? help" pointer) instead of cramming every key into
@@ -2447,135 +2474,42 @@ function M.open_views_panel(mode)
   end
 end
 
--- Shared tree build_lines for the view-selection panels (delete / update): the
--- same filterable view tree, differing only in the header label and the hint
--- for what <CR> does. Keeps the two panels visually identical and in one place.
----@param header string  First-line label (e.g. 'Delete View').
----@param select_hint string  What <CR> does (e.g. 'select (confirms)').
----@return function build_lines
-local function view_pick_build_lines(header, select_hint)
-  return function(state)
-    local tree = build_tree_entries()
-    local filtered = tree
-    if state.filter and state.filter ~= '' then
-      local needle = state.filter:lower()
-      local f = {}
-      for _, e in ipairs(tree) do
-        if e.name:lower():find(needle, 1, true) then f[#f + 1] = e end
-      end
-      filtered = f
-    end
-
-    local filter_label = (state.filter and state.filter ~= '')
-      and ('  [filter: ' .. state.filter .. ']') or ''
-    local lines = {
-      string.format('  %s  (%d)%s  <CR> %s  / search  q close',
-        header, #filtered, filter_label, select_hint),
-    }
-    local map    = {}
-    local counts = M.count_many(entry_names(filtered))
-    for _, e in ipairs(filtered) do
-      local count  = counts[e.name] or 0
-      local indent = string.rep('  ', e.depth)
-      local marker = e.has_children and '▶ ' or '• '
-      lines[#lines + 1] = string.format('  %s%s%s  (%d)', indent, marker, e.name, count)
-      map[#lines] = e.name
-    end
-    if #filtered == 0 then
-      lines[#lines + 1] = (state.filter and state.filter ~= '')
-        and '  (no views match)' or '  (no views defined)'
-    end
-    return lines, map
-  end
-end
-
-local _delete_panel = panel.create({
-  name          = 'viewdeletepanel',
-  split_cmd     = 'noautocmd botright split',
-  focus_on_open = true,
-  resize = function(state, lines)
-    if state.win and vim.api.nvim_win_is_valid(state.win) then
-      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 16))
-    end
-  end,
-  build_lines = view_pick_build_lines('Delete View', 'select (confirms)'),
-  keymaps = {
-    ['<CR>'] = function(state, helpers)
-      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
-      if not name then return end
-      -- Warn about orphaned children: M.delete() only removes this
-      -- entry, it does not touch any subproject whose parent field
-      -- pointed here (a pre-existing, out-of-scope-for-this-phase
-      -- limitation) — surfacing it in the confirm prompt at least makes
-      -- the consequence visible before it happens, not only after.
-      local children = get_view_children(name)
-      local msg = string.format("Delete view '%s'?", name)
-      if #children > 0 then
-        msg = msg .. string.format(
-          '\n(%d subview%s reference this as parent and will be orphaned)',
-          #children, #children == 1 and '' or 's')
-      end
-      local choice = vim.fn.confirm(msg, '&Yes\n&No', 2)
-      if choice == 1 then
-        M.delete(name)
-        helpers.refresh()
-      end
-    end,
-    ['/'] = function(state, helpers)
-      vim.fn.inputsave()
-      local query = vim.fn.input('Filter: ', state.filter or '')
-      vim.fn.inputrestore()
-      state.filter = (query and query ~= '') and query or nil
-      helpers.refresh()
-    end,
-  },
-})
-
---- Open the view-deletion panel: browse → select → confirm before delete
---- (vim.fn.confirm, single keypress — matches the existing convention used
---- by the buffer panel's own "close with unsaved changes" prompt, not a
---- typed "yes"/"no" like :PKMTrash empty's heavier confirmation, since
---- deleting a view only removes a saved filter, never any note content).
+--- Open the view-deletion selector: the whole view tree in the shared picker
+--- (fuzzy, per-view counts, hierarchy preserved by indentation), then a single
+--- confirm before deleting the chosen view. The confirm stays a native
+--- vim.fn.confirm (Yes/No) — a destructive two-way question, not an option menu
+--- — matching the buffer panel's "close with unsaved changes" prompt; deleting
+--- a view removes only a saved filter, never note content. (One delete per
+--- invocation now; re-run to delete another — the picker closes on select.)
 ---@return nil
 function M.open_view_deletion_panel()
-  _delete_panel.open({ filter = '' })
+  pick_view_tree('Delete view — pick one', function(name)
+    if not name then return end
+    -- M.delete() removes only this entry; a subproject whose parent field
+    -- points here is orphaned (re-levels to a root), a pre-existing limitation.
+    -- Surface it in the confirm so the consequence is visible before it happens.
+    local children = get_view_children(name)
+    local msg = string.format("Delete view '%s'?", name)
+    if #children > 0 then
+      msg = msg .. string.format(
+        '\n(%d subview%s reference this as parent and will be orphaned)',
+        #children, #children == 1 and '' or 's')
+    end
+    if vim.fn.confirm(msg, '&Yes\n&No', 2) == 1 then
+      M.delete(name)
+    end
+  end)
 end
 
--- The view-update selection panel: same filterable tree as the deletion panel,
--- but <CR> closes it and opens the chosen view's edit UI (via M.edit_view, which
--- routes a named view to its action picker). Replaces the flat vim.ui.select
--- that :PKMView update used to pick a view — the tree reads better as views grow.
-local _update_panel = panel.create({
-  name          = 'viewupdatepanel',
-  split_cmd     = 'noautocmd botright split',
-  focus_on_open = true,
-  resize = function(state, lines)
-    if state.win and vim.api.nvim_win_is_valid(state.win) then
-      vim.api.nvim_win_set_height(state.win, math.min(#lines + 1, 16))
-    end
-  end,
-  build_lines = view_pick_build_lines('Update View', 'edit'),
-  keymaps = {
-    ['<CR>'] = function(state, helpers)
-      local name = state.map[vim.api.nvim_win_get_cursor(state.win)[1]]
-      if not name then return end
-      helpers.close()
-      M.edit_view(name)
-    end,
-    ['/'] = function(state, helpers)
-      vim.fn.inputsave()
-      local query = vim.fn.input('Filter: ', state.filter or '')
-      vim.fn.inputrestore()
-      state.filter = (query and query ~= '') and query or nil
-      helpers.refresh()
-    end,
-  },
-})
-
---- Open the view-update panel: browse → select → open that view's edit UI.
+--- Open the view-update selector: the whole view tree in the shared picker,
+--- then the chosen view's edit UI (M.edit_view → its action picker). This is
+--- the `:PKMView update` no-arg entry — the list grows with the vault, so it is
+--- the fuzzy picker, not a plain split window.
 ---@return nil
 function M.open_view_update_panel()
-  _update_panel.open({ filter = '' })
+  pick_view_tree('Update view — pick one to edit', function(name)
+    if name then M.edit_view(name) end
+  end)
 end
 
 -- =============================================================================
@@ -3656,7 +3590,6 @@ sidebar.register_sidebar_provider({
 
 -- Exposed for test/test_v160_p3.lua only; not part of the module's public API.
 M._views_panel          = _views_panel
-M._delete_panel         = _delete_panel
 M._sort_wins_by_col     = sort_wins_by_col
 M._resolve_window_slot  = resolve_window_slot
 M._resolve_split_target = resolve_split_target
