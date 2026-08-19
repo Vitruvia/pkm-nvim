@@ -95,5 +95,34 @@ drive('C', { ['update'] = 'Change parent', ['New parent'] = 'P' })   -- already 
 check("'parent unchanged' reported when re-picking the current parent",
   notified('unchanged'), table.concat(notifies, ' | '))
 
+print("\n== rename goes through vim.ui.input and re-points children ==")
+assert(api.save_view('RenParent', 'tag:afo').ok)
+assert(api.save_subproject('RenChild', 'RenParent', 'tag:guia').ok)
+do
+  local o_input, o_notify = vim.ui.input, vim.notify
+  notifies = {}
+  vim.ui.input = function(_opts, on_confirm) on_confirm('RenParent-x') end
+  vim.notify   = function(msg) notifies[#notifies + 1] = tostring(msg) end
+  -- Action menu (vim.ui.select, still stubbed off) picks 'Rename'; the rename
+  -- itself now uses vim.ui.input, stubbed just above.
+  local o_select = vim.ui.select
+  vim.ui.select = function(items, opts, on_choice)
+    local prompt = (opts and opts.prompt) or ''
+    if prompt:find('update', 1, true) then
+      for _, it in ipairs(items) do
+        local val = (type(it) == 'table') and it.value or it
+        if val == 'Rename' then on_choice(it); return end
+      end
+    end
+    on_choice(nil)
+  end
+  local ok, err = pcall(views.edit_view, 'RenParent')
+  vim.ui.select, vim.ui.input, vim.notify = o_select, o_input, o_notify
+  if not ok then error(err) end
+  check("rename via vim.ui.input succeeded", notified('renamed'), table.concat(notifies, ' | '))
+  check("child followed the rename (re-pointed to new parent name)",
+    parent_of('RenChild') == 'RenParent-x', tostring(parent_of('RenChild')))
+end
+
 print("")
 if failures == 0 then print("ALL PASS") else print(string.format("%d FAILURE(S)", failures)) end

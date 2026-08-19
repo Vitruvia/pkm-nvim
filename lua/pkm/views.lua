@@ -1145,6 +1145,40 @@ end
 -- SECTION: Pickers
 -- =============================================================================
 
+--- The one selection primitive for this file's view-management menus. Routes a
+--- small choice set through the Telescope `pick_list` UI (fuzzy + per-line
+--- detail), falling back to `vim.ui.select` only where Telescope is absent.
+--- Every menu in the view flow that used to be a bare `vim.ui.select` window --
+--- the view chooser, the subview lists, the `:PKMView update` action menu, the
+--- reparent candidate list -- goes through here, so the "a menu with more than
+--- 3-4 options gets a real UI" rule holds uniformly across the whole class and
+--- cannot drift back menu-by-menu.
+---@param title     string
+---@param entries   table[]  list of { display = string, value = any }
+---@param on_select fun(value:any)  called with the chosen entry's `value`; not called on cancel
+local function ui_pick(title, entries, on_select)
+  if #entries == 0 then return end
+  local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
+  backend.pick_list(title, entries, on_select)
+end
+
+--- `ui_pick` specialised for choosing among view NAMES: annotates each name
+--- with its live note count (as the search UIs do), preserving the given order.
+---@param title     string
+---@param names     string[]
+---@param on_select fun(name:string)
+local function pick_view_from(title, names, on_select)
+  local counts  = M.count_many(names)
+  local entries = {}
+  for _, n in ipairs(names) do
+    entries[#entries + 1] = {
+      display = string.format('%s  (%d)', n, counts[n] or 0),
+      value   = n,
+    }
+  end
+  ui_pick(title, entries, on_select)
+end
+
 --- Show a small floating window listing keymap hints, one per line. Shared
 --- by every Telescope-backed picker in this file so prompt titles can stay
 --- short (a single "? help" pointer) instead of cramming every key into
@@ -1391,13 +1425,8 @@ local function telescope_view_picker(name, paths, invocation_win, invocation_was
         end
         actions.close(prompt_bufnr)
         vim.schedule(function()
-          local ch_counts = M.count_many(ch)
-          vim.ui.select(ch, {
-            prompt      = string.format("Subviews of '%s':", name),
-            format_item = function(n)
-              return string.format('%s  (%d)', n, ch_counts[n] or 0)
-            end,
-          }, function(sel) if sel then M.open(sel) end end)
+          pick_view_from(string.format("Subviews of '%s':", name), ch,
+            function(sel) if sel then M.open(sel) end end)
         end)
       end
 
@@ -1676,13 +1705,8 @@ local function float_view_picker(name, paths, invocation_win, invocation_was_sid
     end
     close()
     vim.schedule(function()
-      local ch_counts = M.count_many(ch)
-      vim.ui.select(ch, {
-        prompt      = string.format("Subviews of '%s':", name),
-        format_item = function(n)
-          return string.format('%s  (%d)', n, ch_counts[n] or 0)
-        end,
-      }, function(sel) if sel then M.open(sel) end end)
+      pick_view_from(string.format("Subviews of '%s':", name), ch,
+        function(sel) if sel then M.open(sel) end end)
     end)
   end
 
@@ -1815,10 +1839,7 @@ local function pick_view()
       vim.log.levels.WARN)
     return
   end
-  vim.ui.select(names, {
-    prompt      = 'Open view:',
-    format_item = function(n) return n end,
-  }, function(sel)
+  pick_view_from('Open view:', names, function(sel)
     if sel then M.open(sel) end
   end)
 end
@@ -2743,22 +2764,22 @@ function M.rename(old_name, new_name)
 end
 
 local function rename_view_prompt(old_name)
-  vim.fn.inputsave()
-  local new_name = vim.fn.input('Rename view to: ', old_name)
-  vim.fn.inputrestore()
+  -- vim.ui.input (not the raw vim.fn.input) so a configured input UI is honoured,
+  -- matching the pickers; the async callback carries the rest of the flow.
+  vim.ui.input({ prompt = 'Rename view to: ', default = old_name }, function(new_name)
+    if not new_name or new_name:match('^%s*$') then
+      vim.notify('[pkm] rename cancelled', vim.log.levels.INFO)
+      return
+    end
 
-  if not new_name or new_name:match('^%s*$') then
-    vim.notify('[pkm] rename cancelled', vim.log.levels.INFO)
-    return
-  end
-
-  local ok, err = M.rename(old_name, new_name)
-  if not ok then
-    vim.notify('[pkm] ' .. err, vim.log.levels.WARN)
-    return
-  end
-  vim.notify(string.format("[pkm] view renamed: '%s' → '%s'",
-    old_name, new_name:match('^%s*(.-)%s*$')), vim.log.levels.INFO)
+    local ok, err = M.rename(old_name, new_name)
+    if not ok then
+      vim.notify('[pkm] ' .. err, vim.log.levels.WARN)
+      return
+    end
+    vim.notify(string.format("[pkm] view renamed: '%s' → '%s'",
+      old_name, new_name:match('^%s*(.-)%s*$')), vim.log.levels.INFO)
+  end)
 end
 
 --- Prompt for a new parent and reparent a subproject view.
@@ -2796,9 +2817,9 @@ local function reparent_view_prompt(name)
     return
   end
 
-  -- The same Telescope picker the search UIs use (with per-view counts), falling
-  -- back to vim.ui.select only where Telescope is absent — a candidate list of
-  -- dozens of views should not be a bare native menu.
+  -- Uses the shared picker (Telescope, native fallback) like the rest of the
+  -- view flow; here the display carries a per-view count and a "· current" tag
+  -- on the existing parent, so a plain pick_view_from will not do.
   local counts = M.count_many(candidates)
   local items  = {}
   for _, cand in ipairs(candidates) do
@@ -2808,9 +2829,8 @@ local function reparent_view_prompt(name)
       value   = cand,
     }
   end
-  local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
 
-  backend.pick_list(
+  ui_pick(
     string.format("New parent for '%s'  (current: '%s')", name, current_parent),
     items,
     function(new_parent)
@@ -2868,22 +2888,25 @@ function M.edit_view(name)
     end
   end
 
-  vim.ui.select(options, {
-    prompt      = string.format(
-      "PKMView update — '%s'  (%s):",
-      name,
-      is_sub and 'subproject' or 'simple view'),
-    format_item = function(o) return o end,
-  }, function(choice)
-    if not choice then return end
-    if choice == 'Edit filter expression' then
-      edit_view_float(name)
-    elseif choice == 'Rename' then
-      rename_view_prompt(name)
-    elseif choice == 'Change parent' then
-      reparent_view_prompt(name)
-    end
-  end)
+  local entries = {}
+  for _, o in ipairs(options) do
+    entries[#entries + 1] = { display = o, value = o }
+  end
+
+  ui_pick(
+    string.format("PKMView update — '%s'  (%s):",
+      name, is_sub and 'subproject' or 'simple view'),
+    entries,
+    function(choice)
+      if not choice then return end
+      if choice == 'Edit filter expression' then
+        edit_view_float(name)
+      elseif choice == 'Rename' then
+        rename_view_prompt(name)
+      elseif choice == 'Change parent' then
+        reparent_view_prompt(name)
+      end
+    end)
 end
 
 -- =============================================================================

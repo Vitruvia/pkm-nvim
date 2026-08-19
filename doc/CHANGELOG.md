@@ -177,10 +177,19 @@ mismatch): a subview should not *narrow* its parent, it should *belong to* it.
   automatic. `views.get_tree` composes **downward** (own OR children), with a
   per-branch ancestor/depth guard and malformed children skipped (a bad leaf no
   longer breaks the tree above it).
-- **The reparent candidate picker uses the Telescope `pick_list` UI** (with
-  per-view counts), falling back to `vim.ui.select` only without Telescope — a
-  list of dozens of views should not be a bare native menu. (The 2–3 option
-  action menu stays `vim.ui.select` per PRINCIPLES §5.)
+- **Every selection menu in the view-management flow now uses the Telescope
+  `pick_list` UI** (fuzzy + per-line detail, `vim.ui.select` only as the
+  no-Telescope fallback), routed through one shared `ui_pick` / `pick_view_from`
+  helper so the "a menu with more than 3–4 options gets a real UI" rule holds
+  across the whole class and cannot drift back menu-by-menu. Converted together,
+  not one at a time: the `:PKMView open` view chooser, both "Subviews of X"
+  pickers, the `:PKMView update` **action menu** (Edit filter / Rename / Change
+  parent), and the reparent candidate list. The rename prompt moves from the raw
+  `vim.fn.input` to `vim.ui.input` (async) so a configured input UI is honoured
+  too. The `:PKMView update` no-arg **tree panel** is deliberately left as-is —
+  it is a richer hierarchical view than a flat picker, not a native menu. (The
+  `vim.fn.input('Filter: …')` free-text filter prompts are unchanged: they are
+  single-line text entry, not option menus.)
 
 ### Removed
 
