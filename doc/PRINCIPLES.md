@@ -66,11 +66,18 @@ shrink as work completes, and these do not.
    changes a choice the user makes, the Telescope version of that screen —
    counts, previewer, the shared marking gesture — is part of *that* phase, not
    deferred to a later "UI pass". The `vim.ui.select` / float path remains as the
-   no-Telescope fallback, and small fixed choice sets (3–4 options, e.g. the
-   Simple/Deep menu of `:PKMExport`) may stay `vim.ui.select` outright. Shipping
-   the poor version first creates rework and an inconsistent surface across
-   commands; v1.8.0 Ph3 had to go back and redo the tag panel for exactly this
-   reason.
+   no-Telescope fallback. **The threshold, by option count (author's rule,
+   19/8/2026): ≤3 options is *definitely under* — a native `vim.ui.select` is
+   fine (e.g. the Simple/Deep menu of `:PKMExport`, or the `:PKMView update`
+   action menu Edit/Rename/Change parent); 4–7 is a *gray area* — judgment; 8+ is
+   *definitely above* — it must be the real (Telescope) picker.** A list that
+   *grows with the vault* (every view, every note, a view's subviews) is treated
+   as above regardless of its count today — it will cross 8. This is exactly why
+   the v1.81.0 `:PKMView update` / `:PKMView delete` selectors, which had been
+   plain split windows over the whole view tree, became the picker while the
+   3-item action menu stayed native. Shipping the poor version first creates
+   rework and an inconsistent surface across commands; v1.8.0 Ph3 had to go back
+   and redo the tag panel for exactly this reason.
 
 6. **Command surface.** A typed command is for what the user invokes directly;
    nothing gets a new `:PKM*` name when it fits as an argument to an existing

@@ -177,23 +177,25 @@ mismatch): a subview should not *narrow* its parent, it should *belong to* it.
   automatic. `views.get_tree` composes **downward** (own OR children), with a
   per-branch ancestor/depth guard and malformed children skipped (a bad leaf no
   longer breaks the tree above it).
-- **Every view-selection surface now uses the Telescope picker** (fuzzy +
+- **Every view-selection *list* now uses the Telescope picker** (fuzzy +
   per-line detail, `vim.ui.select` only as the no-Telescope fallback), routed
   through one shared `ui_pick` / `pick_view_from` / `pick_view_tree` helper so
-  the "a list with more than 3–4 options gets a real UI" rule holds across the
-  whole class and cannot drift back surface-by-surface. **The important ones are
-  the big, growing lists:** `:PKMView update` and `:PKMView delete`, which used
-  to open a plain `panel.create` **split window** you cursor through, now open
-  the picker over the whole view tree — hierarchy preserved by indentation
-  (`▶`/`•` + depth) and a live count per view. `:PKMView delete` keeps its
-  single native `vim.fn.confirm` (Yes/No) before removing the chosen view (a
-  destructive two-way question, not an option menu). Also converted: the
-  `:PKMView open` view chooser, both "Subviews of X" pickers, the `:PKMView
-  update` action menu (Edit filter / Rename / Change parent), and the reparent
-  candidate list; the rename prompt moves from raw `vim.fn.input` to
-  `vim.ui.input`. Left as-is: the persistent `:PKMView panel` browse/overview
-  (already Telescope-backed when available; a navigation surface, not a
-  one-shot menu) and the free-text `Filter:` prompts (single-line text entry).
+  the threshold rule holds across the whole class and cannot drift back
+  surface-by-surface. **The threshold, by option count: ≤3 is native, 4–7 is
+  judgment, 8+ (or any list that grows with the vault) is the real picker**
+  (PRINCIPLES §5). **The important conversions are the big, growing lists:**
+  `:PKMView update` and `:PKMView delete`, which used to open a plain
+  `panel.create` **split window** you cursor through, now open the picker over
+  the whole view tree — hierarchy preserved by indentation (`▶`/`•` + depth) and
+  a live count per view. `:PKMView delete` keeps its single native
+  `vim.fn.confirm` (Yes/No) before removing the chosen view (a destructive
+  two-way question, not an option menu). Also picker-backed: the `:PKMView open`
+  view chooser, both "Subviews of X" lists, and the reparent candidate list; the
+  rename prompt moves from raw `vim.fn.input` to `vim.ui.input`. **Left native on
+  purpose:** the `:PKMView update` action menu (Edit filter / Rename / Change
+  parent — 3 fixed items, under the threshold). **Left as-is:** the persistent
+  `:PKMView panel` browse/overview (already Telescope-backed; a navigation
+  surface, not a one-shot menu) and the free-text `Filter:` prompts.
 
 ### Removed
 

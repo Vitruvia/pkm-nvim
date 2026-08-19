@@ -2822,25 +2822,26 @@ function M.edit_view(name)
     end
   end
 
-  local entries = {}
-  for _, o in ipairs(options) do
-    entries[#entries + 1] = { display = o, value = o }
-  end
-
-  ui_pick(
-    string.format("PKMView update — '%s'  (%s):",
-      name, is_sub and 'subproject' or 'simple view'),
-    entries,
-    function(choice)
-      if not choice then return end
-      if choice == 'Edit filter expression' then
-        edit_view_float(name)
-      elseif choice == 'Rename' then
-        rename_view_prompt(name)
-      elseif choice == 'Change parent' then
-        reparent_view_prompt(name)
-      end
-    end)
+  -- This action menu is 1-3 fixed items (Edit / Rename / Change parent) --
+  -- definitely under the "8+ gets a real UI" threshold (<=3 is under, 4-7 gray,
+  -- 8+ above), so it stays a native vim.ui.select. The pickers are reserved for
+  -- the view LISTS, which grow with the vault.
+  vim.ui.select(options, {
+    prompt      = string.format(
+      "PKMView update — '%s'  (%s):",
+      name,
+      is_sub and 'subproject' or 'simple view'),
+    format_item = function(o) return o end,
+  }, function(choice)
+    if not choice then return end
+    if choice == 'Edit filter expression' then
+      edit_view_float(name)
+    elseif choice == 'Rename' then
+      rename_view_prompt(name)
+    elseif choice == 'Change parent' then
+      reparent_view_prompt(name)
+    end
+  end)
 end
 
 -- =============================================================================
