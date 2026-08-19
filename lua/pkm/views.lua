@@ -482,15 +482,29 @@ end
 ---@param _visited table|nil  Internal cycle-detection set; do not pass
 ---@return table|nil tree
 ---@return string|nil err
-local function get_tree(name, _visited)
+--- Resolve a view name to the parsed filter tree it matches, under the
+--- **containment** model: a view matches its own filter OR the union of every
+--- child's effective set (composed downward, recursively). So a parent always
+--- CONTAINS its children — a note in a subview is a note in its parent — and
+--- nesting a view under another never narrows or empties it. (The pre-v1.81.0
+--- model AND-ed the parent's filter INTO the child, which excluded a child whose
+--- notes did not also satisfy the parent — the reparent-empties footgun.) The
+--- `parent` field of a subview now records only the hierarchy (who rolls up into
+--- whom); the child keeps its own filter as its membership.
+---@param name       string
+---@param _ancestors table|nil   set of ancestor names on this path (cycle guard)
+---@param _depth     integer|nil  nesting depth on this path (8-level cap)
+---@return table|nil tree, string|nil err
+local function get_tree(name, _ancestors, _depth)
   if _tree_cache[name] then return _tree_cache[name], nil end
 
-  _visited = _visited or {}
-  if _visited[name] then
+  _ancestors = _ancestors or {}
+  _depth     = _depth or 0
+  if _ancestors[name] then
     return nil, string.format(
       "PKMView: cycle detected in view hierarchy at '%s'", name)
   end
-  if vim.tbl_count(_visited) >= 8 then
+  if _depth >= 8 then
     return nil, string.format(
       "PKMView: hierarchy depth limit (8) reached at '%s'", name)
   end
@@ -500,52 +514,59 @@ local function get_tree(name, _visited)
     return nil, string.format("PKMView: no view named '%s'", name)
   end
 
-  _visited[name] = true
   local expr   = projects[name]
   local filter = require('pkm.filter')
-  local tree, err
 
+  -- The view's OWN filter: a bare string for a top-level view, `expr.filter` for
+  -- a subview (whose `parent` field only names where it rolls up, no longer a
+  -- filter to AND in).
+  local own_expr
   if type(expr) == 'string' then
     if expr:match('^%s*$') then
       return nil, string.format(
         "PKMView: view '%s' has an empty filter expression", name)
     end
-    tree, err = filter.parse(expr)
-    if not tree then
-      return nil, string.format(
-        "PKMView: parse error in view '%s': %s", name, err)
-    end
-
+    own_expr = expr
   elseif type(expr) == 'table' then
-    local parent_name = expr.parent
-    local sub_filter  = expr.filter
-
-    if type(parent_name) ~= 'string' or parent_name == '' then
+    if type(expr.parent) ~= 'string' or expr.parent == '' then
       return nil, string.format(
         "PKMView: subproject '%s' missing valid 'parent' field", name)
     end
-    if type(sub_filter) ~= 'string' or sub_filter:match('^%s*$') then
+    if type(expr.filter) ~= 'string' or expr.filter:match('^%s*$') then
       return nil, string.format(
         "PKMView: subproject '%s' missing valid 'filter' field", name)
     end
-
-    local parent_tree, parent_err = get_tree(parent_name, _visited)
-    if not parent_tree then
-      return nil, string.format(
-        "PKMView: error resolving parent '%s' for '%s': %s",
-        parent_name, name, parent_err)
-    end
-
-    local sub_tree, sub_err = filter.parse(sub_filter)
-    if not sub_tree then
-      return nil, string.format(
-        "PKMView: parse error in subproject '%s': %s", name, sub_err)
-    end
-
-    tree = { type = 'AND', args = { parent_tree, sub_tree } }
+    own_expr = expr.filter
   else
     return nil, string.format(
       "PKMView: view '%s' must be a string or a {parent, filter} table", name)
+  end
+
+  local own_tree, own_err = filter.parse(own_expr)
+  if not own_tree then
+    return nil, string.format(
+      "PKMView: parse error in view '%s': %s", name, own_err)
+  end
+
+  -- Roll the children up: each child's effective tree OR-ed in, recursively.
+  -- A malformed child is skipped rather than allowed to break its parent (it
+  -- still reports its own error when evaluated directly), so one bad leaf never
+  -- nukes the whole tree above it.
+  local children = get_view_children(name)
+  local tree
+  if #children == 0 then
+    tree = own_tree
+  else
+    local child_anc = {}
+    for k in pairs(_ancestors) do child_anc[k] = true end
+    child_anc[name] = true
+
+    local args = { own_tree }
+    for _, child in ipairs(children) do
+      local ctree = get_tree(child, child_anc, _depth + 1)
+      if ctree then args[#args + 1] = ctree end
+    end
+    tree = (#args == 1) and own_tree or { type = 'OR', args = args }
   end
 
   _tree_cache[name] = tree
@@ -958,38 +979,6 @@ local function mixes_field_and_any(tree)
   return false
 end
 
---- Why a just-composed subview would show nothing. A subview AND-composes its
---- parent's filter, so a child whose own filter matches notes can still resolve
---- to an EMPTY set when the parent excludes them all — the silent-empty reparent
---- footgun (a child moved under a parent whose defining tag the child's notes do
---- not carry). Returns a warning when the own filter matches > 0 notes but the
---- composition with the parent matches 0, else nil. Not an error: the user may
---- intend to retag next, so it is surfaced, never blocking. Reads the index; a
---- parse/parent failure is left to the caller's own validation (returns nil).
----@param parent_name string   the (existing) parent view
----@param own_expr    string   the subview's own filter expression
----@return table|nil  { kind = 'empty-composition', message = string }
-local function composition_warning(parent_name, own_expr)
-  local own_tree = require('pkm.filter').parse(own_expr)
-  if not own_tree then return nil end
-  local parent_tree = get_tree(parent_name)
-  if not parent_tree then return nil end
-
-  local entries = require('pkm.index').get_all()
-  local own     = count_matches(own_tree, entries)
-  if own == 0 then return nil end
-  local composed = count_matches({ type = 'AND', args = { parent_tree, own_tree } }, entries)
-  if composed > 0 then return nil end
-
-  return {
-    kind    = 'empty-composition',
-    message = string.format(
-      "the subview matches %d note%s on its own, but 0 under parent '%s' — the "
-      .. "parent's filter excludes them (retag the notes, or broaden the parent)",
-      own, own == 1 and '' or 's', parent_name),
-  }
-end
-
 --- Add or replace a named view in views.json.
 --- Validates the filter expression before writing.
 ---@param name string
@@ -1020,13 +1009,15 @@ end
 
 --- Add or replace a subproject view in views.json.
 --- Validates that the parent exists and the filter expression is valid.
---- The effective filter is the parent's filter AND-ed with filter_expr;
---- the parent chain is composed automatically at query time.
+--- Under the containment model the subview matches its own `filter_expr`, and the
+--- parent rolls the subview up (parent = own filter OR union of children), so
+--- nesting never narrows or empties the child; the tree is composed at query time.
 ---@param name        string  New subproject name
 ---@param parent      string  Existing view name to use as parent
----@param filter_expr string  Own additional filter expression
----@return boolean success, table|nil warning  { kind='empty-composition', message } when the
----        composition with the parent would match nothing (non-blocking)
+---@param filter_expr string  Own filter expression (the child's membership — under
+---        the containment model it is NOT AND-ed with the parent; the parent rolls
+---        the child up instead, so nesting never narrows or empties the child)
+---@return boolean success
 function M.save_subproject(name, parent, filter_expr)
   local projects = get_projects()
   if not projects[parent] then
@@ -1052,12 +1043,6 @@ function M.save_subproject(name, parent, filter_expr)
       name), vim.log.levels.WARN)
   end
 
-  -- The silent-empty guard: a subview whose parent filter excludes all its own
-  -- matches resolves to nothing. Warn (never block) before the write, and return
-  -- it so a headless caller (pkm.api) can surface it too.
-  local warning = composition_warning(parent, filter_expr)
-  if warning then vim.notify('PKMView: ' .. warning.message, vim.log.levels.WARN) end
-
   local data = load_sidecar()
   data[name] = { parent = parent, filter = filter_expr }
   local ok   = save_sidecar(data)
@@ -1067,7 +1052,7 @@ function M.save_subproject(name, parent, filter_expr)
       vim.log.levels.INFO)
     M.refresh_sidebar_if_open()
   end
-  return ok, warning
+  return ok
 end
 
 --- Remove a named view from views.json.
@@ -1107,13 +1092,12 @@ end
 --- interactive "Change parent", and the explicit move that `save_subproject`
 --- re-save only performed as a side effect. Refuses to move a config-only view,
 --- a non-subproject, onto a missing parent, onto itself, or under any of its own
---- descendants (a hierarchy cycle). Only this view's `parent` field changes.
---- Like `save_subproject` it returns a non-blocking `warning` when the new
---- composition would match nothing (the silent-empty footgun).
+--- descendants (a hierarchy cycle). Only this view's `parent` field changes —
+--- and under the containment model that never narrows or empties the view (the
+--- child keeps its own filter; the new parent simply rolls it up).
 ---@param name       string  the subproject to move
 ---@param new_parent string  the destination parent view
----@return boolean ok, string|table|nil  an error string when ok is false; a
----        warning table (or nil) when ok is true
+---@return boolean ok, string|nil err  an error string when ok is false
 function M.reparent(name, new_parent)
   local projects = get_projects()
   local expr     = projects[name]
@@ -1149,13 +1133,12 @@ function M.reparent(name, new_parent)
   end
   if new_parent == expr.parent then return true end   -- nothing to do
 
-  local warning = composition_warning(new_parent, expr.filter)
   data[name] = { parent = new_parent, filter = expr.filter }
   if not save_sidecar(data) then
     return false, 'could not write views.json'
   end
   M.refresh_sidebar_if_open()
-  return true, warning
+  return true
 end
 
 -- =============================================================================
@@ -2813,34 +2796,43 @@ local function reparent_view_prompt(name)
     return
   end
 
-  vim.ui.select(candidates, {
-    prompt      = string.format(
-      "New parent for '%s'  (current: '%s'):", name, current_parent),
-    format_item = function(n) return n end,
-  }, function(new_parent)
-    if not new_parent then
-      vim.notify('[pkm] reparent cancelled', vim.log.levels.INFO)
-      return
-    end
-    if new_parent == current_parent then
-      vim.notify('[pkm] parent unchanged', vim.log.levels.INFO)
-      return
-    end
+  -- The same Telescope picker the search UIs use (with per-view counts), falling
+  -- back to vim.ui.select only where Telescope is absent — a candidate list of
+  -- dozens of views should not be a bare native menu.
+  local counts = M.count_many(candidates)
+  local items  = {}
+  for _, cand in ipairs(candidates) do
+    items[#items + 1] = {
+      display = string.format('%s  (%d)%s', cand, counts[cand] or 0,
+        cand == current_parent and '   · current' or ''),
+      value   = cand,
+    }
+  end
+  local backend = pcall(require, 'telescope') and require('pkm.telescope') or require('pkm.ui')
 
-    -- The cycle guard, the config-only refusal and the write all live in the
-    -- headless core now; this prompt is only the candidate picker over it.
-    local ok, res = M.reparent(name, new_parent)
-    if not ok then
-      vim.notify('[pkm] ' .. tostring(res), vim.log.levels.ERROR)
-      return
-    end
-    vim.notify(
-      string.format("[pkm] '%s' reparented: '%s' → '%s'", name, current_parent, new_parent),
-      vim.log.levels.INFO)
-    if type(res) == 'table' and res.message then
-      vim.notify('[pkm] ' .. res.message, vim.log.levels.WARN)
-    end
-  end)
+  backend.pick_list(
+    string.format("New parent for '%s'  (current: '%s')", name, current_parent),
+    items,
+    function(new_parent)
+      if not new_parent then
+        vim.notify('[pkm] reparent cancelled', vim.log.levels.INFO)
+        return
+      end
+      if new_parent == current_parent then
+        vim.notify('[pkm] parent unchanged', vim.log.levels.INFO)
+        return
+      end
+      -- The cycle guard, the config-only refusal and the write live in the
+      -- headless core; this prompt is only the candidate picker over it.
+      local ok, err = M.reparent(name, new_parent)
+      if not ok then
+        vim.notify('[pkm] ' .. tostring(err), vim.log.levels.ERROR)
+        return
+      end
+      vim.notify(
+        string.format("[pkm] '%s' reparented: '%s' → '%s'", name, current_parent, new_parent),
+        vim.log.levels.INFO)
+    end)
 end
 
 --- Open an edit UI for a named view.

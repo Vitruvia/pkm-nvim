@@ -1251,10 +1251,13 @@ A second Manager-mode reorg of vault `01` (nest Guias/Editais under `_meta`; gro
 12 disciplines under a new `Disciplinas`; rename a CASP view) produced findings D1–D7.
 Full report: `temp/pkm-gestor-audit-2026-08-19.md`.
 
-- **D1 [P1] — silent-empty reparent: SHIPPED (v1.80.0).** A subview AND-composes its
-  parent, so reparenting a child under a parent that excludes its notes emptied the
-  view (`Guias` 21→0) with `ok=true` and no warning. `views.save_subproject`/`reparent`
-  now return a non-blocking empty-composition `warning`, surfaced by the API.
+- **D1 [P1] — silent-empty reparent: RESOLVED by a model change (v1.81.0), superseding
+  the v1.80.0 warning.** v1.80.0 added a non-blocking empty-composition warning under
+  the old AND-composition model. The author then chose the deeper fix: **containment**
+  — a subview matches its own filter and a parent contains its children (own OR union
+  of descendants), so nesting/reparenting can no longer empty a view. `views.get_tree`
+  composes downward; the warning is removed (obsolete by construction). This makes the
+  OR-union superset the gestor built by hand automatic.
 - **D2 — no view rename/reparent/delete in `pkm.api`: SHIPPED (v1.80.0).**
   `api.rename_view` (re-points children), `api.reparent_view` (cycle-guarded, over the
   new pure `views.reparent`), `api.delete_view`. (`save_view`/`save_subproject` already

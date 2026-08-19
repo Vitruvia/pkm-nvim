@@ -90,9 +90,15 @@ for _, name in ipairs(names) do
     string.format("count_all=%d match_all=%d", from_count, from_paths))
 end
 
-check("t-alpha matches both alpha notes", views.count_all('t-alpha') == 2,
+-- Containment model (v1.81.0): a parent ROLLS UP its children (own filter OR the
+-- union of descendants), and a subview matches its OWN filter, not narrowed by
+-- the parent. t-alpha (tag:alpha) with child t-alpha-beta (tag:beta) therefore
+-- matches alpha OR beta = {alpha_one, alpha_two, beta_one} = 3; the child alone
+-- matches beta = {alpha_two, beta_one} = 2.
+check("t-alpha rolls up its child (alpha OR beta = 3)", views.count_all('t-alpha') == 3,
   string.format("got %d", views.count_all('t-alpha')))
-check("subproject narrows the parent", views.count_all('t-alpha-beta') == 1,
+check("subview matches its own filter, not narrowed by the parent (beta = 2)",
+  views.count_all('t-alpha-beta') == 2,
   string.format("got %d", views.count_all('t-alpha-beta')))
 check("view matching nothing counts 0", views.count_all('t-empty') == 0,
   string.format("got %d", views.count_all('t-empty')))

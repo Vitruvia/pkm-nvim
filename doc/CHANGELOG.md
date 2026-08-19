@@ -157,6 +157,57 @@ fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.81.0] - 19/8/2026
+
+Nested views become **containment**, not intersection. On the author's call
+(after the v1.80.0 reparent-empties warning surfaced the underlying model
+mismatch): a subview should not *narrow* its parent, it should *belong to* it.
+
+### Changed
+
+- **The view composition model is inverted (BREAKING for nested-view results).**
+  A subview used to resolve to `parent AND child` — a *refinement* that matched
+  the intersection, and emptied a child whose notes did not also satisfy the
+  parent. Now a view resolves to **its own filter OR the union of its
+  descendants**: a subview matches its own filter (independent of the parent),
+  and a **parent contains its children** (a note in a subview is a note in its
+  parent). So nesting — or reparenting — a view never narrows or empties it; the
+  parent simply rolls the child up. This is the model the 2026-08-19 gestor reorg
+  reached for by hand (the OR-union supersets on `_meta` / `Disciplinas`), now
+  automatic. `views.get_tree` composes **downward** (own OR children), with a
+  per-branch ancestor/depth guard and malformed children skipped (a bad leaf no
+  longer breaks the tree above it).
+- **The reparent candidate picker uses the Telescope `pick_list` UI** (with
+  per-view counts), falling back to `vim.ui.select` only without Telescope — a
+  list of dozens of views should not be a bare native menu. (The 2–3 option
+  action menu stays `vim.ui.select` per PRINCIPLES §5.)
+
+### Removed
+
+- **The v1.80.0 empty-composition warning (finding D1) — obsolete by
+  construction.** Under containment a reparent cannot empty a view, so the
+  `warning` field is gone from `save_subproject` / `reparent` (Lua) and
+  `api.save_subproject` / `api.reparent_view` (they return `{ ok }`). The pure
+  `views.composition_warning` helper is deleted.
+
+### Kept from v1.80.0
+
+- `api.rename_view` (re-points children), `api.reparent_view`, `api.delete_view`
+  (finding D2); the `save_subproject` mixed-filter validation (D5); the
+  tree-shaped `api.structure()` / `views.tree()` (D6) — all unchanged.
+
+### Notes
+
+- Existing nested views are compatible: the manual OR-union supersets built in
+  vault `01` still resolve (they become redundant, not wrong). Only views whose
+  child notes did **not** carry the parent's tag change — which is exactly where
+  the old model silently emptied them.
+- Suite **104/104**. `test_v1800_p1` rewritten to the containment invariant (a
+  subview keeps its members under any parent; a parent rolls up its children),
+  `test_v1800_p2` to the picker under containment (no warning; members kept), and
+  `test_v161_p3`'s two composition assertions updated (parent = alpha OR beta;
+  child = its own filter).
+
 ## [1.80.0] - 19/8/2026
 
 View-lifecycle API + the silent-empty-composition guard. Closes the dev-facing

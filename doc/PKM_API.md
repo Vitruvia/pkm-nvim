@@ -157,19 +157,24 @@ path.
 | `view_members(name)` | the note paths matching a named view's full filter chain. |
 | `set_membership(path, view_name, kind)` | `{ ok }` — add/remove a note from a view by writing the tags that define it. `kind` is `"add"`/`"remove"`. Resolves the view's tag condition **against the note's present tags**, so a subview under an OR parent the note already satisfies is written unambiguously; returns an error (never a prompt) only when the change is genuinely ambiguous (distinct cheapest tag-sets) or the view is not a tag condition. |
 | `save_view(name, expr)` | `{ ok }` — save a **top-level** view defined by a filter expression (the parentless twin of `save_subproject`). Replaces an existing view of the same name. Fails when the name is blank or the filter does not parse. |
-| `save_subproject(name, parent, filter_expr)` | `{ ok, warning? }` — save a sub-view under an existing parent, defined by a filter expression. Fails if the parent is missing or the filter does not parse. Because a subview AND-composes its parent, it can save yet match **nothing** when the parent excludes all its own notes — that case returns a non-blocking `warning` string (the view is still saved). To *move* an existing subview, use `reparent_view`, not a re-save. |
+| `save_subproject(name, parent, filter_expr)` | `{ ok }` — save a sub-view under an existing parent, defined by a filter expression. Fails if the parent is missing or the filter does not parse. Under the **containment** model the subview keeps its own filter as its membership and the parent rolls it up, so nesting never narrows or empties the child. To *move* an existing subview, use `reparent_view`, not a re-save. |
 | `rename_view(old_name, new_name)` | `{ ok }` — rename a view in place, **re-pointing every child's `parent`** so a non-leaf renames without orphaning its subtree (unlike delete-old + save-new). Fails if the new name is taken; a config-defined view can't be renamed here. |
-| `reparent_view(name, new_parent)` | `{ ok, warning? }` — move a subproject under a new parent (the explicit "change parent"). Guards against a cycle (a view under its own descendant), a missing parent, itself, and a config-only view. Returns the same empty-composition `warning` as `save_subproject` when the new parent would match **zero** of the child's notes. |
+| `reparent_view(name, new_parent)` | `{ ok }` — move a subproject under a new parent (the explicit "change parent"). Guards against a cycle (a view under its own descendant), a missing parent, itself, and a config-only view. A pure hierarchy move: the view keeps its members and the new parent rolls it up, so a reparent never empties it. |
 | `delete_view(name)` | `{ ok }` — delete a view from `views.json`. Promptless (the caller owns the confirmation). Deleting a view with children **orphans** them (they re-level to roots) — `reparent_view` them first, or `rename_view`. A config-defined view can't be deleted here. |
 
-**The view/tag model.** A view is a saved **filter over tags** (the same DSL as
-`query`). A subview's effective filter is its parent's filter **AND**-ed with its
-own, composed down the whole parent chain — so a subview always matches a subset
-of its parent. Putting a note "in" a view means giving it the tags the view
-filters on; that is why membership needs a view to reduce to a **single defining
-tag** (or a set the note already partly satisfies) to be writable — an OR of
-alias tags is ambiguous to write (prefer one canonical tag; see
-`doc/CONVENTIONS.md` § Tags). Read the whole shape cheaply with `structure()`.
+**The view/tag model (containment).** A view is a saved **filter over tags** (the
+same DSL as `query`). Nesting is **containment**: a subview matches its **own**
+filter, and a parent matches its own filter **OR** the union of all its
+descendants — so a parent always **contains** its children (a note in a subview
+is a note in its parent), and nesting a view under another never narrows or
+empties it. (Before v1.81.0 a subview was its parent's filter **AND**-ed with its
+own — the reverse containment — which emptied a child whose notes did not also
+satisfy the parent; that model, and its empty-composition warning, are gone.)
+Putting a note "in" a leaf view means giving it the tags that view filters on,
+which is why membership writes want a view that reduces to a **single defining
+tag** (or a set the note already partly satisfies) — an OR of alias tags is
+ambiguous to write (prefer one canonical tag; see `doc/CONVENTIONS.md` § Tags).
+Read the whole shape cheaply with `structure()`.
 
 ### Structure (compact projection)
 

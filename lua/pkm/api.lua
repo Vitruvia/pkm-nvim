@@ -954,24 +954,22 @@ function M.set_membership(path, view_name, kind)
 end
 
 --- Save a sub-view under a parent view, defined by a filter expression. Fails if
---- the parent does not exist or the filter does not parse. A subview AND-composes
---- its parent, so it can save cleanly yet match **nothing** when the parent's
---- filter excludes all its own notes — that case returns a non-blocking
---- `warning` (the view is still saved). To *move* an existing subview to a new
---- parent, use `reparent_view` (an explicit move with a cycle guard), not a
---- re-save.
+--- the parent does not exist or the filter does not parse. Under the
+--- **containment** model the subview keeps its own filter as its membership and
+--- the parent rolls it up (a note in a subview is a note in its parent), so
+--- nesting never narrows or empties the child — the parent contains it. To *move*
+--- an existing subview to a new parent, use `reparent_view` (an explicit move
+--- with a cycle guard), not a re-save.
 ---@param name string
 ---@param parent string
 ---@param filter_expr string
----@return table  { ok, warning?, error? }
+---@return table  { ok, error? }
 function M.save_subproject(name, parent, filter_expr)
-  local ok, warning = require('pkm.views').save_subproject(name, parent, filter_expr)
+  local ok = require('pkm.views').save_subproject(name, parent, filter_expr)
   if not ok then
     return { ok = false, error = 'could not save subproject (parent missing or filter invalid)' }
   end
-  local res = { ok = true }
-  if type(warning) == 'table' then res.warning = warning.message end
-  return res
+  return { ok = true }
 end
 
 --- Rename a view in place — the safe headless rename the API was missing. Unlike
@@ -991,19 +989,17 @@ end
 
 --- Reparent a subproject under a new parent — the explicit headless "change
 --- parent". Guards against a cycle (a view under its own descendant), a missing
---- parent, itself, and a config-only view. Returns the same non-blocking
---- `warning` as `save_subproject` when the new composition would match **zero**
---- notes (the parent's filter excludes the child's — retag, or broaden the
---- parent, or the view shows empty). Only this view's parent changes.
+--- parent, itself, and a config-only view. Under the containment model this is a
+--- pure hierarchy move: the view keeps its own members and the new parent simply
+--- rolls it up, so a reparent never narrows or empties the view. Only this view's
+--- parent changes.
 ---@param name string  the subproject to move
 ---@param new_parent string  the destination parent view
----@return table  { ok, warning?, error? }
+---@return table  { ok, error? }
 function M.reparent_view(name, new_parent)
-  local ok, res = require('pkm.views').reparent(name, new_parent)
-  if not ok then return { ok = false, error = tostring(res) } end
-  local out = { ok = true }
-  if type(res) == 'table' and res.message then out.warning = res.message end
-  return out
+  local ok, err = require('pkm.views').reparent(name, new_parent)
+  if not ok then return { ok = false, error = tostring(err) } end
+  return { ok = true }
 end
 
 --- Delete a view from views.json — the headless twin of `:PKMView delete`. Like
