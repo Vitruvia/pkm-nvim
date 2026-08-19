@@ -954,15 +954,70 @@ function M.set_membership(path, view_name, kind)
 end
 
 --- Save a sub-view under a parent view, defined by a filter expression. Fails if
---- the parent does not exist or the filter does not parse.
+--- the parent does not exist or the filter does not parse. A subview AND-composes
+--- its parent, so it can save cleanly yet match **nothing** when the parent's
+--- filter excludes all its own notes — that case returns a non-blocking
+--- `warning` (the view is still saved). To *move* an existing subview to a new
+--- parent, use `reparent_view` (an explicit move with a cycle guard), not a
+--- re-save.
 ---@param name string
 ---@param parent string
 ---@param filter_expr string
----@return table  { ok, error? }
+---@return table  { ok, warning?, error? }
 function M.save_subproject(name, parent, filter_expr)
-  local ok = require('pkm.views').save_subproject(name, parent, filter_expr)
+  local ok, warning = require('pkm.views').save_subproject(name, parent, filter_expr)
   if not ok then
     return { ok = false, error = 'could not save subproject (parent missing or filter invalid)' }
+  end
+  local res = { ok = true }
+  if type(warning) == 'table' then res.warning = warning.message end
+  return res
+end
+
+--- Rename a view in place — the safe headless rename the API was missing. Unlike
+--- delete-old + save-new (which orphans any child subviews, silently re-leveling
+--- them to top-level roots), this **re-points every child's `parent`** to the new
+--- name, so a non-leaf view renames without breaking its subtree. Fails if the new
+--- name is already taken; a config-defined view can't be renamed here (edit the
+--- config). Headless twin of `:PKMView rename`.
+---@param old_name string
+---@param new_name string
+---@return table  { ok, error? }
+function M.rename_view(old_name, new_name)
+  local ok, err = require('pkm.views').rename(old_name, new_name)
+  if not ok then return { ok = false, error = err } end
+  return { ok = true }
+end
+
+--- Reparent a subproject under a new parent — the explicit headless "change
+--- parent". Guards against a cycle (a view under its own descendant), a missing
+--- parent, itself, and a config-only view. Returns the same non-blocking
+--- `warning` as `save_subproject` when the new composition would match **zero**
+--- notes (the parent's filter excludes the child's — retag, or broaden the
+--- parent, or the view shows empty). Only this view's parent changes.
+---@param name string  the subproject to move
+---@param new_parent string  the destination parent view
+---@return table  { ok, warning?, error? }
+function M.reparent_view(name, new_parent)
+  local ok, res = require('pkm.views').reparent(name, new_parent)
+  if not ok then return { ok = false, error = tostring(res) } end
+  local out = { ok = true }
+  if type(res) == 'table' and res.message then out.warning = res.message end
+  return out
+end
+
+--- Delete a view from views.json — the headless twin of `:PKMView delete`. Like
+--- every write here it is promptless; the confirmation is the *caller's* (every
+--- removal confirms, `doc/PRINCIPLES.md`). Deleting a view that has children
+--- orphans them (they re-level to roots) — `reparent_view` them first, or
+--- `rename_view` instead. A config-defined view can't be deleted here.
+---@param name string
+---@return table  { ok, error? }
+function M.delete_view(name)
+  local ok = require('pkm.views').delete(name)
+  if not ok then
+    return { ok = false, error = string.format(
+      "could not delete view '%s' (not in views.json, or config-defined)", name) }
   end
   return { ok = true }
 end
@@ -1000,16 +1055,30 @@ end
 --- cheap "what is in here, how is it organised" read an agent makes to orient
 --- itself before drilling in with `query` / `view_members`. Counts come from the
 --- same AND-chained filter each view resolves to, so a subview's count already
---- reflects its parent composition.
----@return table  { ok, total_notes, views = {{name,count}}, tags = {{tag,count}} }
+--- reflects its parent composition. Views come back in **tree order** (roots
+--- first, children under each parent), each carrying its `depth`, its `parent`
+--- (nil for a root) and `has_children` — so the reply shows the whole hierarchy,
+--- not just a flat name list.
+---@return table  { ok, total_notes,
+---                 views = {{name,count,depth,parent,has_children}},
+---                 tags = {{tag,count}} }
 function M.structure()
-  local entries = require('pkm.index').get_all()
-  local names   = require('pkm.views').list()
-  local counts  = require('pkm.views').count_many(names)
+  local entries   = require('pkm.index').get_all()
+  local views_mod = require('pkm.views')
+  local tree      = views_mod.tree()
+  local names     = {}
+  for _, e in ipairs(tree) do names[#names + 1] = e.name end
+  local counts    = views_mod.count_many(names)
 
   local views = {}
-  for _, name in ipairs(names) do
-    views[#views + 1] = { name = name, count = counts[name] or 0 }
+  for _, e in ipairs(tree) do
+    views[#views + 1] = {
+      name         = e.name,
+      count        = counts[e.name] or 0,
+      depth        = e.depth,
+      parent       = e.parent,
+      has_children = e.has_children,
+    }
   end
 
   local tally = {}

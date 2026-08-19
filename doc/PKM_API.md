@@ -157,7 +157,10 @@ path.
 | `view_members(name)` | the note paths matching a named view's full filter chain. |
 | `set_membership(path, view_name, kind)` | `{ ok }` — add/remove a note from a view by writing the tags that define it. `kind` is `"add"`/`"remove"`. Resolves the view's tag condition **against the note's present tags**, so a subview under an OR parent the note already satisfies is written unambiguously; returns an error (never a prompt) only when the change is genuinely ambiguous (distinct cheapest tag-sets) or the view is not a tag condition. |
 | `save_view(name, expr)` | `{ ok }` — save a **top-level** view defined by a filter expression (the parentless twin of `save_subproject`). Replaces an existing view of the same name. Fails when the name is blank or the filter does not parse. |
-| `save_subproject(name, parent, filter_expr)` | `{ ok }` — save a sub-view under an existing parent, defined by a filter expression. Fails if the parent is missing or the filter does not parse. |
+| `save_subproject(name, parent, filter_expr)` | `{ ok, warning? }` — save a sub-view under an existing parent, defined by a filter expression. Fails if the parent is missing or the filter does not parse. Because a subview AND-composes its parent, it can save yet match **nothing** when the parent excludes all its own notes — that case returns a non-blocking `warning` string (the view is still saved). To *move* an existing subview, use `reparent_view`, not a re-save. |
+| `rename_view(old_name, new_name)` | `{ ok }` — rename a view in place, **re-pointing every child's `parent`** so a non-leaf renames without orphaning its subtree (unlike delete-old + save-new). Fails if the new name is taken; a config-defined view can't be renamed here. |
+| `reparent_view(name, new_parent)` | `{ ok, warning? }` — move a subproject under a new parent (the explicit "change parent"). Guards against a cycle (a view under its own descendant), a missing parent, itself, and a config-only view. Returns the same empty-composition `warning` as `save_subproject` when the new parent would match **zero** of the child's notes. |
+| `delete_view(name)` | `{ ok }` — delete a view from `views.json`. Promptless (the caller owns the confirmation). Deleting a view with children **orphans** them (they re-level to roots) — `reparent_view` them first, or `rename_view`. A config-defined view can't be deleted here. |
 
 **The view/tag model.** A view is a saved **filter over tags** (the same DSL as
 `query`). A subview's effective filter is its parent's filter **AND**-ed with its
@@ -172,7 +175,7 @@ alias tags is ambiguous to write (prefer one canonical tag; see
 
 | Function | Returns |
 |---|---|
-| `structure()` | `{ ok, total_notes, views = [{ name, count }], tags = [{ tag, count }] }` — the view list with per-view **match counts** (already reflecting each view's full parent AND-chain) and the **tag catalog** with per-tag counts, plus the note total — *without* dumping every full record the way `notes()` does. The cheap "what is in here / how is it organised" read to make **before** drilling in with `query`/`view_members`. |
+| `structure()` | `{ ok, total_notes, views = [{ name, count, depth, parent, has_children }], tags = [{ tag, count }] }` — the view **tree** (roots first, children under each parent; each row carries its `depth`, its `parent`, and `has_children`) with per-view **match counts** (already reflecting each view's full parent AND-chain), the **tag catalog** with per-tag counts, and the note total — *without* dumping every full record the way `notes()` does. The cheap "what is in here / how is it organised" read to make **before** drilling in with `query`/`view_members`. |
 | `tag_catalog()` | `{ ok, tags = [{ tag, count }] }` — the tag half of `structure()`, most-used first, for a caller that only needs the vocabulary. |
 
 ### Output (headless contract)

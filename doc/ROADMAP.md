@@ -1245,6 +1245,40 @@ the sole write path.
 
 ---
 
+## Requests from the PKM vault-gestor session (2026-08-19) — mostly SHIPPED in v1.80.0
+
+A second Manager-mode reorg of vault `01` (nest Guias/Editais under `_meta`; group the
+12 disciplines under a new `Disciplinas`; rename a CASP view) produced findings D1–D7.
+Full report: `temp/pkm-gestor-audit-2026-08-19.md`.
+
+- **D1 [P1] — silent-empty reparent: SHIPPED (v1.80.0).** A subview AND-composes its
+  parent, so reparenting a child under a parent that excludes its notes emptied the
+  view (`Guias` 21→0) with `ok=true` and no warning. `views.save_subproject`/`reparent`
+  now return a non-blocking empty-composition `warning`, surfaced by the API.
+- **D2 — no view rename/reparent/delete in `pkm.api`: SHIPPED (v1.80.0).**
+  `api.rename_view` (re-points children), `api.reparent_view` (cycle-guarded, over the
+  new pure `views.reparent`), `api.delete_view`. (`save_view`/`save_subproject` already
+  existed.)
+- **D3 — reparent-by-overwrite undocumented: SHIPPED (v1.80.0).** Superseded by the
+  explicit `reparent_view`; documented in `PKM_API.md`.
+- **D5 — `save_subproject` skipped filter validation: SHIPPED (v1.80.0).** It now runs
+  the `mixes_field_and_any` guard `save` already had.
+- **D6 — compact structural read: SHIPPED (v1.80.0).** `emit`/`structure`/`tag_catalog`
+  already existed (v1.75.0); `structure()` now returns the view **tree** (depth/parent/
+  has_children) via the new public `views.tree()`.
+- **D4 — a "container" view type (auto-union of children): DEFERRED.** The OR-union
+  superset-parent pattern plus the D1 warning cover the grouping need; a third view
+  shape (a node whose match set is auto-maintained as the union of its children,
+  touching the data model, `get_tree` composition, the tree builder, the sidebar, and
+  `set_membership`) is a larger surface than the itch justifies now. Revisit only if
+  hand-maintained union filters become a recurring gestor cost.
+- **D7 — `audit()` flags frontmatter-less journals: NOT A BUG.** Journals are created
+  with frontmatter (`journal.lua` → `yaml.create_frontmatter`), so the `no-frontmatter`
+  findings are genuine, not false positives. No plugin change; investigate the vault-01
+  journals in a gestor session.
+
+---
+
 **Process for future upgrades:**
 - Re-run this audit against `:help news` for the target version before
   upgrading, not after. Check specifically: treesitter API changes (PKM's

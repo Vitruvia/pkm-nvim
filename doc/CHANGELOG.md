@@ -157,6 +157,58 @@ fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.80.0] - 19/8/2026
+
+View-lifecycle API + the silent-empty-composition guard. Closes the dev-facing
+findings a 2026-08-19 Manager-mode reorg of vault `01` raised (report
+`temp/pkm-gestor-audit-2026-08-19.md`): a subview AND-composes its parent, so
+reparenting a child under a parent whose filter excludes it silently emptied the
+view (`Guias de Estudo` 21 → 0), and the headless API had no rename / reparent /
+delete for views, forcing a delete-old + save-new that orphans children.
+
+### Added
+
+- **`api.rename_view` / `api.reparent_view` / `api.delete_view`** — the view
+  lifecycle over the headless surface, so a gestor agent restructures a vault's
+  view tree the same way it edits notes. `rename_view` re-points every child's
+  `parent` (a subtree renames without breaking), so it replaces the
+  child-orphaning delete-old + save-new. `reparent_view` is the explicit move
+  `save_subproject`-re-save only did as a side effect, with the cycle guard
+  (finding D2/D3). Backed by a new pure `views.reparent(name, new_parent)`; the
+  interactive "Change parent" picker now delegates to it.
+- **Silent-empty-composition warning (D1).** `views.save_subproject` and
+  `views.reparent` now compute whether the composed filter would match **zero**
+  notes while the child's own filter matches some — the exact footgun that
+  emptied `Guias`. They return a non-blocking `warning`, surfaced as
+  `{ ok = true, warning = "…" }` by `api.save_subproject` / `api.reparent_view`
+  (the write still lands; the user may mean to retag). Pure helper
+  `composition_warning`.
+- **`api.structure()` now returns the view tree**, not a flat list: each view
+  row carries `depth`, `parent`, and `has_children`, in tree order (roots first,
+  children under each parent) — a one-call read of a vault's shape (D6). New
+  public `views.tree()`.
+
+### Fixed
+
+- **`views.save_subproject` now validates its filter like `views.save` does
+  (D5).** It skipped the `mixes_field_and_any` guard, so a subview filter that
+  OR-ed a field term with a bare free-text term (a mistyped tag, e.g.
+  `tag:x OR "y"`) saved unwarned. It now warns (non-blocking), matching `save`.
+
+### Notes
+
+- **Finding D4 (a "container" view type whose match set is the auto-union of its
+  children) is deferred** — the OR-union-superset parent pattern plus the D1
+  warning cover the need; a third view shape is a larger surface. Recorded in
+  ROADMAP.
+- **Finding D7 (audit flags frontmatter-less journals) is not a plugin bug.**
+  Journals *are* created with frontmatter (`journal.lua` → `yaml.create_frontmatter`),
+  so the `no-frontmatter` findings are real, not false positives; investigate the
+  vault-01 journals in a gestor session, not here.
+- Suite **103/103** (`test_v1800_p1` added: the D1 warning on the exact
+  Guias→Meta emptying case, the reparent cycle guard, child-re-pointing rename,
+  and the tree-shaped `structure`).
+
 ## [1.79.0] - 17/8/2026
 
 Relative-level header navigation — **`[N` / `]N` jump an exact number of heading levels**
