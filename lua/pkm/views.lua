@@ -495,6 +495,60 @@ end
 ---@param _ancestors table|nil   set of ancestor names on this path (cycle guard)
 ---@param _depth     integer|nil  nesting depth on this path (8-level cap)
 ---@return table|nil tree, string|nil err
+
+--- Resolve a view's OWN filter *expression* — the child's direct membership
+--- under the containment model — WITHOUT composing any descendants. A bare
+--- string for a top-level view, `expr.filter` for a subview (whose `parent`
+--- field only names where it rolls up). Shared by `get_tree` (which then rolls
+--- the children up) and `get_own_tree` (which stops here).
+---@param name string
+---@return string|nil own_expr, string|nil err
+local function resolve_own_expr(name)
+  local projects = get_projects()
+  if not projects[name] then
+    return nil, string.format("PKMView: no view named '%s'", name)
+  end
+  local expr = projects[name]
+  if type(expr) == 'string' then
+    if expr:match('^%s*$') then
+      return nil, string.format(
+        "PKMView: view '%s' has an empty filter expression", name)
+    end
+    return expr
+  elseif type(expr) == 'table' then
+    if type(expr.parent) ~= 'string' or expr.parent == '' then
+      return nil, string.format(
+        "PKMView: subproject '%s' missing valid 'parent' field", name)
+    end
+    if type(expr.filter) ~= 'string' or expr.filter:match('^%s*$') then
+      return nil, string.format(
+        "PKMView: subproject '%s' missing valid 'filter' field", name)
+    end
+    return expr.filter
+  end
+  return nil, string.format(
+    "PKMView: view '%s' must be a string or a {parent, filter} table", name)
+end
+
+--- A view's OWN parsed filter — its DIRECT membership, with NO descendant
+--- composition. `get_tree` composes children downward (for reading/counting a
+--- parent CONTAINS its children); this stops at the view's own filter. The
+--- membership WRITES (add/remove a note, create a note in a view) resolve against
+--- this: "add to `_meta`" must write `_meta`'s own tag, not shove the note into an
+--- arbitrary subview whose tag the composed tree would equally accept.
+---@param name string
+---@return table|nil tree, string|nil err
+local function get_own_tree(name)
+  local own_expr, oerr = resolve_own_expr(name)
+  if not own_expr then return nil, oerr end
+  local tree, perr = require('pkm.filter').parse(own_expr)
+  if not tree then
+    return nil, string.format(
+      "PKMView: parse error in view '%s': %s", name, perr)
+  end
+  return tree, nil
+end
+
 local function get_tree(name, _ancestors, _depth)
   if _tree_cache[name] then return _tree_cache[name], nil end
 
@@ -509,39 +563,10 @@ local function get_tree(name, _ancestors, _depth)
       "PKMView: hierarchy depth limit (8) reached at '%s'", name)
   end
 
-  local projects = get_projects()
-  if not projects[name] then
-    return nil, string.format("PKMView: no view named '%s'", name)
-  end
+  local own_expr, oerr = resolve_own_expr(name)
+  if not own_expr then return nil, oerr end
 
-  local expr   = projects[name]
   local filter = require('pkm.filter')
-
-  -- The view's OWN filter: a bare string for a top-level view, `expr.filter` for
-  -- a subview (whose `parent` field only names where it rolls up, no longer a
-  -- filter to AND in).
-  local own_expr
-  if type(expr) == 'string' then
-    if expr:match('^%s*$') then
-      return nil, string.format(
-        "PKMView: view '%s' has an empty filter expression", name)
-    end
-    own_expr = expr
-  elseif type(expr) == 'table' then
-    if type(expr.parent) ~= 'string' or expr.parent == '' then
-      return nil, string.format(
-        "PKMView: subproject '%s' missing valid 'parent' field", name)
-    end
-    if type(expr.filter) ~= 'string' or expr.filter:match('^%s*$') then
-      return nil, string.format(
-        "PKMView: subproject '%s' missing valid 'filter' field", name)
-    end
-    own_expr = expr.filter
-  else
-    return nil, string.format(
-      "PKMView: view '%s' must be a string or a {parent, filter} table", name)
-  end
-
   local own_tree, own_err = filter.parse(own_expr)
   if not own_tree then
     return nil, string.format(
@@ -730,22 +755,38 @@ function M.get_tree(name)
   return get_tree(name)
 end
 
+--- The parsed OWN filter of a view — its **direct** membership, with no
+--- descendants composed in. The write-side counterpart of `get_tree`: membership
+--- mutations (`set_membership`, `tags.view_flow`, `tags.new_note_in_view`) resolve
+--- against this so "add to a container view" writes the container's own tag rather
+--- than a child's, while reads/counts keep using the containment roll-up.
+---@param name string
+---@return table|nil tree
+---@return string|nil err
+function M.get_own_tree(name)
+  return get_own_tree(name)
+end
+
 --- Add or remove a *named* note's membership in a view, without a prompt.
 ---
 --- A view is a filter over tags, so membership is having the tags it filters on;
---- this resolves the view's tag condition and applies it. The interactive
---- counterpart (`tags.view_flow`) shows a menu when a view can be satisfied more
---- than one way — an OR of tags — because which tag to add is a judgement about
---- meaning. The programmatic form cannot guess, so it refuses that case and
---- points at the interactive one, rather than pick a tag the caller did not
---- choose. This is the typed sibling of `:PKMView add <view>` on the current note.
+--- this resolves the view's tag condition and applies it. Membership is
+--- **direct**: it resolves against the view's OWN filter (`get_own_tree`), not
+--- the containment roll-up — nesting a view under another means the parent
+--- CONTAINS the child for reading, but "add to the parent" writes the parent's
+--- own membership tag, never a child's. The interactive counterpart
+--- (`tags.view_flow`) shows a menu when a view can be satisfied more than one way
+--- — an OR of tags — because which tag to add is a judgement about meaning. The
+--- programmatic form cannot guess, so it refuses that case and points at the
+--- interactive one, rather than pick a tag the caller did not choose. This is the
+--- typed sibling of `:PKMView add <view>` on the current note.
 ---@param path string       Absolute note path
 ---@param view_name string
 ---@param kind string       'add' | 'remove'
 ---@return boolean ok
 ---@return string|nil err
 function M.set_membership(path, view_name, kind)
-  local tree, terr = get_tree(view_name)
+  local tree, terr = get_own_tree(view_name)
   if not tree then return false, terr or ("no view named '" .. view_name .. "'") end
 
   -- Removal is satisfying the negation: the same question, mirrored.
@@ -753,10 +794,11 @@ function M.set_membership(path, view_name, kind)
   local alts   = require('pkm.filter').tag_sets(target)
 
   -- The note's present tags. A tag the note already carries (or already lacks)
-  -- is not a decision to make: it collapses an alternative's residual work, and
-  -- — crucially — a subview under an OR parent the note ALREADY satisfies is not
-  -- "several ways", because the branch to use is already chosen. Without this,
-  -- every OR-composed view rejected an otherwise-unambiguous add/remove.
+  -- is not a decision to make: it collapses an alternative's residual work, so a
+  -- view whose OWN filter is an OR the note ALREADY partly satisfies is not
+  -- "several ways" — the branch to use is already chosen. (Membership resolves
+  -- against the view's OWN filter, not the containment roll-up, so a container's
+  -- children never surface here as spurious add/remove alternatives.)
   local present = {}
   local entry   = require('pkm.index').get(vim.fn.fnamemodify(path, ':p'))
   for _, t in ipairs((entry and entry.tags) or {}) do

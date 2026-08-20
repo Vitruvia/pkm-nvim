@@ -968,7 +968,11 @@ function M.view_flow(paths, kind, ctx)
   ---@param name  string
   ---@param scope string[]  The notes the operation acts on
   local function with_view(name, scope)
-    local tree, err = views.get_tree(name)
+    -- DIRECT membership resolves against the view's OWN filter, not the
+    -- containment roll-up: "add to a container view" writes the container's own
+    -- tag, never a child's — otherwise adding to `_meta` would offer the subviews'
+    -- tags (the composed tree ORs them in). Reads/counts still compose downward.
+    local tree, err = views.get_own_tree(name)
     if not tree then
       vim.notify('[pkm] ' .. (err or 'view has no filter'), vim.log.levels.ERROR)
       return
@@ -1171,7 +1175,10 @@ function M.new_note_in_view(name, opts)
   local views = require('pkm.views')
   local notes = require('pkm.notes')
 
-  local tree, err = views.get_tree(name)
+  -- Seed the new note with the view's OWN membership tag(s), not the containment
+  -- roll-up: creating a note "in _meta" gives it _meta's own tag, not an
+  -- arbitrary child's (which the composed tree would also accept).
+  local tree, err = views.get_own_tree(name)
   if not tree then
     vim.notify('[pkm] ' .. (err or 'view has no filter'), vim.log.levels.ERROR)
     return

@@ -96,14 +96,26 @@ api.actions()                  -- discover the enumerable bulk operations
 
 See `PKM_API.md` for the complete list and every return shape.
 
-**View/tag model.** A view is a saved **filter over tags**; a subview's effective
-filter is its parent's **AND**-ed with its own (composed down the whole chain), so
-a subview always matches a subset of its parent. Putting a note "in" a view means
-giving it the tags the view filters on — so membership writes need the view to
-reduce to a single defining tag (or one the note already partly satisfies). Keep
-one canonical tag per concept and avoid OR-of-alias views (`doc/CONVENTIONS.md`
-§ Tags). Use `api.structure()` to see the whole view tree + tag catalog cheaply
-before drilling in.
+**View/tag model — CONTAINMENT (v1.81.0+).** A view is a saved **filter over
+tags**. Nesting is **containment, not intersection**: a parent's effective set is
+its own filter **OR** the union of every descendant, composed **downward** — so a
+parent **contains** its children (a note in a subview is a note in its parent) and
+nesting never narrows or empties a view. A subview keeps its **own** filter as its
+membership; the `parent` field only records *where it rolls up*, and is **not**
+AND-ed in. **To group views under a parent, just create/`reparent_view` them under
+it — never hand-edit the parent's own filter into an OR-union of the children's
+tags.** That hand-built superset (the pre-v1.81.0 way to fake containment) is now
+redundant *and harmful*: it pollutes the parent's own membership, so "add a note to
+the parent" starts offering the children's tags instead of the parent's. Give a
+pure container view its **own** identity tag (e.g. a near-empty `x-_meta` marker)
+and let containment roll the children up.
+
+Putting a note "in" a view means giving it the tags **that view's own filter**
+needs (membership resolves against the OWN filter, not the roll-up) — so a
+membership write needs the view to reduce to a single defining tag (or one the note
+already partly satisfies). Keep one canonical tag per concept and avoid OR-of-alias
+views (`doc/CONVENTIONS.md` § Tags). Use `api.structure()` to see the whole view
+tree + tag catalog cheaply before drilling in.
 
 ## Finding notes
 

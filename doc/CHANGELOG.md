@@ -157,6 +157,53 @@ fired — is **fixed in v1.17.0**; see that entry.)*
 
 ---
 
+## [1.82.0] - 19/8/2026
+
+Membership **writes** resolve against a view's OWN filter, not the v1.81.0
+containment roll-up — the fix for the 2026-08-19 gestor `_meta` reorg fallout.
+*(Headless-verified 19/8/2026; the interactive `:PKMView add` picker awaits
+author smoke before the tag.)*
+
+### Fixed
+
+- **`:PKMView add <container>` (and `new_note_in_view`, `api.set_membership`) no
+  longer offer a subview's tag.** Under containment `get_tree(parent)` composes
+  `own OR union(descendants)`, so resolving "add a note to `_meta`" from that tree
+  proposed the CHILDREN's tags (`editais` / `guia-estudos`) — or refused as
+  "satisfiable several ways" — instead of writing `_meta`'s own `concursos-_meta`.
+  The three membership-write paths (`views.set_membership`, `tags.view_flow`,
+  `tags.new_note_in_view`) now resolve against the view's **own** filter, while
+  reads/counts (`match_all`/`count_*`/`match_set`) keep composing downward. So a
+  parent still CONTAINS its children for viewing, but "add/remove/new note in a
+  view" writes that view's DIRECT membership — never a child's.
+
+### Added
+
+- **`views.get_own_tree(name)`** — a view's parsed OWN filter with no descendant
+  composition (the write-side counterpart of `get_tree`). Extracted a shared
+  `resolve_own_expr` used by both. `test/test_v1820_p1.lua` (15 checks) pins the
+  own-vs-composed split across add/remove/new-note. Suite **105/105**.
+
+### Docs / prevention
+
+- **`skills/pkm-notes/SKILL.md` View/tag model rewritten to CONTAINMENT.** It still
+  described the pre-v1.81.0 `parent AND child` "subview is a subset" model — the
+  very instruction that led the gestor to fake containment by hand-ORing the
+  children's tags into the parent's own filter. Now: nesting = containment; to
+  group views under a parent, create/`reparent_view` them — **never** hand-edit the
+  parent's own filter into an OR-union; give a pure container its own identity tag.
+  (Installed `~/.claude/skills/pkm-notes` copy synced.)
+
+### Vault 01 (gestor data fix)
+
+- Applied via `pkm.api` (backup taken first): `_meta`'s own filter reset from the
+  hand-built `concursos-_meta OR guia-estudos OR editais` to just
+  `tag:"concursos-_meta"`, and `Disciplinas` from its ~20-tag OR-union to a clean
+  container marker `tag:"concursos-disciplina"`. Containment rolls the children up
+  automatically (`_meta` 24, `Disciplinas` 136); hierarchy and counts intact.
+
+---
+
 ## [1.81.0] - 19/8/2026
 
 Nested views become **containment**, not intersection. On the author's call
