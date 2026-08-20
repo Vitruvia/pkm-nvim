@@ -110,6 +110,23 @@ two found while evaluating multi-vault support, along with the one below.)*
   have a comparable type toggle; the views panel should offer the same. Tracked in
   ROADMAP for design (one-panel policy — an in-panel type cycle, not a new command).
 
+- **OPEN (found 20/8/2026, deferred) — `<C-j>` continuation of a roman/alpha
+  subitem NESTED under a different-family parent in the same paragraph.**
+  `renumber_sequence` detects **one** family for the whole paragraph (from its
+  first line), and `list_newline` relies on that cascade to fix the copied
+  placeholder marker. So a subalínea `i.` nested under an arabic `1.` or inciso
+  `I -` parent isn't renumbered (the new item stays `i.`), and under an `a)`
+  parent it is *mis-rewritten* (`i. child` → `a) child`) because the `list` /
+  `list_emph` / `list_inciso` / `list_alpha` renumber branches don't clear `ind`
+  on a separator mismatch (the `list_subalinea` branch does — `else ind = nil`).
+  Standalone and same-family lists (the common case, which the author smoked) are
+  correct. **Fix, when taken up:** compute the next marker directly in
+  `plan_list_continuation` (parse → +1 → `to_roman`/`to_alpha`, like arabic
+  already does) so the new item is right regardless of the cascade, **and** add
+  `else ind = nil` to the four renumber branches so the cascade never sweeps a
+  cross-family/cross-separator line. Not a data-corruption risk (buffer text the
+  user can see and undo). Deferred on the author's call at v1.83.0.
+
 *(The `PKMCitation` highlight bug found 27/7/2026 — the `matchadd` regex that never
 fired — is **fixed in v1.17.0**; see that entry.)*
 
@@ -154,6 +171,31 @@ fired — is **fixed in v1.17.0**; see that entry.)*
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
     ~200+ views.
+
+---
+
+## [1.83.0] - 20/8/2026
+
+Insert-mode `<C-j>` list continuation now covers the **unordered** families and
+places the cursor correctly for **every** ordered family. *(Author-smoke
+confirmed 20/8/2026.)* Lockstep pkm-markdown `a8dd776`.
+
+### Added
+
+- **Bullets and task items continue.** `plan_list_continuation` (pkm-markdown)
+  now recognizes plain bullets (`-` / `*` / `+`, marker repeated) and GFM task
+  items (`- [ ]` / `* [x]` → a **fresh unchecked** `- [ ] `), alongside the
+  ordered families. Unordered plans carry the marker verbatim (`ordered = false`)
+  so `list_newline` skips the cascade renumber for them.
+
+### Fixed
+
+- **Cursor lands after the rewritten marker for roman / alpha / inciso items.**
+  `list_newline`'s final cursor placement used an arabic-only regex
+  (`^%s*%d+[.)] `), so a continued `i.` / `a)` / `I -` dropped the cursor to
+  column 0, before the new marker. It now measures the rewritten line minus the
+  unchanged tail, correct for every marker width — a lone `i.` continues as `ii.`
+  with the cursor after it.
 
 ---
 
