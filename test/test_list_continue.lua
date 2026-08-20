@@ -33,7 +33,21 @@ check("two-digit ordinal increments", p and p.newline == '11. ', p and p.newline
 
 check("plain text is not a list", md.plan_list_continuation('plain text', 4) == nil)
 check("heading is not a list", md.plan_list_continuation('## heading', 3) == nil)
-check("bullet is not an ordered list", md.plan_list_continuation('- bullet', 2) == nil)
+
+print("\n== plan_list_continuation: unordered families (bullets, tasks) ==")
+p = md.plan_list_continuation('- bullet', 8)               -- dash bullet
+check("dash bullet continues verbatim", p and p.newline == '- ' and p.ordered == false, p and p.newline)
+p = md.plan_list_continuation('  * item', 8)               -- indented star bullet
+check("indented star bullet keeps indent+marker", p and p.newline == '  * ' and p.cursor_col == 4,
+  p and (p.newline .. '/' .. tostring(p.cursor_col)))
+p = md.plan_list_continuation('+ item', 6)                 -- plus bullet
+check("plus bullet continues verbatim", p and p.newline == '+ ', p and p.newline)
+p = md.plan_list_continuation('- [ ] todo', 10)            -- unchecked task
+check("task item continues as fresh unchecked box", p and p.newline == '- [ ] ' and p.ordered == false,
+  p and p.newline)
+p = md.plan_list_continuation('- [x] done', 10)            -- checked task → unchecked
+check("checked task resets to unchecked", p and p.newline == '- [ ] ', p and p.newline)
+check("thematic break (---) is not a list", md.plan_list_continuation('---', 3) == nil)
 
 print("\n== list_newline: buffer edit + cascade renumber ==")
 -- Split "2. bcd" after "2. b" (col 4, a valid normal-mode column); the tail "cd"
@@ -84,6 +98,36 @@ out2 = run({ 'a) texto', 'b) texto texto' }, 2, #'b) texto')
 check("alpha list continues (a)→b)→c))", out2 == 'a) texto|b) texto|c) texto', out2)
 out2 = run({ 'I - texto', 'II - texto texto' }, 2, #'II - texto')
 check("inciso list continues (I -→II -→III -)", out2 == 'I - texto|II - texto|III - texto', out2)
+
+print("\n== list_newline: cursor lands after the rewritten marker (all families) ==")
+-- Continue a lone item at its true end (insert-mode column == #line): the content
+-- advances AND the cursor lands just past the new marker, not at column 0.
+local function run_end(line)
+  vim.cmd('enew!')
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, { line })
+  vim.cmd('startinsert')                        -- insert mode allows col == #line
+  vim.api.nvim_win_set_cursor(0, { 1, #line })
+  md.list_newline()
+  vim.cmd('stopinsert')
+  local c = vim.api.nvim_win_get_cursor(0)
+  return vim.api.nvim_buf_get_lines(0, 1, 2, false)[1], c[1], c[2]
+end
+local nl, r, c = run_end('i. foo')
+check("lone i. becomes ii. with cursor after it", nl == 'ii. ' and r == 2 and c == 4,
+  string.format('%q @%d,%d', nl, r, c))
+nl, r, c = run_end('1. foo')
+check("lone 1. becomes 2. with cursor after it", nl == '2. ' and c == 3, string.format('%q @%d', nl, c))
+nl, r, c = run_end('a) foo')
+check("lone a) becomes b) with cursor after it", nl == 'b) ' and c == 3, string.format('%q @%d', nl, c))
+nl, r, c = run_end('I - foo')
+check("lone I - becomes II - with cursor after it", nl == 'II - ' and c == 5, string.format('%q @%d', nl, c))
+
+print("\n== list_newline: unordered families continue (no renumber) ==")
+nl, r, c = run_end('- foo')
+check("dash bullet continues, cursor after marker", nl == '- ' and c == 2, string.format('%q @%d', nl, c))
+nl, r, c = run_end('- [ ] foo')
+check("task item continues as unchecked, cursor after box", nl == '- [ ] ' and c == 6,
+  string.format('%q @%d', nl, c))
 
 print("")
 if failures == 0 then print("ALL PASS") else print(string.format("%d FAILURE(S)", failures)) end
