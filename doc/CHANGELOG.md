@@ -7,7 +7,29 @@
 *The sections below are living project state, not release notes: they are
 carried forward from version to version and consulted before any fix.*
 
-### Status checkpoint (post-v1.74.0, 12/8/2026)
+### Status checkpoint (post-v1.83.1, 27/8/2026)
+
+- **Current version: v1.83.1.** Since the post-v1.74.0 snapshot below, shipped:
+  the **2026-08-12 vault-gestor batch** (G1–G12, v1.75.0–v1.78.0 + siblings) and
+  the view-pop-up type switch (v1.77.0); **relative-level header navigation**
+  (v1.79.0); and the **2026-08-19 gestor-reorg thread** — the view-lifecycle API
+  + silent-empty-composition guard (v1.80.0), the **containment** model for nested
+  views (v1.81.0), and the membership-write fix against a view's own filter
+  (v1.82.0); then `<C-j>` unordered/bullet continuation (v1.83.0) and this
+  version's **views count cache** (v1.83.1). The compact thematic history is in
+  ROADMAP § Shipped so far (now extended through v1.83.1).
+- **Doc-drift correction (27/8/2026):** the ROADMAP had frozen at v1.63.1 while
+  code advanced to v1.83.0 — its Current State, Shipped so far, and several
+  "pending" items were stale. Reconciled this session alongside the v1.83.1 code.
+- **Open dev items from the 2026-08-19 gestor audit** (`temp/` file retired into
+  the plan): **D1** reparent-silently-empties warning, **D4** container/grouping
+  view type, **D7** journal/bib no-frontmatter audit false-positives — triaged in
+  ROADMAP § Triaged backlog — 2026-08-19. **D2** (view rename/reparent/save/delete
+  in `pkm.api`) and **D6** (compact structural read) were already **shipped**
+  (v1.80.0 `rename_view`/`reparent_view`/`delete_view`/`save_view`;
+  `structure`/`tag_catalog`) — that audit ran an older Lazy-synced build.
+
+### Status checkpoint (post-v1.74.0, 12/8/2026) — superseded by the checkpoint above
 
 - **Full headless suite green: 101/101** `test_*.lua` files report their pass
   marker (`test_phase1_old` passes by self-skipping its populated-root assertions
@@ -170,7 +192,63 @@ fired — is **fixed in v1.17.0**; see that entry.)*
   - JIT accounts for ~2–3× speedup between cold and warm runs at same note
     count.
   - Caching decision: not warranted at current scale. Revisit at ~5k notes or
-    ~200+ views.
+    ~200+ views. **Revisited in v1.83.1:** the author reported perceptible reopen
+    lag, so `count_many` is now memoized by index generation — the *reopen*
+    recompute is gone (cold first compute unchanged). The deeper O(N)→O(matched)
+    lever (inverted tag index) stays deferred to Phase 3, gated on a fresh
+    baseline. See ROADMAP § Views-panel open latency.
+
+---
+
+## [1.83.1] - 27/8/2026
+
+Views-panel open latency — Phase 1 of 3. The panel (`<leader>va` → the view
+tree) recomputed **every** view's match count on **every** open — an
+O(views × notes) scan run synchronously each time, felt as a small delay that
+grows with the vault. This phase memoizes those counts so a reopen with the
+corpus unchanged reuses them instead of re-scanning. *(Performance/internal —
+PATCH; no user-facing surface change. Headless-verified; the panel feel rides
+the author's smoke.)*
+
+### Added
+
+- **`index.generation()` — a monotonic content-generation counter** (`index.lua`).
+  It advances on every mutation of the in-memory index that can change a query's
+  result: a completed full build, a completed background build, and each
+  `invalidate(path)`. Pure reads (`get_all`/`get`) never advance it. It is the
+  cache-invalidation seam consumers use to know the corpus changed without
+  diffing it.
+
+### Changed
+
+- **`views.count_many` is now memoized, keyed by the index generation**
+  (`views.lua`). The first call at a given corpus state pays the O(views × notes)
+  scan once; every later call at the same generation returns the cached numbers
+  with no index touch — so opening the views panel again is free until a note or
+  a view definition actually changes. Counts for names not yet cached at the
+  current generation are computed and merged in, so mixed callers stay correct.
+  The cache clears two ways: a note change advances the generation (stale key →
+  recompute), and a view-definition change clears it outright via
+  `views.invalidate()` (a view's — or a rolled-up child's — filter no longer
+  matches what was counted). This implements the **reopen** half of the caching
+  decision recorded under [Unreleased] › Benchmarks › Views_suite ("Revisit at
+  ~5k notes or ~200+ views"): the *cold* first compute is unchanged; only the
+  redundant recompute-per-open is removed.
+
+### Notes
+
+- `test/test_v1831_p1.lua` (14 checks): generation monotonicity + read-stability;
+  `count_many` correctness vs `count_all`; cache invalidation by a note change
+  (generation bump) and by a new view definition (`invalidate` clear). Full
+  headless suite re-run — no regressions; `test_v161_p3`'s "counts follow the
+  index, no stale caching" case stays green (the generation bump on `invalidate`
+  is exactly what keeps it correct). luacheck clean on both files (the lone
+  `views.lua:666` long-line warning is the pre-existing notify string).
+- **Phases 2–3 deferred** (spec in ROADMAP § Views-panel open latency): async /
+  chunked count fill so the *first* open is instant regardless of N (Phase 2),
+  and an inverted tag index so a *cold* recompute is O(matched) not O(N) for the
+  common tag-only filter shape (Phase 3, gated on a `bench.lua` baseline). Phase 1
+  alone resolves the reported reopen lag; 2–3 are the scale-to-100k insurance.
 
 ---
 

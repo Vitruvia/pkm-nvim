@@ -42,7 +42,7 @@ highlighting in pkm-syntax, not here. See `CLAUDE.md` and the suite-level
 ## Current State
 
 **Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical;
-**v1.63.1** as of this writing). All work happens directly on `dev`; `main` holds
+**v1.83.1** as of this writing). All work happens directly on `dev`; `main` holds
 periodic stable backups of `dev`, not an independently maintained release line.
 
 **Working features:**
@@ -183,7 +183,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.63.1)
+## Shipped so far (v1.5.7 → v1.83.1)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -247,6 +247,43 @@ shipped work that still constrain **pending** work are kept in
   persistent-vs-transient axis); and a **path fix** (v1.63.1 — the reference tree
   is `P:\Resources`, not `P:\Recursos`; corrected across the skill, AGENT_PROTOCOL,
   CONVENTIONS, CLAUDE.md, LLM_CONTEXT).
+- **v1.64.0 – v1.74.0 — descriptor search, `<CR>`/`<C-j>` list continuation, the
+  2026-08-10 backlog, and the `pkm-markdown` extraction.** Descriptor search
+  (`tag:`/`text:`/…) in the view note-lists + space-after-colon tolerance
+  (v1.64); as-you-type `tag:` substring narrowing (v1.65); post-hoc metadata
+  setters + author-marker-preserving rename (v1.66, clears Gestor #1/#2); the
+  bulk of the **2026-08-10 14-item backlog** — buffer-panel splits & the E36/
+  cmdheight fixes (v1.67), ordered-list `<CR>` continuation (v1.68), pop-up search
+  resume (v1.69), a pkm-syntax batch (v1.70), auto-sidebar in `:PKMMode` + help/
+  panel-keymap docs (v1.71.x); and the **`markdown.lua` → `pkm-markdown` sibling
+  extraction** (v1.72, the last backlog item) with its smoke follow-ups — editing
+  attaches under `highlight_all_markdown` (v1.72.1), `<CR>` continuation covers all
+  ordered families (v1.73), and `highlight_all_markdown` defaults **true** (v1.74).
+- **v1.75.0 – v1.78.0 — the 2026-08-12 vault-gestor batch (G1–G12).** The spaced-
+  view-name `:PKMView rename` fix (quote-aware `args.lua`), the OR-view
+  `set_membership` fix, `api.save_view`/`api.structure`, the malformed-filter
+  reject, the tag-naming convention, and the settings/permission corrections
+  (v1.75); the block-aware inciso highlight fix in pkm-syntax (v1.76); the
+  view-pop-up `<C-t>` type switch (v1.77); and list continuation moved to `<C-j>`
+  with `<CR>` = plain newline (v1.78). Batch **complete**; see § Triaged backlog —
+  2026-08-12 batch.
+- **v1.79.0 — relative-level header navigation.** Two-axis relative-level heading
+  jumps (direction `[`/`]` × level `u`/`l`, digit = exact delta, plus bare `[N`/`]N`),
+  pure core `find_heading_target` in pkm-markdown. Closes the last Markdown-nav item.
+- **v1.80.0 – v1.83.0 — the 2026-08-19 gestor-reorg thread + list-continuation
+  polish.** From a real vault-gestor `_meta` reorg: the **view-lifecycle API**
+  (`rename_view`/`reparent_view`/`delete_view`/`save_view`) **plus the silent-empty-
+  composition guard** — a reparent/save that would drop a view to 0 matches now
+  warns (v1.80, closing gestor D1's API half and D2); nested views redefined as
+  **containment** (a parent rolls up its children; a subview matches its own
+  filter, not the parent-narrowed intersection) (v1.81); membership **writes**
+  resolve against a view's OWN filter, not the roll-up (v1.82); and `<C-j>`
+  continuation extended to unordered/bullet/task families with a cross-family
+  cursor fix (v1.83).
+- **v1.83.1 — views-panel count cache (perf).** `index.generation()` + a
+  generation-keyed memo of `views.count_many`, so reopening the views panel no
+  longer re-runs the O(views × notes) count scan. Phase 1 of 3; see § Views-panel
+  open latency.
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.
@@ -269,11 +306,18 @@ noted caveat (but do both when it is easy). The detailed specs live under
 § Near goals / § Distant goals / § Potential goals below; this is the priority
 view over them.*
 
-**Pending-features status (updated 2026-08-10).** A fresh 14-item capture was
-triaged into **§ Triaged backlog — 2026-08-10 batch** (precedence-ordered; the
-top item **P1** is the `:PKMNote rename` → title prompt, which also clears a
-pending Gestor request). Before that batch there were **no non-deferred,
-near-term pending features left** — the two that were then open both shipped: the
+**Pending-features status (updated 2026-08-27).** The three triaged batches are
+**substantially shipped**: the **2026-08-10** 14-item batch is fully resolved (its
+last item, the `pkm-markdown` extraction, landed v1.72.0); the **2026-08-12**
+vault-gestor batch (G1–G12) is complete (v1.75.0–v1.78.0 + siblings); and the
+**2026-08-19** gestor-reorg thread mostly shipped (view-lifecycle API + composition
+guard v1.80.0, containment v1.81.0, membership-write fix v1.82.0), leaving **D1/D4/
+D7** open (see § Triaged backlog — 2026-08-19). Newly captured (2026-08-27): the
+**views-panel latency** work (Phase 1 shipped v1.83.1; 2–3 deferred) and the
+**views tree expand/collapse** feature. Older deferred/long-horizon items are
+unchanged (below). *Historical note:* the 2026-08-10 batch's top item **P1** was
+the `:PKMNote rename` → title prompt (cleared a Gestor request); before it there
+were no non-deferred near-term features left — the two then open both shipped: the
 **forced-save prompt** (Near 5.1) in **v1.61.2** (a citation into an open,
 unmodified buffer now writes the backlink *through* the buffer, so a later `:w`
 no longer hits the phantom W12 prompt), and the **`pkm.sidebar` extraction**
@@ -291,7 +335,10 @@ vault-gestor Manager-mode session plus the author's smoke pass produced a fresh
 batch — see § Triaged backlog — 2026-08-12 batch (the `:PKMView rename`
 spaced-name bug, the `set_membership` OR-view defect, the `api.save_view` /
 `api.structure` gaps, the tag-naming convention, and the sibling
-pkm-syntax/pkm-markdown fixes). None have shipped yet.
+pkm-syntax/pkm-markdown fixes). **Shipped (v1.75.0–v1.78.0 + siblings; batch
+complete).** A **third** capture (2026-08-19 gestor reorg) followed — mostly
+shipped in v1.80.0–v1.82.0, with **D1/D4/D7** still open (§ Triaged backlog —
+2026-08-19 batch).
 
 ### 1 · pkm.api & agents — 🔺 highest priority
 
@@ -348,6 +395,12 @@ Core shipped (v1.48–v1.56; see above). **Pending:**
 - Active-window motions (list items, blocks — Near goals 2.1); explorer UI
   customisation (Distant goals 6); relevance ordering in panels (Distant goals 9).
   *These create commands/panels an agent reaches for → 🔺.*
+- **Views-panel open latency — Phase 1 shipped (v1.83.1); Phases 2–3 deferred.**
+  Count cache done; async count fill + inverted tag index deferred. Full spec in
+  § Views-panel open latency.
+- **Views tree expand/collapse — planned.** Real expand/collapse across every view
+  display (sidebar + pop-up); auto-expand top levels only. Full spec in § Views tree
+  expand/collapse.
 
 ### 4 · Syntax highlighting — ▹ core complete; now the standalone `pkm-syntax` plugin
 
@@ -749,6 +802,143 @@ whole.*
   each picker's title + `?` help (the report was half discoverability). No new command
   (one-panel policy honoured). `luacheck` clean, suite 102/102; the picker `<C-t>` is
   interactive so it was smoke-confirmed by the author (13/8) in the `<leader>va` pop-up.
+
+---
+
+## Triaged backlog — 2026-08-19 batch (second vault-gestor audit)
+
+*A third capture, from a Manager-mode `01 - Vitruvia` view reorg (the gestor
+audit report, retired from `temp/pkm-gestor-audit-2026-08-19.md` into this
+section). The report listed D1–D7; **D2 and D6 were already shipped** when it ran
+(it drove an older Lazy-synced build), and **D5 is the 2026-08-12 G4**. What
+remains genuinely open is **D1, D4, D7**. This section is the single owner of
+these until each ships or graduates into a version. Anchors verified on disk
+27/8/2026.*
+
+**Precedence:** D1 (correctness/UX guard — highest) → D7 (audit false-positives)
+→ D4 (feature). D3 is a doc line; D2/D5/D6 are closed (below).
+
+- **✅ D2 — CLOSED (shipped v1.80.0).** "No view rename/reparent/top-level-save/
+  delete in `pkm.api`." All four exist: `api.rename_view` (re-points children),
+  `api.reparent_view`, `api.delete_view`, `api.save_view` (`lua/pkm/api.lua`
+  984–1030). The audit predated the sync.
+- **✅ D5 — same as 2026-08-12 G4** (malformed `tag:"…" OR "…"` bare-term filter).
+  Tracked there; the vault-side *Estatística* view definition is user data, fixable
+  by re-saving through the now-strict parser.
+- **✅ D6 — CLOSED (shipped v1.80.0).** "No compact structural read." `api.structure`
+  (`api.lua:1061`) returns the view tree + per-view counts + tag catalog in one
+  call; `api.tag_catalog` (1099) is the vocabulary-only subset. The headless-JSON-
+  on-stderr half is 2026-08-12 **G6** (tracked there).
+- **D3 — `save_subproject` doubling as reparent-by-overwrite, undocumented.** Now
+  largely moot: `api.reparent_view` is the explicit path (v1.80.0). Residual: a one-
+  line note in `PKM_API.md` that re-saving a subview with a different `parent`
+  reparents in place. **Doc-only; fold into the next PKM_API.md pass.**
+
+### Area 1 · pkm.api & agents — 🔺
+
+- **D1 · [P1] Reparenting/saving a subview into a non-superset parent silently
+  empties it — VERIFY the guard covers the interactive path.** A subview composed
+  under a parent whose filter it does not imply can drop to **0 matches** with no
+  warning (the gestor's `Guias de Estudo` 21→0, `Editais` 1→0 under `_meta`).
+  v1.80.0 added the **silent-empty-composition guard** on the API lifecycle writes
+  (`save_view`/`reparent_view`/`save_subproject`), which is D1's API half. **Still
+  to confirm/close:** that the guard also fires on the **interactive** reparent/edit
+  path (`edit_view` → save) — a `:PKMView update` reparent that empties a view must
+  warn the human too, non-blocking (they may intend to retag). **Accept:** an
+  interactive reparent that would drop a view to 0 (parent tag-set not implied by
+  the child's filter) surfaces the same warning the API returns; headless test on
+  the composed-filter count. If already covered, close with a test that proves it.
+
+- **D4 · No "container"/grouping view; a grouping node needs a hand-maintained
+  OR-union.** To make a node like `Disciplinas` show the union of its children (and
+  each child compose to its own set), its filter must be the OR-union of all child
+  tags, maintained by hand as children are added — the v1.81.0 **containment** model
+  rolls a parent up over its children's *filters*, which helps, but there is still
+  no pure grouping node (no content filter of its own) nor an auto-derived
+  "union-of-my-children" that updates on child add/move. **Consider** a container
+  view type whose match set is the auto-maintained union of its children. Interacts
+  with v1.81.0 containment — check whether containment already subsumes this before
+  building. **Feature; specify against the v1.81.0 model first.**
+
+### Area 1 · pkm.api — audit ergonomics
+
+- **D7 · `api.audit()` flags frontmatter-less journals (and bib notes) as
+  `no-frontmatter` ERRORs.** On the real vault, 34 `no-frontmatter` errors, ~30 of
+  them journal notes (`02-Journal/journal_*.md`) — burying the real findings.
+  **Decision needed (dev):** are journals intentionally frontmatter-less? If yes,
+  `audit` should **exempt or downgrade** journals (and document it); if no, journal
+  creation has a gap. Either way it is a plugin-side call. (The 4 **bib** notes
+  without frontmatter — 0006/0007/0008/0009 — look like genuine user-data gaps, not
+  a plugin bug; they belong to the vault owner, not this triage.) **Accept:**
+  `audit` no longer emits `no-frontmatter` ERRORs for by-design journal notes (or a
+  recorded decision that journals must carry frontmatter, with the creation gap
+  filed).
+
+---
+
+## Views-panel open latency — Phase 1 shipped (v1.83.1); Phases 2–3 deferred
+
+*From `temp/improvements.md` (retired here): the views panel (`<leader>va` → the
+view tree) felt laggy to open "once again," and should scale to hundreds of
+thousands of notes. Root cause: `views.count_many` (`views.lua`) ran an
+O(views × notes) `filter.eval` scan on **every** open, recomputed from scratch
+with no cross-open cache. Three phases, decreasing certainty; Phase 1 shipped.*
+
+- **✅ Phase 1 — count cache (v1.83.1).** `index.generation()` (a monotonic
+  content-generation counter) + a generation-keyed memo of `count_many`. A reopen
+  with the corpus unchanged reuses the counts; a note change (generation bump) or a
+  view-definition change (`views.invalidate`) forces the next compute. Removes the
+  **reopen** recompute; the *cold* first compute is unchanged. `test_v1831_p1`.
+- **Phase 2 — async / chunked count fill (deferred; medium risk).** Open the picker
+  immediately with view names + a placeholder count, compute counts on a
+  `vim.schedule`d/chunked pass, then `picker:refresh()` with real numbers (guarded
+  against the picker closing mid-fill). Makes even the **first** open feel instant
+  regardless of N; with Phase 1, reopens already have the numbers. Interactive —
+  needs a smoke (percurso note). Applies to **every** view display that shows counts
+  — the Telescope pop-up **and** the sidebar overview — so factor the fill through
+  the shared `count_many` path, not per-surface.
+- **Phase 3 — inverted tag index (deferred; larger; gate on a bench baseline).**
+  Maintain `tag → {note keys}` posting lists in `index.lua` (built during build,
+  updated on `invalidate`); count a **pure-tag** view filter (the dominant shape) by
+  set algebra — O(matched), not O(N). Filters with `title:`/`text:`/`any:` fall back
+  to the linear scan. The only phase that makes a *cold* recompute cheap at 100k
+  notes, but it touches index internals — **do not start without a fresh `bench.lua`
+  baseline** (the "no optimization without a baseline" invariant; the last Views_suite
+  bench is in CHANGELOG [Unreleased] › Benchmarks). Trigger: the author reports the
+  *first* open (post-Phase-2) still lagging at real scale, or the bench crosses the
+  ~5k-notes / ~200-views line.
+
+---
+
+## Views tree expand/collapse — planned (every view display)
+
+*From the author (27/8/2026). Today the view tree renders **fully expanded** — a
+purely visual state; there is no real expand/collapse. As views, subviews,
+sub-subviews accumulate, the panels will get polluted.*
+
+- **Goal:** a real expand/collapse for the view hierarchy. Keep "auto-expanded" as
+  the **default appearance**, but likely only for **top-level views and their
+  first-level subviews**; deeper levels start collapsed. This default may change if
+  the vault ends up with many deep subviews.
+- **Scope — every view display, consistently:** the persistent **views sidebar**
+  (`sidebar.lua` overview mode) **and** the transient **view pop-up**
+  (`telescope_views_tree_picker` + the no-Telescope `_views_panel`), and any future
+  view surface. The tree is built once by `build_tree_entries` (`views.lua`) — the
+  natural single seam to carry a per-node `collapsed`/`expanded` state and a
+  visible-rows filter, so the two surfaces share one expansion model rather than
+  each inventing its own.
+- **Open questions:** where collapse state lives (per-session vs. persisted in
+  `views.json` alongside the tree); the keymap (a toggle on the row — `za`-like — in
+  both the sidebar and the picker); how a Telescope picker (flat finder) represents
+  and toggles a collapsed subtree (re-run the finder over the visible-rows set);
+  whether a collapsed parent's count includes hidden descendants (it should — the
+  count is already the containment roll-up, v1.81.0).
+- **Interacts with:** the count cache (above — collapsed rows still need their
+  parent's rolled-up count) and Near goals 2.3 (the sidebar bookmark/index bar,
+  which already wants "collapsable/expandable levels" for headers — same interaction
+  idiom, different tree; build one collapse mechanism both can use). **Priority:**
+  after the latency phases settle; it is a UX/scale feature, not a bug. 🔺 (it is a
+  panel an agent may read, though the collapse state itself is human-facing).
 
 ---
 

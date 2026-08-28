@@ -37,6 +37,8 @@
 --   invalidate(path)          → re-read one file; remove entry if file gone
 --   rebuild()                 → full rescan; call after bulk external changes
 --   is_built()                → boolean (true only when fully built)
+--   generation()              → monotonic counter; advances on every content
+--                               change, for cache invalidation by consumers
 -- =============================================================================
 
 local M = {}
@@ -55,6 +57,17 @@ end
 local _index  = {}      -- path → entry table
 local _built  = false   -- true after first full scan
 local _config = nil     -- set by setup()
+
+-- Monotonic content-generation counter. Bumped on every mutation of _index that
+-- can change a query's result: a completed build, a completed background build,
+-- and each invalidate(path). Consumers that memoize over the whole corpus (the
+-- views panel's per-view counts) tag their cache with the generation and
+-- recompute only when it advances, instead of re-scanning on every open. Read
+-- via M.generation(); never reset (wraps only past 2^53, which never happens).
+local _generation = 0
+local function bump_generation()
+  _generation = _generation + 1
+end
 
 -- Background (chunked) build state. When a background build is running, the
 -- full file list lives in _bg_queue and _bg_pos is the next index to read; the
@@ -266,6 +279,7 @@ local function build()
     if entry then _index[norm(path)] = entry end
   end
   _built = true
+  bump_generation()
 end
 
 -- Drain the remainder of an in-progress background build synchronously, then
@@ -281,6 +295,7 @@ local function bg_finish_sync()
   end
   _bg_queue, _bg_pos, _bg_active = nil, 1, false
   _built = true
+  bump_generation()
 end
 
 -- Read one slice of the background queue, then reschedule until it is drained.
@@ -298,6 +313,7 @@ local function bg_step()
   if _bg_pos > #q then
     _bg_queue, _bg_pos, _bg_active = nil, 1, false
     _built = true
+    bump_generation()
   else
     vim.defer_fn(bg_step, BG_DELAY)
   end
@@ -389,6 +405,7 @@ function M.invalidate(path)
   local key = norm(path)
   if vim.fn.filereadable(path) == 0 then
     _index[key] = nil
+    bump_generation()
     return
   end
   local entry = read_entry(path)
@@ -397,6 +414,7 @@ function M.invalidate(path)
   else
     _index[key] = nil
   end
+  bump_generation()
 end
 
 --- Discard the current index and rebuild from scratch.
@@ -415,6 +433,17 @@ end
 ---@return boolean
 function M.is_built()
   return _built
+end
+
+--- Return the current content generation — a counter that advances every time
+--- the index gains, loses, or updates an entry (build, background-build finish,
+--- and each invalidate). A consumer that caches a whole-corpus computation tags
+--- it with this value and recomputes only when the value changes; two reads with
+--- no mutation between them return the same number, so an unchanged corpus never
+--- forces a recompute. Reads (get_all/get) never advance it.
+---@return integer
+function M.generation()
+  return _generation
 end
 
 return M

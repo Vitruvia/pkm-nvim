@@ -76,6 +76,13 @@ local SEARCH_EVAL = { tag_substring = true }
 
 local _sidecar_cache = nil   -- table loaded from views.json; nil when stale
 local _tree_cache    = {}    -- name → parsed filter tree
+-- Per-view match counts, memoized for the overview screens (the views panel).
+-- Shape: { gen = <index.generation()>, counts = { name → integer } }, or nil.
+-- Kept fresh two ways: a note change bumps the index generation, so a stale
+-- `gen` forces a recompute; a view-definition change clears this outright in
+-- invalidate() (a view's filter — or a child's, which rolls up — no longer
+-- matches what was counted). See M.count_many.
+local _count_cache = nil
 local _last_view = nil          -- name of last successfully activated view
 local _panel_keymap_lhs = nil   -- sidebar-buffer-local key to open the views
                                  -- panel; nil until set_panel_keymap() is
@@ -188,6 +195,7 @@ end
 local function invalidate()
   _sidecar_cache = nil
   _tree_cache    = {}
+  _count_cache   = nil
 end
 
 --- Drop both caches from outside the module.
@@ -914,22 +922,51 @@ end
 --- index.get_all() plus V filter passes, instead of V index reads, V path
 --- arrays and V sorts. Unknown or invalid views notify and count 0, exactly
 --- as `#match_all(name)` does.
+---
+--- Results are memoized in `_count_cache`, tagged with the index generation at
+--- the time they were computed. A repeat call with the corpus unchanged (the
+--- common case: opening the views panel again) returns the cached numbers
+--- without touching the index — the O(views × notes) scan runs once per corpus
+--- state, not once per open. The cache is cleared when a view definition changes
+--- (invalidate()) and bypassed when the index generation has advanced (a note
+--- was added, edited, or removed). Counts for names not yet cached at the current
+--- generation are computed and merged in, so mixed callers stay correct.
 ---@param names string[]
 ---@return table<string, integer>
 function M.count_many(names)
   if #names == 0 then return {} end
 
-  local entries = require('pkm.index').get_all()
-  local counts  = {}
+  local gen = require('pkm.index').generation()
+
+  -- Drop a cache computed against an older corpus; keep one at this generation so
+  -- counts already computed for other names (a prior panel open) are reused.
+  if not _count_cache or _count_cache.gen ~= gen then
+    _count_cache = { gen = gen, counts = {} }
+  end
+  local cached = _count_cache.counts
+
+  -- Which requested names are missing from the cache? Scan the index only if any.
+  local missing = {}
   for _, name in ipairs(names) do
-    local tree, err = get_tree(name)
-    if tree then
-      counts[name] = count_matches(tree, entries)
-    else
-      vim.notify(err, vim.log.levels.ERROR)
-      counts[name] = 0
+    if cached[name] == nil then missing[#missing + 1] = name end
+  end
+
+  if #missing > 0 then
+    local entries = require('pkm.index').get_all()
+    for _, name in ipairs(missing) do
+      local tree, err = get_tree(name)
+      if tree then
+        cached[name] = count_matches(tree, entries)
+      else
+        vim.notify(err, vim.log.levels.ERROR)
+        cached[name] = 0
+      end
     end
   end
+
+  -- Return only the requested names, so the shape matches the pre-cache contract.
+  local counts = {}
+  for _, name in ipairs(names) do counts[name] = cached[name] end
   return counts
 end
 
