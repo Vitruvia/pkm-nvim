@@ -21,13 +21,18 @@ carried forward from version to version and consulted before any fix.*
 - **Doc-drift correction (27/8/2026):** the ROADMAP had frozen at v1.63.1 while
   code advanced to v1.83.0 — its Current State, Shipped so far, and several
   "pending" items were stale. Reconciled this session alongside the v1.83.1 code.
-- **Open dev items from the 2026-08-19 gestor audit** (`temp/` file retired into
-  the plan): **D1** reparent-silently-empties warning, **D4** container/grouping
-  view type, **D7** journal/bib no-frontmatter audit false-positives — triaged in
-  ROADMAP § Triaged backlog — 2026-08-19. **D2** (view rename/reparent/save/delete
-  in `pkm.api`) and **D6** (compact structural read) were already **shipped**
-  (v1.80.0 `rename_view`/`reparent_view`/`delete_view`/`save_view`;
-  `structure`/`tag_catalog`) — that audit ran an older Lazy-synced build.
+- **2026-08-19 gestor audit — fully closed** (`temp/` file retired into the plan;
+  dispositions verified against live code 27/8/2026). **D1** (reparent silently
+  empties a view) is **resolved by construction**: the v1.80.0 warning was removed
+  once v1.81.0 **containment** made emptying a view impossible. **D2/D3/D5/D6**
+  shipped v1.80.0 (`rename_view`/`reparent_view`/`delete_view`/`save_view`;
+  reparent-by-overwrite documented; the `save_subproject` mixed-filter guard;
+  `structure`/`tag_catalog`) — that audit drove an older Lazy-synced build, which is
+  why D2/D6 looked open. **D4** (container/grouping view) is **deferred**. **D7**
+  (journal/bib no-frontmatter) is **not a plugin bug** — journals are created with
+  frontmatter (`journal.lua` → `yaml.create_frontmatter`), so those findings are
+  genuine vault-data gaps. Single owner: ROADMAP § Requests from the PKM vault-gestor
+  session (2026-08-19).
 
 ### Status checkpoint (post-v1.74.0, 12/8/2026) — superseded by the checkpoint above
 

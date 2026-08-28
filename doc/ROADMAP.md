@@ -272,14 +272,14 @@ shipped work that still constrain **pending** work are kept in
   pure core `find_heading_target` in pkm-markdown. Closes the last Markdown-nav item.
 - **v1.80.0 – v1.83.0 — the 2026-08-19 gestor-reorg thread + list-continuation
   polish.** From a real vault-gestor `_meta` reorg: the **view-lifecycle API**
-  (`rename_view`/`reparent_view`/`delete_view`/`save_view`) **plus the silent-empty-
-  composition guard** — a reparent/save that would drop a view to 0 matches now
-  warns (v1.80, closing gestor D1's API half and D2); nested views redefined as
-  **containment** (a parent rolls up its children; a subview matches its own
-  filter, not the parent-narrowed intersection) (v1.81); membership **writes**
-  resolve against a view's OWN filter, not the roll-up (v1.82); and `<C-j>`
-  continuation extended to unordered/bullet/task families with a cross-family
-  cursor fix (v1.83).
+  (`rename_view`/`reparent_view`/`delete_view`/`save_view`) plus a silent-empty-
+  composition guard (v1.80, closing gestor D2 and D1's API half); then nested views
+  redefined as **containment** (a parent rolls up its children; a subview matches its
+  own filter, not the parent-narrowed intersection) (v1.81), which made emptying a
+  view impossible by construction and **retired that guard** — closing D1 for good;
+  membership **writes** resolve against a view's OWN filter, not the roll-up (v1.82);
+  and `<C-j>` continuation extended to unordered/bullet/task families with a
+  cross-family cursor fix (v1.83).
 - **v1.83.1 — views-panel count cache (perf).** `index.generation()` + a
   generation-keyed memo of `views.count_many`, so reopening the views panel no
   longer re-runs the O(views × notes) count scan. Phase 1 of 3; see § Views-panel
@@ -310,9 +310,10 @@ view over them.*
 **substantially shipped**: the **2026-08-10** 14-item batch is fully resolved (its
 last item, the `pkm-markdown` extraction, landed v1.72.0); the **2026-08-12**
 vault-gestor batch (G1–G12) is complete (v1.75.0–v1.78.0 + siblings); and the
-**2026-08-19** gestor-reorg thread mostly shipped (view-lifecycle API + composition
-guard v1.80.0, containment v1.81.0, membership-write fix v1.82.0), leaving **D1/D4/
-D7** open (see § Triaged backlog — 2026-08-19). Newly captured (2026-08-27): the
+**2026-08-19** gestor-reorg thread is **fully closed** (view-lifecycle API + the
+now-retired composition guard v1.80.0, containment v1.81.0, membership-write fix
+v1.82.0): **D1** resolved by containment, **D4** deferred, **D7** not-a-bug (see
+§ Requests from the PKM vault-gestor session (2026-08-19)). Newly captured (2026-08-27): the
 **views-panel latency** work (Phase 1 shipped v1.83.1; 2–3 deferred) and the
 **views tree expand/collapse** feature. Older deferred/long-horizon items are
 unchanged (below). *Historical note:* the 2026-08-10 batch's top item **P1** was
@@ -336,9 +337,9 @@ batch — see § Triaged backlog — 2026-08-12 batch (the `:PKMView rename`
 spaced-name bug, the `set_membership` OR-view defect, the `api.save_view` /
 `api.structure` gaps, the tag-naming convention, and the sibling
 pkm-syntax/pkm-markdown fixes). **Shipped (v1.75.0–v1.78.0 + siblings; batch
-complete).** A **third** capture (2026-08-19 gestor reorg) followed — mostly
-shipped in v1.80.0–v1.82.0, with **D1/D4/D7** still open (§ Triaged backlog —
-2026-08-19 batch).
+complete).** A **third** capture (2026-08-19 gestor reorg) followed — **fully
+closed**: D2/D3/D5/D6 shipped v1.80.0, D1 resolved by v1.81.0 containment, D4
+deferred, D7 not-a-bug (§ Requests from the PKM vault-gestor session (2026-08-19)).
 
 ### 1 · pkm.api & agents — 🔺 highest priority
 
@@ -802,77 +803,6 @@ whole.*
   each picker's title + `?` help (the report was half discoverability). No new command
   (one-panel policy honoured). `luacheck` clean, suite 102/102; the picker `<C-t>` is
   interactive so it was smoke-confirmed by the author (13/8) in the `<leader>va` pop-up.
-
----
-
-## Triaged backlog — 2026-08-19 batch (second vault-gestor audit)
-
-*A third capture, from a Manager-mode `01 - Vitruvia` view reorg (the gestor
-audit report, retired from `temp/pkm-gestor-audit-2026-08-19.md` into this
-section). The report listed D1–D7; **D2 and D6 were already shipped** when it ran
-(it drove an older Lazy-synced build), and **D5 is the 2026-08-12 G4**. What
-remains genuinely open is **D1, D4, D7**. This section is the single owner of
-these until each ships or graduates into a version. Anchors verified on disk
-27/8/2026.*
-
-**Precedence:** D1 (correctness/UX guard — highest) → D7 (audit false-positives)
-→ D4 (feature). D3 is a doc line; D2/D5/D6 are closed (below).
-
-- **✅ D2 — CLOSED (shipped v1.80.0).** "No view rename/reparent/top-level-save/
-  delete in `pkm.api`." All four exist: `api.rename_view` (re-points children),
-  `api.reparent_view`, `api.delete_view`, `api.save_view` (`lua/pkm/api.lua`
-  984–1030). The audit predated the sync.
-- **✅ D5 — same as 2026-08-12 G4** (malformed `tag:"…" OR "…"` bare-term filter).
-  Tracked there; the vault-side *Estatística* view definition is user data, fixable
-  by re-saving through the now-strict parser.
-- **✅ D6 — CLOSED (shipped v1.80.0).** "No compact structural read." `api.structure`
-  (`api.lua:1061`) returns the view tree + per-view counts + tag catalog in one
-  call; `api.tag_catalog` (1099) is the vocabulary-only subset. The headless-JSON-
-  on-stderr half is 2026-08-12 **G6** (tracked there).
-- **D3 — `save_subproject` doubling as reparent-by-overwrite, undocumented.** Now
-  largely moot: `api.reparent_view` is the explicit path (v1.80.0). Residual: a one-
-  line note in `PKM_API.md` that re-saving a subview with a different `parent`
-  reparents in place. **Doc-only; fold into the next PKM_API.md pass.**
-
-### Area 1 · pkm.api & agents — 🔺
-
-- **D1 · [P1] Reparenting/saving a subview into a non-superset parent silently
-  empties it — VERIFY the guard covers the interactive path.** A subview composed
-  under a parent whose filter it does not imply can drop to **0 matches** with no
-  warning (the gestor's `Guias de Estudo` 21→0, `Editais` 1→0 under `_meta`).
-  v1.80.0 added the **silent-empty-composition guard** on the API lifecycle writes
-  (`save_view`/`reparent_view`/`save_subproject`), which is D1's API half. **Still
-  to confirm/close:** that the guard also fires on the **interactive** reparent/edit
-  path (`edit_view` → save) — a `:PKMView update` reparent that empties a view must
-  warn the human too, non-blocking (they may intend to retag). **Accept:** an
-  interactive reparent that would drop a view to 0 (parent tag-set not implied by
-  the child's filter) surfaces the same warning the API returns; headless test on
-  the composed-filter count. If already covered, close with a test that proves it.
-
-- **D4 · No "container"/grouping view; a grouping node needs a hand-maintained
-  OR-union.** To make a node like `Disciplinas` show the union of its children (and
-  each child compose to its own set), its filter must be the OR-union of all child
-  tags, maintained by hand as children are added — the v1.81.0 **containment** model
-  rolls a parent up over its children's *filters*, which helps, but there is still
-  no pure grouping node (no content filter of its own) nor an auto-derived
-  "union-of-my-children" that updates on child add/move. **Consider** a container
-  view type whose match set is the auto-maintained union of its children. Interacts
-  with v1.81.0 containment — check whether containment already subsumes this before
-  building. **Feature; specify against the v1.81.0 model first.**
-
-### Area 1 · pkm.api — audit ergonomics
-
-- **D7 · `api.audit()` flags frontmatter-less journals (and bib notes) as
-  `no-frontmatter` ERRORs.** On the real vault, 34 `no-frontmatter` errors, ~30 of
-  them journal notes (`02-Journal/journal_*.md`) — burying the real findings.
-  **Decision needed (dev):** are journals intentionally frontmatter-less? If yes,
-  `audit` should **exempt or downgrade** journals (and document it); if no, journal
-  creation has a gap. Either way it is a plugin-side call. (The 4 **bib** notes
-  without frontmatter — 0006/0007/0008/0009 — look like genuine user-data gaps, not
-  a plugin bug; they belong to the vault owner, not this triage.) **Accept:**
-  `audit` no longer emits `no-frontmatter` ERRORs for by-design journal notes (or a
-  recorded decision that journals must carry frontmatter, with the creation gap
-  filed).
 
 ---
 
@@ -1435,11 +1365,14 @@ the sole write path.
 
 ---
 
-## Requests from the PKM vault-gestor session (2026-08-19) — mostly SHIPPED in v1.80.0
+## Requests from the PKM vault-gestor session (2026-08-19) — fully closed
 
-A second Manager-mode reorg of vault `01` (nest Guias/Editais under `_meta`; group the
-12 disciplines under a new `Disciplinas`; rename a CASP view) produced findings D1–D7.
-Full report: `temp/pkm-gestor-audit-2026-08-19.md`.
+*Single owner for the 2026-08-19 audit; dispositions verified against live code
+27/8/2026.* A second Manager-mode reorg of vault `01` (nest Guias/Editais under
+`_meta`; group the 12 disciplines under a new `Disciplinas`; rename a CASP view)
+produced findings D1–D7. The audit drove an older Lazy-synced build, which is why
+D2/D6 read as open in the report; against the synced code they were already shipped.
+(The `temp/` report has been retired into this section.)
 
 - **D1 [P1] — silent-empty reparent: RESOLVED by a model change (v1.81.0), superseding
   the v1.80.0 warning.** v1.80.0 added a non-blocking empty-composition warning under
