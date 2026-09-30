@@ -67,8 +67,8 @@ creates, `:PKMCite <target>` cites, `:PKMBrowse <expr>` browses.
 
 | Command | Description |
 |---|---|
-| `:PKMTag add <tag> [note=<ref>]` | Add a tag to the current note (or to `note=<ref>` on disk) |
-| `:PKMTag remove <tag> [note=<ref>]` | Remove a tag |
+| `:PKMTag add <tag> [note=<ref>]` | Add a tag to the current note (or to `note=<ref>` on disk); bare (`<leader>ta`) opens the tag picker — type to filter, or to create a new tag |
+| `:PKMTag remove <tag> [note=<ref>]` | Remove a tag; bare (`<leader>tr`) picks from the note's tags |
 | `:PKMTag merge` | Merge one or more tags into a target tag |
 | `:PKMTags add\|remove\|rename <tag>` | The same across **all** notes, with a change-list confirm |
 
@@ -243,7 +243,7 @@ require('pkm').setup({
   },
 
   keymaps = {
-    -- CONTENT: n notes · c cite · f find · v views · M markdown
+    -- CONTENT: n notes · c cite · t tags · f find · v views · M markdown
     new_note        = '<leader>nn',
     new_journal     = '<leader>nj',
     new_scratchpad  = '<leader>ns',
@@ -251,6 +251,8 @@ require('pkm').setup({
     delete_note     = '<leader>nd',
     insert_citation = '<leader>cc',
     goto_citation   = '<leader>cg',
+    add_tag         = '<leader>ta',  -- tag picker: type to filter or create
+    remove_tag      = '<leader>tr',
     browse          = '<leader>ff',
     browse_tags     = '<leader>ft',
     view_last       = '<leader>vl',

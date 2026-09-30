@@ -93,7 +93,9 @@ drops a UTF-8 BOM, strips CR before LF, keeps a CR at EOF, empty file → `{}`;
 used by the index build, where the VimL round trip per file was measurable),
 `utils.ensure_dir(path)`, `utils.notify(msg, level?)` (emits `[pkm]`),
 `utils.type_prefix(note_type)` / `utils.strip_display_prefix(filename, note_type)`
-(shared display helpers used by `ui.lua` and `views.lua`), `utils.is_windows`,
+(shared display helpers used by `ui.lua` and `views.lua`), `utils.fold(s)`
+(lower-case + strip PT accents, upper-case included — the matching key shared by
+`pkm.api`'s searches and the tag picker's filter), `utils.is_windows`,
 `utils.is_wsl`. No `pkm.*` dependencies — safe to require from anywhere.
 
 **commands/** — registers all `:PKM*` commands, split one file per context
@@ -140,7 +142,8 @@ strong justification.** Contains the non-trivial nested-empty-structure parser.
 **ui.lua** — fallback UI (no Telescope): `browse`, `browse_paths`, `browse_recent`,
 `insert_citation_ui`, `merge_tags_ui`, `show_stats`.
 `toggle_bufpanel()` / `is_bufpanel_open()` — per-tabpage buffer-list panel, built on
-`panel.create`. Tag panel is also built on `panel.create`.
+`panel.create`. (The split tag panel, `open_tag_panel`, was retired in v1.84.0: bare
+`:PKMTag add`/`remove` now use `picker.select_tag` — see `commands/tag.lua`.)
 
 **telescope.lua** — all Telescope pickers. Checked at call time via `pcall`.
 `browse`, `browse_paths`, `browse_recent`, `insert_citation_picker`,
@@ -268,7 +271,9 @@ renderer, which is what lets a batch preview be the same picker showing
 "before → after" instead of a screen with its own gesture. `select_tag(rows, opts,
 on_choice)` picks one tag from counted rows, previewing the notes that carry it and
 showing each row's `note`; with `opts.allow_new` typing an unknown tag offers to
-create it. Its sorter is pass-through, so the caller's ranking is what the user
+create it. Typing filters by a case- and accent-insensitive substring (`utils.fold`,
+v1.84.0 — `fisica` lists `física`, so a near-duplicate shows beside the "new tag" row);
+the filter is the pure `M._tag_rows_matching`, asserted headless. Its sorter is pass-through, so the caller's ranking is what the user
 sees; it takes the rows ready-made, so the module has no dependency on the tag engine.
 `select_live(opts, on_confirm)` (v1.8.0 Ph7) is the one where the prompt *is* the
 operation: `compute(prompt)` recomputes the rows on every keystroke, `display`
@@ -337,7 +342,9 @@ image of the buffer-only `citations.add_tag`/`remove_tag`, which must not.
 and restricts to a selection when given one; `rank_tags(rows, ctx)` is pure and
 orders them by relevance to a selection (on some of it → co-occurring → by usage →
 already on all of it), with `suggest_tags(paths?)` gathering that context
-read-only; `format_change(item)` is pure so the
+read-only, and `suggest_tags_for(tags)` (v1.84.0) the same for ONE note given its
+tags directly — the buffer being edited, so unsaved/new notes rank correctly (it
+feeds bare `:PKMTag add`); `format_change(item)` is pure so the
 wording shown before a destructive write is testable, as are `scope_choices` and
 `parse_command_args` (the `:PKMTags` argument contract). The interactive layer is
 `browse_by_tag()` and `batch_on(paths, kind, ops?, header?)` — a selection that
@@ -357,7 +364,7 @@ get_win(), get_state() }`, each owning its own per-tab state. Every panel gets
 lifecycle) uniformly. Optional `spec.width` makes it a **managed-width side split** (fix
 width + `wincmd =` at open, re-assert on `WinResized`); optional `spec.on_open(state,
 helpers)` is the per-panel decoration seam (statusline/winbar/extra autocmds). Consumed by
-`ui` (buffer panel, tag panel), `trash` (restore panel), and `views` (the sidebar since
+`ui` (buffer panel), `trash` (restore panel), and `views` (the sidebar since
 v1.49.0, which since v1.51.0 hosts the `views` and `nav` content providers, plus the
 views/delete panels). Header/statusline hints,
 content formatting, and filtering are deliberately NOT unified — panels differ enough there

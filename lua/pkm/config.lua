@@ -198,9 +198,10 @@ local defaults = {
     link_note        = "<leader>cl",
     backlinks        = "<leader>cb",
     follow_link      = "gf",           -- natural, non-leader; overrides goto-file
-    -- Tags on the current note (buffer-only; opt-in — bind to any free key)
-    add_tag          = false,
-    remove_tag       = false,
+    -- Tags on the current note (`<leader>t`; buffer-only) — the tag picker:
+    -- type to filter, or to create a tag that does not exist yet
+    add_tag          = "<leader>ta",
+    remove_tag       = "<leader>tr",
     -- Find / search — transient pickers (`<leader>f`)
     browse          = "<leader>ff",
     browse_tags     = "<leader>ft",

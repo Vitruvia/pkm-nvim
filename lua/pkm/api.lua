@@ -2,7 +2,8 @@
 -- pkm.api — the programmatic surface for assistants and scripts
 -- =============================================================================
 -- Dependencies : pkm.notes, pkm.citations, pkm.tags, pkm.index, pkm.filter,
---                pkm.views, pkm.check, pkm.export, pkm.vault, pkm.actions
+--                pkm.views, pkm.check, pkm.export, pkm.vault, pkm.actions,
+--                pkm.utils (fold)
 -- Consumed by  : LLM assistants (via `doc/AGENT_PROTOCOL.md` + the skill), the
 --                headless invocation contract, and advanced users from Lua.
 --
@@ -46,20 +47,9 @@ local function to_path(ref)
 end
 
 -- Lower-case and strip common (Portuguese) accents, so a search for `afo` or
--- `orcamentaria` still matches `AFO` and `orçamentária`.
-local ACCENTS = {
-  ['á'] = 'a', ['à'] = 'a', ['â'] = 'a', ['ã'] = 'a', ['ä'] = 'a',
-  ['é'] = 'e', ['ê'] = 'e', ['è'] = 'e', ['ë'] = 'e',
-  ['í'] = 'i', ['ì'] = 'i', ['î'] = 'i', ['ï'] = 'i',
-  ['ó'] = 'o', ['ô'] = 'o', ['õ'] = 'o', ['ö'] = 'o', ['ò'] = 'o',
-  ['ú'] = 'u', ['ü'] = 'u', ['ù'] = 'u', ['û'] = 'u',
-  ['ç'] = 'c', ['ñ'] = 'n',
-}
-local function fold(s)
-  s = tostring(s or ''):lower()
-  for seq, ascii in pairs(ACCENTS) do s = s:gsub(seq, ascii) end
-  return s
-end
+-- `orcamentaria` still matches `AFO` and `orçamentária`. Lives in pkm.utils,
+-- shared with the tag picker's filter.
+local fold = require('pkm.utils').fold
 
 -- Relevance of one index entry to a folded search needle, for ordering find /
 -- find_all results best-first instead of in the index's iteration order. Clear

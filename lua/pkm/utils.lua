@@ -18,6 +18,7 @@
 --   read_lines(path)      → string[]|nil, readfile-equivalent, LuaJIT-only I/O
 --   ensure_dir(path)      → create directory recursively if absent
 --   notify(msg, level?)   → vim.notify with "[pkm] " prefix
+--   fold(s)               → lower-cased, PT-accent-stripped text for matching
 --   type_prefix(nt)       → compact bracketed note-type label, e.g. "[n]"
 --   strip_display_prefix(filename, nt) → stem without number/type prefix
 --   is_editing_win(win)   → boolean, a window a note may be opened in
@@ -106,6 +107,36 @@ end
 ---@param level integer? vim.log.levels constant (default: WARN)
 function M.notify(msg, level)
   vim.notify("[pkm] " .. msg, level or vim.log.levels.WARN)
+end
+
+-- Lower-case and strip common (Portuguese) accents, so a search for `afo` or
+-- `orcamentaria` still matches `AFO` and `orçamentária`. Upper-case forms are
+-- listed too: string.lower is ASCII-only and leaves `Ó` as it is. Every key is
+-- a two-byte UTF-8 sequence led by \195 (U+00C0–U+00FF), which is what lets
+-- fold() replace them all in one gsub pass.
+local ACCENTS = {
+  ['á'] = 'a', ['à'] = 'a', ['â'] = 'a', ['ã'] = 'a', ['ä'] = 'a',
+  ['é'] = 'e', ['ê'] = 'e', ['è'] = 'e', ['ë'] = 'e',
+  ['í'] = 'i', ['ì'] = 'i', ['î'] = 'i', ['ï'] = 'i',
+  ['ó'] = 'o', ['ô'] = 'o', ['õ'] = 'o', ['ö'] = 'o', ['ò'] = 'o',
+  ['ú'] = 'u', ['ü'] = 'u', ['ù'] = 'u', ['û'] = 'u',
+  ['ç'] = 'c', ['ñ'] = 'n',
+  ['Á'] = 'a', ['À'] = 'a', ['Â'] = 'a', ['Ã'] = 'a', ['Ä'] = 'a',
+  ['É'] = 'e', ['Ê'] = 'e', ['È'] = 'e', ['Ë'] = 'e',
+  ['Í'] = 'i', ['Ì'] = 'i', ['Î'] = 'i', ['Ï'] = 'i',
+  ['Ó'] = 'o', ['Ô'] = 'o', ['Õ'] = 'o', ['Ö'] = 'o', ['Ò'] = 'o',
+  ['Ú'] = 'u', ['Ü'] = 'u', ['Ù'] = 'u', ['Û'] = 'u',
+  ['Ç'] = 'c', ['Ñ'] = 'n',
+}
+
+--- Fold a string for case- and accent-insensitive matching: lower-cased, with
+--- common (Portuguese) accents stripped. Shared by pkm.api's searches and the
+--- tag picker's filter, so both treat `fisica` and `FÍSICA` as the same text.
+--- A sequence not in the table is left as it is.
+---@param s any  Coerced with tostring; nil → ''
+---@return string
+function M.fold(s)
+  return (tostring(s or ''):lower():gsub('\195[\128-\191]', ACCENTS))
 end
 
 -- Note-type single-letter abbreviations for compact display prefixes.

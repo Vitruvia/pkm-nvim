@@ -1,11 +1,11 @@
 -- test/test_v160_p1.lua
 -- Integration-style tests for v1.6.0 Phase 1: panel.lua generic lifecycle,
--- the buffer-panel port, and the new tag panel's candidate-list logic.
+-- and the buffer-panel port. (The tag panel it also covered was retired in
+-- v1.84.0 for the shared tag picker — see test/test_v1840_p1.lua.)
 -- Not pure-logic (panel.lua is inherently side-effecting: real window/buffer
 -- creation) — run against a real headless Neovim instance, per the Standing
--- Verification Protocol. The interactive select-and-mutate flow (pressing
--- <CR> on a tag) is left to the manual smoke checklist; what's asserted here
--- is everything cleanly reachable without simulating keypresses.
+-- Verification Protocol. What's asserted here is everything cleanly reachable
+-- without simulating keypresses.
 --
 -- Run from repo root:
 --   nvim --headless -u test/min_init.lua -c "luafile test/test_v160_p1.lua" -c "qa!"
@@ -143,55 +143,6 @@ do
   vim.cmd('bwipeout! ' .. vim.fn.bufnr(f2))
   vim.fn.delete(f1)
   vim.fn.delete(f2)
-end
-
--- ============================================================================
--- SECTION: tag panel candidate-list correctness
--- ============================================================================
-
-print("== tag panel candidates ==")
-
-do
-  local ui = require('pkm.ui')
-
-  -- 'add' mode: candidates are get_all_tags() minus already-present tags.
-  ui._tag_panel.open({
-    mode = 'add',
-    buffer_tags = { 'alpha' },
-    filter = '',
-  })
-  local win = ui._tag_panel.get_win()
-  check("tag panel opens with focus (focus_on_open=true)",
-    vim.api.nvim_get_current_win() == win)
-
-  local buf = vim.api.nvim_win_get_buf(win)
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local has_alpha = false
-  for _, line in ipairs(lines) do
-    if line:match('^%s*alpha%s*$') then has_alpha = true end
-  end
-  check("'add' mode excludes an already-present tag from candidates", not has_alpha)
-
-  -- Switch mode without closing: reopening with a different mode should
-  -- reconfigure in place, not require a manual close first.
-  ui._tag_panel.open({
-    mode = 'remove',
-    buffer_tags = { 'alpha', 'beta' },
-    filter = '',
-  })
-  check("still open after mode switch (no close/reopen needed)", ui._tag_panel.is_open())
-  local lines2 = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
-  local has_alpha2, has_beta2 = false, false
-  for _, line in ipairs(lines2) do
-    if line:match('^%s*alpha%s*$') then has_alpha2 = true end
-    if line:match('^%s*beta%s*$') then has_beta2 = true end
-  end
-  check("'remove' mode shows only buffer's own tags (alpha)", has_alpha2)
-  check("'remove' mode shows only buffer's own tags (beta)", has_beta2)
-
-  -- Regression check for the filter='' vs filter=nil table-constructor bug:
-  -- reopening after a mode switch must not carry over a stale filter.
-  ui._tag_panel.close()
 end
 
 print(string.format("\n%s", failures == 0 and "ALL PASS" or (failures .. " FAILURE(S)")))

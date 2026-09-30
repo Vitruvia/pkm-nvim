@@ -212,6 +212,37 @@ local function tag_display(row, width)
     row.note and ('  ·  ' .. row.note) or '')
 end
 
+--- Tag rows the prompt leaves visible, plus — when the caller allows it and the
+--- typed text is not already a tag — the option to create that tag, first.
+--- Matching is a case- and accent-insensitive substring (`utils.fold`), so
+--- typing `fisica` still lists `física`: a near-duplicate shows up right under
+--- the "new tag" row before it is created. What is created is the text as typed
+--- (trimmed, lower-cased) — the fold only decides what is *shown*. Order is the
+--- caller's; nothing is re-ranked.
+---@param rows      table[]      { { tag, count, paths, note? }, … }
+---@param prompt    string|nil
+---@param allow_new boolean|nil
+---@return table[]
+local function tag_rows_matching(rows, prompt, allow_new)
+  if not prompt or prompt == '' then return rows end
+
+  local typed = prompt:match('^%s*(.-)%s*$'):lower()
+  local needle, filtered, exact = utils.fold(typed), {}, false
+  for _, row in ipairs(rows) do
+    if utils.fold(row.tag):find(needle, 1, true) then filtered[#filtered + 1] = row end
+    if row.tag:lower() == typed then exact = true end
+  end
+
+  if allow_new and not exact and typed ~= '' then
+    table.insert(filtered, 1, { tag = typed, count = 0, paths = {}, is_new = true })
+  end
+
+  return filtered
+end
+
+-- Exposed for the headless tests (the filter is the part a screen hides).
+M._tag_rows_matching = tag_rows_matching
+
 ---@param rows      table[]   { { tag, count, paths, note? }, … }
 ---@param opts      table     { title, allow_new? }
 ---@param on_choice function(tag: string)
@@ -228,27 +259,10 @@ local function telescope_select_tag(rows, opts, on_choice)
     width = math.max(width, vim.fn.strdisplaywidth(row.tag))
   end
 
-  --- Rows the prompt leaves visible, plus — when the caller allows it and the
-  --- typed text is not already a tag — the option to create that tag.
   ---@param prompt string|nil
   ---@return table[]
   local function visible_rows(prompt)
-    if not prompt or prompt == '' then return rows end
-
-    local needle, filtered, exact = prompt:lower(), {}, false
-    for _, row in ipairs(rows) do
-      if row.tag:lower():find(needle, 1, true) then filtered[#filtered + 1] = row end
-      if row.tag:lower() == needle then exact = true end
-    end
-
-    if opts.allow_new and not exact then
-      local tag = prompt:match('^%s*(.-)%s*$'):lower()
-      if tag ~= '' then
-        table.insert(filtered, 1, { tag = tag, count = 0, paths = {}, is_new = true })
-      end
-    end
-
-    return filtered
+    return tag_rows_matching(rows, prompt, opts.allow_new)
   end
 
   pickers.new({}, {

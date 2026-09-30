@@ -53,6 +53,7 @@
 --   tag_counts(paths?)     → { {tag, count, paths}… } sorted — read-only
 --   rank_tags(rows, ctx)   → the same rows ordered by relevance — pure
 --   suggest_tags(paths?)   → every tag, ranked for that selection — read-only
+--   suggest_tags_for(tags) → every tag, ranked for one note given its tags — read-only
 --   format_change(item)    → one "before → after" display line — pure
 --   apply(paths, ops)      → (applied, errors) — writes and invalidates
 --   all_note_paths()       → every indexed note path (helper for whole-vault ops)
@@ -303,7 +304,7 @@ function M.rank_tags(rows, ctx)
       note = string.format('on %d of %d selected', on, selected_count)
     elseif on > 0 then
       tier, score = 4, on
-      note = 'already on all selected'
+      note = selected_count == 1 and 'already on this note' or 'already on all selected'
     elseif cooc > 0 then
       tier, score = 2, cooc
       note = string.format('co-occurs on %d note%s', cooc, cooc == 1 and '' or 's')
@@ -330,25 +331,14 @@ function M.rank_tags(rows, ctx)
   return ranked
 end
 
---- Every vault tag, ordered by relevance to a selection of notes.
---- Read-only. The ranking itself is `rank_tags`; this only gathers the context
---- it needs — which of the selection's notes already carry each tag, and which
---- tags keep company with the selection's tags elsewhere in the vault.
----@param paths string[]|nil  The selection; nil ranks by usage alone
----@return { tag: string, count: integer, paths: string[], note: string|nil }[]
-function M.suggest_tags(paths)
-  local all = M.tag_counts()
-  if not paths or #paths == 0 then
-    return M.rank_tags(all, {})
-  end
-
-  local on_selected = {}
-  local sel_set     = {}
-  for _, row in ipairs(M.tag_counts(paths)) do
-    on_selected[row.tag] = row.count
-    sel_set[row.tag]     = true
-  end
-
+--- Rank every vault tag against a selection described by its tags: gathers the
+--- co-occurrence context `rank_tags` needs, then ranks. Shared by
+--- `suggest_tags` (selection = notes, read from the index) and
+--- `suggest_tags_for` (selection = one note, tags given directly).
+---@param on_selected    table<string, integer>  tag → how many selected notes carry it
+---@param selected_count integer
+---@return table[]
+local function rank_for_selection(on_selected, selected_count)
   -- Co-occurrence: on every note that shares a tag with the selection, count
   -- the tags the selection does not have yet.
   local cooccurrence = {}
@@ -357,7 +347,7 @@ function M.suggest_tags(paths)
     for _, tag in ipairs(entry.tags or {}) do
       local norm = M.normalize(tag)
       if norm then
-        if sel_set[norm] then shares = true else others[norm] = true end
+        if on_selected[norm] then shares = true else others[norm] = true end
       end
     end
     if shares then
@@ -367,11 +357,48 @@ function M.suggest_tags(paths)
     end
   end
 
-  return M.rank_tags(all, {
-    selected_count = #paths,
+  return M.rank_tags(M.tag_counts(), {
+    selected_count = selected_count,
     on_selected    = on_selected,
     cooccurrence   = cooccurrence,
   })
+end
+
+--- Every vault tag, ordered by relevance to a selection of notes.
+--- Read-only. The ranking itself is `rank_tags`; this only gathers the context
+--- it needs — which of the selection's notes already carry each tag, and which
+--- tags keep company with the selection's tags elsewhere in the vault.
+---@param paths string[]|nil  The selection; nil ranks by usage alone
+---@return { tag: string, count: integer, paths: string[], note: string|nil }[]
+function M.suggest_tags(paths)
+  if not paths or #paths == 0 then
+    return M.rank_tags(M.tag_counts(), {})
+  end
+
+  local on_selected = {}
+  for _, row in ipairs(M.tag_counts(paths)) do
+    on_selected[row.tag] = row.count
+  end
+  return rank_for_selection(on_selected, #paths)
+end
+
+--- Every vault tag, ordered by relevance to ONE note whose tags are given
+--- directly — the note being edited, read from its buffer rather than the
+--- index, so an unsaved or brand-new note ranks by what it says right now.
+--- Same ranking as `suggest_tags`; tags on the note sort last ("already on this
+--- note"). Read-only.
+---@param note_tags string[]|nil  The note's tags (any spelling; normalised here)
+---@return { tag: string, count: integer, paths: string[], note: string|nil }[]
+function M.suggest_tags_for(note_tags)
+  local on_selected = {}
+  for _, tag in ipairs(note_tags or {}) do
+    local t = M.normalize(tag)
+    if t then on_selected[t] = 1 end
+  end
+  if next(on_selected) == nil then
+    return M.rank_tags(M.tag_counts(), {})
+  end
+  return rank_for_selection(on_selected, 1)
 end
 
 --- Render one preview() item as a display row: "stem   before → after".

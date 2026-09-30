@@ -402,9 +402,19 @@ TAGS~  `:PKMTag` one note · `:PKMTags` all notes         *:PKMTag* *:PKMTags*
 :PKMTag add <tag>       Add a tag to the current note (buffer-only; the index
         [note=<ref>]    updates on the next :w). `note=<ref>` targets another
                         note on disk instead. Skips if already present.
+                        With no tag (or <leader>ta): the tag picker — every
+                        vault tag with its note count, ranked for this note
+                        (tags that keep company with its tags first, its own
+                        last), previewing the notes carrying each. Typing
+                        filters, case- and accent-insensitively (`fisica`
+                        lists `física`); text that is not a tag yet appears
+                        first as "← new tag" — check for a near-duplicate,
+                        then <CR> to create it. Telescope when installed,
+                        `vim.ui.select` otherwise.
 
 :PKMTag remove <tag>    Remove a tag from the current note (or `note=<ref>`).
-        [note=<ref>]    Picker if no tag is given.
+        [note=<ref>]    With no tag (or <leader>tr): the same picker, listing
+                        only the tags this note carries.
 
 :PKMTag merge           Merge one or more tags into a target tag across all
                         notes. Three-step Telescope picker, or fallback UI.
@@ -926,8 +936,9 @@ destination prompt appears.
       link_note        = "<leader>cl",
       backlinks        = "<leader>cb",
       follow_link      = "gf",           -- non-leader; overrides goto-file
-      add_tag          = false,          -- buffer-only tag ops (opt-in)
-      remove_tag       = false,
+      -- Tags on the current note (<leader>t; buffer-only)
+      add_tag          = "<leader>ta",   -- tag picker; type to create
+      remove_tag       = "<leader>tr",
       -- Find / search — transient pickers (<leader>f)
       browse          = "<leader>ff",
       browse_tags     = "<leader>ft",
@@ -998,6 +1009,10 @@ CITATIONS AND LINKS (<leader>c)~
   <leader>cb   :PKMCite backlinks
   gf           :PKMCite follow      (non-leader; overrides goto-file)
 
+TAGS ON THE CURRENT NOTE (<leader>t)~
+  <leader>ta   :PKMTag add          (tag picker; type to filter or create)
+  <leader>tr   :PKMTag remove       (picker over this note's tags)
+
 FIND AND SEARCH (<leader>f)~
   <leader>ff   :PKMBrowse
   <leader>ft   :PKMBrowse tags
@@ -1036,8 +1051,6 @@ MARKDOWN EDITING (<leader>M, and ]h / [h)~
 Off by default — assign a key to enable~
   new_relative     :PKMNote relative
   set_title        :PKMNote settitle
-  add_tag          :PKMTag add
-  remove_tag       :PKMTag remove
   nav_panel        :PKMPanel nav        (sidebar → heading index)  e.g. <leader>pn
   explorer         :PKMPanel explorer   (sidebar + buffer panel)   e.g. <leader>pe
   toggle_mode      :PKMPanel mode                                  e.g. <leader>pm

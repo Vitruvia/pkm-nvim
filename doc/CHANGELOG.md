@@ -9,7 +9,9 @@ carried forward from version to version and consulted before any fix.*
 
 ### Status checkpoint (post-v1.83.1, 27/8/2026)
 
-- **Current version: v1.83.1.** Since the post-v1.74.0 snapshot below, shipped:
+- **Update 29/9/2026: current version v1.84.0** — the per-note tag picker +
+  `<leader>ta`/`<leader>tr` (see [1.84.0]). The rest of this checkpoint stands.
+- **Current version (at checkpoint): v1.83.1.** Since the post-v1.74.0 snapshot below, shipped:
   the **2026-08-12 vault-gestor batch** (G1–G12, v1.75.0–v1.78.0 + siblings) and
   the view-pop-up type switch (v1.77.0); **relative-level header navigation**
   (v1.79.0); and the **2026-08-19 gestor-reorg thread** — the view-lifecycle API
@@ -78,6 +80,19 @@ carried forward from version to version and consulted before any fix.*
 drifts in Ph2, `:PKMOrphans` and the `bench.lua` separator in Ph3, the absolute
 `original_path` in Ph4 and the `E484` on emptying the trash in Ph5 — the last
 two found while evaluating multi-vault support, along with the one below.)*
+
+- **OPEN (found 29/9/2026, v1.84.0) — tag normalisation lower-cases ASCII only.**
+  `tags.normalize` and `citations.add_tag` use Lua's `string.lower`, which leaves
+  non-ASCII capitals as they are: typing `Óptica` stores the tag `Óptica`, not
+  `óptica`, so `Óptica` and `óptica` can coexist as two tags (and an
+  `ÓPTICA`-typed prompt is not recognised as the existing `óptica`). Pre-existing
+  — every tag write path shares it; the v1.84.0 picker only made it easier to
+  reach, since it lets a new tag be typed. Not data loss (both spellings stay
+  visible and `:PKMTag merge` / `:PKMTags rename` join them), but a silent
+  near-duplicate. **Fix, when taken up:** lower-case with a UTF-8-aware fold
+  (`vim.fn.tolower`, or a `\195`-sequence map like `utils.fold`'s, without the
+  accent strip) inside `tags.normalize`, and route `citations.add_tag`'s own
+  `lower()` through it. Touches every tag write — needs its own phase + tests.
 
 - **FIXED in v1.75.0 — `:PKMView rename` on a spaced view name (G1).** The cause
   was `pkm.args.parse` reading `opts.fargs`, which Neovim splits on whitespace
@@ -159,15 +174,10 @@ fired — is **fixed in v1.17.0**; see that entry.)*
 
 ### Known limitations
 
-- **The add/remove tag panel is always the built-in list, never a Telescope
-  picker.** `:PKMTag add`/`remove` (and the `:PKMAddTag`/`:PKMRemoveTag`
-  aliases) with no tag call `ui.open_tag_panel(mode)` directly, which has no
-  Telescope variant — unlike browse, citations and tag-merge, which pick
-  Telescope when it is present. Fine at ≤5 tags on a note; degrades past ~10,
-  where a fuzzy picker would matter. Pre-existing (v1.13.0 preserved it
-  verbatim); noticed during the v1.13.0 smoke. Fix is a `telescope`-branch in
-  the tag handler mirroring the other panels' fallback pattern — a candidate to
-  fold into v1.14.0.
+- **CLOSED in v1.84.0 — the add/remove tag panel was always the built-in list,
+  never a Telescope picker.** Bare `:PKMTag add`/`remove` now open the shared
+  `picker.select_tag` (Telescope, `vim.ui.select` fallback); the split panel
+  (`ui.open_tag_panel`) is gone. See [1.84.0].
 
 - `notes.is_same_file()`'s case-fold fallback is gated on
   `utils.is_windows`/`utils.is_wsl` (session-level) rather than a per-path
@@ -202,6 +212,73 @@ fired — is **fixed in v1.17.0**; see that entry.)*
     recompute is gone (cold first compute unchanged). The deeper O(N)→O(matched)
     lever (inverted tag index) stays deferred to Phase 3, gated on a fresh
     baseline. See ROADMAP § Views-panel open latency.
+
+---
+
+## [1.84.0] - 29/9/2026
+
+Tagging the current note goes through the real tag picker, and has a key.
+Bare `:PKMTag add` used to open a built-in split list — no Telescope, no fuzzy
+narrowing, and no way to create a tag that did not exist yet (that took typing
+the whole `:PKMTag add <tag>`). The vault's tag list grows with the vault, so by
+the menu-threshold rule (PRINCIPLES § Design, rule 5: a growing list is a
+Telescope picker) it had to move. *(MINOR: new default keymaps; the split tag panel is removed.)*
+
+### Added
+
+- **`<leader>ta` / `<leader>tr` — add / remove a tag on the current note** (new
+  `<leader>t` group). The `add_tag`/`remove_tag` keymaps existed but defaulted to
+  `false`; they now default on. Set either to `false` to unbind.
+- **`tags.suggest_tags_for(note_tags)`** — every vault tag ranked for ONE note
+  given its tags directly (co-occurring tags first, unrelated by usage, the note's
+  own last as "already on this note"). Reads the note's tags from the *buffer*, so
+  an unsaved or brand-new note ranks by what it says now. Same ranking as
+  `suggest_tags`, whose co-occurrence gathering is now a shared local
+  (`rank_for_selection`).
+- **`utils.fold(s)`** — the case- and accent-insensitive matching key, moved out
+  of `pkm.api` (behaviour-preserving there) and extended to upper-case accents
+  (`string.lower` is ASCII-only, so `FÍSICA` used to keep its `Í`). One `gsub`
+  pass over `\195`-led sequences instead of one per accent.
+
+### Changed
+
+- **Bare `:PKMTag add` / `:PKMTag remove` open `picker.select_tag`** — the same
+  Telescope tag picker the bulk `:PKMTags add` flow uses: per-tag note counts, a
+  preview of the notes carrying the tag under the cursor, `vim.ui.select` only
+  without Telescope. **add** lists every vault tag ranked for this note, with
+  `allow_new` — text that is not a tag yet appears first as "← new tag", so you
+  see the similar existing tags *before* creating one. **remove** lists only the
+  note's own tags, in its order, with their vault counts. The write is unchanged
+  and still buffer-only (`citations.add_tag`/`remove_tag`, no `index.invalidate`);
+  focus returns to the note's window before it runs.
+- **The tag picker's filter is case- and accent-insensitive** (`utils.fold`):
+  typing `fisica` lists `física`. What is *created* is the text as typed
+  (trimmed, lower-cased) — the fold only decides what is shown, so `fisica` is
+  still offered as new, with `física` listed right under it. Applies to every
+  `select_tag` surface (bulk add/rename, browse by tag). The filter is now the
+  pure module-level `picker._tag_rows_matching`.
+
+### Removed
+
+- **The split tag panel** (`ui.open_tag_panel`, `ui._tag_panel`) — dead once both
+  modes moved to the picker. Its test section in `test_v160_p1.lua` went with it;
+  the coverage moved to `test_v1840_p1.lua`. Closes the Known limitation recorded
+  since v1.13.0.
+
+### Notes
+
+- `test/test_v1840_p1.lua` (24 checks): `utils.fold` incl. upper-case accents;
+  `_tag_rows_matching` (accent-insensitive listing, leading new-tag row, exact
+  match suppresses it, no-allow_new); `suggest_tags_for` ranking; bare
+  `:PKMTag add`/`remove` through the fallback — new tag lands in the note's buffer
+  normalised, focus returns after the picker moved it, disk untouched + buffer
+  modified, remove offers only the note's tags with counts; `<leader>ta`/`tr`
+  bound; `api.find` still accent-insensitive. Full headless suite **107/107**;
+  luacheck clean on every changed file.
+- Found while testing: **tag normalisation lower-cases ASCII only** — logged under
+  Known Bugs, not fixed here (pre-existing, touches every tag write).
+- The Telescope screen itself is interactive → the author's smoke (percurso note
+  in the test vault) is the verification; tag after it confirms.
 
 ---
 
