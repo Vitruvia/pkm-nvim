@@ -18,7 +18,11 @@
 --   2. Requires the vault: `--root=<path>` must name an existing directory.
 --      There is no fallback — an operation never guesses its vault, and a
 --      silent default is a write into the wrong one.
---   3. Never reads or writes the user's ShaDa (marks, registers, history).
+--   3. Never reads or writes the user's ShaDa (marks, registers, history), and
+--      creates no swap file (v1.85.0 P2): a headless session never leaves a
+--      `.swp` behind that another Neovim would read as "this note is being
+--      edited" — and the `--root=…` argument, which nvim's `-c` form also opens
+--      as an empty buffer, no longer trips E303 on a path it cannot name.
 --   4. Calls `require('pkm').setup({ root_path = root })`, then
 --      `require('pkm.api').health()`, and exits non-zero if it is not ok.
 --
@@ -28,13 +32,18 @@
 -- Usage (flags go after a literal `--`; quote the whole flag — vault paths
 -- contain spaces):
 --
+--   # a task in a file — the recommended form (v1.85.0 P2): `-l` runs the script
+--   # and exits 1 on ANY Lua error; no shell quoting of Lua, no length limit
+--   nvim -u "<pkm-nvim>/scripts/headless_init.lua" -l task.lua \
+--     -- "--root=P:/Note-Vault/02 - LLM-Claude"
+--
+--   # a one-liner (a Lua error here still exits 0 — read stderr)
 --   nvim --headless -u "<pkm-nvim>/scripts/headless_init.lua" \
 --     -c "lua require('pkm.api').emit(require('pkm.api').structure())" \
 --     -c "qa!" -- "--root=P:/Note-Vault/02 - LLM-Claude"
 --
---   # several calls, or any body containing [[wikilinks]]: put the Lua in a file
---   nvim --headless -u "<pkm-nvim>/scripts/headless_init.lua" \
---     -c "luafile task.lua" -c "qa!" -- "--root=P:/Note-Vault/02 - LLM-Claude"
+-- The traps of the `-c` form (wikilinks closing a `[[…]]` long string, E5107,
+-- Windows stdout decoding) are in doc/PKM_API.md § Headless pitfalls.
 --
 -- Flags:
 --   --root=<path>        REQUIRED. The vault this session operates on.
@@ -100,6 +109,10 @@ end
 
 -- Never touch the user's ShaDa; also avoids E138 from rapid successive runs.
 vim.o.shadafile = 'NONE'
+
+-- No swap files: a headless call must not look like an editor holding a note
+-- open (a `.swp` is how one Neovim tells another a file is being edited).
+vim.o.swapfile = false
 
 -- =============================================================================
 -- SECTION: The vault — required, never guessed

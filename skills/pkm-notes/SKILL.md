@@ -64,9 +64,38 @@ nvim --headless -u "<pkm-nvim>/scripts/headless_init.lua" \
 - A **read** returns its data directly.
 - **Batch a task into one headless session.** Each `nvim --headless` starts cold
   and builds the vault index on first use; several operations in *one* session
-  (chain `-c "lua …"` calls, or run one `lua` block) build it once and reuse it
-  warm. Prefer **one session per task**, not one per call — the difference grows
-  with vault size, and `find`/`query`/`find_all` each need the index.
+  build it once and reuse it warm. Prefer **one session per task**, not one per
+  call — the difference grows with vault size, and `find`/`query`/`find_all` each
+  need the index.
+
+**Anything beyond a one-liner: put the Lua in a file and run it with `-l`.**
+
+```sh
+nvim -u "<pkm-nvim>/scripts/headless_init.lua" -l task.lua -- "--root=<vault path>"
+```
+
+`-l` runs `task.lua` after the init, quits by itself, and **exits 1 on any Lua
+error**. The `-c "lua …"` / `-c "luafile …"` forms exit **0** even when the Lua
+fails — check stderr, or you will read an empty stdout as an empty answer. The
+traps the one-liner leads to (all reproduced, v1.85.0):
+
+- **Wikilinks close a `[[…]]` long string.** A body holding `[[0042_note_x]]`
+  ends the string at its `]]`. Write bodies as `[==[ … ]==]`; if the text itself
+  contains `]==]`, use `[====[ … ]====]`.
+- **`E5107` = a Lua syntax error in `-c "lua …"`** — typically a real newline
+  spliced into a `'…'`/`"…"` string, or quotes mangled by the shell. Windows also
+  caps the command line at 32 767 chars (`WinError 206`), and through `cmd.exe`
+  a newline truncates the command so nvim never sees `qa!` and **hangs**. The
+  file + `-l` form avoids all of it.
+- **Windows stdout is UTF-8 bytes, lines ending `\r\n`.** Python's
+  `text=True` decodes as cp1252 by default (silent mojibake): pass
+  `encoding='utf-8'` (add `errors='replace'` against a note with invalid
+  bytes). Printing the result to a cp1252 console raises `UnicodeEncodeError`
+  on characters like `→` — reconfigure stdout to UTF-8 or write to a file.
+- **References:** a path, `note-0042` or `note[0042]` always resolve; a bare
+  `'0042'` resolves only when one note holds that number (since v1.85.0).
+
+Details: `PKM_API.md` § Headless pitfalls.
 
 ## Core operations
 

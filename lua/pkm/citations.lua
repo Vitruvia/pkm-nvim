@@ -16,7 +16,7 @@
 --   get_citable_items_for_picker()   → item[] formatted list for pickers
 --   get_citable_items_list           → alias for get_citable_items_for_picker
 --   complete_insertion(selected)     → insert citation at cursor, trigger sync
---   resolve_citable(ref)             → (item, err) from a path, id or token
+--   resolve_citable(ref)             → (item, err) from a path, id, token or bare number
 --   cite(source_path, target_ref)    → add a citation, both sides of the graph
 --   uncite(source_path, target_ref)  → remove it, both sides of the graph
 --   update_references(target_file?)  → sync cites/cited_by for one file
@@ -699,8 +699,14 @@ end
 
 --- Resolve a reference to a citable note.
 --- Accepts, in this order: an absolute path, an identifier ("note-0042"), or a
---- raw token ("note[0042]"). A short number alone is refused as ambiguous — it
---- could be a note or a bib — because a wrong guess cites the wrong note.
+--- raw token ("note[0042]"); then, failing those, a **bare number** ("0042" or
+--- "42"). Consolidated notes of every type (note/agg/bib) draw from ONE counter
+--- (`notes.get_next_note_number`), so a number names at most one of them; it is
+--- resolved only when exactly one citable note holds it. Two holders (possible
+--- only with hand-made files) is refused, naming both — a wrong guess would cite
+--- the wrong note (v1.85.0 P2; before, every bare number was refused as
+--- "no note matches", on the mistaken premise that a note and a bib could share
+--- a number).
 ---@param ref string
 ---@return table|nil item
 ---@return string|nil err
@@ -715,6 +721,24 @@ function M.resolve_citable(ref)
     if it.identifier == ref then return it end
     if t and s and it.type == t and it.short_id == s then return it end
     if samepath(it.path, as_path) then return it end
+  end
+
+  if ref:match('^%d+$') then
+    local want, holders = tonumber(ref), {}
+    for _, it in ipairs(items) do
+      if (it.type == 'note' or it.type == 'bib') and it.short_id:match('^%d+$')
+          and tonumber(it.short_id) == want then
+        holders[#holders + 1] = it
+      end
+    end
+    if #holders == 1 then return holders[1] end
+    if #holders > 1 then
+      local names = {}
+      for _, it in ipairs(holders) do names[#names + 1] = it.identifier end
+      table.sort(names)
+      return nil, string.format("number '%s' is held by several notes (%s); pass the identifier",
+        ref, table.concat(names, ', '))
+    end
   end
   return nil, string.format("no note matches '%s'", ref)
 end

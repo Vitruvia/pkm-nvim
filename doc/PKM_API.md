@@ -88,10 +88,71 @@ mixed with notify lines ("PKMView: saved view …"). Prefer `api.emit(value)`, w
 writes only the JSON to **stdout**, and read stdout alone:
 
 ```sh
-nvim --headless -u pkm-init.lua \
-  -c "lua require('pkm.api').emit(require('pkm.api').structure())" -c "qa!" 2>/dev/null
+nvim --headless -u "$INIT" \
+  -c "lua require('pkm.api').emit(require('pkm.api').structure())" -c "qa!" \
+  -- "--root=P:/Note-Vault/02 - LLM-Claude" 2>/dev/null
 # → {"ok":true,"total_notes":667,"views":[…],"tags":[…]}   (stdout only, parseable)
 ```
+
+### A task in a file: `-l` (recommended)
+
+Anything beyond a one-liner — several calls, a note body, wikilinks, a value
+built by a program — belongs in a Lua **file** run with `-l`:
+
+```sh
+nvim -u "$INIT" -l task.lua -- "--root=P:/Note-Vault/02 - LLM-Claude"
+```
+
+`-l` runs the script after the init and quits by itself (no `-c "qa!"`), implies
+`--headless`, and **exits 1 on any Lua error** — a syntax error or a raised error
+in `task.lua` — with the message on stderr. The `-c "lua …"` and
+`-c "luafile …"` forms do **not**: a Lua error there still ends with exit status
+0, so a caller that trusts the exit code reads an empty stdout as an empty answer.
+Arguments after the script reach it in `_G.arg`; the init's `--root` is read from
+them as usual. (`print` and `vim.notify` still go to stderr under `-l`; use
+`emit` for the result.) Verified on Neovim 0.11.3, Windows (v1.85.0 P2).
+
+### Headless pitfalls
+
+The first three were hit by a consumer (ferramentas-concursos); every one was
+reproduced here before being written down (v1.85.0 P2, Neovim 0.11.3 on
+Windows 10; `test/test_v1850_p2.lua` pins the ones a test can).
+
+- **A wikilink closes a `[[…]]` long string.** A note body with `[[0042_note_x]]`
+  inside a Lua long string written `[[ … ]]` ends at the wikilink's `]]`; the
+  rest is parsed as code and the chunk fails (`'=' expected near …`). Use a
+  level-2 long bracket, `[==[ … ]==]`; if the body itself contains `]==]`, go up a
+  level — `[====[ … ]====]`. The level is free: pick one whose closer does not
+  occur in the text.
+- **`E5107` is a Lua syntax error in a `-c "lua …"` command.** What causes it in
+  practice is the layer between the caller and Lua: a body with a real newline
+  spliced into a quoted Lua string (`'…'` / `"…"` cannot span lines), or quotes
+  and backslashes reshaped by the caller's shell. On Windows the whole command
+  line is also capped at 32 767 characters — past it the process does not start
+  at all (`WinError 206`, "the filename or extension is too long"). A task in a
+  file run with `-l` (above) has none of these: no shell layer, no length cap.
+  Through `cmd.exe` (`shell=True` in Python) a newline even truncates the
+  command, so `qa!` never arrives and the headless nvim **waits forever** — never
+  pass multi-line Lua through a shell.
+- **Windows: read stdout as UTF-8 bytes.** `emit` writes raw UTF-8 (lines end in
+  `\r\n`). Python's `subprocess.run(…, text=True)` decodes with the locale code
+  page (cp1252) by default, which turns `—` into `â€”` **silently**; pass
+  `encoding='utf-8'`. A note whose file holds invalid UTF-8 passes those bytes
+  through `emit` verbatim, so a strict decode can then fail; `errors='replace'`
+  is the defensive choice. Surrogates come from decoding with
+  `errors='surrogateescape'`, and re-printing such a string — or any character
+  outside cp1252, like `→` — to a cp1252 console raises `UnicodeEncodeError`:
+  reconfigure the caller's stdout to UTF-8
+  (`sys.stdout.reconfigure(encoding='utf-8')`) or write the result to a file.
+- **The `-c` form opens `--root=…` as a buffer.** Arguments after `--` are file
+  names to Neovim, so the session holds an empty buffer named after the flag. It
+  is harmless (nothing writes it, and the shipped init disables swap files so it
+  leaves no `.swp`); `-l` does not do this.
+- **A bare number resolves only when one note holds it.** `resolve('0056')` (or
+  `'56'`) finds the consolidated note numbered 56 — numbers are unique across
+  note/agg/bib. Before v1.85.0 every bare number answered "no note matches". The
+  unambiguous forms — a path, `note-0056`, `note[0056]` — always work, and are
+  what to store.
 
 **Vault selection.** The vault is whatever the init's `root_path` names, or the
 registry default, or `$PKM_VAULT` — nothing outside the registry names a vault.
@@ -139,7 +200,7 @@ path.
 | `cite(source, target_ref)` | `{ ok }` — appends the citation and syncs both sides of the graph. Idempotent. |
 | `uncite(source, target_ref)` | `{ ok, removed }` — removes every citation to the target; `removed` counts the tokens taken out. |
 | `cite_source(citing_ref, source, opts?)` | `{ ok, bib = { path, number, title, created }, cited, heading, token }` — record a **source**: find its bib note (by `source.title`, exact then substring, among indexed `bib` notes) or **create** one (`source.bibtex` at the top, optional `source.notes`, `by` default `claude`), then cite it. Places the token under `opts.heading` (default `References`, created if absent) or, with `opts.heading = false`, at the body's end. Idempotent (`cited = false` if already present). Single-vault, like every citation. |
-| `resolve(ref)` | `{ ok, identifier, type, short_id, path, title }` — resolve a reference to the note it names. |
+| `resolve(ref)` | `{ ok, identifier, type, short_id, path, title }` — resolve a reference to the note it names: a path, an identifier (`note-0042`), a token (`note[0042]`), or a **bare number** (`0042`/`42`, v1.85.0) when exactly one note holds it — several holders are refused, naming them. Every `ref`-taking function resolves the same way. |
 
 ### Tags
 
