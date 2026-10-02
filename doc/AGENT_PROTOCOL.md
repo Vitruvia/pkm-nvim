@@ -403,9 +403,14 @@ This document is policy; `pkm.api` is how the policy is carried out.
   `rename_tag` (which merges onto an existing tag). A gestor reorganises through
   these, never by hand-moving files. Full table: `doc/PKM_API.md`.
 - **Invocation.** The same core is reachable two ways: from Lua inside Neovim, and
-  headless — `nvim --headless -u <init> -c "lua print(vim.json.encode(
-  require('pkm.api').<fn>(...)))" -c "qa!"` returning JSON. The headless boca is
-  what Directive §3.5 means by "external scripts use the API".
+  headless — through the shipped init, `nvim -u <pkm-nvim>/scripts/headless_init.lua
+  -l task.lua -- "--root=<vault>"` (or a `-c "lua require('pkm.api').emit(…)"`
+  one-liner) returning JSON (`doc/PKM_API.md` § Invocation, and § Headless
+  pitfalls). The headless boca is what Directive §3.5 means by "external scripts
+  use the API". A script that edits **several notes at once** — the case that used
+  to justify the §3.5 exception of writing the files directly — has its API path
+  since v1.85.0: `write_notes` (preview, compare-and-swap, all-or-nothing,
+  history, author). The exception no longer applies to it.
 - **The skill** binds this protocol's intents to concrete API calls and is
   installed globally so an assistant reaches for the surface by default. It
   discovers vaults through the registry; it is not handed a path.

@@ -42,7 +42,7 @@ highlighting in pkm-syntax, not here. See `CLAUDE.md` and the suite-level
 ## Current State
 
 **Current version:** see the top released entry in `doc/CHANGELOG.md` (canonical;
-**v1.84.0** as of this writing). All work happens directly on `dev`; `main` holds
+**v1.85.0** as of this writing). All work happens directly on `dev`; `main` holds
 periodic stable backups of `dev`, not an independently maintained release line.
 
 **Working features:**
@@ -185,7 +185,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.84.0)
+## Shipped so far (v1.5.7 → v1.85.0)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -290,6 +290,12 @@ shipped work that still constrain **pending** work are kept in
   `:PKMTag add`/`remove` open the shared Telescope `picker.select_tag` (ranked for
   the note via `tags.suggest_tags_for`, type to create a new tag, accent-insensitive
   filter via the new `utils.fold`); the split tag panel is retired.
+- **v1.85.0 — the ferramentas-concursos dev-report (P1–P4).** Shipped headless
+  init (`scripts/headless_init.lua`, `api.health`), the headless traps verified
+  and documented (`-l` recommended; bare-number refs), the cross-session
+  unsaved-buffer guard (`pkm.instances`, `api.buffer_state`), and checked batch
+  writes (`api.write_notes`/`_preview`/`file_sha`, `.pkm-history/`). P5 is a
+  proposal — § Requests from ferramentas-concursos.
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.

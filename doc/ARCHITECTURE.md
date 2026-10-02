@@ -41,6 +41,8 @@ pkm.nvim/
 │   ├── api.lua         # pkm.api — data-only, headless surface for agents/scripts (wraps cores)
 │   ├── rename.lua      # Name substitution (pure), bulk title write + propagation
 │   ├── bufsync.lua     # Open buffers vs. bulk disk writes (reload / ask / save)
+│   ├── instances.lua   # Other Neovim sessions: UIEnter registry + RPC buffer query (v1.85.0)
+│   ├── writes.lua      # Checked batch body writes: preview, CAS, rollback, history (v1.85.0)
 │   ├── index.lua       # In-memory note index with incremental invalidation
 │   ├── check.lua       # :PKMCheck vault audit (frontmatter, citation graph, numbering, vault refs)
 │   ├── views.lua       # Named views: sidecar, CRUD; the `views` sidebar provider + re-export shim
@@ -58,6 +60,8 @@ pkm.nvim/
 │   (queries/markdown/*.scm and the highlighting module now live in the separate
 │    pkm-syntax repo — see "Highlighting: the pkm-syntax split" below)
 ├── plugin/pkm.lua      # Auto-load marker
+├── scripts/headless_init.lua  # The shipped init for pkm.api headless (v1.85.0): mounts the
+│                       #   three suite plugins, requires --root, health() preflight
 ├── doc/
 │   ├── pkm.txt                    # Vim :help documentation (end-user, in-editor)
 │   ├── ARCHITECTURE.md            # This file: layout, modules, config shape
@@ -287,7 +291,31 @@ itself. Consumed by `export.lua`, `tags.lua` and `rename.lua`.
 disk (v1.8.0 Ph7). `reload(paths)` re-reads unmodified buffers and deliberately
 skips modified ones; `unsaved(paths)` finds the notes open with pending edits and
 `guard(paths, on_ready)` asks about them **only when there are any**, so the
-common case is promptless. Consumed by `rename.lua` and `tags.lua`.
+common case is promptless. Consumed by `rename.lua` and `tags.lua`. It sees only
+the session it runs in; other sessions are `instances.lua`'s.
+
+**instances.lua** — which **other** Neovim sessions hold a note open (v1.85.0).
+Every session with a UI registers on `UIEnter` in `stdpath('state')/pkm/instances/
+<pid>.json` (`{ pid, server, root }`) and unregisters on `VimLeavePre`;
+`$PKM_INSTANCES_DIR` overrides the directory (`test/min_init.lua` points it at a
+temp dir). `registered()` prunes dead pids; `query(server, timeout)` asks one
+session over a short `nvim --server … --remote-expr` with a timeout (a stuck
+editor cannot hang the caller); `state(paths)` merges this session's buffers
+with every answer; `blocking(paths)` is the write guard — modified elsewhere, or
+a registered session that did not answer, blocks. Swap files are deliberately
+not used (absent under `noswapfile`, which the author's config sets). Consumed
+by `api.lua` and `writes.lua`.
+
+**writes.lua** — the checked batch write of note bodies (v1.85.0). `apply(entries,
+opts)` plans every entry first (exists, frontmatter, `expected_sha` CAS on the
+file's sha256, a whole-file `content` copy must keep the frontmatter, no
+duplicates; per-note unified body diff), stops there on `dry_run`, then runs the
+same-session and `instances.blocking` guards and writes all: body, citation
+engine, `last_updated_on`, `index.invalidate`, `bufsync.reload`. A failure
+mid-batch restores the written notes graph-first (old body under the current
+frontmatter through the engine, then the exact bytes). History: one JSON per
+batch in `<root>/.pkm-history/` (relative paths, sha before/after, previous
+text; newest 100 kept). Consumed by `api.lua`.
 
 **rename.lua** — substitution over the names of a set of notes (v1.8.0 Ph7). The
 notes in a selection do not share a name, so the input is a *substitution*, not a

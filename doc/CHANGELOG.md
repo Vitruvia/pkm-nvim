@@ -9,8 +9,10 @@ carried forward from version to version and consulted before any fix.*
 
 ### Status checkpoint (post-v1.83.1, 27/8/2026)
 
-- **Update 29/9/2026: current version v1.84.0** — the per-note tag picker +
-  `<leader>ta`/`<leader>tr` (see [1.84.0]). The rest of this checkpoint stands.
+- **Update 2/10/2026: current version v1.85.0** — the ferramentas-concursos
+  dev-report (headless init, traps, cross-session guard, checked batch writes; see
+  [1.85.0]), awaiting author smoke before tag. Previous: v1.84.0, the per-note tag
+  picker. The rest of this checkpoint stands.
 - **Current version (at checkpoint): v1.83.1.** Since the post-v1.74.0 snapshot below, shipped:
   the **2026-08-12 vault-gestor batch** (G1–G12, v1.75.0–v1.78.0 + siblings) and
   the view-pop-up type switch (v1.77.0); **relative-level header navigation**
@@ -214,6 +216,92 @@ fired — is **fixed in v1.17.0**; see that entry.)*
     baseline. See ROADMAP § Views-panel open latency.
 
 ---
+
+## [1.85.0] - 2/10/2026
+
+The `ferramentas-concursos` consumer (agregador, mentor) audited how it drives
+`pkm.api` and filed five requests in the Claude vault (note 0056). This version
+answers them: an official headless init, the headless traps verified and
+written down, an unsaved-buffer guard that sees the user's own editor, and a
+checked batch write so the consumer can stop writing the student's notes with
+`io.open`. *(MINOR: new API functions and modules; no config change. Awaiting the
+author's smoke before tag — the cross-session registration runs in the real
+editor.)*
+
+### Added
+
+- **`scripts/headless_init.lua`** (P1) — the shipped init for `pkm.api`
+  headless: mounts pkm-nvim + pkm-markdown + pkm-syntax (siblings: a checkout or
+  a Lazy install; `--pkm-suite=<dir>` overrides), **requires `--root`**, never
+  touches ShaDa, creates no swap file (P2), runs `api.health()` and exits 1 on an
+  incomplete session.
+- **`api.health()`** (P1) → `{ ok, root, markdown, syntax, errors, warnings }`;
+  **`pkm.markdown.available()`**.
+- **`pkm.instances`** + **`api.buffer_state(paths, opts?)`** (P3) — every pkm
+  session with a UI registers on `UIEnter` (`stdpath('state')/pkm/instances/
+  <pid>.json`, `$PKM_INSTANCES_DIR` overrides) and leaves on `VimLeavePre`; a
+  checker asks each live session over RPC (`nvim --server … --remote-expr`, with
+  a timeout) which buffers it has loaded and whether modified. `buffer_state` →
+  `{ ok, notes, open, modified, instances, complete }`; `opts.servers` adds
+  addresses.
+- **`pkm.writes`** + **`api.write_notes(entries, opts?)`**,
+  **`api.write_notes_preview(entries)`**, **`api.file_sha(path)`** (P4) — a
+  checked batch write of note bodies: per-note diff, `expected_sha`
+  compare-and-swap, `body` or whole-file `content` (frontmatter must be
+  unchanged), all-or-nothing with a graph-aware rollback, `last_updated_on`
+  stamped, author + previous text in `<root>/.pkm-history/` (newest 100).
+- **`set_body(path, content, opts)`** (P4) — with `opts`, the one-note checked
+  write (`expected_sha`, `dry_run`, `by`, `history` off by default). Without
+  `opts`, unchanged.
+
+### Changed
+
+- **The API's body/section/tag/citation writers refuse a note modified in
+  another registered Neovim session** (P3): `set_body`, `append_body`,
+  `insert_section`, `annotate`, `tag_note`, `cite`/`uncite` (source and backlink
+  target), `cite_source` (citing note). A registered session that does not answer
+  in 2 s **fails closed**. Open-but-clean elsewhere does not block.
+- **`resolve` (and every `ref`-taking function) accepts a bare number** (P2):
+  `'0056'`/`'56'` resolves when exactly one consolidated note holds the number;
+  several holders are refused, naming them. It used to refuse every bare number
+  ("no note matches"), on the premise that a note and a bib could share a number
+  — but note/agg/bib draw from one counter.
+- **`notes.write_section` refuses without pkm-markdown** (P1) instead of crashing
+  with `ipairs` over nil, so `insert_section`/`cite_source`/`annotate(heading)` do
+  too.
+- **Docs.** SKILL.md "How to call it" uses the shipped init, recommends a task file
+  run with **`-l`** (exits 1 on any Lua error — `-c "lua"`/`luafile` exit 0), and
+  lists the traps next to the template; PKM_API.md gains § Headless pitfalls,
+  § Unsaved buffers in other Neovim sessions and § Checked batch writes;
+  AGENT_PROTOCOL § 9 points script batch writes at `write_notes`. **P5**
+  (machine-maintained blocks in a user's note) is a **proposal pending the
+  author** — ROADMAP § Requests from ferramentas-concursos.
+- `test/min_init.lua` isolates the instances registry in a temp dir.
+
+### Notes
+
+- **Verified headless:** `test_v1850_p1` (27 checks), `_p2` (25), `_p3` (38 — the
+  P3 commit message says 39; 38 is the real count), `_p4` (41); full suite
+  **111/111**. Discrimination shown: P1 fails 5 and P2's resolve checks fail 7 on
+  the old code; P4's backlink-rollback check fails on a bytes-only restore. P3's
+  UIEnter registration is exercised with a real UI attached to an `--embed` nvim.
+- **Smoke on the test vault** (`00 - NotesTeste`, through the shipped init with
+  `-l`): preview → apply of two notes (backlink created) → stale-sha retry refused
+  → notes trashed; two `.pkm-history` entries remain there.
+- **Traps established on Windows / Neovim 0.11.3:** a Lua error under
+  `-c "lua"`/`luafile` exits 0; through `cmd.exe` a newline truncates the command
+  and nvim hangs waiting for `qa!`; the command line caps at 32 767 chars
+  (WinError 206); `emit` output is raw UTF-8 with `\r\n`, which Python's
+  `text=True` decodes as cp1252; the author's config sets `noswapfile`, so swap
+  files cannot reveal an open note.
+- **Not run:** the WSL/Linux path of `test_v1850_p3` (WSL unavailable in this
+  session); the test chooses a socket path off Windows.
+- **Author smoke needed before tag:** `:Lazy sync` + restart, then — with a vault
+  `00` note modified and unsaved in the editor — `api.buffer_state` from a headless
+  session must report it modified with the editor's pid, and `set_body` must refuse
+  it; after `:w` it writes; after quitting, the registry entry is gone. Re-run
+  `:PKMAgentProtocol install` so `~/.claude/skills/pkm-notes` carries the new
+  SKILL.md and PKM_API.md.
 
 ## [1.84.0] - 29/9/2026
 
