@@ -107,6 +107,9 @@ api.create('note', { title = 'AFO audit', by = 'claude', tags = { 'afo' },
 
 api.set_body(path, text)       -- replace a note's prose (frontmatter preserved) — YOUR OWN notes
 api.append_body(path, text)    -- add to a note's prose — YOUR OWN notes
+api.write_notes_preview({ { path=p, body=t, expected_sha=s } })  -- diff of N notes, writes nothing
+api.write_notes({ { path=p, body=t, expected_sha=s } })          -- N bodies, all-or-nothing + history
+api.file_sha(path)             -- sha256 of the file NOW: keep it, pass it back as expected_sha
 api.annotate(ref, text, { heading = 'Notes' })  -- add a By-Claude-marked comment to a USER's note (with permission)
 api.rename(ref, new_name)      -- rename, keeping a consolidated note's number/type prefix
 api.changetype(ref, 'agg')     -- change a consolidated note's type (note|agg|bib)
@@ -339,6 +342,13 @@ for vault notes proceeds regardless.
 
 - **The body is yours to write; the frontmatter and citations are not.** Add prose
   with `create(body=…)`, `set_body`, `append_body`; add citations with `cite`.
+- **A script that edits several notes uses `write_notes`, never `io.open`.**
+  Keep each note's `file_sha` when you read/export it; preview with
+  `write_notes_preview`; apply with `write_notes` passing `expected_sha`. It
+  refuses the whole batch if any note changed meanwhile, writes all or none,
+  keeps the graph and `last_updated_on` right, and records author + previous text
+  in `.pkm-history/`. An edited whole-file copy goes in as `content` (its
+  frontmatter must be unchanged).
 - **Build your vault as a graph, not a pile.** When your own notes relate, link
   them with `cite` *within your vault* — that interconnection is what makes the
   vault more than flat memory and what lets structured retrieval (RAG/OKF) work.

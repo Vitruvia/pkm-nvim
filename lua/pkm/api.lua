@@ -3,7 +3,8 @@
 -- =============================================================================
 -- Dependencies : pkm.notes, pkm.citations, pkm.tags, pkm.index, pkm.filter,
 --                pkm.views, pkm.check, pkm.export, pkm.vault, pkm.actions,
---                pkm.instances (cross-session guard), pkm.utils (fold)
+--                pkm.instances (cross-session guard), pkm.writes (checked
+--                batch writes), pkm.utils (fold)
 -- Consumed by  : LLM assistants (via `doc/AGENT_PROTOCOL.md` + the skill), the
 --                headless invocation contract, and advanced users from Lua.
 --
@@ -241,10 +242,26 @@ end
 --- frontmatter and reconciling the citation graph. The prose is yours to write;
 --- citations are not raw tokens, they go through `cite`/`uncite`. Refuses while
 --- the note has unsaved changes in this session or in another registered one.
+---
+--- With `opts` (v1.85.0 P4) it is the CHECKED write — a one-note
+--- `write_notes`: `expected_sha` (compare-and-swap on the file's sha256),
+--- `dry_run` (return the diff, write nothing), `by` (the author recorded),
+--- `history` (default false here; true records a `.pkm-history` entry), and
+--- `last_updated_on` is stamped. Without `opts`, the plain write as before.
 ---@param path string
 ---@param content string|string[]
----@return table  { ok, error? }
-function M.set_body(path, content)
+---@param opts table|nil  { expected_sha?, dry_run?, by?, history?, timeout? }
+---@return table  { ok, error? } — with opts: { ok, dry_run, changed, diff, sha_before, sha_after?, history?, error? }
+function M.set_body(path, content, opts)
+  if type(opts) == 'table' then
+    local r = require('pkm.writes').apply(
+      { { path = path, body = content, expected_sha = opts.expected_sha } },
+      { dry_run = opts.dry_run, by = opts.by, history = opts.history == true, timeout = opts.timeout })
+    local n = r.notes[1] or {}
+    return { ok = r.ok, dry_run = r.dry_run, by = r.by, changed = n.changed, diff = n.diff,
+             sha_before = n.sha_before, sha_after = n.sha_after, history = r.history,
+             error = r.error }
+  end
   path = vim.fn.fnamemodify(path, ':p')
   local blocked = elsewhere({ path })
   if blocked then return blocked end
@@ -264,6 +281,41 @@ function M.append_body(path, content)
   local ok, err = require('pkm.notes').write_body(path, content, { mode = 'append' })
   if not ok then return { ok = false, error = err } end
   return { ok = true }
+end
+
+--- Write the bodies of SEVERAL notes as one checked batch (v1.85.0 P4) — the
+--- API path for a script that exports notes, edits the copies and applies them
+--- back. Every entry is checked before the first write: the note exists,
+--- `expected_sha` (sha256 of the file's bytes when it was read) still matches,
+--- and a `content` copy kept the note's frontmatter line for line. Then no note
+--- may have unsaved changes in this or another registered Neovim session. Any
+--- failure writes nothing; a failure mid-write restores what was written.
+--- Each write keeps the frontmatter, reconciles the citation graph, stamps
+--- `last_updated_on`, invalidates the index and reloads open buffers; the batch
+--- is recorded (author, previous text) in `<root>/.pkm-history/`.
+---@param entries table[]  { path, body? | content?, expected_sha? } — body = the
+---                        prose after the frontmatter; content = the whole file
+---@param opts table|nil   { dry_run?, by? ('claude'), history? (true), timeout? }
+---@return table  { ok, dry_run, by, written, unchanged, notes = [{ path, changed,
+---                diff, sha_before, sha_after?, error? }], history?, rolled_back?, error? }
+function M.write_notes(entries, opts)
+  return require('pkm.writes').apply(entries, opts)
+end
+
+--- What `write_notes` would do — the per-note diff, `changed` and `sha_before`,
+--- after the same checks — touching nothing (the `tag_preview` twin).
+---@param entries table[]
+---@return table  the `write_notes` result with `dry_run = true`
+function M.write_notes_preview(entries)
+  return require('pkm.writes').apply(entries, { dry_run = true })
+end
+
+--- The sha256 of a note file's bytes, exactly as on disk — the `expected_sha`
+--- to pass to `write_notes`/`set_body` for a compare-and-swap. nil if unreadable.
+---@param path string
+---@return string|nil
+function M.file_sha(path)
+  return require('pkm.writes').sha(path)
 end
 
 --- Write into a *named section* of a note — placement-aware. The section is

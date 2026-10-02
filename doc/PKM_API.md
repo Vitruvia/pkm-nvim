@@ -182,7 +182,10 @@ path.
 | Function | Returns |
 |---|---|
 | `create(note_type, opts)` | `{ ok, path, number, filename, title, tags, author }` — `note_type` is `"note"`/`"agg"`/`"bib"`; `opts = { title?, by?, tags?, body?, source_author?, source_type? }`. `body` (string or list of lines) populates the note; `by` stamps the authorship demarcation (§ 7). Headless: no prompt, no buffer opened. |
-| `set_body(path, content)` | `{ ok }` — replace a note's body (the prose after the frontmatter); the frontmatter is preserved and the citation graph is reconciled to the new body. Refuses behind an unsaved buffer — in this session **or in another Neovim session** (v1.85.0; see *Unsaved buffers in other Neovim sessions* below). |
+| `set_body(path, content, opts?)` | `{ ok }` — replace a note's body (the prose after the frontmatter); the frontmatter is preserved and the citation graph is reconciled to the new body. Refuses behind an unsaved buffer — in this session **or in another Neovim session** (v1.85.0; see *Unsaved buffers in other Neovim sessions* below). **With `opts`** (v1.85.0) it is the *checked* write, a one-note `write_notes`: `opts = { expected_sha?, dry_run?, by?, history?, timeout? }` → `{ ok, dry_run, by, changed, diff, sha_before, sha_after?, history?, error? }`; `last_updated_on` is stamped; `history` defaults to **false** here. |
+| `write_notes(entries, opts?)` | `{ ok, dry_run, by, written, unchanged, notes = [{ path, changed, diff, sha_before, sha_after?, error? }], history?, rolled_back?, error? }` — write the bodies of **several notes as one checked batch** (v1.85.0). `entries = [{ path, body? \| content?, expected_sha? }]`: `body` is the prose after the frontmatter; `content` is the **whole file** as edited from an exported copy — its frontmatter must equal the note's, line for line, or the entry is refused (the frontmatter is the API's). `expected_sha` is the sha256 of the file's bytes when it was read (`file_sha`) — a compare-and-swap. `opts = { dry_run?, by? ('claude'), history? (true), timeout? }`. See *Checked batch writes* below. |
+| `write_notes_preview(entries)` | the `write_notes` result with `dry_run = true` — every check, the per-note unified `diff` (of the body), `changed`, `sha_before`; writes nothing. The `tag_preview` twin. |
+| `file_sha(path)` | the sha256 (hex) of the note file's bytes exactly as on disk — what to keep at export and pass back as `expected_sha`; `nil` if unreadable. Same value as `vim.fn.sha256(io.open(path, 'rb'):read('*a'))`. |
 | `append_body(path, content)` | `{ ok }` — add to a note's body, same rules. |
 | `insert_section(path, heading, content, opts)` | `{ ok }` — write into a *named section* (found by heading text); `opts.mode` is `'append'` (default) or `'replace'`. Frontmatter preserved, graph reconciled. |
 | `annotate(ref, content, opts)` | `{ ok }` — add a **marked comment** to a note that is **not** your own. The `By <Author>: ` marker is applied for you (not optional) and the block lands at a boundary — the end of `opts.heading`'s section, or the note's end — never inline. `opts = { heading?, by? }` (`by` defaults to `claude`). It writes only your block; the user's text is untouched. Authorisation is the caller's (see §§ 5.3, 7 in `doc/AGENT_PROTOCOL.md`); this supplies mechanism + marker, not permission. |
@@ -192,6 +195,38 @@ path.
 | `delete(path)` | `{ ok, author, trashed }` — through the guard: refuses any note with no `By<Author>` marker, and trashes rather than hard-deletes. |
 | `merge(survivor_ref, absorbed_ref, opts?)` | `{ ok, survivor, redirected, absorbed_title }` — fold `absorbed` into `survivor`: append its body (under `opts.heading` if given), **redirect** its citation graph onto the survivor (inbound citers re-pointed, the survivor gains the absorbed note's outbound cites), union its topical tags, then trash it. The graph is redirected *before* the trash, so nothing dangles. **Both notes must be assistant-authored.** Destructive — the act on `duplicates`/`unlinked_pairs` findings. |
 | `authored_by(path)` | the agent author read from the filename, or `nil` for a human note. |
+
+**Checked batch writes (v1.85.0).** For a script that edits a *set* of notes —
+export, change the copies, apply them back — `write_notes` gives what a loop of
+`set_body` (or writing the files itself) does not:
+
+1. **Plan, all reads.** Every entry is checked before anything is written: the
+   note exists and has a frontmatter; `expected_sha` still matches (else
+   `"the note changed since it was read (sha mismatch)"`); a `content` copy kept
+   the frontmatter; no note appears twice. Each note gets its body `diff`
+   (unified, 3 lines of context). `dry_run` stops here.
+2. **Guard.** No note to be written may have unsaved changes in this session or
+   in another registered Neovim session (§ *Unsaved buffers in other Neovim
+   sessions*); an unanswering session fails closed.
+3. **Write, all or nothing.** Each changed note: body written (frontmatter kept),
+   citation graph reconciled, `last_updated_on` stamped, index invalidated, open
+   buffers reloaded. If one fails, the ones already written are **restored** —
+   graph first (the edges their new bodies created on other notes are removed),
+   then the exact previous bytes — and the result says `rolled_back = true`.
+   Unchanged entries are skipped (`unchanged` counts them).
+4. **History.** One JSON file per applied batch in `<root>/.pkm-history/`:
+   `{ version, at, by, notes = [{ path, sha_before, sha_after, before }] }` —
+   `path` relative to the root, `before` the full previous file text (enough to
+   undo by hand). The newest 100 are kept. `history = false` skips it.
+
+Any failure in 1–2 writes nothing (`written = 0`). Between the check and the
+write there is a short window an outside edit could slip into; the sha is
+checked once, at planning.
+
+*Mechanism, not permission.* On a **user's** note this rewrites what the user
+wrote, which `doc/AGENT_PROTOCOL.md` § 7 allows only under an explicit task
+authorisation; `write_notes` supplies the safety (preview, precondition,
+atomicity, history, author), not the right.
 
 ### Citations
 
