@@ -83,6 +83,14 @@ end
 -- completing their atomic write+rename.
 vim.o.shadafile = 'NONE'
 
+-- Never reach a real editor: the cross-instance guard (pkm.instances, v1.85.0)
+-- asks every Neovim registered in the instances directory about open notes. A
+-- test session uses its own empty registry unless one was handed down (a test
+-- that spawns a "registered" child sets it for both sides).
+if not vim.env.PKM_INSTANCES_DIR or vim.env.PKM_INSTANCES_DIR == '' then
+  vim.env.PKM_INSTANCES_DIR = vim.fn.tempname() .. '_pkm_instances'
+end
+
 -- =============================================================================
 -- SECTION: Flag parsing
 -- =============================================================================

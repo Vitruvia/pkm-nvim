@@ -3,7 +3,7 @@
 -- =============================================================================
 -- Dependencies : pkm.notes, pkm.citations, pkm.tags, pkm.index, pkm.filter,
 --                pkm.views, pkm.check, pkm.export, pkm.vault, pkm.actions,
---                pkm.utils (fold)
+--                pkm.instances (cross-session guard), pkm.utils (fold)
 -- Consumed by  : LLM assistants (via `doc/AGENT_PROTOCOL.md` + the skill), the
 --                headless invocation contract, and advanced users from Lua.
 --
@@ -43,6 +43,18 @@ local function to_path(ref)
   if vim.fn.filereadable(p) == 1 then return p end
   local item = require('pkm.citations').resolve_citable(ref)
   if item and item.path then return item.path end
+  return nil
+end
+
+--- The cross-instance guard for a write (v1.85.0 P3): an error table when one of
+--- `paths` has unsaved changes in ANOTHER registered Neovim session, or such a
+--- session did not answer; nil when the write may proceed. This session's own
+--- buffers stay the cores' guard. See pkm.instances.
+---@param paths string[]
+---@return table|nil  { ok = false, error }
+local function elsewhere(paths)
+  local err = require('pkm.instances').blocking(paths)
+  if err then return { ok = false, error = err } end
   return nil
 end
 
@@ -227,12 +239,16 @@ end
 
 --- Replace a note's body — the prose after the frontmatter — preserving the
 --- frontmatter and reconciling the citation graph. The prose is yours to write;
---- citations are not raw tokens, they go through `cite`/`uncite`.
+--- citations are not raw tokens, they go through `cite`/`uncite`. Refuses while
+--- the note has unsaved changes in this session or in another registered one.
 ---@param path string
 ---@param content string|string[]
 ---@return table  { ok, error? }
 function M.set_body(path, content)
-  local ok, err = require('pkm.notes').write_body(vim.fn.fnamemodify(path, ':p'), content, { mode = 'replace' })
+  path = vim.fn.fnamemodify(path, ':p')
+  local blocked = elsewhere({ path })
+  if blocked then return blocked end
+  local ok, err = require('pkm.notes').write_body(path, content, { mode = 'replace' })
   if not ok then return { ok = false, error = err } end
   return { ok = true }
 end
@@ -242,7 +258,10 @@ end
 ---@param content string|string[]
 ---@return table  { ok, error? }
 function M.append_body(path, content)
-  local ok, err = require('pkm.notes').write_body(vim.fn.fnamemodify(path, ':p'), content, { mode = 'append' })
+  path = vim.fn.fnamemodify(path, ':p')
+  local blocked = elsewhere({ path })
+  if blocked then return blocked end
+  local ok, err = require('pkm.notes').write_body(path, content, { mode = 'append' })
   if not ok then return { ok = false, error = err } end
   return { ok = true }
 end
@@ -257,8 +276,10 @@ end
 ---@param opts table|nil  { mode?: 'append'|'replace' }
 ---@return table  { ok, error? }
 function M.insert_section(path, heading, content, opts)
-  local ok, err = require('pkm.notes').write_section(
-    vim.fn.fnamemodify(path, ':p'), heading, content, opts or {})
+  path = vim.fn.fnamemodify(path, ':p')
+  local blocked = elsewhere({ path })
+  if blocked then return blocked end
+  local ok, err = require('pkm.notes').write_section(path, heading, content, opts or {})
   if not ok then return { ok = false, error = err } end
   return { ok = true }
 end
@@ -367,6 +388,8 @@ end
 function M.annotate(ref, content, opts)
   local path = to_path(ref)
   if not path then return { ok = false, error = 'note not found: ' .. tostring(ref) } end
+  local blocked = elsewhere({ path })
+  if blocked then return blocked end
   local ok, err = require('pkm.notes').annotate(path, content, opts or {})
   if not ok then return { ok = false, error = err } end
   return { ok = true }
@@ -410,6 +433,8 @@ end
 function M.cite(source, target_ref)
   local src = to_path(source)
   if not src then return { ok = false, error = 'source note not found: ' .. tostring(source) } end
+  local blocked = elsewhere({ src, to_path(target_ref) })   -- the target gets the backlink
+  if blocked then return blocked end
   local ok, err = require('pkm.citations').cite(src, target_ref)
   if not ok then return { ok = false, error = err } end
   return { ok = true }
@@ -422,6 +447,8 @@ end
 function M.uncite(source, target_ref)
   local src = to_path(source)
   if not src then return { ok = false, error = 'source note not found: ' .. tostring(source) } end
+  local blocked = elsewhere({ src, to_path(target_ref) })
+  if blocked then return blocked end
   local ok, removed, err = require('pkm.citations').uncite(src, target_ref)
   if not ok then return { ok = false, error = err } end
   return { ok = true, removed = removed }
@@ -480,6 +507,8 @@ function M.cite_source(citing_ref, source, opts)
   if not citing then
     return { ok = false, error = 'citing note not found: ' .. tostring(citing_ref) }
   end
+  local blocked = elsewhere({ citing })
+  if blocked then return blocked end
 
   local citations = require('pkm.citations')
   local index     = require('pkm.index')
@@ -603,7 +632,10 @@ end
 ---@param ops table
 ---@return table  { ok, error? }
 function M.tag_note(path, ops)
-  local ok, err = require('pkm.tags').write_note_tags(vim.fn.fnamemodify(path, ':p'), ops)
+  path = vim.fn.fnamemodify(path, ':p')
+  local blocked = elsewhere({ path })
+  if blocked then return blocked end
+  local ok, err = require('pkm.tags').write_note_tags(path, ops)
   if not ok then return { ok = false, error = err } end
   return { ok = true }
 end
@@ -1147,6 +1179,42 @@ function M.health()
     syntax   = syn,
     errors   = errors,
     warnings = warnings,
+  }
+end
+
+-- =============================================================================
+-- SECTION: Open buffers across Neovim sessions (read)
+-- =============================================================================
+
+--- Where are these notes open, and with unsaved changes? Answers for THIS
+--- session and for every other Neovim running pkm-nvim with a UI (each
+--- registers itself on UIEnter — pkm.instances), asked over its RPC server with
+--- a timeout; `opts.servers` adds addresses to ask (e.g. an editor started with
+--- `--listen` that does not run this version of pkm). The same check guards the
+--- body/section/tag/citation writes of this API, so a caller needs this only to
+--- check BEFORE preparing work, or for notes it will write some other way.
+---@param paths string[]  note paths
+---@param opts table|nil  { servers?: string[], timeout?: integer (ms, default 2000) }
+---@return table  { ok, notes = { { path, open, modified, where = { { pid, modified, self? } } } },
+---                 open, modified, instances = { { pid?, server, status, error? } }, complete }
+function M.buffer_state(paths, opts)
+  if type(paths) == 'string' then paths = { paths } end
+  if type(paths) ~= 'table' then return { ok = false, error = 'paths must be a list' } end
+  local abs = {}
+  for i, p in ipairs(paths) do abs[i] = vim.fn.fnamemodify(p, ':p') end
+  local st = require('pkm.instances').state(abs, opts)
+  local open, modified = {}, {}
+  for _, n in ipairs(st.notes) do
+    if n.open then open[#open + 1] = n.path end
+    if n.modified then modified[#modified + 1] = n.path end
+  end
+  return {
+    ok        = true,
+    notes     = st.notes,
+    open      = open,
+    modified  = modified,
+    instances = st.instances,
+    complete  = st.complete,
   }
 end
 

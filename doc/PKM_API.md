@@ -182,7 +182,7 @@ path.
 | Function | Returns |
 |---|---|
 | `create(note_type, opts)` | `{ ok, path, number, filename, title, tags, author }` — `note_type` is `"note"`/`"agg"`/`"bib"`; `opts = { title?, by?, tags?, body?, source_author?, source_type? }`. `body` (string or list of lines) populates the note; `by` stamps the authorship demarcation (§ 7). Headless: no prompt, no buffer opened. |
-| `set_body(path, content)` | `{ ok }` — replace a note's body (the prose after the frontmatter); the frontmatter is preserved and the citation graph is reconciled to the new body. Refuses behind an unsaved buffer. |
+| `set_body(path, content)` | `{ ok }` — replace a note's body (the prose after the frontmatter); the frontmatter is preserved and the citation graph is reconciled to the new body. Refuses behind an unsaved buffer — in this session **or in another Neovim session** (v1.85.0; see *Unsaved buffers in other Neovim sessions* below). |
 | `append_body(path, content)` | `{ ok }` — add to a note's body, same rules. |
 | `insert_section(path, heading, content, opts)` | `{ ok }` — write into a *named section* (found by heading text); `opts.mode` is `'append'` (default) or `'replace'`. Frontmatter preserved, graph reconciled. |
 | `annotate(ref, content, opts)` | `{ ok }` — add a **marked comment** to a note that is **not** your own. The `By <Author>: ` marker is applied for you (not optional) and the block lands at a boundary — the end of `opts.heading`'s section, or the note's end — never inline. `opts = { heading?, by? }` (`by` defaults to `claude`). It writes only your block; the user's text is untouched. Authorisation is the caller's (see §§ 5.3, 7 in `doc/AGENT_PROTOCOL.md`); this supplies mechanism + marker, not permission. |
@@ -264,6 +264,49 @@ Read the whole shape cheaply with `structure()`.
 |---|---|
 | `emit(value)` | writes `value` as **one line of JSON to real stdout** (fd 1) and returns the encoded string. Use this instead of `print(vim.json.encode(...))` in headless invocations: under `--headless`, `print`/`vim.notify` land on the **message stream (stderr)**, so JSON printed that way is interleaved with notify noise. `emit` keeps stdout clean JSON — capture stdout alone (`2>/dev/null`) and it parses. |
 | `health()` | `{ ok, root, markdown, syntax, errors, warnings }` — the **preflight**: can this session run the whole API? `ok = false` when a write would fail for an environmental reason — `root_path` not an existing directory, or **pkm-markdown not loaded** (the section writers need it). pkm-syntax missing is only a warning (no API function needs it). `scripts/headless_init.lua` calls it and exits 1 when it is not ok. |
+
+### Unsaved buffers in other Neovim sessions (v1.85.0)
+
+| Function | Returns |
+|---|---|
+| `buffer_state(paths, opts?)` | `{ ok, notes = [{ path, open, modified, where = [{ pid, modified, self? }] }], open, modified, instances = [{ pid?, server, status, error? }], complete }` — where each note is **loaded**, and whether **modified**, in this session and in every other registered Neovim session. `open`/`modified` list the paths; `instances` says how each session answered (`status` = `answered` \| `timeout` \| `unreachable` \| `error`); `complete = false` when a session could not be asked. `opts = { servers?, timeout? }`: `servers` adds RPC addresses to ask (e.g. an editor started with `--listen \\.\pipe\nvim-pkm`), `timeout` is the ms each gets (default 2000). Read-only. |
+
+**Why it exists.** The unsaved-buffer guard of the writers used to look only at
+the session it runs in (`bufsync.buffer_for`). A headless call is another
+process, so it could not see the user's editor holding the note with unsaved
+edits — the very case the guard is for. **How it works.** Every pkm-nvim
+session **with a UI** registers itself on `UIEnter` in
+`stdpath('state')/pkm/instances/<pid>.json` (`{ pid, server, root }`) and
+removes the entry on `VimLeavePre` (`$PKM_INSTANCES_DIR` overrides the
+directory). The check reads that directory, drops entries whose process is gone,
+and asks each live session over its RPC server — through a short
+`nvim --server … --remote-expr` with a timeout, so a stuck editor cannot hang the
+caller — which buffers it has loaded and whether they are modified. Headless
+sessions never register.
+
+**The writers use it.** `set_body`, `append_body`, `insert_section`, `annotate`,
+`tag_note`, `cite`/`uncite` (source **and** target, which gets the backlink) and
+`cite_source` (the citing note) refuse with `ok = false` when the note is
+modified in another session (`"the note has unsaved changes in another Neovim
+(pid N) — save it there first"`), and **fail closed** when a registered session
+does not answer (`"… did not answer — cannot confirm …"`). A note open but
+**unmodified** elsewhere does not block: that session notices the file changed.
+
+**Limits — what it cannot see.**
+
+- A session that is **not registered**: one running a pkm-nvim older than
+  v1.85.0 (until `:Lazy sync` + restart), one without pkm loaded, Vim, or another
+  editor. Pass such an editor's address in `opts.servers` to `buffer_state` (the
+  writers ask only the registry).
+- Writes outside the list above — `rename`, `changetype`, `transpose`, `merge`,
+  the batch `tag`/`rename_tag`, `set_membership`, `delete`, and the bib note a
+  `cite_source` creates or links — check this session only. Call `buffer_state`
+  first when that matters.
+- The check and the write are two steps: an edit made in between is not seen
+  (the window is the write's own duration).
+- Swap files are deliberately **not** used: they exist only where `swapfile` is
+  on, in a `directory` the reader would have to guess — and the author's config
+  sets `noswapfile`, which makes a swap scan blind where it matters.
 
 ### UI state (read)
 

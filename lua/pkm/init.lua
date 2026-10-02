@@ -69,6 +69,10 @@ function M.setup(user_config)
   require('pkm.views').setup()
   require('pkm.nav').setup(M.config)
 
+  -- Register this session (once a UI attaches) so a headless pkm.api call in
+  -- another process can ask whether a note is open here with unsaved edits.
+  require('pkm.instances').setup()
+
 end
 
 -- =============================================================================

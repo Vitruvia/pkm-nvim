@@ -135,7 +135,17 @@ api.duplicates()               -- near-identical notes (body/title/tag similarit
 api.delete(path)               -- guarded: removes only notes YOU authored, trashes them
 api.merge(survivor, absorbed)  -- fold one note into another: body + redirected graph, then trash (both must be yours) — DESTRUCTIVE
 api.actions()                  -- discover the enumerable bulk operations
+api.buffer_state(paths)        -- is a note open/MODIFIED in the user's editor (another Neovim)? read-only
 ```
+
+**The user's editor is another process.** The body/section/tag/citation writes
+refuse when the note has unsaved changes in another Neovim session running
+pkm-nvim (each registers itself when its UI starts), and refuse when such a
+session does not answer. An `ok = false` saying *"unsaved changes in another
+Neovim"* means: stop and ask the user to save — never retry around it. Before a
+batch, or for an editor that is not registered, ask `buffer_state(paths,
+{ servers = { … } })` first (`PKM_API.md` § Unsaved buffers in other Neovim
+sessions).
 
 See `PKM_API.md` for the complete list and every return shape.
 
