@@ -1110,6 +1110,47 @@ function M.emit(value)
 end
 
 -- =============================================================================
+-- SECTION: Health (preflight)
+-- =============================================================================
+
+--- Is this session able to run the whole API? The preflight a headless caller
+--- makes before writing — the answer to "my init loaded pkm, but did it load
+--- everything?". A minimal init that puts only pkm-nvim on the runtimepath
+--- passes `create`/`find`/`read` and then fails on the section writers, which
+--- need the pkm-markdown sibling; this names that gap up front. `ok` is false
+--- when a write would fail for an environmental reason: no usable root, or
+--- pkm-markdown missing. pkm-syntax is highlighting only — its absence is a
+--- warning, since no API function needs it.
+---@return table  { ok, root, markdown, syntax, errors, warnings }
+function M.health()
+  local root   = (require('pkm').config or {}).root_path
+  local md     = require('pkm.markdown').available()
+  local syn    = pcall(require, 'pkm-syntax')
+  local errors, warnings = {}, {}
+
+  if type(root) ~= 'string' or root == '' or vim.fn.isdirectory(root) == 0 then
+    errors[#errors + 1] = 'root_path is not an existing directory: ' .. tostring(root)
+  end
+  if not md then
+    errors[#errors + 1] = 'pkm-markdown is not on the runtimepath: insert_section, '
+      .. 'cite_source and annotate(heading) will refuse'
+  end
+  if not syn then
+    warnings[#warnings + 1] = 'pkm-syntax is not on the runtimepath (highlighting only; '
+      .. 'no API function needs it)'
+  end
+
+  return {
+    ok       = #errors == 0,
+    root     = root,
+    markdown = md,
+    syntax   = syn,
+    errors   = errors,
+    warnings = warnings,
+  }
+end
+
+-- =============================================================================
 -- SECTION: UI state (read)
 -- =============================================================================
 

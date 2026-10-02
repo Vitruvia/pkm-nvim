@@ -75,4 +75,15 @@ function facade.formatexpr()
   return 1  -- pkm-markdown absent: let Vim format internally rather than no-op
 end
 
+--- Whether the real `pkm-markdown` backend is loaded. The no-op degradation above
+--- is right for the interactive editor (a missing sibling must not break the
+--- rest of pkm-nvim), but a *write* that depends on the backend's answer — the
+--- section writer reads `scan_headings` — must not run on a stub that returns
+--- nil. Such callers ask this first and refuse with a clear message. A real key,
+--- like `formatexpr`, so it never resolves to the proxy's no-op.
+---@return boolean
+function facade.available()
+  return backend() ~= nil
+end
+
 return facade

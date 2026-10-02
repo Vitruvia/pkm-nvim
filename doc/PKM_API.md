@@ -40,32 +40,46 @@ local res = api.create('note', { title = 'Alpha', by = 'claude', tags = { 'foo' 
 ### Headless, returning JSON (the external contract)
 
 An assistant running in a terminal shells out to Neovim, prints the JSON, and
-quits. The one requirement is an init that puts pkm on the runtimepath and points
-it at the vault — either the user's own config, or a minimal init:
+quits. It needs an init that puts the **whole suite** on the runtimepath —
+pkm-nvim **and** its siblings pkm-markdown and pkm-syntax — and points it at the
+vault. Use the one the plugin ships, **`scripts/headless_init.lua`** (v1.85.0):
 
-```lua
--- pkm-init.lua  (minimal; assumes pkm is installed on the runtimepath)
-vim.opt.runtimepath:append('/path/to/pkm-nvim')   -- omit if a plugin manager already adds it
-require('pkm').setup({ root_path = '/path/to/Note-Vault/02 - LLM-Claude' })
-```
+- it prepends pkm-nvim (its own repo) and the two siblings, found next to it —
+  the layout of both a checkout (`…/pkm-suite/pkm-*`) and a Lazy.nvim install
+  (`<data>/lazy/pkm-*`); `--pkm-suite=<dir>` names another parent;
+- it **requires `--root=<vault>`** (an existing directory) — no default, no guess;
+- it never touches the user's ShaDa;
+- after `setup` it runs `api.health()` and **exits 1** on an incomplete session.
 
-Then any function is one command. **Quote the whole `-c` argument** (vault paths
-contain spaces), and JSON-encode the result:
+Every failure is one stderr line and exit status 1. Init flags go after a literal
+`--`, and a vault path must be **quoted as one argument** (it contains spaces).
+
+*Why not a two-line init.* `require('pkm').setup({ root_path = … })` with only
+pkm-nvim on the runtimepath half-works: `create`/`find`/`read` succeed, while the
+section writers — `insert_section`, `cite_source`, `annotate` with a heading —
+need pkm-markdown's heading scanner. Since v1.85.0 they refuse with an error
+naming pkm-markdown (earlier they crashed with `ipairs` over nil). A custom init
+must mount all three plugins and should check `health()` before writing.
+
+Then any function is one command:
 
 ```sh
+INIT="<pkm-nvim>/scripts/headless_init.lua"
+
 # create a note in the assistant's own vault
-nvim --headless -u pkm-init.lua \
-  -c "lua print(vim.json.encode(require('pkm.api').create('note', { title = 'Alpha', by = 'claude' })))" \
-  -c "qa!"
+nvim --headless -u "$INIT" \
+  -c "lua require('pkm.api').emit(require('pkm.api').create('note', { title = 'Alpha', by = 'claude' }))" \
+  -c "qa!" -- "--root=P:/Note-Vault/02 - LLM-Claude"
 # → {"ok":true,"path":"…/0007_note_ByClaude_Alpha.md","number":7,"filename":"0007_note_ByClaude_Alpha.md","title":"Alpha","tags":["by-claude"],"author":"Claude"}
 
 # audit the vault
-nvim --headless -u pkm-init.lua \
-  -c "lua print(vim.json.encode(require('pkm.api').audit()))" -c "qa!"
+nvim --headless -u "$INIT" \
+  -c "lua require('pkm.api').emit(require('pkm.api').audit())" -c "qa!" -- "--root=P:/Note-Vault/02 - LLM-Claude"
 
 # query
-nvim --headless -u pkm-init.lua \
-  -c "lua print(vim.json.encode(require('pkm.api').query('tag:direito AND type:note')))" -c "qa!"
+nvim --headless -u "$INIT" \
+  -c "lua require('pkm.api').emit(require('pkm.api').query('tag:direito AND type:note'))" \
+  -c "qa!" -- "--root=P:/Note-Vault/02 - LLM-Claude"
 ```
 
 **Clean stdout.** Under `--headless`, `print` and `vim.notify` go to the message
@@ -188,6 +202,7 @@ Read the whole shape cheaply with `structure()`.
 | Function | Returns |
 |---|---|
 | `emit(value)` | writes `value` as **one line of JSON to real stdout** (fd 1) and returns the encoded string. Use this instead of `print(vim.json.encode(...))` in headless invocations: under `--headless`, `print`/`vim.notify` land on the **message stream (stderr)**, so JSON printed that way is interleaved with notify noise. `emit` keeps stdout clean JSON — capture stdout alone (`2>/dev/null`) and it parses. |
+| `health()` | `{ ok, root, markdown, syntax, errors, warnings }` — the **preflight**: can this session run the whole API? `ok = false` when a write would fail for an environmental reason — `root_path` not an existing directory, or **pkm-markdown not loaded** (the section writers need it). pkm-syntax missing is only a warning (no API function needs it). `scripts/headless_init.lua` calls it and exits 1 when it is not ok. |
 
 ### UI state (read)
 

@@ -490,8 +490,19 @@ function M.write_section(path, heading, content, opts)
     return false, 'the note has unsaved changes — save it first'
   end
 
+  -- The heading scan lives in the pkm-markdown sibling. Without it the facade
+  -- degrades to a no-op that returns nil, and the loop below would crash on
+  -- `ipairs(nil)` — the failure a minimal init (pkm-nvim alone on the
+  -- runtimepath) produced. Refuse first, naming the fix.
+  local md = require('pkm.markdown')
+  if not md.available() then
+    return false, 'pkm-markdown is not loaded — section writes need it on the '
+      .. 'runtimepath (use scripts/headless_init.lua, or add the pkm-markdown '
+      .. 'and pkm-syntax siblings to your init)'
+  end
+
   local lines = vim.fn.readfile(path)
-  local heads = require('pkm.markdown').scan_headings(lines)
+  local heads = md.scan_headings(lines) or {}
 
   local want = vim.trim(tostring(heading)):lower()
   local idx, head

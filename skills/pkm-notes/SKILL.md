@@ -38,13 +38,27 @@ You are in a terminal; drive Neovim headless. `require('pkm.api')` returns data
 (JSON-encodable) and never opens UI.
 
 ```sh
-nvim --headless -u <init> \
-  -c "lua print(vim.json.encode(require('pkm.api').<fn>(<args>)))" -c "qa!"
+nvim --headless -u "<pkm-nvim>/scripts/headless_init.lua" \
+  -c "lua require('pkm.api').emit(require('pkm.api').<fn>(<args>))" -c "qa!" \
+  -- "--root=<vault path>"
 ```
 
-- **`<init>`** loads pkm-nvim and selects the vault: the user's own Neovim config,
-  or a minimal init — `require('pkm').setup({ root_path = '<vault path>' })`.
-  **Quote the whole `-c`**; vault paths contain spaces.
+- **Use the shipped init, `scripts/headless_init.lua`.** `<pkm-nvim>` is the
+  plugin's directory — the Lazy install (`~/AppData/Local/nvim-data/lazy/pkm-nvim`
+  on Windows, `~/.local/share/nvim/lazy/pkm-nvim` on Linux) or a checkout. It puts
+  **all three** suite plugins on the runtimepath (pkm-nvim + its siblings
+  pkm-markdown and pkm-syntax, found next to it), **requires `--root`** (no
+  default vault — exit 1 without it), and exits 1 if the session is incomplete.
+  **Do not hand-roll a "minimal" init** that only does
+  `require('pkm').setup({ root_path = … })`: with pkm-nvim alone on the
+  runtimepath, `create`/`find`/`read` work but `insert_section`, `cite_source`
+  and `annotate(…, { heading })` refuse — they need pkm-markdown. If you must use
+  your own init, mount all three plugins and check **`api.health()`** first
+  (`ok = false` names what is missing).
+- **Quote every argument that holds a vault path** — `-- "--root=P:/Note-Vault/02 - LLM-Claude"`;
+  vault paths contain spaces. Flags for the init go after a literal `--`.
+- **`api.emit(value)`** writes clean JSON to stdout; `print` goes to stderr mixed
+  with notices.
 - A **write** returns `{ ok, … }`. If `ok` is false, read `error`, stop, and
   report — never retry blindly or edit the file instead.
 - A **read** returns its data directly.
