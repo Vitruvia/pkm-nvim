@@ -1411,6 +1411,79 @@ D2/D6 read as open in the report; against the synced code they were already ship
 
 ---
 
+## Requests from ferramentas-concursos (dev-report 2026-10-02, vault 02 note 0056)
+
+*Single owner for the report.* The `ferramentas-concursos` program (agregador,
+mentor), a `pkm.api` consumer, audited its own use of the API and the skill and
+filed P1–P5 in the Claude vault (note 0056). P1–P4 shipped in **v1.85.0** (see
+CHANGELOG); P5 asked for a convention, so it is a proposal awaiting the author.
+
+- **P1 — the skill's minimal init broke the section writers: SHIPPED (v1.85.0 P1).**
+  `scripts/headless_init.lua`, `api.health()`, `write_section` refuses naming
+  pkm-markdown.
+- **P2 — headless traps undocumented: SHIPPED (v1.85.0 P2).** Verified and documented
+  (PKM_API.md § Headless pitfalls; SKILL.md); `-l` recommended (exits 1 on a Lua
+  error, which `-c` does not); bare-number references now resolve when unambiguous.
+- **P3 — unsaved-buffer guard blind to other sessions: SHIPPED (v1.85.0 P3).**
+  `pkm.instances` registry + `api.buffer_state`; the body/section/tag/citation writers
+  refuse a note modified in another registered session (fail closed on no answer).
+- **P4 — no safe batch write: SHIPPED (v1.85.0 P4).** `api.write_notes` /
+  `write_notes_preview` / `file_sha`, `set_body(…, opts)`: CAS, all-or-nothing with
+  graph-aware rollback, `last_updated_on`, author + previous text in `.pkm-history/`.
+- **P5 — machine-maintained blocks inside a user's note: PROPOSAL, pending the
+  author's decision.** Nothing is implemented. The question: a tool (the agregador)
+  keeps content inside the *user's* notes under a standing authorisation — a generated
+  index between HTML markers, question blocks it appends — and today none of it is
+  attributed. `AGENT_PROTOCOL.md` § 7 covers marked comments (`By Claude: `, via
+  `annotate`) and task-authorised edits, not standing machine-owned regions.
+
+  Two kinds of content want different treatment:
+
+  1. **Regenerated regions** (the index): the tool rewrites the whole region each
+     time. It must find the region exactly and never touch anything outside it.
+  2. **Accreted content** (appended question blocks): written once, then part of the
+     note — the user may edit it like anything else.
+
+  *Proposed convention.*
+
+  - A regenerated region is delimited by a pair of HTML comments (invisible in
+    rendered Markdown, inert to pkm-syntax and to the citation engine):
+
+    ```markdown
+    <!-- pkm:generated id="indice" by="claude" tool="agregador" -->
+    …content the tool owns…
+    <!-- /pkm:generated id="indice" -->
+    ```
+
+    `id` is unique within the note; `by` is the § 7 author (the same name the
+    filename marker uses); `tool` names the owner. Rules: the tool writes **only
+    between** its markers and only through the API; the user is told that edits
+    inside are overwritten; a missing or unbalanced pair is an error the tool
+    reports (never "repairs" by guessing), and `check`/`audit` would flag it.
+  - Accreted content carries **no in-text marker** (hundreds of markers would clutter
+    the user's notes). Its attribution is the write's history: since v1.85.0 every
+    `write_notes` batch records `by`, the time and the previous text in
+    `.pkm-history/`. A visible one-line marker before each block
+    (`<!-- pkm:added by="claude" tool="agregador" at="2026-10-02" -->`) stays an
+    opt-in for a user who wants it in the text.
+  - The *right* to maintain either kind stays the user's grant (for the consumer:
+    its `notas-do-aluno-operaveis.md`); the markers record **where** and **by whom**,
+    not **whether**.
+  - When adopted, the mechanism would be one API pair: `api.set_generated(path, id,
+    content, { by, tool })` (replace between the markers; create the pair at the
+    note's end or under `opts.heading` when absent) and `api.get_generated(path,
+    id)`, both on top of the P4 checked write (CAS, history), plus the `check` rule.
+    Owner of the format: `CONVENTIONS.md` § Assistant-Authored Notes.
+
+  *Options for the author.* (a) **Adopt as proposed** — markers for regenerated
+  regions, history for accreted content (recommended: attribution where the tool must
+  find its text, no clutter elsewhere). (b) Markers for both kinds. (c) Declare that
+  the standing task authorisation suffices: no markers; attribution only in
+  `.pkm-history/`. Until the author decides, consumers keep their current markers and
+  nothing in the plugin depends on them.
+
+---
+
 **Process for future upgrades:**
 - Re-run this audit against `:help news` for the target version before
   upgrading, not after. Check specifically: treesitter API changes (PKM's
