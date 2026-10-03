@@ -11,7 +11,7 @@ carried forward from version to version and consulted before any fix.*
 
 - **Update 2/10/2026: current version v1.85.0** — the ferramentas-concursos
   dev-report (headless init, traps, cross-session guard, checked batch writes; see
-  [1.85.0]), awaiting author smoke before tag. Previous: v1.84.0, the per-note tag
+  [1.85.0]), author smoke of P3 passed 3/10/2026, tagged. Previous: v1.84.0, the per-note tag
   picker. The rest of this checkpoint stands.
 - **Current version (at checkpoint): v1.83.1.** Since the post-v1.74.0 snapshot below, shipped:
   the **2026-08-12 vault-gestor batch** (G1–G12, v1.75.0–v1.78.0 + siblings) and
