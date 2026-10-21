@@ -101,6 +101,30 @@ shrink as work completes, and these do not.
    This is why command-creating and command-modifying work has priority: it is
    what the API wraps. (Author directive, 31/7/2026.)
 
+8. **Panel lifetime follows the task.** A panel whose task is usually done
+   *several times in a row* stays open after each choice — the choice is applied
+   at once, the list refreshes (re-ranked for the new state, prompt cleared) — and
+   closes with `<Esc>`, or by itself when nothing is left to choose. A panel for a
+   task presumed to be done *once* before returning to normal work closes itself
+   on the choice. (Author request, 21/10/2026.) The audit at v1.86.0:
+
+   - **Stays open:** the per-note tag panels, add and remove (`<leader>ta`/`tr`) —
+     a note is usually given or stripped of several tags at a time. The docked
+     panels (sidebar, buffer panel) were already persistent by design.
+   - **Closes on the choice (one-shot):** opening a note (`:PKMBrowse` and every
+     browse/find/recent picker, view note lists, the views pop-up) — the next
+     thing is reading it; inserting or adding a citation — the next thing is
+     writing; uncite — a correction, usually of one citation; the bulk
+     `:PKMTags add/remove/rename` tag choice — it leads to a change-list
+     confirmation, one batch per run; `:PKMTag merge`, `:PKMBrowse tags`, the
+     vault pickers, scratchpad promote, every confirmation and every short
+     action menu (`picker.choose`, `vim.ui.select` ≤ 3).
+
+   The mechanism for a picker is `picker.select_tag`'s `keep_open` (+ `refresh`,
+   `on_close`); a new repeated-use panel reuses that shape. Its action must apply
+   without moving focus out of the panel (`nvim_win_call`/`nvim_buf_call`), since
+   leaving a Telescope prompt closes it.
+
 ---
 
 ## Standing bug-prevention design rules

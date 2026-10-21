@@ -410,11 +410,14 @@ TAGS~  `:PKMTag` one note · `:PKMTags` all notes         *:PKMTag* *:PKMTags*
                         lists `física`); text that is not a tag yet appears
                         first as "← new tag" — check for a near-duplicate,
                         then <CR> to create it. Telescope when installed,
-                        `vim.ui.select` otherwise.
+                        `vim.ui.select` otherwise. The picker stays open:
+                        each <CR> adds a tag and re-ranks the list; <Esc>
+                        closes it.
 
 :PKMTag remove <tag>    Remove a tag from the current note (or `note=<ref>`).
         [note=<ref>]    With no tag (or <leader>tr): the same picker, listing
-                        only the tags this note carries.
+                        only the tags this note carries; it stays open until
+                        <Esc> or until no tag is left.
 
 :PKMTag merge           Merge one or more tags into a target tag across all
                         notes. Three-step Telescope picker, or fallback UI.

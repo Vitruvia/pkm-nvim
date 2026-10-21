@@ -9,6 +9,10 @@ carried forward from version to version and consulted before any fix.*
 
 ### Status checkpoint (post-v1.83.1, 27/8/2026)
 
+- **Update 21/10/2026: current version v1.86.0** — the ferramentas-concursos
+  user queue (journals newest first, tag panels that stay open, association-ranked
+  tag suggestions; see [1.86.0]). Headless-verified; the Telescope panels ride the
+  author's smoke before the tag.
 - **Update 2/10/2026: current version v1.85.0** — the ferramentas-concursos
   dev-report (headless init, traps, cross-session guard, checked batch writes; see
   [1.85.0]), author smoke of P3 passed 3/10/2026, tagged. Previous: v1.84.0, the per-note tag
@@ -214,6 +218,70 @@ fired — is **fixed in v1.17.0**; see that entry.)*
     recompute is gone (cold first compute unchanged). The deeper O(N)→O(matched)
     lever (inverted tag index) stays deferred to Phase 3, gated on a fresh
     baseline. See ROADMAP § Views-panel open latency.
+
+---
+
+## [1.86.0] - 21/10/2026
+
+Three requests the user queued through the `ferramentas-concursos` session
+(`temp/journal-order.md`, `temp/persistent-tag-add.md`, `temp/tag-relationship.md`,
+retired into this entry and the ROADMAP). *(MINOR: the tag panels' behaviour
+changes; no config change.)*
+
+### Changed
+
+- **Journal entries list newest first** in every note list — the browse pickers
+  (`:PKMBrowse`, the sidebar's `/`, a view's note list, `<C-f>` Browse All), the
+  views pop-up and the `vim.ui.select` fallbacks. They used to sort by title,
+  i.e. oldest first. The type order (note → agg → bib → journal → scratch) and
+  the title order of the other types are unchanged. One comparator now serves all
+  six sort sites: NEW **`utils.note_before(a, b)`** — journals compare their
+  stems (`journal_<YYYY-MM-DD_hh-mm-ss>`, zero-padded and kept in step with
+  `created_on` on save) descending. `:PKMBrowse recent` keeps its mtime order.
+- **The per-note tag panels stay open** (`<leader>ta` / `<leader>tr`, bare
+  `:PKMTag add` / `remove`). Each `<CR>` writes the tag at once and the panel
+  stays, re-ranked for the note as it now stands, prompt cleared; `<Esc>` closes
+  it and focus returns to the note. Remove also ends by itself when no tag is
+  left. The write is unchanged (buffer-only `citations.add_tag`/`remove_tag`, no
+  `index.invalidate`); it now runs in the note's window through `nvim_win_call`
+  (no autocommands, so the panel is not closed by a focus change) instead of
+  moving focus there first. Panel lifetime is now a design rule —
+  PRINCIPLES § Design rule 8, which also records the audit of every panel.
+- **`picker.select_tag` gains `keep_open`, `refresh` and `on_close`.** Without
+  `keep_open` nothing changes (one pick, close). The fallback list re-opens after
+  each pick and ends on cancel; a cancelled "new tag" input returns to the list.
+- **Tag suggestions rank companions by association, not raw count.** Tier 2 of
+  `tags.rank_tags` (tags that co-occur with the note's or selection's tags) is
+  now ordered by `affinity(x) = Σ over the selection's tags t of n(t, x) / n(t)`
+  — how often `x` comes along when `t` is present. Each of the note's tags weighs
+  at most 1, so a broad tag (on hundreds of notes) no longer drowns the specific
+  companions of a narrow one, which the raw count let it do. The row text still
+  shows the raw co-occurrence count; ties break by usage. `rank_tags` without
+  `ctx.affinity` behaves as before (pure callers unchanged). Applies to
+  `suggest_tags_for` (the per-note panel) and `suggest_tags` (bulk `:PKMTags add`).
+
+### Notes
+
+- Bench (synthetic 3000 notes / 400 clustered tags, headless, scratch script):
+  `suggest_tags_for` 12.4–13.0 ms/call before, 17.2 ms after — one call per
+  panel open and one per pick in the kept-open panel. In the same corpus a tag
+  reachable only through the broad tag dropped out of the top six.
+- Agent side (PRINCIPLES rule 7): low impact, deferred with this caveat — the
+  ranking is reachable as `require('pkm.tags').suggest_tags_for(tags)` but has no
+  `pkm.api` wrapper; agents tag by explicit choice (`api.tag`/`write_notes`) and
+  `api.tag_catalog` lists the vocabulary. A wrapper is cheap if a consumer asks.
+- `test/test_v1860_p1.lua` (14 checks): comparator order and strictness, the
+  fallback browser's journal order, affinity vs a broad tag, the raw-count path
+  of `rank_tags`, `keep_open` re-list/cancel/`on_close`, one-shot unchanged,
+  `:PKMTag add` adding two tags in one session with a re-ranked second list and
+  focus restored, `:PKMTag remove` ending by itself. `test_v1840_p1.lua`'s stubs
+  now answer the re-listed panel with `<Esc>`. Full headless suite **112/112**.
+- luacheck could not run in this session (the installed binary is the WSL build
+  and WSL had no shell); every changed file passed the LuaJIT `loadfile` parse
+  check instead.
+- The Telescope side (title refresh, `picker:refresh` with `reset_prompt`, the
+  `close` hook) is interactive → the author's smoke is its verification; tag
+  after it confirms.
 
 ---
 

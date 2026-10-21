@@ -185,7 +185,7 @@ form of [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Shipped so far (v1.5.7 → v1.85.0)
+## Shipped so far (v1.5.7 → v1.86.0)
 
 *Compact thematic summary. `doc/CHANGELOG.md` is canonical for what each version
 changed; consult it rather than reconstructing detail here. Decisions from
@@ -296,6 +296,11 @@ shipped work that still constrain **pending** work are kept in
   unsaved-buffer guard (`pkm.instances`, `api.buffer_state`), and checked batch
   writes (`api.write_notes`/`_preview`/`file_sha`, `.pkm-history/`). P5 is a
   proposal — § Requests from ferramentas-concursos.
+- **v1.86.0 — the ferramentas-concursos user queue (2026-10-21).** Journals list
+  newest first (`utils.note_before`); the per-note tag panels stay open
+  (PRINCIPLES § Design rule 8, panel lifetime); tag suggestions ranked by
+  association instead of raw co-occurrence. See § Requests from
+  ferramentas-concursos (2026-10-21).
 
 **The eval loop is the ongoing driver:** each run against the real vault reports
 friction (a missing op, a discovery gap), which becomes the next increment.
@@ -1487,6 +1492,53 @@ CHANGELOG); P5 asked for a convention, so it is a proposal awaiting the author.
   the standing task authorisation suffices: no markers; attribution only in
   `.pkm-history/`. Until the author decides, consumers keep their current markers and
   nothing in the plugin depends on them.
+
+## Requests from ferramentas-concursos (user queue, 2026-10-21)
+
+*Single owner.* Three requests the user wrote into `temp/`, executed by the dev
+agent on the consumer session's request. Items 1–2 shipped in **v1.86.0**; item 3
+shipped its cheap part in v1.86.0, and the rest is the evaluation below.
+
+1. **Journal entries in the search panel, newest first — SHIPPED (v1.86.0).**
+2. **The tag-add panel stays open; `<Esc>` closes; same for similar panels —
+   SHIPPED (v1.86.0).** Rule and audit: PRINCIPLES § Design rule 8.
+3. **Tag relationships (tags added together first; meaning second) — evaluated;
+   association ranking SHIPPED (v1.86.0), the rest below.**
+
+   *What already existed.* v1.84.0 shipped co-occurrence ranking: the add panel
+   lists first the tags found on notes that share a tag with this one. So the
+   core of the request was already there; its weakness was the raw count — a
+   broad tag on the note (on hundreds of notes) made every tag that rides with it
+   look related, burying the specific companions of the note's narrow tags.
+
+   *Fit with the project.* Good. PHILOSOPHY § 5 names "surfacing related notes,
+   suggesting citations" as acceptable facilitation; ranking a list the user still
+   chooses from is the same kind of aid (Principle 4: it orders, it never tags by
+   itself). It also serves CONVENTIONS § Tags — seeing the vocabulary that keeps
+   company with a note discourages near-synonym tags.
+
+   *Options weighed.*
+
+   | Option | Signal | Cost | Verdict |
+   |---|---|---|---|
+   | A. Raw co-occurrence count | notes sharing any tag | O(Σ tags) per open, no state | v1.84.0; popularity-biased |
+   | B. **Association** Σ_t n(t,x)/n(t) (rule confidence) | how often x comes along with each of the note's tags | same pass + a second over the sharing notes; 13 → 17 ms at 3000 notes | **shipped v1.86.0** |
+   | C. Lift / PMI / cosine | association normalised by x's frequency | same | rejected for now: promotes tags used once or twice; confidence is what "likely to be added" means |
+   | D. Linked notes' tags | tags of notes this note cites / is cited by (frontmatter `cites`/`cited_by`) | an identifier → entry lookup per link; cheap | **best next step** — works for a note with no tags yet, which A–C cannot rank |
+   | E. Words in the note | tag text found in the title/body (folded, word-bounded) | O(tags × body) per open; hyphenated and short tags (`ia`) need care | possible third signal, weaker and noisier than D |
+   | F. Meaning (embeddings) | semantic similarity of tag names / note text | a model or an AI service, a vector cache, async | **out of scope as a core feature**: PHILOSOPHY § 5 corollary forbids a hard AI dependency and the plugin has no model; only as an optional, externally-provided score (e.g. a consumer's `pkm.api` call), never required |
+
+   *Performance.* Everything A–E runs over the in-memory index (`index.get_all`),
+   with no new state to persist or invalidate. A persistent tag-pair matrix
+   (tag → tag → count, kept in step with `invalidate`) would make each open
+   O(note tags × neighbours) instead of O(notes), but at ~17 ms for 3000 notes it
+   is not needed; gate it on a `bench.lua` baseline if vaults grow an order of
+   magnitude (same rule as the views-count Phase 3).
+
+   *Proposed next increment (not scheduled; author's call):* D — when the note
+   cites or is cited by other notes, add their tags as a second context source
+   (weighted below the note's own tags), so a fresh untagged note that already
+   links somewhere still gets a useful order. E only if D proves insufficient.
 
 ---
 
