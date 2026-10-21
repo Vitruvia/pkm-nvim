@@ -243,8 +243,29 @@ end
 -- Exposed for the headless tests (the filter is the part a screen hides).
 M._tag_rows_matching = tag_rows_matching
 
+--- Prompt title: what the panel does, how many tags it lists, and how to use it.
+---@param opts table
+---@param n    integer
+---@return string
+local function tag_title(opts, n)
+  return string.format('%s:  %d tag%s%s%s', opts.title, n, n == 1 and '' or 's',
+    opts.allow_new and '  ·  type to create' or '',
+    opts.keep_open and '  ·  <Esc> done' or '')
+end
+
+--- Longest tag's display width, so the counts line up.
+---@param rows table[]
+---@return integer
+local function tag_width(rows)
+  local width = 0
+  for _, row in ipairs(rows) do
+    width = math.max(width, vim.fn.strdisplaywidth(row.tag))
+  end
+  return width
+end
+
 ---@param rows      table[]   { { tag, count, paths, note? }, … }
----@param opts      table     { title, allow_new? }
+---@param opts      table     { title, allow_new?, keep_open?, refresh?, on_close? }
 ---@param on_choice function(tag: string)
 local function telescope_select_tag(rows, opts, on_choice)
   local pickers      = require('telescope.pickers')
@@ -254,10 +275,7 @@ local function telescope_select_tag(rows, opts, on_choice)
   local previewers   = require('telescope.previewers')
   local sorters      = require('telescope.sorters')
 
-  local width = 0
-  for _, row in ipairs(rows) do
-    width = math.max(width, vim.fn.strdisplaywidth(row.tag))
-  end
+  local width = tag_width(rows)
 
   ---@param prompt string|nil
   ---@return table[]
@@ -266,9 +284,7 @@ local function telescope_select_tag(rows, opts, on_choice)
   end
 
   pickers.new({}, {
-    prompt_title = string.format('%s:  %d tag%s%s',
-      opts.title, #rows, #rows == 1 and '' or 's',
-      opts.allow_new and '  ·  type to create' or ''),
+    prompt_title = tag_title(opts, #rows),
 
     finder = finders.new_dynamic({
       fn = visible_rows,
@@ -297,9 +313,30 @@ local function telescope_select_tag(rows, opts, on_choice)
     attach_mappings = function(prompt_bufnr)
       actions.select_default:replace(function()
         local sel = action_state.get_selected_entry()
-        actions.close(prompt_bufnr)
-        if sel then vim.schedule(function() on_choice(sel.value.tag) end) end
+        if not opts.keep_open then
+          actions.close(prompt_bufnr)
+          if sel then vim.schedule(function() on_choice(sel.value.tag) end) end
+          return
+        end
+
+        -- Kept open: apply now (synchronously, so the re-rank sees the write),
+        -- then re-rank, clear the prompt and stay for the next tag. Nothing
+        -- left to offer (and nothing to create) ends the panel by itself.
+        if not sel then return end
+        on_choice(sel.value.tag)
+        local fresh = opts.refresh and opts.refresh() or rows
+        if #fresh == 0 and not opts.allow_new then
+          actions.close(prompt_bufnr)
+          return
+        end
+        rows, width = fresh, tag_width(fresh)
+        local current = action_state.get_current_picker(prompt_bufnr)
+        pcall(function() current.prompt_border:change_title(tag_title(opts, #rows)) end)
+        current:refresh(current.finder, { reset_prompt = true })
       end)
+      if opts.keep_open and opts.on_close then
+        actions.close:enhance({ post = function() vim.schedule(opts.on_close) end })
+      end
       return true
     end,
   }):find()
@@ -578,8 +615,19 @@ end
 ---
 --- With `opts.allow_new`, typing a tag that does not exist offers to create it:
 --- the same screen answers "which of my tags?" and "a new one, this".
+---
+--- With `opts.keep_open` the panel is for repeated use (PRINCIPLES § Design,
+--- rule 8): each pick runs `on_choice` at once and the panel stays, re-listed
+--- from `opts.refresh()` (default: the same rows) with the prompt cleared, until
+--- `<Esc>` — or until the refreshed list is empty and nothing can be created.
+--- `opts.on_close` runs once when it ends. `on_choice` runs while the panel
+--- still has focus, so it must act on its target without moving to it
+--- (`nvim_win_call` / `nvim_buf_call`). Without Telescope the fallback list
+--- re-opens after each pick and ends on cancel.
 ---@param rows      table[]  { { tag, count, paths, note? }, … }
----@param opts      table    { title = string, allow_new? = boolean }
+---@param opts      table    { title = string, allow_new? = boolean,
+---                            keep_open? = boolean, refresh? = fun(): table[],
+---                            on_close? = fun() }
 ---@param on_choice function(tag: string)
 function M.select_tag(rows, opts, on_choice)
   opts = opts or {}
@@ -595,40 +643,71 @@ function M.select_tag(rows, opts, on_choice)
     return
   end
 
+  local open_list   -- forward: the fallback list, re-opened when kept open
+
+  --- After a pick (or a cancelled "new tag"): re-list when kept open, else done.
+  local function after_pick()
+    if not opts.keep_open then return end
+    rows = opts.refresh and opts.refresh() or rows
+    if #rows == 0 and not opts.allow_new then
+      if opts.on_close then opts.on_close() end
+      return
+    end
+    open_list()
+  end
+
   --- Free text, for the fallback's "new tag" entry and for an empty list.
   local function ask_new()
     vim.ui.input({ prompt = 'New tag: ' }, function(text)
       local tag = text and text:match('^%s*(.-)%s*$'):lower()
-      if not tag or tag == '' then return end
-      vim.schedule(function() on_choice(tag) end)
+      vim.schedule(function()
+        if tag and tag ~= '' then
+          on_choice(tag)
+          after_pick()
+        elseif #rows > 0 then
+          after_pick()                         -- cancelled: back to the list
+        elseif opts.keep_open and opts.on_close then
+          opts.on_close()                      -- cancelled with no list: done
+        end
+      end)
     end)
   end
 
-  if #rows == 0 then
-    ask_new()
-    return
+  open_list = function()
+    if #rows == 0 then
+      ask_new()
+      return
+    end
+
+    local items = {}
+    if opts.allow_new then items[1] = { is_new_prompt = true } end
+    for _, row in ipairs(rows) do items[#items + 1] = row end
+
+    vim.ui.select(items, {
+      prompt      = opts.title,
+      format_item = function(item)
+        if item.is_new_prompt then return '+ new tag…' end
+        return string.format('%s  (%d note%s)%s',
+          item.tag, item.count, item.count == 1 and '' or 's',
+          item.note and ('  ·  ' .. item.note) or '')
+      end,
+    }, function(item)
+      if not item then
+        if opts.keep_open and opts.on_close then vim.schedule(opts.on_close) end
+        return
+      end
+      if item.is_new_prompt then
+        vim.schedule(ask_new)
+      else
+        vim.schedule(function()
+          on_choice(item.tag)
+          after_pick()
+        end)
+      end
+    end)
   end
 
-  local items = {}
-  if opts.allow_new then items[1] = { is_new_prompt = true } end
-  for _, row in ipairs(rows) do items[#items + 1] = row end
-
-  vim.ui.select(items, {
-    prompt      = opts.title,
-    format_item = function(item)
-      if item.is_new_prompt then return '+ new tag…' end
-      return string.format('%s  (%d note%s)%s',
-        item.tag, item.count, item.count == 1 and '' or 's',
-        item.note and ('  ·  ' .. item.note) or '')
-    end,
-  }, function(item)
-    if not item then return end
-    if item.is_new_prompt then
-      vim.schedule(ask_new)
-    else
-      vim.schedule(function() on_choice(item.tag) end)
-    end
-  end)
+  open_list()
 end
 
 --- Pick one row from a ranked list and hand it back with its position.

@@ -101,8 +101,6 @@ local function get_tab()
   return sidebar.get_state()
 end
 
-local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5,
-other = 6 }
 
 -- =============================================================================
 -- SECTION: Marking (pure)
@@ -334,22 +332,22 @@ local function next_type_idx(idx)
   return ((idx or 1) % #TYPE_CYCLE) + 1
 end
 
---- Sort a path list by note type (note→agg→bib→journal→scratch) then title.
+--- Sort a path list by note type (note→agg→bib→journal→scratch) then title,
+--- journals newest first (`utils.note_before`). A path the index does not know
+--- sorts as type "other" under its stem.
 ---@param paths string[]
 ---@return string[]  New sorted array
 local function sort_paths_by_type(paths)
   local index  = require('pkm.index')
+  local key = {}
+  for _, p in ipairs(paths) do
+    if not key[p] then
+      local stem = vim.fn.fnamemodify(p, ':t:r')
+      key[p] = index.get(p) or { note_type = 'other', title = stem, filename = stem }
+    end
+  end
   local sorted = vim.list_extend({}, paths)
-  table.sort(sorted, function(a, b)
-    local ea = index.get(a)
-    local eb = index.get(b)
-    local ta = ea and (_TYPE_ORDER[ea.note_type] or 6) or 6
-    local tb = eb and (_TYPE_ORDER[eb.note_type] or 6) or 6
-    if ta ~= tb then return ta < tb end
-    local ta_t = (ea and ea.title or vim.fn.fnamemodify(a, ':t:r')):lower()
-    local tb_t = (eb and eb.title or vim.fn.fnamemodify(b, ':t:r')):lower()
-    return ta_t < tb_t
-  end)
+  table.sort(sorted, function(a, b) return utils.note_before(key[a], key[b]) end)
   return sorted
 end
 
@@ -2032,12 +2030,7 @@ local function telescope_views_tree_picker(mode, invocation_win, invocation_was_
   if mode == 'browse' then
     local index   = require('pkm.index')
     local entries = index.get_all()
-    table.sort(entries, function(a, b)
-      local ta = _TYPE_ORDER[a.note_type] or 6
-      local tb = _TYPE_ORDER[b.note_type] or 6
-      if ta ~= tb then return ta < tb end
-      return (a.title or a.filename or ''):lower() < (b.title or b.filename or ''):lower()
-    end)
+    table.sort(entries, utils.note_before)   -- type, then title; journals newest first
     local items = {}
     for _, e in ipairs(entries) do
       items[#items + 1] = {
@@ -2301,12 +2294,7 @@ local _views_panel = panel.create({
         end
         filtered = f
       end
-      table.sort(filtered, function(a, b)
-        local ta = _TYPE_ORDER[a.note_type] or 6
-        local tb = _TYPE_ORDER[b.note_type] or 6
-        if ta ~= tb then return ta < tb end
-        return (a.title or a.filename or ''):lower() < (b.title or b.filename or ''):lower()
-      end)
+      table.sort(filtered, utils.note_before)   -- type, then title; journals newest first
 
       local filter_label = (state.filter and state.filter ~= '')
         and ('  [filter: ' .. state.filter .. ']') or ''

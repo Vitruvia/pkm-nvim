@@ -280,18 +280,21 @@ end
 ---   1. already on *some* of the selected notes — completing a set is the most
 ---      common reason to reach for a tag;
 ---   2. tags that co-occur, elsewhere in the vault, with the tags the selection
----      already has;
+---      already has — strongest association first (`affinity`, when given;
+---      else the raw co-occurrence count);
 ---   3. everything else, most used first;
 ---   4. already on *all* of them — adding it would change nothing, so it goes
 ---      last rather than being hidden.
 ---@param rows table[]  { { tag, count, paths }, … }
----@param ctx  table    { selected_count, on_selected = {tag→n}, cooccurrence = {tag→n} }
+---@param ctx  table    { selected_count, on_selected = {tag→n},
+---                       cooccurrence = {tag→n}, affinity? = {tag→number} }
 ---@return { tag: string, count: integer, paths: string[], note: string|nil }[]
 function M.rank_tags(rows, ctx)
   ctx = ctx or {}
   local selected_count = ctx.selected_count or 0
   local on_selected    = ctx.on_selected or {}
   local cooccurrence   = ctx.cooccurrence or {}
+  local affinity       = ctx.affinity or {}
 
   local ranked = {}
   for _, row in ipairs(rows) do
@@ -306,7 +309,7 @@ function M.rank_tags(rows, ctx)
       tier, score = 4, on
       note = selected_count == 1 and 'already on this note' or 'already on all selected'
     elseif cooc > 0 then
-      tier, score = 2, cooc
+      tier, score = 2, affinity[row.tag] or cooc
       note = string.format('co-occurs on %d note%s', cooc, cooc == 1 and '' or 's')
     else
       tier, score = 3, row.count
@@ -325,6 +328,7 @@ function M.rank_tags(rows, ctx)
   table.sort(ranked, function(a, b)
     if a._tier ~= b._tier then return a._tier < b._tier end
     if a._score ~= b._score then return a._score > b._score end
+    if a.count ~= b.count then return a.count > b.count end
     return a.tag < b.tag
   end)
 
@@ -339,21 +343,38 @@ end
 ---@param selected_count integer
 ---@return table[]
 local function rank_for_selection(on_selected, selected_count)
-  -- Co-occurrence: on every note that shares a tag with the selection, count
-  -- the tags the selection does not have yet.
-  local cooccurrence = {}
+  -- Pass 1: the notes that share a tag with the selection — which of the
+  -- selection's tags each carries, which others — and how many notes carry
+  -- each selection tag (n(t)).
+  local sharing, n_sel = {}, {}
   for _, entry in ipairs(require('pkm.index').get_all()) do
-    local shares, others = false, {}
+    local sel, others, seen = {}, {}, {}
     for _, tag in ipairs(entry.tags or {}) do
       local norm = M.normalize(tag)
-      if norm then
-        if on_selected[norm] then shares = true else others[norm] = true end
+      if norm and not seen[norm] then
+        seen[norm] = true
+        if on_selected[norm] then sel[#sel + 1] = norm else others[#others + 1] = norm end
       end
     end
-    if shares then
-      for tag in pairs(others) do
-        cooccurrence[tag] = (cooccurrence[tag] or 0) + 1
-      end
+    if #sel > 0 then
+      for _, t in ipairs(sel) do n_sel[t] = (n_sel[t] or 0) + 1 end
+      sharing[#sharing + 1] = { sel = sel, others = others }
+    end
+  end
+
+  -- Pass 2: for every tag x the selection lacks,
+  --   cooccurrence(x) = notes sharing a selection tag that also carry x (shown);
+  --   affinity(x)     = Σ over the selection's tags t of n(t, x) / n(t)
+  -- — how often x comes along when t is there, summed over t. Each of the
+  -- note's tags weighs at most 1, so a broad tag on 900 notes cannot drown the
+  -- specific companions of a narrow one (the raw count let it).
+  local cooccurrence, affinity = {}, {}
+  for _, s in ipairs(sharing) do
+    local w = 0
+    for _, t in ipairs(s.sel) do w = w + 1 / n_sel[t] end
+    for _, x in ipairs(s.others) do
+      cooccurrence[x] = (cooccurrence[x] or 0) + 1
+      affinity[x]     = (affinity[x] or 0) + w
     end
   end
 
@@ -361,6 +382,7 @@ local function rank_for_selection(on_selected, selected_count)
     selected_count = selected_count,
     on_selected    = on_selected,
     cooccurrence   = cooccurrence,
+    affinity       = affinity,
   })
 end
 

@@ -29,56 +29,95 @@ local focus_main_win = require('pkm.commands.shared').focus_main_win
 ---           is not yet a tag is offered as "← new tag" — look, then create.
 ---   remove  only the tags the note carries, with their vault counts.
 ---
+--- Both panels are for repeated use (PRINCIPLES § Design, rule 8): a note is
+--- usually given or stripped of several tags at once, so the panel stays open
+--- after each pick — re-ranked for the note as it now stands, prompt cleared —
+--- and `<Esc>` closes it. Remove also ends by itself once no tag is left.
+---
 --- The note's tags are read from the buffer, not the index, so unsaved edits
 --- count. The write stays buffer-only (citations.add_tag/remove_tag — no
---- index.invalidate); focus returns to the note's window before it runs, since
---- both operate on the current buffer.
+--- index.invalidate). Since the panel keeps focus, each write runs *in* the
+--- note's window (`nvim_win_call`, which fires no autocommands — so the panel is
+--- not closed by a focus change) or, if that window is gone, in its buffer;
+--- focus returns to the note's window when the panel ends.
 ---@param kind 'add'|'remove'
 local function pick_buffer_tag(kind)
-  local fm = require('pkm.yaml').parse_frontmatter(
-    vim.api.nvim_buf_get_lines(0, 0, -1, false))
-  if not fm then
+  local buf = vim.api.nvim_get_current_buf()
+  local win = vim.api.nvim_get_current_win()
+  local yaml = require('pkm.yaml')
+  if not yaml.parse_frontmatter(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) then
     vim.notify('[pkm] no frontmatter found', vim.log.levels.WARN)
     return
   end
 
-  local note_tags = {}
-  if type(fm.tags) == 'table' then
-    for _, t in ipairs(fm.tags) do note_tags[#note_tags + 1] = tostring(t) end
+  --- The note's tags as its buffer says right now.
+  ---@return string[]
+  local function note_tags()
+    local fm = yaml.parse_frontmatter(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    local out = {}
+    if fm and type(fm.tags) == 'table' then
+      for _, t in ipairs(fm.tags) do out[#out + 1] = tostring(t) end
+    end
+    return out
   end
 
   local tags   = require('pkm.tags')
   local picker = require('pkm.picker')
-  local win    = vim.api.nvim_get_current_win()
 
   local function apply(chosen)
+    if not vim.api.nvim_buf_is_valid(buf) then return end
+    local function write()
+      require('pkm.citations')[kind == 'add' and 'add_tag' or 'remove_tag'](chosen)
+    end
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+      vim.api.nvim_win_call(win, write)
+    else
+      vim.api.nvim_buf_call(buf, write)
+    end
+  end
+
+  local function back_to_note()
     if vim.api.nvim_win_is_valid(win) then vim.api.nvim_set_current_win(win) end
-    require('pkm.citations')[kind == 'add' and 'add_tag' or 'remove_tag'](chosen)
   end
 
   if kind == 'add' then
-    picker.select_tag(tags.suggest_tags_for(note_tags),
-      { title = 'Add tag to this note', allow_new = true }, apply)
+    picker.select_tag(tags.suggest_tags_for(note_tags()), {
+      title     = 'Add tag to this note',
+      allow_new = true,
+      keep_open = true,
+      refresh   = function() return tags.suggest_tags_for(note_tags()) end,
+      on_close  = back_to_note,
+    }, apply)
     return
   end
 
   -- Remove: the note's own tags, in its order, carrying their vault counts (a
   -- tag not saved to disk yet has none).
-  local by_tag = {}
-  for _, row in ipairs(tags.tag_counts()) do by_tag[row.tag] = row end
-  local rows, seen = {}, {}
-  for _, t in ipairs(note_tags) do
-    local norm = tags.normalize(t)
-    if norm and not seen[norm] then
-      seen[norm] = true
-      rows[#rows + 1] = by_tag[norm] or { tag = norm, count = 0, paths = {} }
+  local function own_rows()
+    local by_tag = {}
+    for _, row in ipairs(tags.tag_counts()) do by_tag[row.tag] = row end
+    local rows, seen = {}, {}
+    for _, t in ipairs(note_tags()) do
+      local norm = tags.normalize(t)
+      if norm and not seen[norm] then
+        seen[norm] = true
+        rows[#rows + 1] = by_tag[norm] or { tag = norm, count = 0, paths = {} }
+      end
     end
+    return rows
   end
+
+  local rows = own_rows()
   if #rows == 0 then
     vim.notify('[pkm] no tags to remove', vim.log.levels.INFO)
     return
   end
-  picker.select_tag(rows, { title = 'Remove tag from this note' }, apply)
+  picker.select_tag(rows, {
+    title     = 'Remove tag from this note',
+    keep_open = true,
+    refresh   = own_rows,
+    on_close  = back_to_note,
+  }, apply)
 end
 
 --- Add or remove one tag on a single note. With `note_ref` it writes to that

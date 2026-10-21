@@ -20,6 +20,8 @@
 --   notify(msg, level?)   → vim.notify with "[pkm] " prefix
 --   fold(s)               → lower-cased, PT-accent-stripped text for matching
 --   type_prefix(nt)       → compact bracketed note-type label, e.g. "[n]"
+--   note_before(a, b)     → list order of two index entries: by type, then
+--                           title — journals newest first
 --   strip_display_prefix(filename, nt) → stem without number/type prefix
 --   is_editing_win(win)   → boolean, a window a note may be opened in
 --   editing_wins()        → those windows, left to right
@@ -157,6 +159,30 @@ local TYPE_ABBREV = {
 ---@return string  e.g. "[n]" or "[j]"
 function M.type_prefix(note_type)
   return '[' .. (TYPE_ABBREV[note_type or 'other'] or 'o') .. ']'
+end
+
+-- Note-type order shared by every note list (browse pickers, views, fallbacks).
+local TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
+
+--- Sort comparator for note lists: note → agg → bib → journal → scratch →
+--- other, then by title (case-insensitive) — except journal entries, which
+--- go newest first. A journal's stem is `journal_<YYYY-MM-DD_hh-mm-ss>`
+--- (zero-padded, renamed to `created_on` on save), so comparing stems
+--- descending is comparing dates descending; a `date_only` stem is a prefix
+--- of that day's timed ones and sorts after them. A strict order (ties
+--- return false), so it is safe for `table.sort`.
+---@param a table  { note_type?, title?, filename? } — an index entry or alike
+---@param b table
+---@return boolean  true when `a` is listed before `b`
+function M.note_before(a, b)
+  local ta = TYPE_ORDER[a.note_type] or 6
+  local tb = TYPE_ORDER[b.note_type] or 6
+  if ta ~= tb then return ta < tb end
+  if a.note_type == 'journal' and a.filename and b.filename
+      and a.filename ~= b.filename then
+    return a.filename > b.filename
+  end
+  return (a.title or a.filename or ''):lower() < (b.title or b.filename or ''):lower()
 end
 
 --- Strip the leading note-number and type prefix from a filename stem.

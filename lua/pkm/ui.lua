@@ -43,7 +43,6 @@ local SEARCH_EVAL = { tag_substring = true }
 local _open_order   = {}
 local _open_counter = 0
 
-local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 -- type_prefix / strip_display_prefix live in pkm.utils (shared with views.lua).
 
 -- =============================================================================
@@ -653,12 +652,7 @@ function M.browse(filter_expr)
     return
   end
 
-  table.sort(entries, function(a, b)
-    local ta = _TYPE_ORDER[a.note_type] or 6
-    local tb = _TYPE_ORDER[b.note_type] or 6
-    if ta ~= tb then return ta < tb end
-    return (a.title or ''):lower() < (b.title or ''):lower()
-  end)
+  table.sort(entries, utils.note_before)   -- type, then title; journals newest first
 
   vim.ui.select(entries, {
     prompt      = (expr and expr ~= '') and ('Browse: ' .. expr) or 'Browse Notes',
@@ -693,12 +687,7 @@ function M.browse_paths(title, paths)
     return
   end
 
-  table.sort(entries, function(a, b)
-    local ta = _TYPE_ORDER[a.note_type] or 6
-    local tb = _TYPE_ORDER[b.note_type] or 6
-    if ta ~= tb then return ta < tb end
-    return (a.title or ''):lower() < (b.title or ''):lower()
-  end)
+  table.sort(entries, utils.note_before)   -- type, then title; journals newest first
 
   vim.ui.select(entries, {
     prompt      = title,

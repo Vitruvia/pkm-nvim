@@ -19,7 +19,6 @@
 local M = {}
 
 local utils = require('pkm.utils')
-local _TYPE_ORDER = { note = 1, agg = 2, bib = 3, journal = 4, scratch = 5, other = 6 }
 
 -- These are live SEARCH pickers: a `tag:` typed key-by-key must narrow the list
 -- as a contiguous substring rather than vanish until the tag is spelled in full.
@@ -80,9 +79,10 @@ local function require_telescope()
 end
 
 --- Core live filter-as-you-type picker used by browse() and browse_paths().
---- Items are sorted by type then title at open time; the fn re-evaluates the
---- prompt as a filter.lua expression on every keystroke. Falls back to an
---- any-predicate when the expression is incomplete (e.g. mid-typing "AND").
+--- Items are sorted by type then title (journals newest first) at open time;
+--- the fn re-evaluates the prompt as a filter.lua expression on every
+--- keystroke. Falls back to an any-predicate when the expression is incomplete
+--- (e.g. mid-typing "AND").
 ---
 --- `<Tab>` marks notes and `<C-a>` runs a bulk action over them (or over
 --- everything the prompt leaves listed, when nothing is marked). Since this one
@@ -104,12 +104,7 @@ local function live_picker(title, entries, seed, presorted, on_cycle, type_idx, 
   local sorted = {}
   for _, e in ipairs(entries) do sorted[#sorted + 1] = e end
   if not presorted then
-    table.sort(sorted, function(a, b)
-      local ta = _TYPE_ORDER[a.note_type] or 6
-      local tb = _TYPE_ORDER[b.note_type] or 6
-      if ta ~= tb then return ta < tb end
-      return (a.title or ''):lower() < (b.title or ''):lower()
-    end)
+    table.sort(sorted, utils.note_before)   -- type, then title; journals newest first
   end
 
   local all_items = {}

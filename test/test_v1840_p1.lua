@@ -158,10 +158,13 @@ local note_buf, note_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_curr
 
 do
   -- Create a tag that does not exist. The fallback puts "+ new tag…" first;
-  -- the stub also moves focus away first, as a picker window would.
+  -- the stub also moves focus away first, as a picker window would. Since
+  -- v1.86.0 the panel stays open (re-lists after a pick): the stub's second
+  -- call is the user's <Esc>.
   local offered, titles = nil, {}
   vim.ui.select = function(items, opts, on_choice)
     titles[#titles + 1] = opts.prompt
+    if #titles > 1 then on_choice(nil) return end
     offered = items
     vim.cmd('new')
     on_choice(items[1], 1)
@@ -171,6 +174,7 @@ do
   vim.cmd('PKMTag add')
   vim.wait(1000, function()
     return vim.tbl_contains(vim.api.nvim_buf_call(note_buf, buffer_tags), 'acústica')
+      and vim.api.nvim_get_current_win() == note_win
   end, 10)
 
   check("bare :PKMTag add opens the tag picker",
@@ -191,6 +195,7 @@ do
   -- Remove: only the note's own tags are offered, the unsaved one included.
   local offered
   vim.ui.select = function(items, _, on_choice)
+    if offered then on_choice(nil) return end   -- re-listed: <Esc>
     offered = items
     on_choice(row_for(items, 'physics'), 1)
   end
