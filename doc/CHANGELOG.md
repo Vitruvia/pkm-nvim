@@ -11,8 +11,7 @@ carried forward from version to version and consulted before any fix.*
 
 - **Update 21/10/2026: current version v1.86.0** — the ferramentas-concursos
   user queue (journals newest first, tag panels that stay open, association-ranked
-  tag suggestions; see [1.86.0]). Headless-verified; the Telescope panels ride the
-  author's smoke before the tag.
+  tag suggestions; see [1.86.0]). Headless-verified; author smoke passed 21/10/2026, tagged.
 - **Update 2/10/2026: current version v1.85.0** — the ferramentas-concursos
   dev-report (headless init, traps, cross-session guard, checked batch writes; see
   [1.85.0]), author smoke of P3 passed 3/10/2026, tagged. Previous: v1.84.0, the per-note tag
